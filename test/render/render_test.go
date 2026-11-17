@@ -703,7 +703,7 @@ func TestRenderValidateRules(t *testing.T) {
 		{"the orchestrator without the safety guard's role", "orchestrator.md",
 			"`jhon hook safety-guard` refuses irreversible\n  operations to every agent and to this thread", "`jhon hook safety-guard` advises"},
 		{"the orchestrator without the owner's approval of a deletion", "orchestrator.md",
-			"runs once the\n  owner approves it (class `destroy`)", "runs on its own"},
+			"runs\n  once the owner approves it (class `destroy`)", "runs on its own"},
 		{"the orchestrator without the credentials rule", "orchestrator.md",
 			"No agent reads, edits, or deletes a credentials file", "An agent may read a credentials file"},
 		{"the shared steps restricting repository state to one agent", "contracts/ldd.md",
@@ -2292,31 +2292,40 @@ func TestRenderOrchestratorBody(t *testing.T) {
 	t.Run("the orchestrator acts on jhon risk, keeps the record always and the rigor by route, and hands off the request verbatim", func(t *testing.T) {
 		t.Parallel()
 		b := flat(claudeAgent(t, renderedHome(t), "jhon-orchestrator"))
-		match(t, b, "run `jhon risk`", "the risk tier drives verification")
-		match(t, b, "`verify` and an automatic 4R with only the pertinent lenses", "L9: risk high gets verify and a 4R by need")
-		match(t, b, "`review_required` always wins; Judgment Day only when the owner asks", "L9, S17: review_required wins, Judgment Day only on request")
-		match(t, b, `The record is always; the rigor is the change's, not\s+yours`, "LDD: the record goes with every change; the route sets only the rigor")
-		match(t, b, `the owner's request verbatim`, "handoffs carry the request")
-		match(t, b, `also fails on the base is reported as pre-existing`, "blockers are measured against the base")
+		// T146 FA3 (L1217): the delivery and delegation rules are read on
+		// demand; the orchestrator carries the pointer, the contract the rule.
+		match(t, b, "run `jhon risk` in its tree and read `contracts/delivery\\.md`", "the risk tier drives verification, read before delivery")
+		match(t, b, "Before writing a delegation prompt, read `contracts/delegation\\.md`", "the delegation rules, read before delegating")
+		match(t, b, "`contracts/<name>\\.md` here is `~/\\.local/share/jhon/current/prose/contracts/<name>\\.md`, binding once its trigger applies", "a contract the orchestrator names resolves")
+		delivery := flat(support.Read(t, treePath(repoRoot, "contracts/delivery.md")))
+		delegation := flat(support.Read(t, treePath(repoRoot, "contracts/delegation.md")))
+		match(t, delivery, "`verify` and an automatic 4R with only the pertinent lenses", "L9: risk high gets verify and a 4R by need")
+		match(t, delivery, "`review_required` always wins; Judgment Day only when the owner asks", "L9, S17: review_required wins, Judgment Day only on request")
+		match(t, delivery, `The record is always; the rigor is the change's, not\s+yours`, "LDD: the record goes with every change; the route sets only the rigor")
+		match(t, delegation, `the owner's request verbatim`, "handoffs carry the request")
+		match(t, delegation, `also fails on the base is reported as pre-existing`, "blockers are measured against the base")
 		match(t, b, `While planning \(exploring, proposing, writing specs, design, tasks, or the\s+next slice's plan\), ask the owner every open point and assume nothing`, "planning asks every open point (L178)")
 		match(t, b, `Once the owner accepts the plan, ask only a real doubt it does not\s+answer, one that changes the scope`, "the question triggers ride in the always-on layer")
 		match(t, b, `Every question names the answer you recommend and\s+why, from the project's context`, "each question carries a recommended answer (L179)")
 		match(t, b, `Inside an authorized change the next step is not a question`, "a slice's next phase follows its report")
-		match(t, b, `Size each worker slice to fit its context budget; the worker checkpoints its progress and partial state at its context notice and returns what is done and what remains: hand the remainder to a fresh worker`, "T131, L905, L908: no turn cap; the context budget sizes a slice")
+		match(t, delegation, `Size each worker slice to fit its context budget; the worker checkpoints its progress and partial state at its context notice and returns what is done and what remains: hand the remainder to a fresh worker`, "T131, L905, L908: no turn cap; the context budget sizes a slice")
 		noMatch(t, b, `(?i)turn cap|\d+-turn|before the cap`, "T131: the orchestrator names no turn cap")
-		match(t, b, `A slice that crosses layers runs as passes, one layer each, in\s+dependency order: pure domain; persistence \(migration, models, migration\s+test\); application \(commands, handlers, repository port and adapter\);\s+API and record \(route, schemas, permission rows, contract test, docs\)\.\s+One worker per pass, its brief naming its exact files from tasks\.md, its\s+Allowed edit surfaces and its one commit, each under the child\s+budget \(wrap-up 80K/40%, cap 150K/75%\); independent passes run in\s+parallel, each in its own worktree\.`, "T126, L797: a multi-layer slice runs as one worker per layer pass")
+		noMatch(t, delegation, `(?i)turn cap|\d+-turn|before the cap`, "T131: the delegation rules name no turn cap")
+		match(t, delegation, `A slice that crosses layers runs as passes, one layer each, in\s+dependency order: pure domain; persistence \(migration, models, migration\s+test\); application \(commands, handlers, repository port and adapter\);\s+API and record \(route, schemas, permission rows, contract test, docs\)\.\s+One worker per pass, its brief naming its exact files from tasks\.md, its\s+Allowed edit surfaces and its one commit, each under the child\s+budget \(wrap-up 80K/40%, cap 150K/75%\); independent passes run in\s+parallel, each in its own worktree\.`, "T126, L797: a multi-layer slice runs as one worker per layer pass")
 		match(t, b, `One session per change`, "S35: a fresh session after an archive or at half the context")
-		match(t, b, `A suite the PR's CI runs whole is never run whole here too`, "in a client project a local full integration suite (35 to 56 min) repeated CI's")
-		match(t, b, "For a wide or long run, tell the owner the `--dry-run` estimate, and when it should end, as you start the run, never a guess from the files changed", "the owner asked how it was going 4 times in a client project; L38, S22: an estimate only for wide or long runs")
-		match(t, b, "with `delivery: change` in `openspec/config.yaml`, committed on the change's branch and merged once with rebase after the last", "one PR and one CI run per change")
+		match(t, delivery, `A suite the PR's CI runs whole is never run whole here too`, "in a client project a local full integration suite (35 to 56 min) repeated CI's")
+		match(t, delivery, "For a wide or long run, tell the owner the `--dry-run` estimate, and when it should end, as you start the run, never a guess from the files changed", "the owner asked how it was going 4 times in a client project; L38, S22: an estimate only for wide or long runs")
+		match(t, delivery, "with `delivery: change` in `openspec/config.yaml`, committed on the change's branch and merged once with rebase after the last", "one PR and one CI run per change")
 	})
 
 	t.Run("the orchestrator builds a handoff with jhon context --handoff", func(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
 		for _, name := range []string{"jhon-orchestrator"} {
-			match(t, flat(claudeAgent(t, home, name)), `jhon context <change> --phase none --handoff`, name)
+			match(t, flat(claudeAgent(t, home, name)), "Before writing a delegation prompt, read `contracts/delegation\\.md`", name)
 		}
+		// T146 FA3 (L1217): the handoff rule is read on demand.
+		match(t, flat(support.Read(t, treePath(repoRoot, "contracts/delegation.md"))), `jhon context <change> --phase none --handoff`, "contracts/delegation.md")
 	})
 
 	// Item 8: the /clear notice.
@@ -2374,7 +2383,8 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		match(t, read("skills/ldd/references/explore.md"), `already exists, read it first and extend it`)
 		match(t, read("skills/ldd/references/design.md"), `Read budget:`)
 		match(t, read("skills/ldd/references/design.md"), `exploration\.md`)
-		match(t, read("orchestrator.md"), `One explore per change`)
+		match(t, read("contracts/delegation.md"), `One explore per change`)
+		match(t, read("orchestrator.md"), "Before writing a delegation prompt, read `contracts/delegation\\.md`")
 	})
 
 	// A client project, pi: a slice's tests ran as loose pytest calls before its commit,
