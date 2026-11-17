@@ -68,7 +68,7 @@ func runExecutionsVerify(argv []string) (int, error) {
 		return 2, nil
 	}
 	if last, err := execution.ReadLastRun(root, change); err == nil && last != nil && *verdict == execution.VerdictPass && !last.RedBeforeGreen {
-		fmt.Fprintf(os.Stderr, "jhon executions: no RED before GREEN on record for %s: a light verify passes a change whose new test failed first; run `jhon executions run %s` while its new test fails (RED), then again once it passes (GREEN)\n", change, change)
+		fmt.Fprintf(os.Stderr, "jhon executions: no RED before GREEN on record for %s: a light verify passes a change whose new test failed first; %s\n", change, ldd.RedGreenHint(change))
 		return 2, nil
 	}
 	c := vcs.CandidateOf(root, execution.ChangeRecordPaths(root, change))

@@ -62,8 +62,8 @@ report them.
 **Where the session says LDD is active, these bind.** Before a
 change, start with `jhon status` and `jhon risk` in its tree. Write the
 record it needs before the first behaviour-changing edit. Write the test
-first and run it through `jhon executions run <change>` while it fails
-(RED), then make the change and run it again (GREEN).
+first and run it through `jhon executions run <change> --affected <base>`
+while it fails (RED), then make the change and run it again (GREEN).
 When LDD's tools cannot record a run, still do the task test-first (RED,
 then GREEN) with the project's own test command and say the record is
 missing; never stop with the work undone.
@@ -182,8 +182,9 @@ A live task list is optional: when you keep one,
 - **Validate consequential premises before building.** At most one
   independent read-only challenge, for a high-consequence premise nothing
   has proved; a deterministic failure gets a fix, not a debate.
-- **Check proportionately.** Focused tests while iterating; before
-  delivery, the affected tests: `jhon executions run <change> --affected
+- **Check proportionately.** Iterate with a unit's run,
+  `jhon executions run <change> --affected`; before delivery, the
+  affected tests: `jhon executions run <change> --affected
   <base>` narrows each project to the tests the change reaches, a change
   of shared behavior included. A suite the PR's CI runs whole is never
   run whole here too: its green checks test the delivery. When the run
@@ -195,8 +196,7 @@ A live task list is optional: when you keep one,
   from the worktree that holds the change (each lane's from its own),
   never as a loose `pytest` or `npm test`: only its record lets
   `jhon deliver check` deliver. A whole suite run by hand gets a note,
-  never a refusal; a package, a directory, and focused commands stay for
-  iterating. A command that did not pass keeps its failed tests
+  never a refusal. A command that did not pass keeps its failed tests
   (`failed_tests`) and the end of its output (`output_tail`) in the
   record: read them there. For a wide or long run, tell the owner the
   `--dry-run` estimate, and when it should end, as you start the run,

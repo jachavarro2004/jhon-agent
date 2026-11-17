@@ -753,3 +753,16 @@ func TestSlicesOutline(t *testing.T) {
 		t.Errorf("single slice done = %q", line)
 	}
 }
+
+// T145b (L1203 N1, N3): the note that asks for a RED before GREEN says the
+// inner loop of docs/ldd.md, "Test runs": the slice base for the RED record
+// and the slice's close, a unit's run between, and what the base is.
+func TestRedGreenNoteFollowsTheInnerLoop(t *testing.T) {
+	jhonRoot(t)
+	root := configuredRepo(t, "", "src/app.py", "tests/test_app.py")
+	write(t, filepath.Join(root, "openspec/changes/c/.openspec.yaml"), "schema: spec-driven\n")
+	want := "no RED before GREEN on record for c: run `jhon executions run c --affected <base>` while its new test fails (RED), a unit's run (`--affected`) between, and `--affected <base>` again once it passes (GREEN), where <base> is the commit the slice started from (with none, a full `jhon executions run c`)"
+	if st := statusOf(t, root, s("c")); !slices.Contains(st.Notes, want) {
+		t.Errorf("notes %q lack %q", st.Notes, want)
+	}
+}

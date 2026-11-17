@@ -6,6 +6,10 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The RED-before-GREEN hints (jhon status, the route guard's PR refusal, a light verify's refusal) and the LDD prose follow the inner loop: the slice base for the RED record and the slice's close, a unit's run (--affected) between (T145b).
+
 ## [0.3.5] - 2026-11-17
 
 ### Added

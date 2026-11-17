@@ -20,7 +20,7 @@ func TestLDDProseIsProportionalAndBinding(t *testing.T) {
 			"Where the session says LDD is active, every change starts the same way",
 			"Run `jhon status` and `jhon risk` in its tree.",
 			"before its first behaviour-changing edit",
-			"run it through `jhon executions run <change>` while it fails (RED)",
+			"run it through `jhon executions run <change> --affected <base>` while it fails (RED)",
 			"over about 400 lines of code",
 			"Create it yourself, without being asked, when you see several rules or cases to cover or a design decision on the way.",
 			"A spec delta only when a main spec under `openspec/specs/` changes or is added.",
@@ -35,20 +35,21 @@ func TestLDDProseIsProportionalAndBinding(t *testing.T) {
 		},
 		"contracts/tdd.md": {
 			"TDD always.",
-			"through `jhon executions run <change>` while it fails (RED)",
+			"through `jhon executions run <change> --affected <base>` while it fails (RED), unit runs (`--affected`) between",
 			"refuses the PR of a behaviour change without its RED before GREEN",
 		},
 		"contracts/routing.md": {
 			"Start with `jhon status` and `jhon risk`",
 			"before the first behaviour-changing edit",
-			"`jhon executions run <change>`",
+			"`jhon executions run <change> --affected <base>` while it fails; unit runs (`--affected`) between",
 			"a small change has no folder",
 			"Outline every slice first; write a slice's tasks after delivering the one before, on what exists.",
 		},
 		"orchestrator.md": {
 			"start with `jhon status` and `jhon risk`",
 			"before the first behaviour-changing edit",
-			"`jhon executions run <change>` while it fails (RED)",
+			"`jhon executions run <change> --affected <base>` while it fails (RED)",
+			"Iterate with a unit's run, `jhon executions run <change> --affected`",
 			"Create tasks.md yourself when you see several rules or cases to cover or a design decision on the way.",
 			// T64: the session says whether LDD is active; a record LDD cannot keep never stops the work.
 			"**Where the session says LDD is active, these bind.**",
@@ -69,9 +70,9 @@ func TestLDDProseIsProportionalAndBinding(t *testing.T) {
 			"Only the current slice gets tasks, written once the one before is delivered; revise the outline when evidence says so.",
 			"Tasks in a later slice, over 12 in a slice, or a slice without `Delivers:` get a note in `jhon status`.",
 			"## Slice 2: {name} Delivers: {CA-03} ```"},
-		"skills/ldd/references/apply.md":   {"`jhon executions run {change-name}` while it fails (RED)"},
+		"skills/ldd/references/apply.md":   {"`jhon executions run {change-name} --affected <base-ref>` while it fails (RED)"},
 		"skills/ldd/references/archive.md": {"Archive only a change with a folder and its RED before GREEN on record"},
-		"agents/worker.md":                 {"`jhon executions run <change>` while it fails (RED)"},
+		"agents/worker.md":                 {"`jhon executions run <change> --affected <base>` while it fails (RED)"},
 		// T76: the explore reports the standing decisions on what it covers.
 		"agents/explore.md": {"for prior decisions on each entity you cover, and report each by id"},
 	}
@@ -85,6 +86,9 @@ func TestLDDProseIsProportionalAndBinding(t *testing.T) {
 		// T127 (L837): slices are outlined from the first plan.
 		"there is no upfront plan", "never upfront", "Plan the next slice after this one is delivered",
 		"each planned after the last is delivered", "names the first slice", "Tasks planned ahead",
+		// T145b (L1203 N2): RED and GREEN follow the inner loop of docs/ldd.md, "Test runs".
+		"`jhon executions run <change>` while it fails", "`jhon executions run {change-name}` while it fails",
+		"focused commands stay for iterating",
 	}
 	for file, phrases := range wants {
 		body := read(file)

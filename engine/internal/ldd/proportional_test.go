@@ -66,7 +66,7 @@ func TestNextWaitsForRedBeforeGreen(t *testing.T) {
 	// Its folder holds no artifact: an exploration alone would make it an umbrella (T37).
 	write(t, filepath.Join(root, "openspec/changes/c/.openspec.yaml"), "schema: spec-driven\n")
 	st := statusOf(t, root, s("c"))
-	if st.Next != "apply" || !strings.Contains(notes(st), "no RED before GREEN on record for c: run `jhon executions run c` while its new test fails (RED), then again once it passes (GREEN)") {
+	if st.Next != "apply" || !strings.Contains(notes(st), "no RED before GREEN on record for c: run `jhon executions run c --affected <base>` while its new test fails (RED), a unit's run (`--affected`) between, and `--affected <base>` again once it passes (GREEN), where <base> is the commit the slice started from (with none, a full `jhon executions run c`)") {
 		t.Errorf("no runs: next %s, notes %q", st.Next, st.Notes)
 	}
 	record := filepath.Join(root, "openspec/changes/c/execution-record.json")
