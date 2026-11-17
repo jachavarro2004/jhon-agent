@@ -1,11 +1,13 @@
 package ldd
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jachavarro2004/jhon-agent/test/support"
 )
@@ -132,4 +134,113 @@ func TestSmallChangeDeliversOnItsGreenRun(t *testing.T) {
 	o := jhonGit(t, other, "deliver", "check", smallChange, "--json")
 	equal(t, o.Code, 1, o.Out())
 	equal(t, anyMatch(object(t, o.Stdout)["reasons"], `^the last test run started on a working tree that was not clean`), true, o.Stdout)
+}
+
+// T146d (L1223-L1224): the committed-tree acceptance trusts only a run that
+// passed, finished, and saw its working tree unchanged from its start to its
+// end. The working tree is read again after the run: one edited while the
+// run went on is marked dirty, so its start-of-run tree is no evidence.
+
+// evidenceNote is the note a run accepted for its committed tree carries.
+const evidenceNote = `^the last test run tested this tree before its commit`
+
+// whileItRuns runs the small change's affected run in the background, calls
+// during at about 1.2 s (the test command sleeps 3 s first, so the run's
+// start is read before and its test after), and returns the run's result.
+func whileItRuns(t *testing.T, root, test string, during func()) support.Result {
+	t.Helper()
+	support.Write(t, root, map[string]string{"openspec/config.yaml": "test_command_override:\n  a: \"sleep 3 && " + test + "\"\n" +
+		"lint_command_override:\n  a: \"true\"\nformat_command_override:\n  a: \"true\"\n"})
+	support.Bin(t) // a build failure fails here, not in the goroutine
+	done := make(chan support.Result, 1)
+	go func() { done <- jhonGit(t, root, "executions", "run", smallChange, "--affected", "main") }()
+	time.Sleep(1200 * time.Millisecond)
+	during()
+	select {
+	case r := <-done:
+		return r
+	case <-time.After(2 * time.Minute):
+		t.Fatal("the run did not end")
+	}
+	return support.Result{}
+}
+
+// refused is a deliver check that refuses with the given reason and gives
+// no evidence note.
+func refused(t *testing.T, root, reason string, msg ...any) {
+	t.Helper()
+	d := jhonGit(t, root, "deliver", "check", smallChange, "--json")
+	equal(t, d.Code, 1, append(msg, d.Out())...)
+	c := object(t, d.Stdout)
+	equal(t, c["ready"], false, msg...)
+	equal(t, anyMatch(c["notes"], evidenceNote), false, append(msg, c["notes"])...)
+	if reason != "" {
+		equal(t, anyMatch(c["reasons"], reason), true, append(msg, c["reasons"])...)
+	}
+}
+
+// A file changed while the run went on (its test passed on the change) and
+// put back before the commit: the committed tree is the start's, but the
+// run did not test it alone. Refused.
+func TestSmallChangeRefusesARunEditedWhileItRan(t *testing.T) {
+	t.Parallel()
+	root := smallRepo(t)
+	support.Write(t, root, map[string]string{"flag": "A\n"})
+	r := whileItRuns(t, root, "grep -qx B ../flag", func() { support.Write(t, root, map[string]string{"flag": "B\n"}) })
+	equal(t, r.Code, 0, r.Out())
+	support.Write(t, root, map[string]string{"flag": "A\n"})
+	commit(t, root, "small fix")
+	refused(t, root, `^the candidate changed during the last test run`)
+}
+
+// An untracked file that appeared while the run went on (its test needs it)
+// and was removed before the commit: refused the same way.
+func TestSmallChangeRefusesAnUntrackedFileRemovedBeforeCommit(t *testing.T) {
+	t.Parallel()
+	root := smallRepo(t)
+	r := whileItRuns(t, root, "test -f ../untracked", func() { support.Write(t, root, map[string]string{"untracked": "x\n"}) })
+	equal(t, r.Code, 0, r.Out())
+	os.Remove(filepath.Join(root, "untracked"))
+	commit(t, root, "small fix")
+	refused(t, root, `^the candidate changed during the last test run`)
+}
+
+// HEAD moved while the run went on (its tree committed mid-run): what was
+// tested is not one revision. Refused.
+func TestSmallChangeRefusesARunWhoseHeadMovedWhileItRan(t *testing.T) {
+	t.Parallel()
+	root := smallRepo(t)
+	r := whileItRuns(t, root, "true", func() { commit(t, root, "small fix, mid-run") })
+	equal(t, r.Code, 0, r.Out())
+	commit(t, root, "small fix")
+	refused(t, root, `^the candidate changed during the last test run`)
+}
+
+// A failed run, a partial record and an old record with no working_tree are
+// never the committed tree's evidence: refused, with no evidence note.
+func TestSmallChangeRefusesFailedPartialAndOldRuns(t *testing.T) {
+	t.Parallel()
+	failed := smallRepo(t)
+	support.Write(t, failed, map[string]string{"red": ""})
+	equal(t, jhonGit(t, failed, "executions", "run", smallChange, "--affected", "main").Code, 1, "RED")
+	commit(t, failed, "a failing test committed")
+	refused(t, failed, `^the last test run did not pass`, "failed")
+
+	edited := func(name string, edit func(map[string]any)) string {
+		root := smallRepo(t)
+		equal(t, jhonGit(t, root, "executions", "run", smallChange, "--affected", "main").Code, 0, name)
+		commit(t, root, "small fix")
+		rec := object(t, support.Read(t, filepath.Join(root, smallRecord)))
+		edit(rec)
+		b, err := json.Marshal(rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		support.Write(t, root, map[string]string{smallRecord: string(b)})
+		return root
+	}
+	partial := edited("partial", func(r map[string]any) { r["complete"] = false })
+	refused(t, partial, `^the last test run did not finish`, "partial")
+	old := edited("old", func(r map[string]any) { delete(r, "working_tree") })
+	refused(t, old, `^the last test run started on a working tree that was not clean`, "old")
 }

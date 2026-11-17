@@ -40,8 +40,10 @@ import (
 //     written and the executor exits; no project outlives it.
 //   - Identity: the candidate (HEAD's commit and tree, and whether the working
 //     tree is clean) is read before the first command and again after the
-//     last. A difference marks the record `dirty`: what was tested is not one
-//     revision. The change's own record files never make the tree unclean.
+//     last, and so is the working tree's git tree (`working_tree`, then
+//     `after_working_tree`). A difference marks the record `dirty`: what was
+//     tested is not one revision. The change's own record files never make
+//     the tree unclean.
 //
 // Projects run sequentially: their output streams to
 // the terminal unmixed, and each deadline is the project's alone.
@@ -203,9 +205,12 @@ type Record struct {
 	// (vcs.WorkingTree): what a later run on the same bytes may reuse.
 	WorkingTree string `json:"working_tree,omitempty"`
 	// After is the candidate read after the run; nil until it ends.
-	After      *CandidateFields `json:"after"`
-	Dirty      bool             `json:"dirty"`
-	Executions []Execution      `json:"executions"`
+	After *CandidateFields `json:"after"`
+	// AfterWorkingTree is WorkingTree read again after the run; a
+	// difference marks the record Dirty. Empty until the run ends.
+	AfterWorkingTree string      `json:"after_working_tree,omitempty"`
+	Dirty            bool        `json:"dirty"`
+	Executions       []Execution `json:"executions"`
 	// History is the outcome of each earlier complete run (HistoryOf).
 	History []PastRun `json:"history,omitempty"`
 	// LightVerify is the change's light verify notes (AddLightVerify).
