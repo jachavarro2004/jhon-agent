@@ -314,14 +314,21 @@ func TestTheProgramsExitCodeAndOutputPassThrough(t *testing.T) {
 			}
 		})
 	}
-	// Its stdin, its working directory, and a --help of its own.
+	// Its stdin, its working directory, and options of its own.
 	r := support.Run(t, support.Cmd{Args: []string{support.Bin(t), "sandbox", "run", "--", "sh", "-c", `cat; pwd`}, Dir: b.proj, Env: b.env, Stdin: "from stdin\n"})
 	if r.Code != 0 || r.Stdout != "from stdin\n"+b.proj+"\n" {
 		t.Errorf("stdin and cwd: exit %d, stdout %q, stderr %q", r.Code, r.Stdout, r.Stderr)
 	}
-	r = support.Jhon(t, b.proj, b.env, "sandbox", "run", "--", "printf", `%s\n`, "--help")
-	if r.Code != 0 || r.Stdout != "--help\n" {
-		t.Errorf("the program's own --help: exit %d, stdout %q; want it passed to the program", r.Code, r.Stdout)
+	// A program of the test's own, not a system one whose --help text varies
+	// by coreutils (uutils printf took --help as its own, L1142): it echoes
+	// each argument, writes to stderr and exits 4.
+	args := filepath.Join(b.proj, "args")
+	if err := os.WriteFile(args, []byte("#!/bin/sh\nfor a; do echo \"arg $a\"; done\necho its-own-stderr >&2\nexit 4\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r = support.Jhon(t, b.proj, b.env, "sandbox", "run", "--", args, "--help", "--profile", "delivery")
+	if r.Code != 4 || r.Stdout != "arg --help\narg --profile\narg delivery\n" || r.Stderr != "its-own-stderr\n" {
+		t.Errorf("the program's own --help and --profile: exit %d, stdout %q, stderr %q; want 4, each argument passed to the program, its stderr", r.Code, r.Stdout, r.Stderr)
 	}
 }
 

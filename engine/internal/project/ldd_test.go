@@ -1,6 +1,7 @@
 package project
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -80,7 +81,12 @@ func TestUsesLddIgnoresAnOldSwitchOff(t *testing.T) {
 		t.Fatal("no record, yet one to tell")
 	}
 	os.MkdirAll(lddswitch.Dir(), 0o700)
-	if err := os.WriteFile(lddswitch.File(dir), []byte(`{"ldd":"off","root":"`+dir+`","since":"x"}`), 0o600); err != nil {
+	// Marshalled, not spliced: a Windows root's backslashes must be escaped.
+	record, err := json.Marshal(map[string]string{"ldd": "off", "root": dir, "since": "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lddswitch.File(dir), record, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if !UsesLdd(dir) {
