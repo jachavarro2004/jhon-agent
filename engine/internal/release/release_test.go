@@ -72,6 +72,40 @@ func TestRootsSource(t *testing.T) {
 	}
 }
 
+// The checkout `jhon sync` last installed from, recorded in the install
+// record, is the source when the runtime is no checkout and JHON_SOURCE is
+// unset: ahead of the legacy ~/dev/jhon and ~/.agents/jhon, behind the two.
+func TestRootsRecordedSource(t *testing.T) {
+	recorded := t.TempDir()
+	record := func(home, source string) {
+		t.Helper()
+		p := filepath.Join(home, ".cache", "jhon", "install.json")
+		must(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		must(t, os.WriteFile(p, []byte(`{"installed_at":"2026-11-16T10:00:00.000Z","commit":"abc","source":"`+source+`"}`+"\n"), 0o644))
+	}
+	checkout := t.TempDir()
+	must(t, os.Mkdir(filepath.Join(checkout, ".git"), 0o755))
+	bare, both, gone := t.TempDir(), t.TempDir(), t.TempDir()
+	record(bare, recorded)
+	record(both, recorded)
+	must(t, os.MkdirAll(filepath.Join(both, ".agents", "jhon"), 0o755))
+	must(t, os.MkdirAll(filepath.Join(both, "dev", "jhon"), 0o755))
+	record(gone, filepath.Join(gone, "removed"))
+	for _, c := range []struct{ name, runtime, jhonSource, home, want string }{
+		{"the recorded source when JHON_SOURCE is unset and the runtime is no checkout", "/release", "", bare, recorded},
+		{"the recorded source ahead of the legacy paths", "/release", "", both, recorded},
+		{"JHON_SOURCE ahead of the recorded source", "/release", "/elsewhere", bare, "/elsewhere"},
+		{"a checkout runtime ahead of the recorded source", checkout, "", bare, checkout},
+		{"a recorded source that is gone falls back to ~/dev/jhon", "/release", "", gone, gone + "/dev/jhon"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if r := roots(c.runtime, c.jhonSource, c.home); r.Source != c.want {
+				t.Errorf("roots(%q, %q, %q).Source = %s; want %s", c.runtime, c.jhonSource, c.home, r.Source, c.want)
+			}
+		})
+	}
+}
+
 func TestLocateHonoursJhonRoot(t *testing.T) {
 	t.Setenv("JHON_ROOT", "/some/release")
 	t.Setenv("JHON_SOURCE", "/some/source")

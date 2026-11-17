@@ -4,14 +4,14 @@ Jhon is one public repository,
 [jachavarro2004/jhon-agent](https://github.com/jachavarro2004/jhon-agent):
 the source, the tests, the docs, the installers (`install.sh` and
 `install.ps1` at the root) and the release workflow
-(`.github/workflows/release.yml`) together. Every release from v0.3.1 on is
+(`.github/workflows/release.yml`) together. Every release is
 built, signed and published there, from the tagged commit of the same
 repository: no second repository and no deploy key.
 
 The workflow's path matters: `jhon update` trusts signatures from
 `https://github.com/jachavarro2004/jhon-agent/.github/workflows/release.yml@refs/tags/vX.Y.Z[-rc.N]`
-(`IdentityPattern` in `engine/internal/update/verify.go`), and `install.sh`
-verifies the same identity. Moving or renaming the workflow, or changing its
+(`IdentityPattern` in `engine/internal/update/verify.go`), the one signer it
+trusts, and `install.sh` verifies the same identity. Moving or renaming the workflow, or changing its
 identity check, needs the same change in both. Each of its jobs runs only
 when `github.repository` is `jachavarro2004/jhon-agent`, so a tag pushed to a
 fork or a private mirror builds nothing.
@@ -22,39 +22,6 @@ Signing needs no key: cosign keyless takes the workflow's GitHub OIDC token (`id
 
 1. The `## [X.Y.Z]` section of `CHANGELOG.md` is the release notes; commit it.
 2. Tag the commit `vX.Y.Z` in jachavarro2004/jhon-agent and push the tag. The workflow checks the tag's form, checks out the tag, runs `jhon release pack` (which builds jhon and runs its Go tests) on amd64 and arm64, packs the commit again and requires the same bytes (`tools/release/repro.sh`), signs and verifies each tarball and its SBOM, and publishes the release; an `-rc.N` tag is published as a pre-release, so `jhon update` never offers it (test one with `JHON_RELEASES_URL`).
-
-## What is left for the v0.3.0 bridge
-
-Up to v0.3.0, releases came from a second, public repository built from a
-private source. v0.3.0 is the bridge (T18): it is the last release built and
-signed by that old pair, so the copies installed before the move, which
-trust only the old signer, accept it; and it is the first that reads its
-updates from jachavarro2004/jhon-agent and trusts both signers
-(`IdentityPattern` and `BridgeIdentityPattern` in `verify.go`). What only
-the bridge needs stays in `dist/`, unchanged but for its notes:
-
-| here | in the old public repository, jachavarro2004/jhon |
-| --- | --- |
-| `dist/public/README.md` | `README.md`, Jhon's user manual |
-| `dist/public/.github/workflows/release.yml` | `.github/workflows/release.yml`: it checks out the private source jachavarro2004/jhon-agents at the tag with the `JHON_AGENTS_DEPLOY_KEY` secret and signs as `https://github.com/jachavarro2004/jhon/.github/workflows/release.yml@refs/tags/vX.Y.Z[-rc.N]` |
-| `dist/public/install.sh` | `install.sh`: the root's, with the old repository and signer |
-| `dist/public/install.ps1` | `install.ps1`: the root's, with the old repository's URL |
-| `dist/public/LICENSE` | `LICENSE` |
-
-`dist/setup-deploy-key.sh` made that deploy key and secret once (T10b); it
-is obsolete and needs no rerun. `.github/workflows/validate.yml` still smokes
-`dist/public/install.ps1`, the same script as the root's but for its URL.
-
-Cutting the bridge:
-
-1. In this repository: the `## [0.3.0]` section of `CHANGELOG.md`, committed, and the tag `v0.3.0` pushed to the private origin, jachavarro2004/jhon-agents (the root workflow does not run there).
-2. Mirror `dist/public/` at that tag into jachavarro2004/jhon and commit it on `main`.
-3. In jachavarro2004/jhon: the same tag, `v0.3.0`, pushed. Its workflow builds, checks, signs and publishes as above.
-
-Until v0.3.1 is published in jachavarro2004/jhon-agent, `jhon update` on
-v0.3.0 finds no release there and says no stable release is published yet.
-Once v0.3.1 is out and jachavarro2004/jhon is deleted, `dist/public/`,
-`dist/setup-deploy-key.sh`, their tests and `BridgeIdentityPattern` can go.
 
 ## Release assets
 
@@ -103,6 +70,6 @@ of the module is Linux-only) and checks that `install.ps1` parses and fails
 cleanly in PowerShell 7 and 5.1 on a runner with no WSL distro to install
 into. install.ps1 has no local source, so no install runs there.
 
-The installers' tests are `dist/test/*.py`: both `install.sh` copies run in
-full, and `install.ps1` is checked statically. Run them with
+The installers' tests are `dist/test/*.py`: `install.sh` runs in full, and
+`install.ps1` is checked statically. Run them with
 `python3 -I -m unittest discover -s dist/test -p 'test_*.py'`.

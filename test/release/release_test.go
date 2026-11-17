@@ -362,11 +362,17 @@ func TestRelease(t *testing.T) {
 		equal(t, namingSource(t, filepath.Join(release, "runtimes", "claude-code", "plugin"), env.home, src), []string{})
 
 		// Provenance comes from the captured commit.
-		var record struct{ Commit string }
+		var record struct{ Commit, Source string }
 		if err := json.Unmarshal([]byte(support.Read(t, filepath.Join(env.home, ".cache", "jhon", "install.json"))), &record); err != nil {
 			t.Fatal(err)
 		}
 		equal(t, record.Commit, commit)
+		// The checkout sync ran from is recorded, and the installed CLI, outside
+		// any checkout and with no JHON_SOURCE, works on it.
+		equal(t, record.Source, src)
+		h := run(t, env, filepath.Join(env.home, ".local", "bin", "jhon"), []string{"help"}, "JHON_SOURCE=", "JHON_ROOT=")
+		wantCode(t, h, 0)
+		match(t, h.Stdout, `(?m)^  source:  `+regexp.QuoteMeta(src)+`$`)
 	})
 
 	t.Run("AV1: a second sync switches current to the new commit and keeps the old release; an uncommitted edit governs nothing", func(t *testing.T) {

@@ -74,7 +74,7 @@ jobs:
           JHON_ROOT="$PWD" ./build/jhon render-engine --check --only claude-code
 
   windows:
-    # Jhon runs on Linux; on Windows it runs inside WSL 2 (dist/public/install.ps1).
+    # Jhon runs on Linux; on Windows it runs inside WSL 2 (install.ps1).
     # This job proves what can be proven on a Windows runner (T52): the
     # packages that compile for GOOS=windows build, vet and pass their tests,
     # and install.ps1 parses and fails cleanly, in PowerShell 7 and 5.1, on a
@@ -127,7 +127,7 @@ jobs:
         timeout-minutes: 5
         shell: pwsh
         run: |
-          $script = Join-Path $PWD 'dist/public/install.ps1'
+          $script = Join-Path $PWD 'install.ps1'
           $errors = $null
           $null = [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$null, [ref]$errors)
           if ($errors) { $errors | ForEach-Object { Write-Error "install.ps1: $_" }; exit 1 }

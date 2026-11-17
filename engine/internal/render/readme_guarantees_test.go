@@ -10,11 +10,11 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
 )
 
-// The READMEs' (the repository's and the published one's) "What each runtime guarantees" table counts agents.yaml's
+// The README's "What each runtime guarantees" table counts agents.yaml's
 // `guarantees` per runtime and level (T56): a guarantee that moves moves the table.
 func TestReadmeGuaranteeCountsMatchAgentsYaml(t *testing.T) {
 	m := manifest.MustLoad(repo).Matrix
-	for _, file := range []string{"README.md", "dist/public/README.md"} {
+	for _, file := range []string{"README.md"} {
 		b, err := os.ReadFile(filepath.Join(repo, file))
 		if err != nil {
 			t.Fatal(err)

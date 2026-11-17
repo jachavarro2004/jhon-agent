@@ -2256,6 +2256,20 @@ func TestRenderInstallRecord(t *testing.T) {
 		equal(t, rec["commit"], expectedCommit())
 	})
 
+	t.Run("a render records no source of its own and keeps the one sync recorded", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		wantCode(t, install(t, home, repoRoot), 0)
+		if _, ok := readRecord(t, home)["source"]; ok {
+			t.Error("a render recorded a source; only sync does")
+		}
+		write(t, filepath.Join(home, recordPath), `{"installed_at":"2020-01-01T00:00:00.000Z","commit":"0000000","source":"/the/checkout"}`+"\n")
+		wantCode(t, install(t, home, repoRoot), 0)
+		rec := readRecord(t, home)
+		equal(t, rec["commit"], expectedCommit())
+		equal(t, rec["source"], "/the/checkout")
+	})
+
 	// Docket AV1 replaces the expectation this test held ("a copy outside git
 	// records the commit as unknown"): an install now runs only from a
 	// release, whose directory name is the captured commit, so a checkout or a

@@ -1,7 +1,6 @@
-"""Tests for install.sh (the repository root's, jachavarro2004/jhon-agent) and
-dist/public/install.sh (the v0.3.0 bridge's, jachavarro2004/jhon): fake uname,
-curl and cosign on a temp PATH, a fake release on disk, nothing from the
-network or the real HOME."""
+"""Tests for install.sh (the repository root's, jachavarro2004/jhon-agent):
+fake uname, curl and cosign on a temp PATH, a fake release on disk, nothing
+from the network or the real HOME."""
 
 import hashlib
 import io
@@ -372,18 +371,6 @@ class InstallerTest(unittest.TestCase):
         self.assertEqual(self.logged("jhon")[1:], ["setup"])
         self.assertIn("is not on your PATH", r.stdout)
         self.assertNotIn("Next steps:", r.stdout)
-
-
-class BridgeInstallerTest(InstallerTest):
-    """dist/public/install.sh, kept only for the v0.3.0 bridge: releases of
-    jachavarro2004/jhon, signed by its workflow (T18)."""
-
-    INSTALLER = ROOT / "dist" / "public" / "install.sh"
-    REPO = "jachavarro2004/jhon"
-    IDENTITY = (
-        r"^https://github\.com/jachavarro2004/jhon/\.github/workflows/release\.yml"
-        r"@refs/tags/v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-rc\.(0|[1-9]\d*))?$"
-    )
 
 
 if __name__ == "__main__":

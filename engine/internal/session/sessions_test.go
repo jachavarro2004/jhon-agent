@@ -186,7 +186,8 @@ func TestNoInstallRecordNoteByRole(t *testing.T) {
 }
 
 // TestHasCheckout is the role signal: JHON_ROOT (or the binary's root)
-// holding .git, or a source checkout at JHON_SOURCE or ~/dev/jhon.
+// holding .git, or a source checkout at JHON_SOURCE, the source `jhon sync`
+// recorded, or ~/dev/jhon.
 func TestHasCheckout(t *testing.T) {
 	home, root := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
@@ -194,6 +195,28 @@ func TestHasCheckout(t *testing.T) {
 	t.Setenv("JHON_ROOT", root)
 	if hasCheckout() {
 		t.Error("a release root with no source anywhere is a checkout")
+	}
+	recorded := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".cache", "jhon"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, InstallRecord), []byte(`{"installed_at":"2026-11-16T10:00:00.000Z","commit":"abc","source":"`+recorded+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if hasCheckout() {
+		t.Error("a recorded source without the binary's source is a checkout")
+	}
+	if err := os.MkdirAll(filepath.Join(recorded, "engine", "cmd", "jhon"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(recorded, "engine", "cmd", "jhon", "main.go"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !hasCheckout() {
+		t.Error("the recorded source holding the source is not a checkout")
+	}
+	if err := os.Remove(filepath.Join(home, InstallRecord)); err != nil {
+		t.Fatal(err)
 	}
 	src := filepath.Join(home, "dev", "jhon")
 	if err := os.MkdirAll(filepath.Join(src, "engine", "cmd", "jhon"), 0o755); err != nil {

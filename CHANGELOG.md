@@ -6,6 +6,11 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The 0.3.0 bridge is retired: `jhon update` and `install.sh` trust exactly one signer, this repository's release workflow (`IdentityPattern`) for `vX.Y.Z` and `vX.Y.Z-rc.N` tags, and the old repository's installer copies, release workflow and deploy-key script are gone from `dist/` (T18).
+- `jhon sync` records the checkout it ran from in `~/.cache/jhon/install.json` (`source`), and the installed `jhon` works on that checkout outside one unless `JHON_SOURCE` names another; `~/dev/jhon` is only the fallback when nothing is recorded, and a command that needs the checkout says to run `jhon sync` from it once or set `JHON_SOURCE`.
+
 ## [0.3.1] - 2026-11-16
 
 ### Changed

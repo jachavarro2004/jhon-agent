@@ -11,12 +11,11 @@ import (
 	"github.com/jachavarro2004/jhon-agent/test/support"
 )
 
-// The public README is the user's manual until the source opens (T36, L351):
-// it names the commands a user runs, and each one it names is one `jhon help`
+// The repository's README is the user's manual (T36, L351, T18): it names the commands a user runs, and each one it names is one `jhon help`
 // states.
 func TestPublicReadmeNamesOnlyCommandsJhonHas(t *testing.T) {
 	t.Parallel()
-	b, err := os.ReadFile(filepath.Join(support.Root(), "dist", "public", "README.md"))
+	b, err := os.ReadFile(filepath.Join(support.Root(), "README.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +30,7 @@ func TestPublicReadmeNamesOnlyCommandsJhonHas(t *testing.T) {
 			"profile", "update", "help",
 		} {
 			if !slices.ContainsFunc(named, func(n string) bool { return n == want || strings.HasPrefix(n, want+" ") }) {
-				t.Errorf("dist/public/README.md does not name `jhon %s`", want)
+				t.Errorf("README.md does not name `jhon %s`", want)
 			}
 		}
 	})
@@ -51,9 +50,12 @@ func TestPublicReadmeNamesOnlyCommandsJhonHas(t *testing.T) {
 			if words[0] == "help" {
 				continue // `jhon help` is the usage itself, run above
 			}
+			if words[0] == "hook" {
+				continue // the runtimes' guard entrypoint, which the README names to say how the guards run; never a user's command
+			}
 			cmd := slices.ContainsFunc(rows, func(row []string) bool { return row[0] == words[0] })
 			if !cmd {
-				t.Errorf("dist/public/README.md names `jhon %s`, which jhon help does not state", words[0])
+				t.Errorf("README.md names `jhon %s`, which jhon help does not state", words[0])
 				continue
 			}
 			if len(words) < 2 {
@@ -67,7 +69,7 @@ func TestPublicReadmeNamesOnlyCommandsJhonHas(t *testing.T) {
 				return row[0] == words[0] && (len(row) == 1 || strings.HasPrefix(row[1], "<") || strings.HasPrefix(row[1], "-"))
 			})
 			if !sub && !argument {
-				t.Errorf("dist/public/README.md names `jhon %s %s`, which jhon help does not state", words[0], words[1])
+				t.Errorf("README.md names `jhon %s %s`, which jhon help does not state", words[0], words[1])
 			}
 		}
 	})

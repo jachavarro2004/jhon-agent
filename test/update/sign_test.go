@@ -20,11 +20,9 @@ import (
 // the jhon_testroot build reads from JHON_TEST_TRUSTED_ROOT.
 
 const (
-	// The public repository's release workflow, and the old public
-	// repository's (bridgeWorkflow), which signs the v0.3.0 bridge (T18).
-	workflow       = "https://github.com/jachavarro2004/jhon-agent/.github/workflows/release.yml@refs/tags/v0.2.0"
-	bridgeWorkflow = "https://github.com/jachavarro2004/jhon/.github/workflows/release.yml@refs/tags/v0.2.0"
-	issuer         = "https://token.actions.githubusercontent.com"
+	// The public repository's release workflow, the one trusted signer.
+	workflow = "https://github.com/jachavarro2004/jhon-agent/.github/workflows/release.yml@refs/tags/v0.2.0"
+	issuer   = "https://token.actions.githubusercontent.com"
 )
 
 // trustedRoot is vs's trusted root as JSON. The virtual logs' IDs are the

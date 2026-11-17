@@ -131,7 +131,6 @@ func TestUpdate(t *testing.T) {
 		for _, id := range []string{
 			"https://github.com/someone/jhon-agent/.github/workflows/release.yml@refs/tags/v0.2.0",
 			"https://github.com/jachavarro2004/jhon-agent/.github/workflows/release.yml@refs/heads/main",
-			"https://github.com/jachavarro2004/jhon/.github/workflows/release.yml@refs/heads/main",
 		} {
 			a := assets("0.2.0")
 			a[name("0.2.0")+".sigstore.json"] = signBundle(t, vs, id, a[name("0.2.0")])
@@ -246,18 +245,6 @@ func TestUpdate(t *testing.T) {
 		wantCode(t, r, 1)
 		match(t, r.Stdout, `^\{"current":"0\.1\.0","latest":"0\.2\.0","status":"failed","error":"[^"]+ is not the checksum of [^"]+"\}\n$`)
 		sameSnapshot(t, snapshot(t, e.home), before)
-	})
-
-	t.Run("a release signed by the old public repository's workflow installs (the v0.3.0 bridge, T18)", func(t *testing.T) {
-		match(t, version(), `^jhon 0\.1\.0 `)
-		a := assets("0.2.0")
-		a[name("0.2.0")+".sigstore.json"] = signBundle(t, vs, bridgeWorkflow, a[name("0.2.0")])
-		rel.set("v0.2.0", a)
-		defer rel.set("v0.2.0", assets("0.2.0"))
-		r := e.run(t, jhon, []string{"update"}, url)
-		wantCode(t, r, 0)
-		match(t, r.Stdout, `(?m)^  ok    sha256 and signature verified: signed by `+regexp.QuoteMeta(bridgeWorkflow)+`$`)
-		match(t, version(), `^jhon 0\.2\.0 `)
 	})
 
 	t.Run("a usage error exits 2", func(t *testing.T) {
