@@ -26,7 +26,7 @@ func TestRenderValidateIntegrationManifests(t *testing.T) {
 		}, `integration\s+integrations/engram/manifest.yaml  display: missing`},
 		{"an unknown schema", func(t *testing.T, repo string) {
 			editFile(t, filepath.Join(repo, engram), "schema: jhon.integration/v1", "schema: jhon.integration/v2")
-		}, `integration\s+integrations/engram/manifest.yaml  schema: jhon.integration/v2 is not jhon.integration/v1`},
+		}, `integration\s+integrations/engram/manifest.yaml  schema: jhon.integration/v2 is another major version; this binary reads jhon.integration/v1 \(integrations/README.md\)`},
 		{"a duplicate name", func(t *testing.T, repo string) {
 			b, err := os.ReadFile(filepath.Join(repo, engram))
 			if err != nil {

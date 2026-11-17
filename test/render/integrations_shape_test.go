@@ -22,9 +22,6 @@ func TestRenderValidateIntegrationShape(t *testing.T) {
 		{"a core integration no longer required", func(t *testing.T, repo string) {
 			editFile(t, filepath.Join(repo, "integrations", "codegraph", "manifest.yaml"), "required: true\nwhen_off: refused", "required: false\nwhen_off: render")
 		}, `integration\s+integrations/codegraph/manifest.yaml  required: false, but setup shows codegraph as a locked row and pins its binary`},
-		{"the remote integration probed locally", func(t *testing.T, repo string) {
-			editFile(t, filepath.Join(repo, "integrations", "context7", "manifest.yaml"), "  probe: remote", "  probe: --version")
-		}, `integration\s+integrations/context7/manifest.yaml  doctor.probe: --version is not remote; doctor probes context7 at doctor.url`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -33,6 +30,31 @@ func TestRenderValidateIntegrationShape(t *testing.T) {
 			r := validate(t, repo)
 			wantCode(t, r, 1)
 			match(t, r.Out(), c.want)
+		})
+	}
+}
+
+// T58b O1 (L1167): nothing reads an optional integration by name, so a set
+// whose remote one is probed locally, or without it, validates.
+func TestRenderValidateAcceptsAReshapedOptionalIntegration(t *testing.T) {
+	t.Parallel()
+	for name, edit := range map[string]func(t *testing.T, repo string){
+		"the remote integration probed locally": func(t *testing.T, repo string) {
+			editFile(t, filepath.Join(repo, "integrations", "context7", "manifest.yaml"), "  probe: remote", "  probe: --version")
+		},
+		"the remote integration gone": func(t *testing.T, repo string) {
+			if err := os.RemoveAll(filepath.Join(repo, "integrations", "context7")); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			repo := support.CopyRepo(t)
+			edit(t, repo)
+			r := validate(t, repo)
+			wantCode(t, r, 0)
+			match(t, r.Stdout, `(?m)^validation: ok — \d+ agents`)
 		})
 	}
 }
@@ -56,7 +78,8 @@ func TestRenderValidateWithoutIntegrationsFolder(t *testing.T) {
 
 // F4 (L1159): a binary built from a reshaped manifest set (the remote
 // integration gone, a core one no longer required) still starts, and its
-// validate refuses the set, naming the files and fields; nothing panics.
+// validate refuses the set, naming the file and field; nothing panics. The
+// optional integration gone is no problem (T58b O1, L1167).
 func TestReshapedEmbeddedManifestsStart(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -81,11 +104,9 @@ func TestReshapedEmbeddedManifestsStart(t *testing.T) {
 	wantCode(t, v, 0)
 	r := run("render-engine", "--validate")
 	wantCode(t, r, 1)
-	for _, want := range []string{
-		`integration\s+integrations/codegraph/manifest.yaml  required: false, but setup shows codegraph as a locked row and pins its binary`,
-		`integration\s+integrations/context7/manifest.yaml  name: no manifest is named context7; doctor and the render read its url and setting by name`,
-	} {
-		match(t, r.Out(), want)
+	match(t, r.Out(), `integration\s+integrations/codegraph/manifest.yaml  required: false, but setup shows codegraph as a locked row and pins its binary`)
+	if strings.Contains(r.Out(), "context7") {
+		t.Errorf("the optional integration gone is named as a problem:\n%s", r.Out())
 	}
 	for _, res := range []support.Result{v, r} {
 		if strings.Contains(res.Out(), "panic") || strings.Contains(res.Out(), "goroutine ") {

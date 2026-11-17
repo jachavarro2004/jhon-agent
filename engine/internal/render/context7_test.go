@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
 )
@@ -25,8 +26,8 @@ func writeFile(t *testing.T, text string) string {
 // T133e (L1016, G3): context7 is its hosted endpoint, so the versions table
 // gains no pin and doctor compares no tool for it.
 func TestContext7IsAHostedEndpointWithNoPin(t *testing.T) {
-	if Context7URL != "https://mcp.context7.com/mcp" {
-		t.Errorf("Context7URL = %s", Context7URL)
+	if m, _ := integrations.Get("context7"); m.Doctor.URL != "https://mcp.context7.com/mcp" || m.Pi == nil || m.Pi.URL != m.Doctor.URL {
+		t.Errorf("context7's url = %+v", m)
 	}
 	for _, tool := range Tools {
 		if strings.Contains(tool.Command, "context7") {
