@@ -38,17 +38,18 @@ import (
 // server is mounted, and the sentence of a body that names it is not
 // rendered, so the render is what it was without it. Settings that cannot be
 // read leave it off, as every optional integration. Its URL and setting
-// are its manifest's, integrations/context7/manifest.yaml: the integration
-// doctor probes remotely.
+// are its manifest's, integrations/context7/manifest.yaml, read by name: ""
+// when the set lacks it, a set jhon validate refuses (integrations.Assumed).
 var (
 	Context7URL     = remote().Doctor.URL
 	Context7Setting = remote().Setting
 )
 
-// remote is the integration doctor probes over the network.
+// remote is the integration doctor probes over the network; a zero
+// Manifest when the set has none.
 func remote() integrations.Manifest {
-	i := slices.IndexFunc(integrations.All(), func(m integrations.Manifest) bool { return m.Doctor.Probe == "remote" })
-	return integrations.All()[i]
+	m, _ := integrations.Get(integrations.Context7)
+	return m
 }
 
 // withoutOff is agents without the capabilities of each optional

@@ -8,8 +8,9 @@
 //
 // The manifests are compiled in (package integrations at the repository
 // root embeds them), so every command reads the same ones wherever it runs;
-// `jhon validate` reads the tree's own with Load and refuses a malformed one,
-// naming the file and the field.
+// `jhon validate` reads the tree's own with Load and Assumed (the compiled-in
+// ones, Embedded, in a tree without the folder) and refuses a malformed one,
+// or a set the engine cannot use, naming the file and the field.
 //
 // The format is a small YAML subset, read by this package alone: `key:
 // value`, a flow list `[a, b]`, a nested block indented two spaces, `#`
@@ -157,21 +158,85 @@ func (m Manifest) InstallCommand(via, version string) string {
 	return ""
 }
 
-var (
-	once sync.Once
-	all  []Manifest
+// The integrations the engine still reads by name (L1159, F4): setup's
+// locked rows and the pins it installs (Core, in row order), and the one
+// doctor probes over the network. Assumed refuses a set that breaks this,
+// so a lookup by one of them never finds a shape it cannot use.
+const (
+	Engram    = "engram"
+	CodeGraph = "codegraph"
+	Context7  = "context7"
 )
 
-// All are the compiled-in manifests, by Order. A malformed one is a build
-// that cannot run: integrations_test.go keeps it from shipping.
+// Core are setup's locked rows and the pins it installs, in row order.
+var Core = []string{Engram, CodeGraph}
+
+// embeddedSet is the compiled-in manifests and their problems, read once.
+var embeddedSet = sync.OnceValues(func() ([]Manifest, []Problem) {
+	ms, probs := Load(embedded.FS)
+	return ms, append(probs, Assumed(ms)...)
+})
+
+// All are the compiled-in manifests, by Order (a malformed one as far as it
+// reads). They never stop the binary: a lookup that finds nothing gives a
+// zero Manifest, `jhon validate` reports their problems (Embedded), and
+// integrations_test.go keeps a malformed set from shipping.
 func All() []Manifest {
-	once.Do(func() {
-		var probs []Problem
-		if all, probs = Load(embedded.FS); len(probs) > 0 {
-			panic("integration manifests: " + probs[0].String())
+	ms, _ := embeddedSet()
+	return ms
+}
+
+// Embedded are the compiled-in manifests and every problem of them: of
+// form (Load) and of shape (Assumed).
+func Embedded() ([]Manifest, []Problem) {
+	ms, probs := embeddedSet()
+	return ms, slices.Clone(probs)
+}
+
+// Assumed are the problems of a set that breaks what the engine still
+// assumes of it, each naming the file and the field: every Core integration
+// is there, required, with a pinned binary, and no other is required (setup
+// shows a locked row for each Core one and no other); Context7 is there and
+// probed remotely (doctor reads its url and setting by name).
+func Assumed(ms []Manifest) []Problem {
+	var probs []Problem
+	file := func(name string) string { return "integrations/" + name + "/manifest.yaml" }
+	find := func(name string) (Manifest, bool) {
+		i := slices.IndexFunc(ms, func(m Manifest) bool { return m.Name == name })
+		if i < 0 {
+			return Manifest{}, false
 		}
-	})
-	return all
+		return ms[i], true
+	}
+	for _, name := range Core {
+		m, ok := find(name)
+		switch {
+		case !ok:
+			probs = append(probs, Problem{file(name), "name", "no manifest is named " + name + "; setup's locked rows and pins read it by name"})
+			continue
+		case !m.Required:
+			probs = append(probs, Problem{m.File, "required", "false, but setup shows " + name + " as a locked row and pins its binary"})
+		}
+		if m.Doctor.Version == "" {
+			probs = append(probs, Problem{m.File, "doctor.version", "missing; setup installs " + name + "'s binary at it"})
+		}
+	}
+	for _, m := range ms {
+		if m.Required && !slices.Contains(Core, m.Name) {
+			probs = append(probs, Problem{m.File, "required", "setup shows a locked row only for " + strings.Join(Core, " and ")})
+		}
+	}
+	switch m, ok := find(Context7); {
+	case !ok:
+		probs = append(probs, Problem{file(Context7), "name", "no manifest is named " + Context7 + "; doctor and the render read its url and setting by name"})
+	case m.Doctor.Probe != "remote":
+		probe := m.Doctor.Probe + " is not remote"
+		if probe == " is not remote" {
+			probe = "missing"
+		}
+		probs = append(probs, Problem{m.File, "doctor.probe", probe + "; doctor probes " + Context7 + " at doctor.url"})
+	}
+	return probs
 }
 
 // Get is the integration called name.

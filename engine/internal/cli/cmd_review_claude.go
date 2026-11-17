@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
 )
 
@@ -37,6 +40,13 @@ import (
 // is recorded, exit 1. A step the engine refuses (an oversized prompt, a
 // stale subject) prints its own refusal with its exit code. Exit 0 prints a
 // short result: the verdict, the record and its sets.
+//
+// The calls share one cancellable context (L1159, F1, F2): the first that
+// fails prints its line at once and cancels the rest, and SIGINT or SIGTERM
+// does the same with "stopped by <signal>". Each call runs in a process
+// group of its own, killed whole on cancel or timeout, so nothing it started
+// outlives it, and its scratch directory is removed before the run exits.
+// A signal that arrives while the record is written lets it finish.
 
 const (
 	reviewClaudeParallel  = 4
@@ -123,11 +133,40 @@ func runReviewClaude(argv []string) (int, error) {
 	for _, l := range start.Lenses {
 		keys = append(keys, l.RoutingKey)
 	}
+	// stop cancels every call with why, the first reason only, and prints
+	// its one line at once; failed is stop as the run's result.
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	var printed sync.Once
+	stop := func(why error) {
+		cancel(why)
+		printed.Do(func() {
+			fmt.Fprintf(os.Stderr, "jhon review run: %s; nothing recorded. Fallback: launch the %s agents, then the review-refuter and review-validator agents, as the 4R contract's fallback says\n",
+				oneLine(context.Cause(ctx).Error(), 400), andList(keys))
+		})
+	}
 	failed := func(reason string) (int, error) {
-		fmt.Fprintf(os.Stderr, "jhon review run: %s; nothing recorded. Fallback: launch the %s agents, then the review-refuter and review-validator agents, as the 4R contract's fallback says\n",
-			oneLine(reason, 400), andList(keys))
+		stop(errors.New(reason))
 		return 1, nil
 	}
+	// A signal stops the run as a failed call does, until the record step.
+	var recording sync.Mutex
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+	go func() {
+		select {
+		case sig := <-sigs:
+			recording.Lock()
+			defer recording.Unlock()
+			if ctx.Err() != nil {
+				return // the record step has run
+			}
+			name := map[os.Signal]string{syscall.SIGINT: "SIGINT", syscall.SIGTERM: "SIGTERM"}[sig]
+			stop(fmt.Errorf("stopped by %s", name))
+		case <-ctx.Done():
+		}
+	}()
 	if why := reviewNativeOff(); why != "" {
 		return failed(why)
 	}
@@ -150,12 +189,11 @@ func runReviewClaude(argv []string) (int, error) {
 		if limit == 0 {
 			limit = reviewClaudeTimeout(len(prompt))
 		}
-		return claudeComplete(bin, model, effort, prompt, limit)
+		return claudeComplete(ctx, bin, model, effort, prompt, limit)
 	}
 
 	// The lenses, at once.
 	lenses := make([]json.RawMessage, len(start.Lenses))
-	errs := make([]error, len(start.Lenses))
 	sem := make(chan struct{}, reviewClaudeParallel)
 	var wg sync.WaitGroup
 	for i, l := range start.Lenses {
@@ -164,18 +202,21 @@ func runReviewClaude(argv []string) (int, error) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			if ctx.Err() != nil {
+				return
+			}
 			text, err := ask(l.RoutingKey, l.Prompt)
 			if err == nil {
 				lenses[i], err = lensAnswer(text, l.Lens, start.Subject)
 			}
-			errs[i] = err
+			if err != nil && ctx.Err() == nil {
+				stop(fmt.Errorf("the %s lens call failed: %v", l.Lens, err))
+			}
 		}()
 	}
 	wg.Wait()
-	for i, err := range errs {
-		if err != nil {
-			return failed(fmt.Sprintf("the %s lens call failed: %v", start.Lenses[i].Lens, err))
-		}
+	if ctx.Err() != nil {
+		return 1, nil
 	}
 	findings := 0
 	for _, l := range lenses {
@@ -206,8 +247,10 @@ func runReviewClaude(argv []string) (int, error) {
 				return answer, 0, nil
 			}
 		}
-		code, _ = failed(fmt.Sprintf("the %s call failed: %v", name, err))
-		return nil, code, nil
+		if ctx.Err() == nil {
+			stop(fmt.Errorf("the %s call failed: %v", name, err))
+		}
+		return nil, 1, nil
 	}
 	empty := func(name string) json.RawMessage {
 		b, _ := json.Marshal(map[string]any{"subject_hash": start.Subject, "role": name, "results": []any{}})
@@ -219,27 +262,22 @@ func runReviewClaude(argv []string) (int, error) {
 		if refuter, code, err = role("refuter", "refute", lenses); refuter == nil {
 			return code, err
 		}
-		var r struct {
-			Results []struct {
-				Outcome string `json:"outcome"`
-			} `json:"results"`
-		}
-		_ = json.Unmarshal(refuter, &r)
-		refuted := 0
-		for _, v := range r.Results {
-			if v.Outcome == "refuted" {
-				refuted++
-			}
-		}
-		if refuted < findings {
+		if standing(lenses, refuter, start.Subject) > 0 {
 			if validator, code, err = role("validator", "validate", map[string]any{"lenses": lenses, "refuter": refuter}); validator == nil {
 				return code, err
 			}
 		}
 	}
 
+	recording.Lock()
+	if ctx.Err() != nil {
+		recording.Unlock()
+		return 1, nil
+	}
 	in, _ := json.Marshal(map[string]any{"lenses": lenses, "refuter": refuter, "validator": validator})
 	raw, code = step("record", []string{"--subject", start.Subject}, string(in))
+	cancel(errRunDone) // the record is written or refused: a signal no longer stops it
+	recording.Unlock()
 	if code != 0 {
 		return code, nil
 	}
@@ -277,40 +315,77 @@ func runReviewClaude(argv []string) (int, error) {
 	return 0, nil
 }
 
+// errRunDone ends the run's context once the record step has run.
+var errRunDone = errors.New("the run is over")
+
+// standing is how many of the lenses' findings the refuter's answer leaves
+// standing, by distinct known finding id as record reduces them
+// (ldd.Standing): a refuted id given twice, or one that names no finding,
+// leaves the others standing. Results the engine cannot read count every
+// finding as standing, so the validate step judges them.
+func standing(lenses []json.RawMessage, refuter json.RawMessage, subject string) int {
+	raw, _ := json.Marshal(lenses)
+	results, err := ldd.ParseLensResults(raw)
+	if err == nil {
+		results, err = ldd.CheckLenses(results, subject)
+	}
+	var r ldd.RoleResult
+	if err == nil {
+		err = json.Unmarshal(refuter, &r)
+	}
+	all := ldd.AllFindings(results)
+	if err != nil {
+		return max(len(all), 1)
+	}
+	return len(ldd.Standing(all, &r))
+}
+
 // boundedBuffer keeps the first max bytes written to it and notes the rest.
+// It has no ReadFrom (a bytes.Buffer's would take every byte past max: exec
+// copies a child's output with io.Copy, which prefers ReadFrom).
 type boundedBuffer struct {
-	bytes.Buffer
+	buf  bytes.Buffer
 	max  int
 	over bool
 }
 
 func (b *boundedBuffer) Write(p []byte) (int, error) {
-	if room := b.max - b.Len(); room < len(p) {
+	if room := b.max - b.buf.Len(); room < len(p) {
 		b.over = true
 		if room > 0 {
-			b.Buffer.Write(p[:room])
+			b.buf.Write(p[:room])
 		}
 		return len(p), nil
 	}
-	return b.Buffer.Write(p)
+	return b.buf.Write(p)
 }
 
-// claudeComplete runs one review call and gives the text of its result.
-func claudeComplete(bin, model, effort, prompt string, limit time.Duration) (string, error) {
+func (b *boundedBuffer) Bytes() []byte  { return b.buf.Bytes() }
+func (b *boundedBuffer) String() string { return b.buf.String() }
+
+// claudeComplete runs one review call under parent and gives the text of its
+// result. The call is a process group of its own, killed whole when parent
+// is cancelled or limit passes.
+func claudeComplete(parent context.Context, bin, model, effort, prompt string, limit time.Duration) (string, error) {
 	dir, err := os.MkdirTemp("", "jhon-review-")
 	if err != nil {
 		return "", err
 	}
 	defer os.RemoveAll(dir)
-	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	ctx, cancel := context.WithTimeout(parent, limit)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, reviewClaudeArgs(model, effort)...)
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(prompt)
 	out, errb := &boundedBuffer{max: reviewClaudeOutputMax}, &boundedBuffer{max: reviewClaudeErrMax}
 	cmd.Stdout, cmd.Stderr = out, errb
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = time.Second
 	err = cmd.Run()
+	if parent.Err() != nil {
+		return "", context.Cause(parent)
+	}
 	if ctx.Err() != nil {
 		return "", fmt.Errorf("claude did not answer within %s", limit)
 	}

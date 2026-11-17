@@ -508,8 +508,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            once, then the refuter and validator the same way,
                            then record; a failed
                            call (no claude, a non-zero exit, output that is
-                           not its JSON, a timeout) records nothing, exits 1
-                           and names the review-* lens agents as the fallback
+                           not its JSON, a timeout), SIGINT or SIGTERM stops
+                           every call, records nothing, exits 1 and
+                           names the review-* lens agents as the fallback
   jhon audit --all [--since <n>d | <YYYY-MM-DD>] [--json] [--draft [<dir>] [--min <n>] [--refresh]]
                            every Claude Code session and Jhon pi session changed
                            since then (default 30d), audited in parallel and
