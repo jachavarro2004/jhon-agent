@@ -222,6 +222,11 @@ func untestedSlice(top, change string) (why string, full bool) {
 	if err != nil || json.Unmarshal(b, &record) != nil || record.WorkingTree == "" {
 		return "its last test run records no working tree", false
 	}
+	// Only a run whose working tree read again at its end is the start's
+	// tested one tree (T146f): a record an earlier binary wrote has none.
+	if !isSha(run.AfterWorkingTree) || run.AfterWorkingTree != record.WorkingTree {
+		return "its last test run recorded no working tree at its end, or another than at its start", false
+	}
 	now := vcs.WorkingTree(top, execution.ChangeRecordPaths(top, change))
 	if now == "" {
 		return "the working tree cannot be read", false

@@ -325,12 +325,15 @@ func ChangeRecordPaths(root, change string) map[string]bool {
 // PassesOn are the passing commands of the change's last run that a run on
 // workingTree may reuse instead of running again, keyed by Key: that run
 // tested the same working tree, ended complete, and saw no change while it
-// ran. None when workingTree is "" or the record cannot be read.
+// ran, its working tree read again at its end the same (T146f): a record an
+// earlier binary wrote has no after_working_tree, so none of it is reused.
+// None when workingTree is "" or the record cannot be read.
 func PassesOn(root, change, workingTree string) map[string]Execution {
 	out := map[string]Execution{}
 	b, err := os.ReadFile(RecordFile(root, change))
 	var r Record
-	if workingTree == "" || err != nil || json.Unmarshal(b, &r) != nil || r.WorkingTree != workingTree || !r.Complete || r.Dirty {
+	if workingTree == "" || err != nil || json.Unmarshal(b, &r) != nil || r.WorkingTree != workingTree || r.AfterWorkingTree != r.WorkingTree ||
+		!r.Complete || r.Dirty {
 		return out
 	}
 	for _, e := range r.Executions {

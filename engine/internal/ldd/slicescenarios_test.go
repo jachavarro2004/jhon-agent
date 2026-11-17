@@ -64,7 +64,7 @@ func sliceTested(t *testing.T, root string) {
 	if tree == "" {
 		t.Fatal("the working tree cannot be read")
 	}
-	write(t, execution.RecordFile(root, "c1"), `{"complete": true, "scope": "full", "working_tree": "`+tree+`", "executions": [{"project": ".", "command": "go test ./...", "status": "pass"}]}`+"\n")
+	write(t, execution.RecordFile(root, "c1"), `{"complete": true, "scope": "full", "working_tree": "`+tree+`", "after_working_tree": "`+tree+`", "executions": [{"project": ".", "command": "go test ./...", "status": "pass"}]}`+"\n")
 }
 
 // closeSlice checks off tasks, writes the test file, records the run, and

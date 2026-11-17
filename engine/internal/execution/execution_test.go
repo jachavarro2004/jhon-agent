@@ -403,7 +403,7 @@ func TestPassesOnReusesOnlyACompleteUndisturbedRunOnTheSameTree(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	base := Record{Schema: Schema(), Complete: true, WorkingTree: "t1", Executions: []Execution{
+	base := Record{Schema: Schema(), Complete: true, WorkingTree: "t1", AfterWorkingTree: "t1", Executions: []Execution{
 		{Project: "a", Command: "go test ./...", ExitCode: &zero, Status: Pass},
 		{Project: "a", Kind: "lint", Command: "go vet ./...", ExitCode: &zero, Status: Pass},
 		{Project: "b", Command: "npm test", ExitCode: &three, Status: Fail},
@@ -417,11 +417,50 @@ func TestPassesOnReusesOnlyACompleteUndisturbedRunOnTheSameTree(t *testing.T) {
 		t.Error("another tree, an unknown one, or no record reuses nothing")
 	}
 	for name, r := range map[string]Record{"partial": {Complete: false}, "disturbed": {Complete: true, Dirty: true}} {
-		r.Schema, r.WorkingTree, r.Executions = Schema(), "t1", base.Executions
+		r.Schema, r.WorkingTree, r.AfterWorkingTree, r.Executions = Schema(), "t1", "t1", base.Executions
 		write(r)
 		if len(PassesOn(root, "c", "t1")) != 0 {
 			t.Errorf("a %s run reuses nothing", name)
 		}
+	}
+	// T146f: a record with no end-of-run tree (an earlier binary's), or
+	// another one, cannot show its passes saw the tree it started on.
+	for _, after := range []string{"", "t2"} {
+		r := base
+		r.AfterWorkingTree = after
+		write(r)
+		if len(PassesOn(root, "c", "t1")) != 0 {
+			t.Errorf("a run whose after_working_tree is %q reuses nothing", after)
+		}
+	}
+}
+
+// T146f: a unit's run measures from the last run that kept its working tree
+// from start to end; a record an earlier binary wrote shows neither that
+// nor that the passing run it kept did.
+func TestLastPassOfTrustsOnlyARunWithItsEndOfRunTree(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ChangesOf(root), "c"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	zero := 0
+	kept := &PassedRun{"2026-01-01T00:00:00.000Z", "t0"}
+	of := func(after string, dirty bool) *PassedRun {
+		r := Record{Schema: Schema(), Timestamp: "2026-02-02T00:00:00.000Z", Complete: true, WorkingTree: "t1", AfterWorkingTree: after, Dirty: dirty,
+			LastPass: kept, Executions: []Execution{{Project: "a", Command: "go test ./...", ExitCode: &zero, Status: Pass}}}
+		if err := WriteRecord(filepath.Join(root, RecordPath(root, "c")), &r); err != nil {
+			t.Fatal(err)
+		}
+		return LastPassOf(root, "c")
+	}
+	if got := of("t1", false); got == nil || *got != (PassedRun{"2026-02-02T00:00:00.000Z", "t1"}) {
+		t.Errorf("a run with its end-of-run tree: %+v", got)
+	}
+	if got := of("t2", true); got == nil || *got != *kept {
+		t.Errorf("a disturbed run keeps the pass before it: %+v", got)
+	}
+	if got := of("", false); got != nil {
+		t.Errorf("an earlier binary's record: %+v", got)
 	}
 }
 
