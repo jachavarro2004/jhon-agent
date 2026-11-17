@@ -36,21 +36,23 @@ func (d doctor) remoteProbed(remote bool) {
 	}
 }
 
+// shippedHolders are, by capability, the agents of the shipped
+// prose/agents.yaml holding a remote-probed integration's capability:
+// context7's, explore and worker (T133e, L1016), the row's clause before
+// T58b. doctor names them when the judged tree's agents cannot be read
+// (T58c, L1193); a test holds them to the checkout's.
+var shippedHolders = map[string][]string{"context7": {"explore", "worker"}}
+
 // heldBy is ", for <agents>": the agents of the judged tree's
-// prose/agents.yaml holding one of m's capabilities; "" when none does or
-// the file cannot be read.
+// prose/agents.yaml (doctor's src: the checkout, or the installed release,
+// which holds its tree) holding one of m's capabilities; "" when none
+// does. With no tree, or one whose agents.yaml cannot be read, they are
+// the shipped ones (shippedHolders).
 func (d doctor) heldBy(m integrations.Manifest) string {
-	if d.src == "" {
-		return ""
-	}
-	mf, err := manifest.Load(d.src)
-	if err != nil {
-		return ""
-	}
-	var names []string
-	for _, a := range mf.Agents {
-		if slices.ContainsFunc(m.Capabilities, func(c string) bool { return slices.Contains(a.Caps, c) }) {
-			names = append(names, a.Name)
+	names, ok := holders(d.src, m.Capabilities)
+	if !ok {
+		for _, c := range m.Capabilities {
+			names = append(names, shippedHolders[c]...)
 		}
 	}
 	switch len(names) {
@@ -60,6 +62,25 @@ func (d doctor) heldBy(m integrations.Manifest) string {
 		return ", for " + names[0]
 	}
 	return ", for " + strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+// holders are the agents of src's prose/agents.yaml holding one of caps;
+// false when there is no src or its agents.yaml cannot be read.
+func holders(src string, caps []string) ([]string, bool) {
+	if src == "" {
+		return nil, false
+	}
+	mf, err := manifest.Load(src)
+	if err != nil {
+		return nil, false
+	}
+	var names []string
+	for _, a := range mf.Agents {
+		if slices.ContainsFunc(caps, func(c string) bool { return slices.Contains(a.Caps, c) }) {
+			names = append(names, a.Name)
+		}
+	}
+	return names, true
 }
 
 // probeRemote asks a remote integration's endpoint whether it answers

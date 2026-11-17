@@ -48,8 +48,11 @@ binary on a newer tree.
   refuses an unknown field and an unknown value, so any of these would break
   it.
 - **A binary that meets another major** refuses the manifest in `jhon
-  validate`, naming the file, the field and the version it reads
-  (`integrations/<name>/manifest.yaml: schema: jhon.integration/v2 is another
-  major version; this binary reads jhon.integration/v1`), and reads none of
-  its other fields: update Jhon to the release that ships it. A value not of
-  the form `jhon.integration/v<N>` is refused the same way.
+  validate`, naming the file, the field and the version it reads, and
+  reads none of its other fields: update Jhon to the release that ships it.
+  A value not of the form `jhon.integration/v<N>` is refused the same way.
+  For Engram's manifest at v2 it prints:
+
+  ```text
+  integration      integrations/engram/manifest.yaml  schema: jhon.integration/v2 is another major version; this binary reads jhon.integration/v1 (integrations/README.md)
+  ```

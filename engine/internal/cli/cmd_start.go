@@ -76,14 +76,20 @@ func agentLoadedEnv(argv, env []string) []string {
 // --strict-mcp-config would drop them all.
 const claudeAIConnectors = "ENABLE_CLAUDEAI_MCP_SERVERS"
 
-// connectorsEnv is env with the claude.ai connectors off unless every
-// integration its manifest turns off at launch (when_off: launch; m365's
-// claude_code.connectors, T42a, L403) is on, or the owner set the variable
-// (T58b, L1167). The variable loads or keeps out every connector at once,
-// so one of them off keeps them all out. pi's claude-bridge loads no
-// claude.ai connectors, so only this launch takes it.
+// connectorsEnv is env with the claude.ai connectors off unless
+// claude_code.connectors (T42a, L403) and every integration its manifest
+// turns off at launch (when_off: launch; m365's is claude_code.connectors
+// itself, T58b, L1167) are on, or the owner set the variable. It fails
+// closed: a set with no launch-off manifest keeps them out too (T58c,
+// L1193). The variable loads or keeps out every connector at once, so one
+// of them off keeps them all out. pi's claude-bridge loads no claude.ai
+// connectors, so only this launch takes it.
 func connectorsEnv(env []string) []string {
-	if os.Getenv(claudeAIConnectors) != "" || !slices.ContainsFunc(integrations.OffAt("launch"), func(m integrations.Manifest) bool { return !settings.On(m.Setting) }) {
+	if os.Getenv(claudeAIConnectors) != "" {
+		return env
+	}
+	off := func(m integrations.Manifest) bool { return !settings.On(m.Setting) }
+	if settings.On(settings.Connectors) && !slices.ContainsFunc(integrations.OffAt("launch"), off) {
 		return env
 	}
 	return withEnv(env, claudeAIConnectors+"=false")
