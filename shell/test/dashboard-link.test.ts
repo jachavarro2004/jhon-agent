@@ -5,6 +5,7 @@
  *
  *   node --experimental-strip-types --test test/dashboard-link.test.ts
  */
+import "./isolated-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { hasDisplay, openDashboard, type DashboardDeps } from "../extensions/jhon.ts";

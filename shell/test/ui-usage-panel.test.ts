@@ -2,6 +2,7 @@
 // Gentle Shell's alt+u panel: each provider's windows with their meters and
 // reset times, the active provider first and marked with Jhon's 力; restored
 // from 7e204a89^ (renderUsagePanel) and 2ad34ac0^ (UsageView, /jhon:usage, alt+u).
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";

@@ -6,6 +6,7 @@
  * before, and the view says so. Real repositories, the shell's own registry,
  * tracker, Git runner and view.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";

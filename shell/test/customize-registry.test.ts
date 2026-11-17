@@ -8,6 +8,7 @@
  * engine lists is in that copy or declared engine-only (ENGINE_ONLY_SETTINGS):
  * a new one fails here until someone places it.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";

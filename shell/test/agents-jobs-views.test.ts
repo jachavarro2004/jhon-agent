@@ -3,6 +3,7 @@
 // finished`, `Subagent <type>` rows, the selected agent's live thread
 // (header, thinking, tool events and their output), and its footer
 // [ Follow ] [ Open session ] [Stop] [Scope] with j/k, ctrl+j/k, f, s, a, o, esc, q.
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AgentDef, ChildEvent } from "../lib/agents.ts";

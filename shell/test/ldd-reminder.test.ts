@@ -3,6 +3,7 @@
  * openspec/config.yaml, or a native ldd/ by its config or its changes/,
  * never a native ldd/ above the file's git repository.
  */
+import "./isolated-env.ts";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";

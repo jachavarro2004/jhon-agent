@@ -1,3 +1,4 @@
+import "./isolated-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { followPalette, switchToRoseInk } from "../lib/rose-ink.ts";

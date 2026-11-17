@@ -7,6 +7,7 @@
  *   node --experimental-strip-types --test test/ldd-umbrella.test.ts
  */
 
+import "./isolated-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { changeCount, estadoLines, lddLanes, readLddStatus, umbrellasAt, type LddStatus } from "../lib/ui/ldd-status.ts";

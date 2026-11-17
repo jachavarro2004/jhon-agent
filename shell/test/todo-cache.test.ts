@@ -4,6 +4,7 @@
  * changed; the nudges are persisted messages sent after a tool-use turn,
  * never request-local and never timestamped in what the model re-reads.
  */
+import "./isolated-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";

@@ -9,6 +9,7 @@
  * fresh-session notice (150K), then auto-compaction (200K); two on one reply
  * are one notice.
  */
+import "./isolated-env.ts";
 import { test, after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";

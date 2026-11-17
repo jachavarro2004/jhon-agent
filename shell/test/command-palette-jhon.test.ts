@@ -4,6 +4,7 @@
  *
  *   jhon test
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCommandPaletteGroups } from "../lib/ui/command-palette-catalog.ts";

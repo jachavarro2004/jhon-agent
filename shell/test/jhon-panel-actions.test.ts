@@ -5,6 +5,7 @@
  *
  *   jhon test
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CHANGE_STATUS, type ChangedFile, type WorktreeChanges } from "../lib/ui/shell-changes.ts";

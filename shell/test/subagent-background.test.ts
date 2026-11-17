@@ -6,6 +6,7 @@
  * task_result reads a run, task_stop cancels one; a sub-agent, which has no
  * background tasks, runs the ones it starts in the foreground.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

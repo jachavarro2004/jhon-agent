@@ -5,6 +5,7 @@
  * <mode> --root <root>` on the owner's step, super-yolo only after the
  * owner's Yes; its note names /jhon:grants, where the grants are.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { changeMode, SUPER_YOLO_QUESTION, type ModeData } from "../lib/ui/jhon-panel-grants.ts";

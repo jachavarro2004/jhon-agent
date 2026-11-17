@@ -2,6 +2,7 @@
 // spend in its header, `profile <name>`, `spent … · N turns · <wall time>`,
 // `tokens in … · out …`, `cache N% hit · … read`, `tools N calls · N failed`,
 // `agents N runs · <tokens> · $…`, then one row per model.
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { collectSessionStats, renderShellStatsSection } from "../lib/ui/shell-stats.ts";

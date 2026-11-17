@@ -6,6 +6,7 @@
  * wording by delegation mode. Children never; a new owner message resets it.
  */
 
+import "./isolated-env.ts";
 import { test, after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";

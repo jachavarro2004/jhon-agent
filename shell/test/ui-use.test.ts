@@ -5,6 +5,7 @@
  * which `jhon audit --all` counts.
  */
 
+import "./isolated-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { counted, UI_USE_ENTRY } from "../lib/ui-use.ts";

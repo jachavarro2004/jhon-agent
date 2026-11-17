@@ -2,6 +2,7 @@
 // shows its full command, its output tail and how long it took; todo and other
 // tools show their result line; read shows its path. shell.appearance.density
 // "minimal" keeps the collapsed (quiet) cards, as G's "Card content: minimal".
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { initTheme, keyHint } from "@earendil-works/pi-coding-agent";

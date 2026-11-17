@@ -6,6 +6,7 @@
  *
  *   cd shell && node --experimental-strip-types --test test/ui-ascii-overlays.test.ts
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AskView } from "../lib/ui/ask-view.ts";
