@@ -23,6 +23,7 @@ All notable changes to Jhon are recorded here. The format follows
 
 - pi's prompt names Engram and CodeGraph tools as pi registers them, and its own background tools (T146).
 - bench: the jhon condition no longer loads the owner's CLAUDE.md or auto-memory (T146).
+- `jhon deliver check` no longer takes a run whose working tree changed while it ran as the tested tree (the run records its working tree again when it ends; a difference marks it dirty), and the committed-tree evidence applies only to a run that passed and finished (T146d).
 - Tests: the shell suite and the git hooks' Go tests no longer read the machine owner's Jhon settings or state (T147).
 
 ## [0.3.5] - 2026-11-17
