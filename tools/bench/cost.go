@@ -27,19 +27,23 @@ type TokenWeights struct {
 //     input 1×, cache write (5 minutes) 1.25×, cache read 0.1×, output 5×
 //     (e.g. Sonnet $3 / $3.75 / $0.30 / $15 per million tokens); the same
 //     weights as the quota estimate (L432).
-//   - glm (any provider serving a GLM model: zai, NaN): Z.ai's API prices for
-//     GLM-4.6 per million tokens, input $0.60, cached input $0.11, output
-//     $2.20; Z.ai charges no cache write apart from input (its cache storage
-//     is free), so a cache write weighs as an input token. Read from
-//     docs.z.ai's pricing page in 2025; not re-checked for GLM-5.x.
+//   - glm (a GLM model on Z.ai or any provider but NaN): Z.ai's list prices
+//     for GLM-5.3 per million tokens, input $1.40, cached input $0.26,
+//     output $4.40 (docs.z.ai/guides/overview/pricing, read 2026-11-17).
+//   - glm-nan (a GLM model on NaN): NaN's credits for glm5.3 per million
+//     tokens, input 49, cached input 1.05, output 154 (nan.builders
+//     model guide, November 2026; cloud.nan.builders/tokens is current).
+//     Neither charges a cache write apart from input, so a cache write
+//     weighs as an input token.
 var providerTokenWeights = []TokenWeights{
 	{Provider: "claude", Input: 1, CacheWrite: 1.25, CacheRead: 0.1, Output: 5},
-	{Provider: "glm", Input: 1, CacheWrite: 1, CacheRead: 0.11 / 0.60, Output: 2.20 / 0.60},
+	{Provider: "glm", Input: 1, CacheWrite: 1, CacheRead: 0.26 / 1.40, Output: 4.40 / 1.40},
+	{Provider: "glm-nan", Input: 1, CacheWrite: 1, CacheRead: 1.05 / 49, Output: 154.0 / 49},
 }
 
 // tokenWeightsFor are the weights of model's provider and whether the table
-// has them: a GLM model (by its id, on any provider) or Z.ai's provider is
-// glm; Claude Code's models, claude-bridge and every other provider take
+// has them: a GLM model on NaN is glm-nan, any other GLM model (by its id)
+// or Z.ai's provider is glm; Claude Code's models, claude-bridge and every other provider take
 // Claude's weights, the others with known false.
 func tokenWeightsFor(model string) (TokenWeights, bool) {
 	provider, id, _ := strings.Cut(strings.ToLower(model), "/")
@@ -55,6 +59,8 @@ func tokenWeightsFor(model string) (TokenWeights, bool) {
 		panic("no token weights for " + name)
 	}
 	switch {
+	case strings.HasPrefix(id, "glm") && provider == "nan":
+		return byName("glm-nan"), true
 	case strings.HasPrefix(id, "glm") || provider == "zai":
 		return byName("glm"), true
 	case provider == "" || provider == BridgeProvider || provider == "anthropic" || strings.HasPrefix(id, "claude"):

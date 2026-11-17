@@ -326,7 +326,8 @@ func TestTokensAreWeightedPerProvider(t *testing.T) {
 		known           bool
 	}{
 		{"opus", "claude", true}, {"claude-bridge/opus", "claude", true}, {"anthropic/claude-sonnet-5-5", "claude", true},
-		{"zai/glm-5.3", "glm", true}, {"zai/glm-5.3@high", "glm", true}, {"nan/glm-5.1", "glm", true}, {"GLM-4.6", "glm", true},
+		{"zai/glm-5.3", "glm", true}, {"zai/glm-5.3@high", "glm", true}, {"GLM-4.6", "glm", true},
+		{"nan/glm5.3", "glm-nan", true}, {"nan/glm-5.1", "glm-nan", true},
 		{"openai/gpt-5", "claude", false},
 	} {
 		if w, known := tokenWeightsFor(c.model); w.Provider != c.provider || known != c.known {
@@ -334,9 +335,16 @@ func TestTokensAreWeightedPerProvider(t *testing.T) {
 		}
 	}
 	m := Metrics{Model: "zai/glm-5.3", InputTokens: 600, CacheWriteTokens: 100, CacheReadTokens: 6000, OutputTokens: 60}
-	if got, want := costWeighted(m), 600+100+6000*0.11/0.60+60*2.20/0.60; math.Abs(got-want) > 1e-6 {
+	// Z.ai's GLM-5.3 list prices: $1.40 input, $0.26 cached input, $4.40 output.
+	if got, want := costWeighted(m), 600+100+6000*0.26/1.40+60*4.40/1.40; math.Abs(got-want) > 1e-6 {
 		t.Errorf("glm weighted %v, want %v", got, want)
 	}
+	// NaN's glm5.3 in credits per million: 49 input, 1.05 cached input, 154 output.
+	m.Model = "nan/glm5.3"
+	if got, want := costWeighted(m), 600+100+6000*1.05/49+60*154.0/49; math.Abs(got-want) > 1e-6 {
+		t.Errorf("nan glm weighted %v, want %v", got, want)
+	}
+	m.Model = "zai/glm-5.3"
 	m.Model = "opus"
 	if got := costWeighted(m); got != 600+125+600+300 || got != quotaWeighted(m) {
 		t.Errorf("claude weighted %v", got)
