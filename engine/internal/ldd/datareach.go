@@ -69,6 +69,7 @@ func (g gitReads) dataReach(top, change string) (unreached, unchecked []string) 
 			Project string `json:"project"`
 			Kind    string `json:"kind"`
 			Command string `json:"command"`
+			Status  string `json:"status"`
 		} `json:"executions"`
 	}
 	if err != nil || json.Unmarshal(b, &record) != nil {
@@ -88,7 +89,7 @@ func (g gitReads) dataReach(top, change string) (unreached, unchecked []string) 
 		for f, names := range reach {
 			for _, n := range names {
 				module, _, _ := strings.Cut(n, "::")
-				if matchesAny(tests, module) && ranModule(e.Command, e.Project, module) {
+				if matchesAny(tests, module) && ranModule(e.Command, e.Status == execution.Pass, e.Project, module) {
 					reached[f] = true
 				}
 			}
@@ -110,17 +111,26 @@ func matchesAny(globs []string, f string) bool {
 	return slices.ContainsFunc(globs, func(g string) bool { return GlobRegex(g).MatchString(f) })
 }
 
-// ranModule is whether a run of command in the project at projectPath
-// executed the test module (relative to the repository's top level): under
+// ranModule is whether a run of command in the project at projectPath,
+// passed or not, executed the test module (relative to the repository's top
+// level) in one of its parts (execution.CommandParts) that ran: under
 // pytest-testmon, which selects every test whose executed code changed,
 // unless it is narrowed to named modules (execution.TestmonModulesCommand);
-// a whole run; or an own run (execution.OwnTestsCommand) that names it.
-func ranModule(command, projectPath, module string) bool {
-	if i := strings.Index(command, "--testmon"); i >= 0 && !quotedPy.MatchString(command[i:]) || !quotedPy.MatchString(command) {
-		return true
-	}
+// a whole run; or an own run (execution.OwnTestsCommand) that names it. The
+// parts of a wide step (execution.BothCommand) all ran, in either order; of
+// an `&&` chain that failed, only the first surely did (T145c, L1191 H1).
+func ranModule(command string, passed bool, projectPath, module string) bool {
 	rel, err := filepath.Rel(projectPath, module)
-	return err == nil && strings.Contains(command, "'"+filepath.ToSlash(rel)+"'")
+	parts, each := execution.CommandParts(command)
+	for i, part := range parts {
+		if i > 0 && !each && !passed {
+			break
+		}
+		if !quotedPy.MatchString(part) || err == nil && strings.Contains(part, "'"+filepath.ToSlash(rel)+"'") {
+			return true
+		}
+	}
+	return false
 }
 
 // dataReachRefusal is why a commit that closes the slices closed of change is

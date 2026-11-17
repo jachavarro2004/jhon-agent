@@ -28,12 +28,19 @@ import (
 // fakeUvScript stands in for uv: one line per call in FAKE_UV_LOG (the record
 // it was told to write, then its arguments), a copy of FAKE_UV_RECORD at
 // TESTMON_DATAFILE, a wait of FAKE_UV_SLEEP seconds, and pytest's exit code,
-// FAKE_UV_EXIT.
+// FAKE_UV_EXIT, or FAKE_UV_EXIT_WHOLE when set for a call outside
+// pytest-testmon. With FAKE_UV_SAY_FAILED set, a call that fails names a
+// failed test in each module it was given, as pytest's summary does.
 const fakeUvScript = `#!/bin/sh
 printf '%s|%s\n' "${TESTMON_DATAFILE-}" "$*" >> "$FAKE_UV_LOG"
 if [ -n "${TESTMON_DATAFILE-}" ]; then cp "$FAKE_UV_RECORD" "$TESTMON_DATAFILE"; fi
 if [ -n "${FAKE_UV_SLEEP-}" ]; then sleep "$FAKE_UV_SLEEP"; fi
-exit "${FAKE_UV_EXIT:-0}"
+code="${FAKE_UV_EXIT:-0}"
+if [ -z "${TESTMON_DATAFILE-}" ] && [ -n "${FAKE_UV_EXIT_WHOLE-}" ]; then code="$FAKE_UV_EXIT_WHOLE"; fi
+if [ "$code" != 0 ] && [ -n "${FAKE_UV_SAY_FAILED-}" ]; then
+  for a; do case "$a" in *.py) echo "FAILED $a::test_fails";; esac; done
+fi
+exit "$code"
 `
 
 // pytestProject is nodeWorkspace with `lib` a uv-run pytest project, on a
@@ -644,7 +651,7 @@ c.commit()`
 	support.Write(t, p.root, map[string]string{"lib/tests/test_new.py": "def test_new(): pass\n"})
 
 	command, tests, notes := p.plan(t, "--affected", "base")
-	equal(t, command, "uv run --extra dev pytest 'tests/test_new.py' && "+p.narrowed()+" 'tests/test_util.py'", "the new module whole, the held one under pytest-testmon")
+	equal(t, command, both("uv run --extra dev pytest 'tests/test_new.py'", p.narrowed()+" 'tests/test_util.py'"), "the new module whole, the held one under pytest-testmon")
 	equal(t, tests, "own")
 	match(t, notes, `(?m)^lib: the change reaches about 1 of its 3 tests, 12 min of 12 min by the last recorded durations; only the 2 test module\(s\) the change touched run here; pytest-testmon narrows 1 of them to the tests its record marks affected: tests/test_util\.py; 1 its record holds no test of \(new, or unknown to it\) runs whole: tests/test_new\.py, and the rest is left to the PR's CI, whose green checks test the delivery$`)
 
@@ -663,4 +670,115 @@ c.commit()`
 	match(t, command, `^uv run --extra dev pytest '[^']+\.py' '[^']+\.py'$`)
 	equal(t, tests, "own")
 	match(t, notes, `(?m)^lib: lib/fixtures\.json changed, and pytest-testmon tracks Python files only; only the 2 test module\(s\) the change touched run here, and the rest is left to the PR's CI, whose green checks test the delivery$`)
+}
+
+// both is a wide step's two parts as the engine joins them: the second runs
+// even when the first fails, and the step exits with the higher status
+// (T145c H1).
+func both(first, second string) string {
+	return first + "; s1=$?; " + second + "; s2=$?; [ $s1 -gt $s2 ] && exit $s1; exit $s2"
+}
+
+// wideRecord gives lib a usable pytest-testmon record in which lib/util.py
+// reaches test_x for twelve minutes, past WideSeconds, and test_untouched, in
+// the same module, reaches only lib/other.py; and adds a new test module the
+// record holds no test of. It returns the record, for FAKE_UV_RECORD.
+func (p *pytestProject) wideRecord(t *testing.T) string {
+	t.Helper()
+	wide := filepath.Join(filepath.Dir(p.log), "wide.db")
+	script := `import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+c.executescript("create table test_execution (id integer primary key, environment_id integer, test_name text, duration float, failed bit, forced bit); create table file_fp (id integer primary key, filename text, method_checksums blob, mtime float, fsha text); create table test_execution_file_fp (test_execution_id integer, fingerprint_id integer)")
+c.execute("insert into file_fp values (1, 'lib/util.py', x'00', 0, 'a'), (2, 'lib/other.py', x'00', 0, 'b')")
+c.execute("insert into test_execution values (1, 1, 'lib/tests/test_util.py::test_x', 720, 0, 0), (2, 1, 'lib/tests/test_util.py::test_untouched', 1, 0, 0), (3, 1, 'lib/tests/test_other.py::test_z', 1, 0, 0)")
+c.execute("insert into test_execution_file_fp values (1, 1), (2, 2), (3, 2)")
+c.commit()`
+	if out, err := exec.Command("python3", "-I", "-c", script, wide).CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	b, err := os.ReadFile(wide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.Write(t, filepath.Dir(p.data), map[string]string{filepath.Base(p.data): string(b)})
+	support.Write(t, p.root, map[string]string{"lib/tests/test_new.py": "def test_new(): pass\n"})
+	return wide
+}
+
+// T145c H1 (L1191): a wide step's whole part and its pytest-testmon part
+// both run even when the whole part fails, and the step fails with the worse
+// status, so the failures of both are in the record from one pass.
+func TestExecutionsWideRunRunsBothPartsWhenTheWholePartFails(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name, whole, narrowed string
+		failed                []any
+	}{
+		{"the whole part fails", "1", "0", []any{"tests/test_new.py::test_fails"}},
+		{"both fail", "1", "1", []any{"tests/test_new.py::test_fails", "tests/test_util.py::test_fails"}},
+		{"the narrowed part fails", "0", "1", []any{"tests/test_util.py::test_fails"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			p := newPytestProject(t)
+			wide := p.wideRecord(t)
+			r := p.jhon(t, []string{"FAKE_UV_RECORD=" + wide, "FAKE_UV_EXIT_WHOLE=" + c.whole, "FAKE_UV_EXIT=" + c.narrowed, "FAKE_UV_SAY_FAILED=1"}, "executions", "run", "c1", "--affected", "base")
+			equal(t, r.Code, 1, r.Out())
+			equal(t, p.calls(t), []string{
+				"|run --extra dev pytest tests/test_new.py",
+				p.data + "|run --with pytest-testmon --extra dev pytest --testmon --rootdir=" + p.root + " tests/test_util.py",
+			}, "both parts ran")
+			var lib map[string]any
+			for _, e := range executions(readRecord(t, p.root)) {
+				if e["project"] == "lib" && e["kind"] == nil {
+					lib = e
+				}
+			}
+			equal(t, lib["status"], "fail", lib)
+			equal(t, lib["exit_code"], 1.0, lib)
+			equal(t, lib["failed_tests"], c.failed, lib)
+		})
+	}
+}
+
+// T145c H2 (L1191): a touched test module that executions_always declares
+// runs whole, never narrowed by pytest-testmon.
+func TestExecutionsWideRunNeverNarrowsAnAlwaysModule(t *testing.T) {
+	t.Parallel()
+	p := newPytestProject(t)
+	p.wideRecord(t)
+	support.Write(t, p.root, map[string]string{"openspec/config.yaml": "test_command_override:\n  lib: uv run --extra dev pytest\n  app: true\n  tool: true\n  other: true\nexecutions_always: [lib/tests/test_util.py]\n"})
+	command, tests, notes := p.plan(t, "--affected", "base")
+	equal(t, command, "uv run --extra dev pytest 'tests/test_new.py' 'tests/test_util.py'", "both modules whole")
+	equal(t, tests, "own")
+	if strings.Contains(notes, "pytest-testmon narrows") {
+		t.Errorf("an always module is narrowed: %s", notes)
+	}
+}
+
+// T145c H4 (L1191): when the pytest-testmon record cannot be read for the
+// tests it holds, the touched modules run whole and the scope reason says
+// the record could not be read, not that it holds no test of them.
+func TestExecutionsWideRunSaysWhenTheTestmonRecordCannotBeRead(t *testing.T) {
+	t.Parallel()
+	p := newPytestProject(t)
+	p.wideRecord(t)
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 reads the record")
+	}
+	// python3 reads the record's reach, but fails the query of the tests it
+	// holds (execution.TestmonHeld), as an unreadable record would.
+	bin := filepath.Join(filepath.Dir(p.log), "bin")
+	support.Write(t, bin, map[string]string{"python3": "#!/bin/sh\ncase \"$*\" in *'select distinct substr(test_name'*) exit 1;; esac\nexec '" + python + "' \"$@\"\n"})
+	if err := os.Chmod(filepath.Join(bin, "python3"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command, tests, notes := p.plan(t, "--affected", "base")
+	equal(t, command, "uv run --extra dev pytest 'tests/test_new.py' 'tests/test_util.py'", "both modules whole")
+	equal(t, tests, "own")
+	match(t, notes, `(?m)^lib: the change reaches about 1 of its 3 tests, 12 min of 12 min by the last recorded durations; only the 2 test module\(s\) the change touched run here; the testmon record could not be read, so 2 of them run whole: tests/test_new\.py, tests/test_util\.py, and the rest is left to the PR's CI, whose green checks test the delivery$`)
+	if strings.Contains(notes, "holds no test") {
+		t.Errorf("an unreadable record read as one holding no test: %s", notes)
+	}
 }
