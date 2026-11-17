@@ -411,12 +411,12 @@ func BranchChanges(dir string) (active, archived []string) {
 // stays, such as a refactor). Below risk high (OneLineRecord) tasks.md with
 // an `## Intent` line and a `Delivers:` line is complete too: a spec delta
 // is due only when a scenario changes.
-func Documented(changeDir string, tier Level) bool {
-	b, err := os.ReadFile(filepath.Join(changeDir, "tasks.md"))
+func Documented(l layout.Layout, changeDir string, tier Level) bool {
+	b, err := os.ReadFile(filepath.Join(changeDir, l.Tasks()))
 	if err != nil {
 		return false
 	}
-	if st, err := os.Stat(filepath.Join(changeDir, "specs")); err == nil && st.IsDir() {
+	if st, err := os.Stat(filepath.Join(changeDir, l.DeltaSpecs())); err == nil && st.IsDir() {
 		return true
 	}
 	text := string(b)
@@ -432,7 +432,7 @@ func Recorded(top, change, changeDir string, r Route, n Needs) bool {
 	if !n.Tasks && !n.Spec {
 		return execution.RedBeforeGreen(top, change)
 	}
-	return Documented(changeDir, r.Tier)
+	return Documented(layout.For(top), changeDir, r.Tier)
 }
 
 // OneLineRecord is whether a change at risk tier (passive or medium) may
@@ -455,24 +455,24 @@ func oneLine(src string) bool {
 var noSpecChange = lazyre.New(`(?m)^\s*(?:[-*]\s+)?No spec change:\s*\S`)
 
 // Unchecked is the tasks of a change directory's tasks.md not yet checked.
-func Unchecked(changeDir string) []string {
-	b, err := os.ReadFile(filepath.Join(changeDir, "tasks.md"))
+func Unchecked(l layout.Layout, changeDir string) []string {
+	b, err := os.ReadFile(filepath.Join(changeDir, l.Tasks()))
 	if err != nil {
 		return nil
 	}
 	s := string(b)
-	return ProgressOf(&s).Unchecked
+	return ProgressOf(l, &s).Unchecked
 }
 
 // Outlined is the slices of a change directory's tasks.md still outlined,
 // with no task yet (TaskProgress.Outlined).
-func Outlined(changeDir string) []string {
-	b, err := os.ReadFile(filepath.Join(changeDir, "tasks.md"))
+func Outlined(l layout.Layout, changeDir string) []string {
+	b, err := os.ReadFile(filepath.Join(changeDir, l.Tasks()))
 	if err != nil {
 		return nil
 	}
 	s := string(b)
-	return ProgressOf(&s).Outlined()
+	return ProgressOf(l, &s).Outlined()
 }
 
 // UndocumentedProjects are the projects of the change in the repository
@@ -492,8 +492,9 @@ func UndocumentedProjects(top string) []string {
 		return nil
 	}
 	active, _ := BranchChanges(top)
+	l := layout.For(top)
 	for _, c := range active {
-		if t, err := os.ReadFile(layout.At(top, layout.For(top).Artifact(c, "tasks.md"))); err == nil && noDocsChange.Match(t) {
+		if t, err := os.ReadFile(layout.At(top, l.Artifact(c, l.Tasks()))); err == nil && noDocsChange.Match(t) {
 			return nil
 		}
 	}

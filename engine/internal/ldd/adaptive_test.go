@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 )
 
 func text(s string) *string { return &s }
@@ -38,14 +40,14 @@ func TestProposalNotesAskForAcceptanceCriteriaOnly(t *testing.T) {
 // tasks.md is planned slice by slice; a task need not cite a requirement.
 func TestTasksNotesAskForSlices(t *testing.T) {
 	good := "# Tasks\n## Slice 1: login\nDelivers: CA-01\n- [ ] 1.1 RED a_test.go: rejects bad password\n- [x] 1.2 GREEN a.go: check\n"
-	if got := TasksNotes(text(good)); len(got) != 0 {
+	if got := TasksNotes(layout.OpenSpec, text(good)); len(got) != 0 {
 		t.Errorf("tasks in a slice have no note, cited or not: %q", got)
 	}
-	if got := strings.Join(TasksNotes(text(strings.Replace(good, "Delivers: CA-01\n", "", 1))), "\n"); !strings.Contains(got, "Slice 1: login name(s) no value it delivers") {
+	if got := strings.Join(TasksNotes(layout.OpenSpec, text(strings.Replace(good, "Delivers: CA-01\n", "", 1))), "\n"); !strings.Contains(got, "Slice 1: login name(s) no value it delivers") {
 		t.Errorf("a slice without its value is noted: %q", got)
 	}
 	flat := "# Tasks\n- [ ] 1.1 do a\n- [ ] 1.2 do b\n"
-	if got := strings.Join(TasksNotes(text(flat)), "\n"); !strings.Contains(got, "## Slice <n>:") {
+	if got := strings.Join(TasksNotes(layout.OpenSpec, text(flat)), "\n"); !strings.Contains(got, "## Slice <n>:") {
 		t.Errorf("tasks without slices are noted: %q", got)
 	}
 }
@@ -64,11 +66,11 @@ func TestPlanAheadCountsTasksPlannedBeforeTheirTurn(t *testing.T) {
 		{"tasks in slice 5 of an outline are planned ahead", "## Slice 1: a\n- [x] 1.1\n## Slice 2: b\n- [x] 2.1\n## Slice 3: c\n- [ ] 3.1\n## Slice 4: d\n## Slice 5: e\n- [ ] 5.1 x\n- [ ] 5.2 y\n## Slice 6: f\n", PlanAhead{1, []string{"Slice 5: e"}}},
 		{"an outline slice before them is the current one", "## Slice 1: a\n- [x] 1.1\n## Slice 2: b\n## Slice 3: c\n- [ ] 3.1 x\n- [ ] 3.2 y\n", PlanAhead{1, []string{"Slice 3: c"}}},
 	} {
-		if got := PlanAheadOf(c.src); !reflect.DeepEqual(got, c.want) {
+		if got := PlanAheadOf(layout.OpenSpec, c.src); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
 		}
 	}
-	if got := strings.Join(TasksNotes(text("## Slice 1: a\n- [ ] 1.1 x\n## Slice 2: b\n- [ ] 2.1 y\n- [ ] 2.2 z\n")), "\n"); !strings.Contains(got, "in a later slice than the current one") {
+	if got := strings.Join(TasksNotes(layout.OpenSpec, text("## Slice 1: a\n- [ ] 1.1 x\n## Slice 2: b\n- [ ] 2.1 y\n- [ ] 2.2 z\n")), "\n"); !strings.Contains(got, "in a later slice than the current one") {
 		t.Errorf("tasks planned ahead are noted: %q", got)
 	}
 }
@@ -94,7 +96,7 @@ func TestEveryDepartureIsANote(t *testing.T) {
 		{"a slice at the advisory size", "## Slice 1: catalog\nDelivers: CA-01\n" + checkboxes(12, "") + "```\n- [ ] fenced\n```\n", nil},
 		{"a task nested past one level", "## Slice 1: a\nDelivers: x\n- [ ] 1.1 a\n  - [ ] 1.1.1 b\n    - [ ] 1.1.1.1 c\n", nil},
 	} {
-		if got := TasksNotes(text(c.src)); !reflect.DeepEqual(got, c.want) {
+		if got := TasksNotes(layout.OpenSpec, text(c.src)); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -135,7 +137,7 @@ func TestScenarioCoverageCountsTheScenariosATestNames(t *testing.T) {
 		"a_test.go": `t.Run("rejects a bad password", func(t *testing.T) {})`,
 		"b.test.ts": "// scenario: something else",
 	}
-	c, err := ScenarioCoverage([]string{spec}, func(visit func(path, src string)) {
+	c, err := ScenarioCoverage(layout.OpenSpec, []string{spec}, func(visit func(path, src string)) {
 		for p, s := range tests {
 			visit(p, s)
 		}
@@ -147,7 +149,7 @@ func TestScenarioCoverageCountsTheScenariosATestNames(t *testing.T) {
 		t.Errorf("coverage = %+v", c)
 	}
 	tests["b.test.ts"] = "// scenario: Locks after five tries"
-	if c, _ := ScenarioCoverage([]string{spec}, func(visit func(path, src string)) {
+	if c, _ := ScenarioCoverage(layout.OpenSpec, []string{spec}, func(visit func(path, src string)) {
 		for p, s := range tests {
 			visit(p, s)
 		}

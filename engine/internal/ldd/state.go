@@ -90,9 +90,10 @@ type ChangeState struct {
 // the change's directory moves.
 func StateOf(top, change, phase, delivery string, diff []string) ChangeState {
 	s := ChangeState{Change: change, Phase: phase, Delivery: delivery, LastRun: "none on record"}
-	if b, err := os.ReadFile(filepath.Join(top, layout.For(top).Artifact(change, "tasks.md"))); err == nil {
+	lay := layout.For(top)
+	if b, err := os.ReadFile(filepath.Join(top, lay.Artifact(change, lay.Tasks()))); err == nil {
 		src := string(b)
-		p := ProgressOf(&src)
+		p := ProgressOf(lay, &src)
 		for _, x := range p.Slices {
 			if x.Total == 0 {
 				continue
@@ -380,12 +381,13 @@ func HeadOf(top string) (commit string, ok bool) {
 // commit that closes a slice of change, and returns the slices it closed;
 // nil when HEAD did not move, or moved to a commit that closes none.
 func AwaitSliceCommit(top, change, after string, wait time.Duration) []string {
-	rel := layout.For(top).Artifact(change, "tasks.md")
+	lay := layout.For(top)
+	rel := lay.Artifact(change, lay.Tasks())
 	for end := time.Now().Add(wait); ; time.Sleep(200 * time.Millisecond) {
 		if head := vcs.HeadSha(top); head != "" && head != after {
 			now, _ := riskGit(top, "show", "HEAD:"+rel)
 			before, _ := riskGit(top, "show", "HEAD^:"+rel)
-			return newlyClosed(before, now)
+			return newlyClosed(lay, before, now)
 		}
 		if time.Now().After(end) {
 			return nil

@@ -231,7 +231,7 @@ func TestChangedSinceFromASubdirectory(t *testing.T) {
 // ── records ─────────────────────────────────────────────────────────────────
 
 func TestRecordPaths(t *testing.T) {
-	if p := RecordPath("c1"); p != "openspec/changes/c1/execution-record.json" {
+	if p := RecordPath(tempDir(t), "c1"); p != "openspec/changes/c1/execution-record.json" {
 		t.Errorf("RecordPath = %q", p)
 	}
 	top := tempDir(t)
@@ -248,7 +248,7 @@ func TestRecordPaths(t *testing.T) {
 
 func TestReadLastRun(t *testing.T) {
 	root := tempDir(t)
-	file := filepath.Join(root, RecordPath("c"))
+	file := filepath.Join(root, RecordPath(root, "c"))
 	if r, err := ReadLastRun(root, "c"); r != nil || err != nil {
 		t.Errorf("no record: %+v, %v", r, err)
 	}
@@ -397,7 +397,7 @@ func TestPassesOnReusesOnlyACompleteUndisturbedRunOnTheSameTree(t *testing.T) {
 	}
 	zero, three := 0, 3
 	write := func(r Record) {
-		if err := WriteRecord(filepath.Join(root, RecordPath("c")), &r); err != nil {
+		if err := WriteRecord(filepath.Join(root, RecordPath(root, "c")), &r); err != nil {
 			t.Fatal(err)
 		}
 	}

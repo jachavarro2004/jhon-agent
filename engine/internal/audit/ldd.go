@@ -250,12 +250,12 @@ func slicesOf(s *Session, change string) (n, maxTasks int) {
 	for _, root := range changeRoots(s, change) {
 		trackChange(root, change)
 		l := lddlayout.For(root)
-		paths := []string{lddlayout.At(root, l.Artifact(change, "tasks.md"))}
-		archived, _ := filepath.Glob(filepath.Join(lddlayout.At(root, l.ArchiveDir()), "*-"+change, "tasks.md"))
+		paths := []string{lddlayout.At(root, l.Artifact(change, l.Tasks()))}
+		archived, _ := filepath.Glob(filepath.Join(lddlayout.At(root, l.ArchiveDir()), "*-"+change, l.Tasks()))
 		for _, p := range append(paths, archived...) {
 			if b, err := os.ReadFile(p); err == nil {
 				src := string(b)
-				sl := ldd.ProgressOf(&src).Slices
+				sl := ldd.ProgressOf(l, &src).Slices
 				for _, x := range sl {
 					maxTasks = max(maxTasks, x.Total)
 				}

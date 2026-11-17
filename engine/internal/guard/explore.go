@@ -41,7 +41,7 @@ func ExploreMayWrite(p, root string) bool {
 		return false
 	}
 	changes := parts[0] + "/" + parts[1]
-	for _, l := range []layout.Layout{layout.Native, layout.OpenSpec} {
+	for _, l := range layout.Layouts {
 		if changes == l.ChangesDir() {
 			return true
 		}

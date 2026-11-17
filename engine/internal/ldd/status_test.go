@@ -14,6 +14,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/discover"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/execution"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 )
 
 // The status tests that call the package directly. Each
@@ -189,8 +190,8 @@ func TestArtifactRules(t *testing.T) {
 		{VerifyState(s("- verdict: `fail`\n")), "partial"},
 		{VerifyState(s("# Report\n\nNo verdict stated.\n")), "partial"},
 		{VerifyState(nil), "missing"},
-		{TasksState(nil), "missing"},
-		{TasksState(s("# Tasks\n")), "partial"},
+		{TasksState(layout.OpenSpec, nil), "missing"},
+		{TasksState(layout.OpenSpec, s("# Tasks\n")), "partial"},
 	} {
 		if c.got != c.want {
 			t.Errorf("case %+v", c)
@@ -205,12 +206,12 @@ func TestArtifactRules(t *testing.T) {
 }
 
 func TestProgressOf(t *testing.T) {
-	p := ProgressOf(s("- [x] a\n- [X] b\n- [ ] c\n```\n- [ ] d\n```\n"))
+	p := ProgressOf(layout.OpenSpec, s("- [x] a\n- [X] b\n- [ ] c\n```\n- [ ] d\n```\n"))
 	if want := (TaskProgress{3, 2, 1, false, []string{"c"}, []SliceProgress{}, nil, 0, nil, nil}); !reflect.DeepEqual(p, want) {
 		t.Errorf("fences ignored, x in either case: %+v", p)
 	}
 	// contracts/ldd.md "Slices": tasks.md plans the change slice by slice.
-	p = ProgressOf(s("# Tasks\n\n## Slice 1: limit check\n- [x] 1.1 RED\n- [x] 1.2 GREEN\n\n## Slice 2: exact limit\n- [x] 2.1 RED\n- [ ] 2.2 GREEN\n\n### Slice 3 — audit trail\n- [ ] 3.1 Plan the slice\n"))
+	p = ProgressOf(layout.OpenSpec, s("# Tasks\n\n## Slice 1: limit check\n- [x] 1.1 RED\n- [x] 1.2 GREEN\n\n## Slice 2: exact limit\n- [x] 2.1 RED\n- [ ] 2.2 GREEN\n\n### Slice 3 — audit trail\n- [ ] 3.1 Plan the slice\n"))
 	want := []SliceProgress{
 		{Name: "Slice 1: limit check", Total: 2, Completed: 2, Tasks: []SliceTask{{"1.1 RED", true}, {"1.2 GREEN", true}}},
 		{Name: "Slice 2: exact limit", Total: 2, Completed: 1, Tasks: []SliceTask{{"2.1 RED", true}, {"2.2 GREEN", false}}},
@@ -222,14 +223,14 @@ func TestProgressOf(t *testing.T) {
 	if line := slicesLine(p); line != "slices      1/3 done, current Slice 2: exact limit (1/2 checked), next Slice 3 — audit trail (0/1 checked)" {
 		t.Errorf("slicesLine = %q", line)
 	}
-	if p := ProgressOf(s("## Slice 1: a\n- [x] done\n")); p.Slice != nil {
+	if p := ProgressOf(layout.OpenSpec, s("## Slice 1: a\n- [x] done\n")); p.Slice != nil {
 		t.Error("every slice done: no current slice")
 	}
 	// JavaScript's i flag without u does not fold ſ to s; a fifth # is no slice heading.
-	if p := ProgressOf(s("## ſlice 1\n##### Slice 2\n## SLICE 3  \n- [ ] a\n")); len(p.Slices) != 1 || p.Slices[0].Name != "SLICE 3" {
+	if p := ProgressOf(layout.OpenSpec, s("## ſlice 1\n##### Slice 2\n## SLICE 3  \n- [ ] a\n")); len(p.Slices) != 1 || p.Slices[0].Name != "SLICE 3" {
 		t.Errorf("slice headings: %+v", p.Slices)
 	}
-	if ProgressOf(nil).Unchecked == nil || ProgressOf(nil).Slices == nil {
+	if ProgressOf(layout.OpenSpec, nil).Unchecked == nil || ProgressOf(layout.OpenSpec, nil).Slices == nil {
 		t.Error("no tasks.md is empty progress, never null lists")
 	}
 }
@@ -682,7 +683,7 @@ func TestALaneBranchSelectsTheChangeItsOwnCommitsLastTouched(t *testing.T) {
 
 func TestSlicesCarryWhatTheyDeliver(t *testing.T) {
 	src := "## Slice 1: launch\nDelivers: an exercise can be launched\n\n- [x] 1.1 a\n\n## Slice 2: panel\n- **Delivers:** the tracking panel\n- [ ] 2.1 b\n\n## Slice 3: none\n- [ ] 3.1 c\n"
-	got := ProgressOf(&src).Slices
+	got := ProgressOf(layout.OpenSpec, &src).Slices
 	want := []string{"an exercise can be launched", "the tracking panel", ""}
 	for i, s := range got {
 		if s.Delivers != want[i] {
@@ -696,7 +697,7 @@ func TestSlicesCarryWhatTheyDeliver(t *testing.T) {
 
 func TestProgressOfWrappedDelivers(t *testing.T) {
 	src := "## Slice 1: copy\n\nDelivers: CA-07 (deadline), CA-06 (a copy restarts every\nexercise, keeping its instructions)\n\n- [x] 1.1 a\n\n## Slice 2: launch\nDelivers: CA-09\n- [ ] 2.1 b\nnot part of it\n"
-	got := ProgressOf(&src)
+	got := ProgressOf(layout.OpenSpec, &src)
 	want := []string{"CA-07 (deadline), CA-06 (a copy restarts every exercise, keeping its instructions)", "CA-09"}
 	for i, s := range got.Slices {
 		if s.Delivers != want[i] {
@@ -721,7 +722,7 @@ func TestSlicesOutline(t *testing.T) {
 			tasks += checkboxes(14, "")
 		}
 	}
-	p := ProgressOf(s(tasks))
+	p := ProgressOf(layout.OpenSpec, s(tasks))
 	if p.SlicesDone != 2 || p.Current == nil || *p.Current != "Slice 3: durations" || p.Next == nil || *p.Next != "Slice 4: blocking" {
 		t.Errorf("outline progress: done %d current %v next %v", p.SlicesDone, p.Current, p.Next)
 	}
@@ -732,7 +733,7 @@ func TestSlicesOutline(t *testing.T) {
 		t.Errorf("slicesLine = %q", line)
 	}
 	// An outline slice is not done, and is current once every earlier one is.
-	p = ProgressOf(s("## Slice 1: a\nDelivers: x\n- [x] 1.1 RED\n## Slice 2: b\nDelivers: y\n## Slice 3: c\nDelivers: z\n"))
+	p = ProgressOf(layout.OpenSpec, s("## Slice 1: a\nDelivers: x\n- [x] 1.1 RED\n## Slice 2: b\nDelivers: y\n## Slice 3: c\nDelivers: z\n"))
 	if p.SlicesDone != 1 || p.Current == nil || *p.Current != "Slice 2: b" || p.Slice != nil {
 		t.Errorf("outline current: %+v", p)
 	}
@@ -740,15 +741,15 @@ func TestSlicesOutline(t *testing.T) {
 		t.Errorf("slicesLine = %q", line)
 	}
 	// An outline slice before the one with unchecked tasks is still current.
-	p = ProgressOf(s("## Slice 1: a\n- [x] 1.1\n## Slice 2: b\n## Slice 3: c\n- [ ] 3.1\n"))
+	p = ProgressOf(layout.OpenSpec, s("## Slice 1: a\n- [x] 1.1\n## Slice 2: b\n## Slice 3: c\n- [ ] 3.1\n"))
 	if p.Current == nil || *p.Current != "Slice 2: b" {
 		t.Errorf("first slice not done is current: %+v", p)
 	}
 	// An old single-slice tasks.md reads as before.
-	if line := slicesLine(ProgressOf(s("## Slice 1: a\n- [x] 1.1\n- [ ] 1.2\n"))); line != "slices      0/1 done, current Slice 1: a (1/2 checked)" {
+	if line := slicesLine(ProgressOf(layout.OpenSpec, s("## Slice 1: a\n- [x] 1.1\n- [ ] 1.2\n"))); line != "slices      0/1 done, current Slice 1: a (1/2 checked)" {
 		t.Errorf("single slice = %q", line)
 	}
-	if line := slicesLine(ProgressOf(s("## Slice 1: a\n- [x] 1.1\n"))); line != "slices      1/1 done" {
+	if line := slicesLine(ProgressOf(layout.OpenSpec, s("## Slice 1: a\n- [x] 1.1\n"))); line != "slices      1/1 done" {
 		t.Errorf("single slice done = %q", line)
 	}
 }

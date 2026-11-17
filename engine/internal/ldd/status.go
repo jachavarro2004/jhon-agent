@@ -258,8 +258,8 @@ func ProposalState(src *string) string {
 // specFiles are every `spec.md` under the change's specs/ directory, as
 // relative path and text, in JavaScript string order. As readdirSync's
 // recursive listing, it does not descend into symlinked directories.
-func specFiles(dir string) ([][2]string, error) {
-	root := filepath.Join(dir, "specs")
+func specFiles(l layout.Layout, dir string) ([][2]string, error) {
+	root := filepath.Join(dir, l.DeltaSpecs())
 	if !project.Exists(root) {
 		return nil, nil
 	}
@@ -297,29 +297,20 @@ func specFiles(dir string) ([][2]string, error) {
 // SpecsState is done when every spec holds requirements and each has a
 // scenario, except those of a heading-only operation (a REMOVED one). The
 // error is a contracts/spec-delta.md that cannot be read.
-func SpecsState(specs []string) (string, error) {
+func SpecsState(l layout.Layout, specs []string) (string, error) {
 	v := sv()
 	if len(specs) == 0 {
 		return v.missing, nil
 	}
-	c, err := requirements.Delta()
-	if err != nil {
-		return "", err
-	}
 	for _, src := range specs {
-		parsed := requirements.ParseSpec(src, requirements.Options{Metadata: c.Metadata, Ops: c.Order})
-		if len(parsed.Requirements) == 0 {
+		reqs, err := l.Scenarios(src, 0)
+		if err != nil {
+			return "", err
+		}
+		if len(reqs) == 0 {
 			return v.partial, nil
 		}
-		exempt := map[*requirements.Requirement]bool{}
-		for _, s := range parsed.Sections {
-			if s.Op != nil && slices.Contains(c.HeadingOnly, *s.Op) {
-				for _, r := range s.Requirements {
-					exempt[r] = true
-				}
-			}
-		}
-		if slices.ContainsFunc(parsed.Requirements, func(r *requirements.Requirement) bool { return !exempt[r] && len(r.Scenarios) == 0 }) {
+		if slices.ContainsFunc(reqs, func(r layout.Requirement) bool { return !r.HeadingOnly && len(r.Scenarios) == 0 }) {
 			return v.partial, nil
 		}
 	}
@@ -344,10 +335,6 @@ func DesignState(src *string) string {
 
 var (
 	checkbox = lazyre.New(`^` + js.Space + `*-[ \t]+\[([ xX])\][ \t]?(` + js.Dot + `*)$`)
-	// sliceHeading is a `## Slice <n>: <name>` heading of tasks.md
-	// (contracts/ldd.md, "Slices"). The word is spelled as
-	// classes: Go's (?i) also folds ſ to s, JavaScript's i flag without u does not.
-	sliceHeading = lazyre.New(`^#{2,4}` + js.Space + `+([sS][lL][iI][cC][eE]` + js.Space + `+\d+\b` + js.Dot + `*?)` + js.Space + `*$`)
 )
 
 // SliceProgress is one slice of tasks.md and its checked tasks.
@@ -424,18 +411,18 @@ func sliceState(x SliceProgress) string {
 
 // ProgressOf is the task progress of tasks.md (src nil: no file), fenced
 // checkboxes ignored, x in either case.
-func ProgressOf(src *string) TaskProgress {
+func ProgressOf(lay layout.Layout, src *string) TaskProgress {
 	var lines []requirements.Line
 	if src != nil {
 		lines = unfenced(*src)
 	}
-	t := TaskProgress{Unchecked: []string{}, Slices: []SliceProgress{}}
+	t := noTasks()
 	current := -1
 	// A Delivers: paragraph wrapped over several lines is one value: its
 	// lines up to a blank one, a heading, or a list item continue it.
 	continuing := false
 	for _, l := range lines {
-		if h := sliceHeading.FindStringSubmatch(l.Text); h != nil {
+		if h := lay.SliceHeading().FindStringSubmatch(l.Text); h != nil {
 			t.Slices = append(t.Slices, SliceProgress{Name: h[1], Tasks: []SliceTask{}})
 			current = len(t.Slices) - 1
 			continuing = false
@@ -494,6 +481,9 @@ func ProgressOf(src *string) TaskProgress {
 	return t
 }
 
+// noTasks is the task progress of no tasks.md.
+func noTasks() TaskProgress { return TaskProgress{Unchecked: []string{}, Slices: []SliceProgress{}} }
+
 // currentSlice is the index of the first slice not done, -1 when every
 // slice is.
 func currentSlice(t TaskProgress) int {
@@ -517,12 +507,12 @@ func slicesLine(t TaskProgress) string {
 }
 
 // TasksState is done when tasks.md holds at least one checkbox.
-func TasksState(src *string) string {
+func TasksState(l layout.Layout, src *string) string {
 	v := sv()
 	switch {
 	case src == nil:
 		return v.missing
-	case ProgressOf(src).Total > 0:
+	case ProgressOf(l, src).Total > 0:
 		return v.done
 	}
 	return v.partial
@@ -824,7 +814,7 @@ func idle(ok bool, next, note string, set changeSet, tdd StrictTdd, resolved dis
 	notes := slices.Concat([]string{note}, vcsNotes(v), resolved.Notes, tdd.Notes, tddNotes(tdd))
 	return Status{
 		Ok: ok, ActiveChanges: set.active, RankedChanges: set.ranked, Umbrellas: set.umbrellas, Artifacts: []ArtifactStatus{}, Vcs: v,
-		Tasks: ProgressOf(nil), Next: next, Notes: notes, StrictTdd: tdd, Projects: resolved.Projects,
+		Tasks: noTasks(), Next: next, Notes: notes, StrictTdd: tdd, Projects: resolved.Projects,
 	}
 }
 
@@ -1008,6 +998,7 @@ func (g gitReads) laneChange(root string, active []string) string {
 // derive is the status of change; branch names it when it has no folder.
 func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved discover.ResolvedProjects, state vcs.Vcs) (Status, error) {
 	v := sv()
+	lay := layout.For(root)
 	rel := filepath.Join(changesOf(root), change)
 	dir := filepath.Join(root, rel)
 	var readErr error
@@ -1024,13 +1015,13 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 		return new(string(b))
 	}
 	proposal := read("proposal.md")
-	tasksSrc := read("tasks.md")
+	tasksSrc := read(lay.Tasks())
 	verifySrc := read("verify-report.md")
 	evidenceSrc := read(evidenceFile)
 	if readErr != nil {
 		return Status{}, readErr
 	}
-	specFileList, err := specFiles(dir)
+	specFileList, err := specFiles(lay, dir)
 	if err != nil {
 		return Status{}, err
 	}
@@ -1042,7 +1033,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	if readErr != nil {
 		return Status{}, readErr
 	}
-	specsState, err := SpecsState(specs)
+	specsState, err := SpecsState(lay, specs)
 	if err != nil {
 		return Status{}, err
 	}
@@ -1060,7 +1051,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 		{Artifact: "proposal.md", State: ProposalState(proposal)},
 		{Artifact: "specs/", State: specsState},
 		{Artifact: "design.md", State: DesignState(design)},
-		{Artifact: "tasks.md", State: TasksState(tasksSrc)},
+		{Artifact: "tasks.md", State: TasksState(lay, tasksSrc)},
 		{Artifact: evidenceFile, State: evidenceState},
 		{Artifact: "verify-report.md", State: VerifyState(verifySrc)},
 	}
@@ -1070,7 +1061,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	st := func(a string) string {
 		return artifacts[slices.IndexFunc(artifacts, func(x ArtifactStatus) bool { return x.Artifact == a })].State
 	}
-	tasks := ProgressOf(tasksSrc)
+	tasks := ProgressOf(lay, tasksSrc)
 	notes := append([]string{}, slices.Concat(vcsNotes(state), resolved.Notes, tdd.Notes, tddNotes(tdd))...)
 	directory, shown := &rel, artifacts
 	if branch != "" {
@@ -1083,7 +1074,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	for _, f := range specFileList {
 		if m := requirements.HeadingDepthMismatch(f[1]); m != nil {
 			notes = append(notes, fmt.Sprintf("%s line %d is a level %d %s: heading; the contract expects level %d, so compose will refuse it",
-				filepath.Join(rel, "specs", f[0]), m.Line, m.Found, m.Kind, m.Expected))
+				filepath.Join(rel, lay.DeltaSpecs(), f[0]), m.Line, m.Found, m.Kind, m.Expected))
 		}
 	}
 
@@ -1097,9 +1088,9 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 
 	// What the adaptive flow asks of the intent, the tasks, the tests, and the verification.
 	notes = append(notes, ProposalNotes(proposal)...)
-	notes = append(notes, TasksNotes(tasksSrc)...)
+	notes = append(notes, TasksNotes(lay, tasksSrc)...)
 	if len(specs) > 0 {
-		coverage, err := ScenarioCoverage(specs, testFiles(root))
+		coverage, err := ScenarioCoverage(lay, specs, testFiles(root))
 		if err != nil {
 			return Status{}, err
 		}
