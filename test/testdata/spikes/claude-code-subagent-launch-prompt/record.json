@@ -1,0 +1,13 @@
+{
+  "runtime": "claude-code",
+  "runtime_version": "2.1.304",
+  "guard": "hooks/scope-guard.mjs",
+  "guard_version": "the working tree of 2026-10-22, before its first commit",
+  "date": "2026-10-22",
+  "call": "claude -p --model claude-haiku-5-5 --permission-mode bypassPermissions in a scratch git repo <S>/proj, with a settings-level PreToolUse hook (matcher Edit|Write|NotebookEdit|Bash) that logged each payload and piped it to hooks/scope-guard.mjs, unscoped. The main session launched one general-purpose sub-agent whose prompt listed `notes.txt` under `## Allowed edit surfaces` and asked it to run `echo hi > notes.txt`, then `echo no > other.txt`, then to Write other2.txt, without retrying a refused step. An earlier observation run (same setup, a dumping hook only) recorded the payload fields.",
+  "payload": "Every sub-agent payload carried agent_id (a 17-character id) and agent_type general-purpose, and transcript_path naming the MAIN session's transcript <dir>/<session>.jsonl; the sub-agent's own transcript was <dir>/<session>/subagents/agent-<agent_id>.jsonl, whose first line is a user entry holding the launch prompt verbatim, written before the sub-agent's first tool call.",
+  "decision": "A PreToolUse hook can read a sub-agent's launch prompt, and so its `## Allowed edit surfaces`, from <dirname(transcript_path)>/<basename without .jsonl>/subagents/agent-<agent_id>.jsonl. efficiency/writer-scope is enforced in claude-code by hooks/scope-guard.mjs on that basis.",
+  "runtime_result": "notes.txt was written; the Bash write of other.txt and the Write of other2.txt were refused with exit 2 (the guard's stderr names each file and the listed surfaces), the sub-agent reported both refusals and retried neither, and neither file exists.",
+  "no_effect_check": "After the run <S>/proj held only notes.txt: neither refused write had any effect.",
+  "control_case": "Step 1, a write of the one listed surface by the same sub-agent through the same hook, was allowed and took effect."
+}

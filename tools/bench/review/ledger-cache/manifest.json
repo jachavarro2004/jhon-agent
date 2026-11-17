@@ -1,0 +1,29 @@
+{
+  "id": "ledger-cache",
+  "title": "balance cache filled by threads",
+  "change": "balance-cache",
+  "defects": [
+    {
+      "id": "D1",
+      "file": "ledger/balance_cache.py",
+      "lines": [
+        12,
+        19
+      ],
+      "lens": "resilience",
+      "severity": "CRITICAL",
+      "what": "a race on shared state: the threads check and fill _cache and bump _hits with no lock (_lock is never taken)"
+    },
+    {
+      "id": "D2",
+      "file": "ledger/balance_cache.py",
+      "lines": [
+        35,
+        35
+      ],
+      "lens": "reliability",
+      "severity": "WARNING",
+      "what": "a missing error check: subprocess.run's exit code is ignored, so a failed copy still returns the target"
+    }
+  ]
+}

@@ -1,0 +1,271 @@
+[
+ {"name": "day-01", "account": "acme-2", "balance": 5100, "months": {"2026-06": 1750, "2026-07": 7475, "2026-09": 6000},
+  "entries": [
+   {"date": "2026-07-02", "account": "acme-1", "kind": "credit", "amount_cents": 7475},
+   {"date": "2026-09-26", "account": "acme-1", "kind": "credit", "amount_cents": 900},
+   {"date": "2026-06-21", "account": "acme-1", "kind": "credit", "amount_cents": 1750},
+   {"date": "2026-09-10", "account": "acme-2", "kind": "credit", "amount_cents": 5100}
+  ]},
+ {"name": "day-02", "account": "acme-1", "balance": 4575, "months": {"2026-03": 13700, "2026-05": 7475, "2026-06": 1400, "2026-12": -2900},
+  "entries": [
+   {"date": "2026-03-16", "account": "acme-2", "kind": "credit", "amount_cents": 5900},
+   {"date": "2026-12-23", "account": "acme-1", "kind": "debit", "amount_cents": 2900},
+   {"date": "2026-06-17", "account": "acme-2", "kind": "refund", "amount_cents": 3525},
+   {"date": "2026-03-04", "account": "acme-2", "kind": "credit", "amount_cents": 7800},
+   {"date": "2026-06-15", "account": "acme-2", "kind": "credit", "amount_cents": 4925},
+   {"date": "2026-05-12", "account": "acme-1", "kind": "credit", "amount_cents": 7475}
+  ]},
+ {"name": "day-03", "account": "acme-1", "balance": 1450, "months": {"2026-01": 11125, "2026-03": 9225, "2026-05": -550, "2026-09": -1300, "2026-11": 9925, "2026-12": 6475},
+  "entries": [
+   {"date": "2026-12-23", "account": "acme-10", "kind": "debit", "amount_cents": 850},
+   {"date": "2026-05-26", "account": "acme-1", "kind": "debit", "amount_cents": 7175},
+   {"date": "2026-03-12", "account": "acme-10", "kind": "credit", "amount_cents": 9225},
+   {"date": "2026-09-07", "account": "acme-1", "kind": "debit", "amount_cents": 1300},
+   {"date": "2026-12-28", "account": "acme-2", "kind": "credit", "amount_cents": 7325},
+   {"date": "2026-01-22", "account": "acme-10", "kind": "credit", "amount_cents": 11125},
+   {"date": "2026-05-13", "account": "acme-10", "kind": "credit", "amount_cents": 6625},
+   {"date": "2026-11-24", "account": "acme-1", "kind": "credit", "amount_cents": 9925}
+  ]},
+ {"name": "day-04", "account": "acme-2", "balance": -20950, "months": {"2026-01": -10600, "2026-02": -8350, "2026-03": -10000, "2026-05": -4850, "2026-07": 1400, "2026-12": -4000},
+  "entries": [
+   {"date": "2026-02-03", "account": "acme-2", "kind": "debit", "amount_cents": 8350},
+   {"date": "2026-03-05", "account": "acme-2", "kind": "refund", "amount_cents": 10000},
+   {"date": "2026-05-24", "account": "acme-21", "kind": "debit", "amount_cents": 4850},
+   {"date": "2026-12-05", "account": "acme-2", "kind": "refund", "amount_cents": 4000},
+   {"date": "2026-07-05", "account": "acme-2", "kind": "credit", "amount_cents": 1400},
+   {"date": "2026-01-07", "account": "acme-1", "kind": "debit", "amount_cents": 10600}
+  ]},
+ {"name": "day-05", "account": "acme-1", "balance": 50, "months": {"2026-01": 9100, "2026-04": -3925, "2026-05": 50, "2026-06": 10875, "2026-10": -9600, "2026-11": 5200},
+  "entries": [
+   {"date": "2026-11-20", "account": "acme-2", "kind": "credit", "amount_cents": 5200},
+   {"date": "2026-04-09", "account": "acme-2", "kind": "debit", "amount_cents": 3925},
+   {"date": "2026-05-18", "account": "acme-1", "kind": "credit", "amount_cents": 50},
+   {"date": "2026-10-11", "account": "acme-2", "kind": "debit", "amount_cents": 9600},
+   {"date": "2026-01-20", "account": "acme-2", "kind": "credit", "amount_cents": 9100},
+   {"date": "2026-06-10", "account": "acme-2", "kind": "credit", "amount_cents": 10875}
+  ]},
+ {"name": "day-06", "account": "acme-2", "balance": -2175, "months": {"2026-04": -2175, "2026-10": 7750, "2026-11": -16250, "2026-12": -1150},
+  "entries": [
+   {"date": "2026-11-26", "account": "acme-10", "kind": "refund", "amount_cents": 9175},
+   {"date": "2026-04-01", "account": "acme-2", "kind": "debit", "amount_cents": 2175},
+   {"date": "2026-11-01", "account": "acme-1", "kind": "refund", "amount_cents": 7075},
+   {"date": "2026-12-21", "account": "acme-10", "kind": "debit", "amount_cents": 1150},
+   {"date": "2026-10-08", "account": "acme-10", "kind": "credit", "amount_cents": 7750}
+  ]},
+ {"name": "day-07", "account": "acme-2", "balance": 3825, "months": {"2026-02": 3825, "2026-06": -3275, "2026-07": -11175},
+  "entries": [
+   {"date": "2026-07-21", "account": "acme-1", "kind": "credit", "amount_cents": 750},
+   {"date": "2026-06-20", "account": "acme-1", "kind": "debit", "amount_cents": 3275},
+   {"date": "2026-07-21", "account": "acme-1", "kind": "debit", "amount_cents": 11925},
+   {"date": "2026-02-06", "account": "acme-2", "kind": "credit", "amount_cents": 3825}
+  ]},
+ {"name": "day-08", "account": "acme-1", "balance": -7275, "months": {"2026-02": 1625, "2026-06": -8225, "2026-07": -11925, "2026-09": 725, "2026-11": -6100},
+  "entries": [
+   {"date": "2026-06-19", "account": "acme-21", "kind": "refund", "amount_cents": 8225},
+   {"date": "2026-11-03", "account": "acme-2", "kind": "refund", "amount_cents": 6100},
+   {"date": "2026-09-09", "account": "acme-21", "kind": "credit", "amount_cents": 8000},
+   {"date": "2026-07-16", "account": "acme-21", "kind": "debit", "amount_cents": 11925},
+   {"date": "2026-09-14", "account": "acme-1", "kind": "refund", "amount_cents": 7275},
+   {"date": "2026-02-08", "account": "acme-2", "kind": "credit", "amount_cents": 1625}
+  ]},
+ {"name": "day-09", "account": "acme-2", "balance": -20825, "months": {"2026-01": 2425, "2026-03": -5375, "2026-05": -11350, "2026-06": 10975, "2026-10": -4600},
+  "entries": [
+   {"date": "2026-01-11", "account": "acme-10", "kind": "credit", "amount_cents": 2425},
+   {"date": "2026-10-11", "account": "acme-1", "kind": "credit", "amount_cents": 1675},
+   {"date": "2026-10-07", "account": "acme-2", "kind": "debit", "amount_cents": 6275},
+   {"date": "2026-05-20", "account": "acme-2", "kind": "debit", "amount_cents": 11350},
+   {"date": "2026-03-08", "account": "acme-2", "kind": "debit", "amount_cents": 5375},
+   {"date": "2026-06-11", "account": "acme-2", "kind": "credit", "amount_cents": 2175},
+   {"date": "2026-06-21", "account": "acme-1", "kind": "credit", "amount_cents": 8800}
+  ]},
+ {"name": "day-10", "account": "acme-1", "balance": 5900, "months": {"2026-02": 300, "2026-03": 5900, "2026-04": 50},
+  "entries": [
+   {"date": "2026-03-11", "account": "acme-1", "kind": "credit", "amount_cents": 3625},
+   {"date": "2026-02-18", "account": "acme-2", "kind": "credit", "amount_cents": 300},
+   {"date": "2026-03-25", "account": "acme-1", "kind": "credit", "amount_cents": 2275},
+   {"date": "2026-04-28", "account": "acme-2", "kind": "credit", "amount_cents": 50}
+  ]},
+ {"name": "day-11", "account": "acme-2", "balance": -9725, "months": {"2026-02": -950, "2026-04": 1050, "2026-08": -6475, "2026-11": 900},
+  "entries": [
+   {"date": "2026-08-09", "account": "acme-1", "kind": "debit", "amount_cents": 6475},
+   {"date": "2026-11-10", "account": "acme-2", "kind": "debit", "amount_cents": 4175},
+   {"date": "2026-02-28", "account": "acme-2", "kind": "debit", "amount_cents": 950},
+   {"date": "2026-04-14", "account": "acme-1", "kind": "credit", "amount_cents": 1050},
+   {"date": "2026-11-06", "account": "acme-1", "kind": "credit", "amount_cents": 9675},
+   {"date": "2026-11-10", "account": "acme-2", "kind": "debit", "amount_cents": 4600}
+  ]},
+ {"name": "day-12", "account": "acme-2", "balance": -10075, "months": {"2026-01": -3500, "2026-07": -22050},
+  "entries": [
+   {"date": "2026-01-24", "account": "acme-2", "kind": "debit", "amount_cents": 3500},
+   {"date": "2026-07-01", "account": "acme-1", "kind": "refund", "amount_cents": 8925},
+   {"date": "2026-07-25", "account": "acme-2", "kind": "debit", "amount_cents": 6575},
+   {"date": "2026-07-23", "account": "acme-21", "kind": "refund", "amount_cents": 6550}
+  ]},
+ {"name": "day-13", "account": "acme-2", "balance": -10100, "months": {"2026-01": 1350, "2026-03": 3975, "2026-04": -8700, "2026-05": -5550, "2026-06": -8375, "2026-08": -11450},
+  "entries": [
+   {"date": "2026-08-20", "account": "acme-2", "kind": "debit", "amount_cents": 11450},
+   {"date": "2026-01-13", "account": "acme-2", "kind": "credit", "amount_cents": 1350},
+   {"date": "2026-03-11", "account": "acme-1", "kind": "credit", "amount_cents": 3975},
+   {"date": "2026-05-02", "account": "acme-1", "kind": "debit", "amount_cents": 5550},
+   {"date": "2026-04-20", "account": "acme-1", "kind": "debit", "amount_cents": 8700},
+   {"date": "2026-06-12", "account": "acme-1", "kind": "debit", "amount_cents": 8375}
+  ]},
+ {"name": "day-14", "account": "acme-1", "balance": -4475, "months": {"2026-03": -25250, "2026-07": 4125, "2026-09": -5325, "2026-11": -6700, "2026-12": -9025},
+  "entries": [
+   {"date": "2026-03-19", "account": "acme-2", "kind": "refund", "amount_cents": 6575},
+   {"date": "2026-03-27", "account": "acme-1", "kind": "refund", "amount_cents": 8600},
+   {"date": "2026-11-04", "account": "acme-2", "kind": "debit", "amount_cents": 6700},
+   {"date": "2026-12-06", "account": "acme-2", "kind": "refund", "amount_cents": 9025},
+   {"date": "2026-07-24", "account": "acme-1", "kind": "credit", "amount_cents": 4125},
+   {"date": "2026-03-28", "account": "acme-2", "kind": "debit", "amount_cents": 10075},
+   {"date": "2026-09-18", "account": "acme-2", "kind": "refund", "amount_cents": 5325}
+  ]},
+ {"name": "day-15", "account": "acme-2", "balance": 9925, "months": {"2026-01": -7800, "2026-03": -6100, "2026-05": 7550, "2026-06": -1500, "2026-08": -1375, "2026-09": 7400, "2026-10": 10175},
+  "entries": [
+   {"date": "2026-09-22", "account": "acme-1", "kind": "credit", "amount_cents": 7400},
+   {"date": "2026-01-24", "account": "acme-2", "kind": "debit", "amount_cents": 7800},
+   {"date": "2026-06-13", "account": "acme-10", "kind": "debit", "amount_cents": 1500},
+   {"date": "2026-05-19", "account": "acme-2", "kind": "credit", "amount_cents": 7550},
+   {"date": "2026-08-12", "account": "acme-10", "kind": "debit", "amount_cents": 1375},
+   {"date": "2026-10-14", "account": "acme-2", "kind": "credit", "amount_cents": 7275},
+   {"date": "2026-03-08", "account": "acme-10", "kind": "debit", "amount_cents": 6100},
+   {"date": "2026-10-17", "account": "acme-2", "kind": "credit", "amount_cents": 2900}
+  ]},
+ {"name": "day-16", "account": "acme-2", "balance": 5750, "months": {"2026-02": -8875, "2026-04": -2800, "2026-06": 7350, "2026-07": -2825},
+  "entries": [
+   {"date": "2026-04-06", "account": "acme-21", "kind": "debit", "amount_cents": 2800},
+   {"date": "2026-07-07", "account": "acme-2", "kind": "credit", "amount_cents": 5750},
+   {"date": "2026-02-18", "account": "acme-21", "kind": "debit", "amount_cents": 8875},
+   {"date": "2026-06-13", "account": "acme-21", "kind": "credit", "amount_cents": 7350},
+   {"date": "2026-07-09", "account": "acme-1", "kind": "refund", "amount_cents": 8575}
+  ]},
+ {"name": "day-17", "account": "acme-1", "balance": -3975, "months": {"2026-01": 1650, "2026-03": -11400, "2026-04": 6550, "2026-08": -4450, "2026-09": 9750, "2026-12": -10925},
+  "entries": [
+   {"date": "2026-12-04", "account": "acme-1", "kind": "debit", "amount_cents": 10925},
+   {"date": "2026-09-26", "account": "acme-1", "kind": "credit", "amount_cents": 9750},
+   {"date": "2026-03-23", "account": "acme-2", "kind": "debit", "amount_cents": 11400},
+   {"date": "2026-04-25", "account": "acme-2", "kind": "credit", "amount_cents": 6550},
+   {"date": "2026-08-11", "account": "acme-1", "kind": "debit", "amount_cents": 4450},
+   {"date": "2026-01-11", "account": "acme-1", "kind": "credit", "amount_cents": 1650}
+  ]},
+ {"name": "day-18", "account": "acme-2", "balance": -6125, "months": {"2026-01": 5575, "2026-02": -22475, "2026-05": 11450, "2026-06": -9575, "2026-08": 20650},
+  "entries": [
+   {"date": "2026-08-19", "account": "acme-1", "kind": "credit", "amount_cents": 12475},
+   {"date": "2026-08-14", "account": "acme-2", "kind": "credit", "amount_cents": 8175},
+   {"date": "2026-05-16", "account": "acme-1", "kind": "credit", "amount_cents": 11450},
+   {"date": "2026-01-28", "account": "acme-2", "kind": "credit", "amount_cents": 5575},
+   {"date": "2026-02-25", "account": "acme-2", "kind": "debit", "amount_cents": 10300},
+   {"date": "2026-02-27", "account": "acme-10", "kind": "refund", "amount_cents": 12175},
+   {"date": "2026-06-23", "account": "acme-2", "kind": "debit", "amount_cents": 9575}
+  ]},
+ {"name": "day-19", "account": "acme-1", "balance": -13675, "months": {"2026-01": -7575, "2026-03": 9500, "2026-04": 1575, "2026-07": -6575, "2026-10": -6575, "2026-11": 475},
+  "entries": [
+   {"date": "2026-01-25", "account": "acme-1", "kind": "debit", "amount_cents": 5950},
+   {"date": "2026-03-08", "account": "acme-2", "kind": "credit", "amount_cents": 9500},
+   {"date": "2026-07-23", "account": "acme-2", "kind": "debit", "amount_cents": 6575},
+   {"date": "2026-01-22", "account": "acme-1", "kind": "debit", "amount_cents": 1625},
+   {"date": "2026-04-26", "account": "acme-2", "kind": "credit", "amount_cents": 1575},
+   {"date": "2026-11-19", "account": "acme-1", "kind": "credit", "amount_cents": 475},
+   {"date": "2026-10-28", "account": "acme-1", "kind": "debit", "amount_cents": 6575}
+  ]},
+ {"name": "day-20", "account": "acme-2", "balance": 5175, "months": {"2026-01": 900, "2026-02": 5175, "2026-04": 6025, "2026-06": 1300, "2026-08": -6600, "2026-09": -2500, "2026-11": -10100},
+  "entries": [
+   {"date": "2026-08-21", "account": "acme-21", "kind": "debit", "amount_cents": 6600},
+   {"date": "2026-11-07", "account": "acme-21", "kind": "refund", "amount_cents": 10100},
+   {"date": "2026-02-20", "account": "acme-2", "kind": "credit", "amount_cents": 5175},
+   {"date": "2026-04-21", "account": "acme-1", "kind": "credit", "amount_cents": 6025},
+   {"date": "2026-01-08", "account": "acme-1", "kind": "credit", "amount_cents": 900},
+   {"date": "2026-09-13", "account": "acme-21", "kind": "debit", "amount_cents": 2500},
+   {"date": "2026-06-23", "account": "acme-1", "kind": "refund", "amount_cents": 8725},
+   {"date": "2026-06-07", "account": "acme-1", "kind": "credit", "amount_cents": 10025}
+  ]},
+ {"name": "day-21", "account": "acme-2", "balance": 3800, "months": {"2026-02": 3800, "2026-03": 4875, "2026-07": 6300, "2026-09": -8300, "2026-11": -5275},
+  "entries": [
+   {"date": "2026-02-01", "account": "acme-2", "kind": "credit", "amount_cents": 3800},
+   {"date": "2026-03-14", "account": "acme-10", "kind": "credit", "amount_cents": 4875},
+   {"date": "2026-09-09", "account": "acme-1", "kind": "debit", "amount_cents": 8300},
+   {"date": "2026-07-27", "account": "acme-10", "kind": "credit", "amount_cents": 6300},
+   {"date": "2026-11-12", "account": "acme-10", "kind": "debit", "amount_cents": 5275}
+  ]},
+ {"name": "day-22", "account": "acme-1", "balance": 10850, "months": {"2026-02": 12900, "2026-07": 8150, "2026-09": -8450},
+  "entries": [
+   {"date": "2026-07-22", "account": "acme-2", "kind": "refund", "amount_cents": 2700},
+   {"date": "2026-02-20", "account": "acme-2", "kind": "credit", "amount_cents": 1775},
+   {"date": "2026-02-14", "account": "acme-2", "kind": "credit", "amount_cents": 11125},
+   {"date": "2026-09-03", "account": "acme-2", "kind": "refund", "amount_cents": 8450},
+   {"date": "2026-07-11", "account": "acme-1", "kind": "credit", "amount_cents": 10850}
+  ]},
+ {"name": "day-23", "account": "acme-2", "balance": -8075, "months": {"2026-04": -8475, "2026-05": 4450, "2026-06": 12450, "2026-12": -4050},
+  "entries": [
+   {"date": "2026-04-04", "account": "acme-2", "kind": "debit", "amount_cents": 8475},
+   {"date": "2026-06-04", "account": "acme-1", "kind": "credit", "amount_cents": 12450},
+   {"date": "2026-05-02", "account": "acme-2", "kind": "credit", "amount_cents": 4450},
+   {"date": "2026-12-02", "account": "acme-2", "kind": "debit", "amount_cents": 4050}
+  ]},
+ {"name": "day-24", "account": "acme-2", "balance": 12400, "months": {"2026-02": 4075, "2026-06": -375, "2026-10": -8975, "2026-12": 12400},
+  "entries": [
+   {"date": "2026-12-21", "account": "acme-2", "kind": "credit", "amount_cents": 12400},
+   {"date": "2026-06-22", "account": "acme-21", "kind": "debit", "amount_cents": 375},
+   {"date": "2026-10-25", "account": "acme-21", "kind": "debit", "amount_cents": 8975},
+   {"date": "2026-02-16", "account": "acme-21", "kind": "credit", "amount_cents": 4075}
+  ]},
+ {"name": "day-25", "account": "acme-1", "balance": -5325, "months": {"2026-03": -4450, "2026-05": 7500, "2026-08": -17725, "2026-11": 4150},
+  "entries": [
+   {"date": "2026-08-27", "account": "acme-2", "kind": "debit", "amount_cents": 8250},
+   {"date": "2026-11-25", "account": "acme-1", "kind": "credit", "amount_cents": 4150},
+   {"date": "2026-08-04", "account": "acme-1", "kind": "debit", "amount_cents": 9475},
+   {"date": "2026-05-02", "account": "acme-2", "kind": "credit", "amount_cents": 7500},
+   {"date": "2026-03-07", "account": "acme-2", "kind": "debit", "amount_cents": 4450}
+  ]},
+ {"name": "day-26", "account": "acme-1", "balance": -17675, "months": {"2026-01": -4250, "2026-03": -600, "2026-04": -12375, "2026-05": -2175, "2026-07": -7075, "2026-09": 10775, "2026-12": 4200},
+  "entries": [
+   {"date": "2026-09-18", "account": "acme-2", "kind": "credit", "amount_cents": 10775},
+   {"date": "2026-05-05", "account": "acme-2", "kind": "debit", "amount_cents": 2175},
+   {"date": "2026-12-10", "account": "acme-2", "kind": "credit", "amount_cents": 4200},
+   {"date": "2026-03-22", "account": "acme-1", "kind": "debit", "amount_cents": 600},
+   {"date": "2026-07-18", "account": "acme-1", "kind": "debit", "amount_cents": 7075},
+   {"date": "2026-01-07", "account": "acme-1", "kind": "refund", "amount_cents": 10000},
+   {"date": "2026-04-21", "account": "acme-2", "kind": "debit", "amount_cents": 12375},
+   {"date": "2026-01-12", "account": "acme-2", "kind": "credit", "amount_cents": 5750}
+  ]},
+ {"name": "day-27", "account": "acme-2", "balance": 7150, "months": {"2026-01": 5650, "2026-02": 1275, "2026-03": 2700, "2026-05": -6925, "2026-08": 12200},
+  "entries": [
+   {"date": "2026-02-07", "account": "acme-2", "kind": "credit", "amount_cents": 1275},
+   {"date": "2026-05-07", "account": "acme-2", "kind": "debit", "amount_cents": 6925},
+   {"date": "2026-03-22", "account": "acme-1", "kind": "debit", "amount_cents": 10100},
+   {"date": "2026-03-07", "account": "acme-2", "kind": "credit", "amount_cents": 4975},
+   {"date": "2026-03-11", "account": "acme-2", "kind": "credit", "amount_cents": 7825},
+   {"date": "2026-01-11", "account": "acme-1", "kind": "credit", "amount_cents": 5650},
+   {"date": "2026-08-21", "account": "acme-1", "kind": "credit", "amount_cents": 12200}
+  ]},
+ {"name": "day-28", "account": "acme-2", "balance": -10425, "months": {"2026-01": -8850, "2026-02": 7700, "2026-03": -175, "2026-04": -10725, "2026-06": -9675, "2026-07": 9975},
+  "entries": [
+   {"date": "2026-03-10", "account": "acme-1", "kind": "refund", "amount_cents": 1325},
+   {"date": "2026-02-13", "account": "acme-1", "kind": "credit", "amount_cents": 10500},
+   {"date": "2026-04-27", "account": "acme-2", "kind": "debit", "amount_cents": 10725},
+   {"date": "2026-06-11", "account": "acme-2", "kind": "debit", "amount_cents": 9675},
+   {"date": "2026-03-23", "account": "acme-1", "kind": "credit", "amount_cents": 1150},
+   {"date": "2026-02-20", "account": "acme-21", "kind": "refund", "amount_cents": 2800},
+   {"date": "2026-07-08", "account": "acme-2", "kind": "credit", "amount_cents": 9975},
+   {"date": "2026-01-11", "account": "acme-21", "kind": "refund", "amount_cents": 8850}
+  ]},
+ {"name": "day-29", "account": "acme-2", "balance": 2375, "months": {"2026-02": -4125, "2026-05": 2375, "2026-11": 8325, "2026-12": -75},
+  "entries": [
+   {"date": "2026-11-01", "account": "acme-1", "kind": "credit", "amount_cents": 400},
+   {"date": "2026-02-07", "account": "acme-1", "kind": "debit", "amount_cents": 4125},
+   {"date": "2026-12-22", "account": "acme-1", "kind": "debit", "amount_cents": 75},
+   {"date": "2026-05-28", "account": "acme-2", "kind": "credit", "amount_cents": 8425},
+   {"date": "2026-11-09", "account": "acme-1", "kind": "credit", "amount_cents": 7925},
+   {"date": "2026-05-17", "account": "acme-2", "kind": "debit", "amount_cents": 6050}
+  ]},
+ {"name": "day-30", "account": "acme-2", "balance": -21350, "months": {"2026-03": 750, "2026-06": 7225, "2026-07": -13975, "2026-08": -11000, "2026-09": -10225, "2026-11": -3275},
+  "entries": [
+   {"date": "2026-03-09", "account": "acme-2", "kind": "credit", "amount_cents": 750},
+   {"date": "2026-07-15", "account": "acme-1", "kind": "refund", "amount_cents": 6150},
+   {"date": "2026-08-13", "account": "acme-2", "kind": "debit", "amount_cents": 11000},
+   {"date": "2026-09-28", "account": "acme-10", "kind": "debit", "amount_cents": 10225},
+   {"date": "2026-07-24", "account": "acme-2", "kind": "refund", "amount_cents": 7825},
+   {"date": "2026-11-15", "account": "acme-2", "kind": "refund", "amount_cents": 3275},
+   {"date": "2026-06-13", "account": "acme-1", "kind": "credit", "amount_cents": 7225}
+  ]}
+]

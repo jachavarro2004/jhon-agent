@@ -1,0 +1,16 @@
+id: pagination-bug
+kind: bug
+model: sonnet
+max_turns: 60
+timeout: 30m
+hidden: hidden
+check: python3 -B -m unittest -q test_acceptance
+tests: test_*.py
+test_command: python3 -m unittest
+scope: |
+  pager.py
+prompt: |
+  Bug report: paginate(items, page, size) in pager.py skips the first page.
+  paginate(list(range(25)), 1, 10) returns items 10 to 19 instead of 0 to 9.
+  Pages are numbered from 1. Fix the bug and add a test for it.
+  Run the tests with: python3 -m unittest

@@ -1,0 +1,24 @@
+ 力  jhon  update                                                                             0.1.0 
+                      │                                                                             
+   ✓ Check            │  Update available                                                           
+▎  ◐ Review           │                                                                             
+   ○ Update           │  current  0.1.0                                                             
+   ○ Done             │  latest   0.1.1   released 2026-11-21                                       
+                      │  signed   ✓ verified  cosign, keyless, jachavarro2004/jhon-agent            
+                      │                                                                             
+                      │  What changed                                                               
+                      │  · setup retries a failed download once before it stops                     
+                      │  · jhon start pi keeps the profile's provider                               
+                      │  · the rail folds finished jobs after a minute                              
+                      │                                                                             
+                      │   Update to 0.1.1    Later                                                  
+                      │  Your settings and profiles are kept. 0.1.0 stays installed for a roll-back.
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+ ←→ choose  enter confirm  esc back  q quit                                                         

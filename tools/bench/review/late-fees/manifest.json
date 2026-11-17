@@ -1,0 +1,29 @@
+{
+  "id": "late-fees",
+  "title": "late fees",
+  "change": "late-fees",
+  "defects": [
+    {
+      "id": "D1",
+      "file": "billing/fees.py",
+      "lines": [
+        16,
+        18
+      ],
+      "lens": "reliability",
+      "severity": "CRITICAL",
+      "what": "except Exception: pass drops an invoice's fee silently (a missing months entry or amount)"
+    },
+    {
+      "id": "D2",
+      "file": "billing/fees.py",
+      "lines": [
+        24,
+        24
+      ],
+      "lens": "reliability",
+      "severity": "WARNING",
+      "what": "average_fee divides by zero on an empty batch (or one whose every fee failed)"
+    }
+  ]
+}

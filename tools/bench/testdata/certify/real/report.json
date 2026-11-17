@@ -1,0 +1,1163 @@
+{
+  "by_condition": [
+    {
+      "condition": "jhon",
+      "variant": "plain",
+      "runs": 9,
+      "passed": {
+        "yes": 9,
+        "known": 9
+      },
+      "final_checks": {
+        "yes": 15,
+        "known": 15
+      },
+      "regressions": 0,
+      "test_changed": {
+        "yes": 9,
+        "known": 9
+      },
+      "red_before_green": {
+        "yes": 8,
+        "known": 9
+      },
+      "tests_run_before_end": {
+        "yes": 8,
+        "known": 9
+      },
+      "out_of_scope_files": 0,
+      "findings": 0,
+      "rework": 1
+    },
+    {
+      "condition": "jhon",
+      "variant": "ldd",
+      "runs": 9,
+      "passed": {
+        "yes": 8,
+        "known": 9
+      },
+      "final_checks": {
+        "yes": 15,
+        "known": 15
+      },
+      "regressions": 0,
+      "test_changed": {
+        "yes": 9,
+        "known": 9
+      },
+      "red_before_green": {
+        "yes": 9,
+        "known": 9
+      },
+      "tests_run_before_end": {
+        "yes": 7,
+        "known": 9
+      },
+      "out_of_scope_files": 9,
+      "findings": 0,
+      "rework": 0
+    },
+    {
+      "condition": "clean",
+      "variant": "plain",
+      "runs": 9,
+      "passed": {
+        "yes": 9,
+        "known": 9
+      },
+      "final_checks": {
+        "yes": 15,
+        "known": 15
+      },
+      "regressions": 0,
+      "test_changed": {
+        "yes": 9,
+        "known": 9
+      },
+      "red_before_green": {
+        "yes": 3,
+        "known": 9
+      },
+      "tests_run_before_end": {
+        "yes": 6,
+        "known": 9
+      },
+      "out_of_scope_files": 0,
+      "findings": 0,
+      "rework": 0
+    },
+    {
+      "condition": "pi-jhon",
+      "variant": "plain",
+      "runs": 9,
+      "passed": {
+        "yes": 9,
+        "known": 9
+      },
+      "final_checks": {
+        "yes": 15,
+        "known": 15
+      },
+      "regressions": 0,
+      "test_changed": {
+        "yes": 9,
+        "known": 9
+      },
+      "red_before_green": {
+        "yes": 9,
+        "known": 9
+      },
+      "tests_run_before_end": {
+        "yes": 8,
+        "known": 9
+      },
+      "out_of_scope_files": 0,
+      "findings": 0,
+      "rework": 1
+    },
+    {
+      "condition": "pi-jhon",
+      "variant": "ldd",
+      "runs": 9,
+      "passed": {
+        "yes": 8,
+        "known": 9
+      },
+      "final_checks": {
+        "yes": 14,
+        "known": 14
+      },
+      "regressions": 0,
+      "test_changed": {
+        "yes": 9,
+        "known": 9
+      },
+      "red_before_green": {
+        "yes": 9,
+        "known": 9
+      },
+      "tests_run_before_end": {
+        "yes": 9,
+        "known": 9
+      },
+      "out_of_scope_files": 6,
+      "findings": 1,
+      "rework": 2
+    }
+  ],
+  "overhead": [
+    {
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "tokens_processed_ratio": 2.56,
+      "active_ratio": 1.42
+    },
+    {
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "tokens_processed_ratio": 2.59,
+      "active_ratio": 1.32
+    },
+    {
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "tokens_processed_ratio": 3.54,
+      "active_ratio": 1.86
+    },
+    {
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "tokens_processed_ratio": 2.82,
+      "active_ratio": 1.35
+    },
+    {
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "tokens_processed_ratio": 1.74,
+      "active_ratio": 1.02
+    },
+    {
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "tokens_processed_ratio": 3.24,
+      "active_ratio": 0.25
+    },
+    {
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "tokens_processed_ratio": 3.2,
+      "active_ratio": 1.11
+    },
+    {
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "tokens_processed_ratio": 3.42,
+      "active_ratio": 0.27
+    },
+    {
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "tokens_processed_ratio": 2.65,
+      "active_ratio": 1.35
+    },
+    {
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "tokens_processed_ratio": 3.32,
+      "active_ratio": 1.33
+    },
+    {
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "tokens_processed_ratio": 5.73,
+      "active_ratio": 1.83
+    },
+    {
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "tokens_processed_ratio": 9.27,
+      "active_ratio": 2.27
+    }
+  ],
+  "rows": [
+    {
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 114269,
+        "agents_launched": 0,
+        "cache_hit": 0.956841051497882,
+        "cache_read_tokens": 756047,
+        "cache_write_tokens": 34066,
+        "elapsed_ms": 118897,
+        "findings": 0,
+        "input_tokens": 36,
+        "output_tokens": 11782,
+        "quota_points": 0,
+        "tokens_processed": 801931,
+        "turns": 24,
+        "verify_runs": 0,
+        "wall_ms": 122420
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 3,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 2,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 9,
+          "known": 9
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 10713,
+          "tokens_processed": 304444,
+          "turns": 11,
+          "wall_ms": 52081
+        },
+        {
+          "cache_write_tokens": 15849,
+          "tokens_processed": 206503,
+          "turns": 5,
+          "wall_ms": 25684
+        },
+        {
+          "cache_write_tokens": 7238,
+          "tokens_processed": 290984,
+          "turns": 8,
+          "wall_ms": 42903
+        }
+      ]
+    },
+    {
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "clean",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 80581,
+        "agents_launched": 0,
+        "cache_hit": 0.9383839347076213,
+        "cache_read_tokens": 285371,
+        "cache_write_tokens": 20948,
+        "elapsed_ms": 85354,
+        "findings": 0,
+        "input_tokens": 26,
+        "output_tokens": 9685,
+        "quota_points": 0,
+        "tokens_processed": 312656,
+        "turns": 15,
+        "verify_runs": 0,
+        "wall_ms": 88351
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 1,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 0,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 9,
+          "known": 9
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 8943,
+          "tokens_processed": 86786,
+          "turns": 7,
+          "wall_ms": 31380
+        },
+        {
+          "cache_write_tokens": 4656,
+          "tokens_processed": 82328,
+          "turns": 3,
+          "wall_ms": 20057
+        },
+        {
+          "cache_write_tokens": 6918,
+          "tokens_processed": 134231,
+          "turns": 5,
+          "wall_ms": 34430
+        }
+      ]
+    },
+    {
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 106636,
+        "agents_launched": 0,
+        "cache_hit": 0.9669028250240347,
+        "cache_read_tokens": 773413,
+        "cache_write_tokens": 28531,
+        "elapsed_ms": 108413,
+        "findings": 0,
+        "input_tokens": 40,
+        "output_tokens": 11571,
+        "tokens_processed": 810202,
+        "turns": 20,
+        "verify_runs": 0,
+        "wall_ms": 114384
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 2,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 2
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 9,
+          "known": 9
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 18097,
+          "tokens_processed": 297755,
+          "turns": 8,
+          "wall_ms": 50378
+        },
+        {
+          "cache_write_tokens": 3341,
+          "tokens_processed": 168954,
+          "turns": 4,
+          "wall_ms": 19599
+        },
+        {
+          "cache_write_tokens": 6719,
+          "tokens_processed": 343445,
+          "turns": 7,
+          "wall_ms": 41456
+        }
+      ]
+    },
+    {
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 150039,
+        "agents_launched": 0,
+        "cache_hit": 0.9635569100110736,
+        "cache_read_tokens": 1052869,
+        "cache_write_tokens": 39773,
+        "elapsed_ms": 155289,
+        "findings": 0,
+        "input_tokens": 48,
+        "output_tokens": 14910,
+        "quota_points": 0,
+        "tokens_processed": 1107600,
+        "turns": 31,
+        "verify_runs": 0,
+        "wall_ms": 158812
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 3,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 9,
+          "known": 9
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 13173,
+          "tokens_processed": 349271,
+          "turns": 13,
+          "wall_ms": 60841
+        },
+        {
+          "cache_write_tokens": 18663,
+          "tokens_processed": 442277,
+          "turns": 9,
+          "wall_ms": 47917
+        },
+        {
+          "cache_write_tokens": 7937,
+          "tokens_processed": 316052,
+          "turns": 8,
+          "wall_ms": 50326
+        }
+      ]
+    },
+    {
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 109140,
+        "agents_launched": 0,
+        "cache_hit": 0.9641224455736056,
+        "cache_read_tokens": 839259,
+        "cache_write_tokens": 30589,
+        "elapsed_ms": 110332,
+        "findings": 0,
+        "input_tokens": 40,
+        "output_tokens": 11214,
+        "tokens_processed": 881907,
+        "turns": 20,
+        "verify_runs": 0,
+        "wall_ms": 115479
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 3,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 1
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 9,
+          "known": 9
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 19583,
+          "tokens_processed": 349349,
+          "turns": 9,
+          "wall_ms": 48399
+        },
+        {
+          "cache_write_tokens": 4096,
+          "tokens_processed": 178877,
+          "turns": 4,
+          "wall_ms": 23969
+        },
+        {
+          "cache_write_tokens": 5693,
+          "tokens_processed": 263288,
+          "turns": 5,
+          "wall_ms": 33734
+        }
+      ]
+    },
+    {
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 221601,
+        "agents_launched": 0,
+        "cache_hit": 0.9358886640989496,
+        "cache_read_tokens": 317343,
+        "cache_write_tokens": 22358,
+        "elapsed_ms": 223928,
+        "findings": 0,
+        "input_tokens": 17,
+        "output_tokens": 4492,
+        "quota_points": 1,
+        "tokens_processed": 343308,
+        "turns": 14,
+        "verify_runs": 0,
+        "wall_ms": 226272
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 2,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 6,
+          "known": 6
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 8263,
+          "tokens_processed": 157844,
+          "turns": 7,
+          "wall_ms": 112363
+        },
+        {
+          "cache_write_tokens": 13739,
+          "tokens_processed": 185464,
+          "turns": 7,
+          "wall_ms": 114184
+        }
+      ]
+    },
+    {
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "clean",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 216964,
+        "agents_launched": 0,
+        "cache_hit": 0.9467474259276472,
+        "cache_read_tokens": 183349,
+        "cache_write_tokens": 11292,
+        "elapsed_ms": 219002,
+        "findings": 0,
+        "input_tokens": 20,
+        "output_tokens": 3462,
+        "quota_points": 0,
+        "tokens_processed": 197080,
+        "turns": 9,
+        "verify_runs": 0,
+        "wall_ms": 221101
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 2,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 6,
+          "known": 6
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 8346,
+          "tokens_processed": 124570,
+          "turns": 6,
+          "wall_ms": 113751
+        },
+        {
+          "cache_write_tokens": 2092,
+          "tokens_processed": 72435,
+          "turns": 3,
+          "wall_ms": 106891
+        }
+      ]
+    },
+    {
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 53288,
+        "agents_launched": 0,
+        "cache_hit": 0.965863266829651,
+        "cache_read_tokens": 611970,
+        "cache_write_tokens": 21597,
+        "elapsed_ms": 228344,
+        "findings": 0,
+        "input_tokens": 32,
+        "output_tokens": 4790,
+        "tokens_processed": 638389,
+        "turns": 16,
+        "verify_runs": 0,
+        "wall_ms": 231706
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 3,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 6,
+          "known": 6
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 17891,
+          "tokens_processed": 299791,
+          "turns": 8,
+          "wall_ms": 118584
+        },
+        {
+          "cache_write_tokens": 3706,
+          "tokens_processed": 338598,
+          "turns": 8,
+          "wall_ms": 112711
+        }
+      ]
+    },
+    {
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 240927,
+        "agents_launched": 0,
+        "cache_hit": 0.9560969430297743,
+        "cache_read_tokens": 596245,
+        "cache_write_tokens": 26709,
+        "elapsed_ms": 242690,
+        "findings": 0,
+        "input_tokens": 31,
+        "output_tokens": 6096,
+        "quota_points": 0,
+        "tokens_processed": 629748,
+        "turns": 19,
+        "verify_runs": 0,
+        "wall_ms": 244418
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 1,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 6,
+          "known": 6
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 11829,
+          "tokens_processed": 377679,
+          "turns": 12,
+          "wall_ms": 127868
+        },
+        {
+          "cache_write_tokens": 14880,
+          "tokens_processed": 256546,
+          "turns": 7,
+          "wall_ms": 116516
+        }
+      ]
+    },
+    {
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "runs": 3,
+      "passed": 2,
+      "medians": {
+        "active_ms": 58061,
+        "agents_launched": 0,
+        "cache_hit": 0.9683318185623229,
+        "cache_read_tokens": 647783,
+        "cache_write_tokens": 21200,
+        "elapsed_ms": 227977,
+        "findings": 0,
+        "input_tokens": 34,
+        "output_tokens": 4732,
+        "tokens_processed": 673700,
+        "turns": 17,
+        "verify_runs": 0,
+        "wall_ms": 230301
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 3,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 5,
+          "known": 5
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 18374,
+          "tokens_processed": 419492,
+          "turns": 11,
+          "wall_ms": 125021
+        },
+        {
+          "cache_write_tokens": 2777,
+          "tokens_processed": 254208,
+          "turns": 6,
+          "wall_ms": 111106
+        }
+      ]
+    },
+    {
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 69236,
+        "agents_launched": 0,
+        "cache_hit": 0.9479673222303511,
+        "cache_read_tokens": 264335,
+        "cache_write_tokens": 14483,
+        "elapsed_ms": 69236,
+        "findings": 0,
+        "input_tokens": 16,
+        "output_tokens": 8174,
+        "quota_points": 0,
+        "tokens_processed": 286704,
+        "turns": 13,
+        "verify_runs": 0,
+        "wall_ms": 70680
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 3,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 0,
+          "known": 0
+        },
+        "regressions": 0,
+        "rework": 1
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 14483,
+          "tokens_processed": 286704,
+          "turns": 13,
+          "wall_ms": 70680
+        }
+      ]
+    },
+    {
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "clean",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 51114,
+        "agents_launched": 0,
+        "cache_hit": 0.9024548743465146,
+        "cache_read_tokens": 93044,
+        "cache_write_tokens": 11248,
+        "elapsed_ms": 51114,
+        "findings": 0,
+        "input_tokens": 10,
+        "output_tokens": 6185,
+        "quota_points": 0,
+        "tokens_processed": 108168,
+        "turns": 5,
+        "verify_runs": 0,
+        "wall_ms": 52877
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 3,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 0,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 0,
+          "known": 0
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 11248,
+          "tokens_processed": 108168,
+          "turns": 5,
+          "wall_ms": 52877
+        }
+      ]
+    },
+    {
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 68012,
+        "agents_launched": 0,
+        "cache_hit": 0.9689498405532353,
+        "cache_read_tokens": 328341,
+        "cache_write_tokens": 22662,
+        "elapsed_ms": 68012,
+        "findings": 0,
+        "input_tokens": 18,
+        "output_tokens": 7674,
+        "tokens_processed": 358695,
+        "turns": 9,
+        "verify_runs": 0,
+        "wall_ms": 70650
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 3,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 0,
+          "known": 0
+        },
+        "regressions": 0,
+        "rework": 1
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 22662,
+          "tokens_processed": 358695,
+          "turns": 9,
+          "wall_ms": 70650
+        }
+      ]
+    },
+    {
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "runs": 3,
+      "passed": 2,
+      "medians": {
+        "active_ms": 93699,
+        "agents_launched": 0,
+        "cache_hit": 0.9688430950537409,
+        "cache_read_tokens": 590599,
+        "cache_write_tokens": 18961,
+        "elapsed_ms": 93699,
+        "findings": 0,
+        "input_tokens": 32,
+        "output_tokens": 9972,
+        "quota_points": 0,
+        "tokens_processed": 619564,
+        "turns": 21,
+        "verify_runs": 0,
+        "wall_ms": 95930
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 3,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 0,
+        "findings_by_check": {},
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 0,
+          "known": 0
+        },
+        "regressions": 0,
+        "rework": 0
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 18961,
+          "tokens_processed": 619564,
+          "turns": 21,
+          "wall_ms": 95930
+        }
+      ]
+    },
+    {
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "runs": 3,
+      "passed": 3,
+      "medians": {
+        "active_ms": 116040,
+        "agents_launched": 0,
+        "cache_hit": 0.9773465302622282,
+        "cache_read_tokens": 974159,
+        "cache_write_tokens": 19167,
+        "elapsed_ms": 116040,
+        "findings": 0,
+        "input_tokens": 44,
+        "output_tokens": 12196,
+        "tokens_processed": 1003024,
+        "turns": 22,
+        "verify_runs": 0,
+        "wall_ms": 120505
+      },
+      "process": {
+        "test_changed": {
+          "yes": 3,
+          "known": 3
+        },
+        "tests_run_before_end": {
+          "yes": 3,
+          "known": 3
+        },
+        "red_before_green": {
+          "yes": 3,
+          "known": 3
+        },
+        "out_of_scope_files_median": 3,
+        "findings_by_check": {
+          "edit-before-red": 1
+        },
+        "ui_requests_declined": 0
+      },
+      "quality": {
+        "final_checks": {
+          "yes": 0,
+          "known": 0
+        },
+        "regressions": 0,
+        "rework": 2
+      },
+      "message_medians": [
+        {
+          "cache_write_tokens": 19167,
+          "tokens_processed": 1003024,
+          "turns": 22,
+          "wall_ms": 120505
+        }
+      ]
+    }
+  ]
+}

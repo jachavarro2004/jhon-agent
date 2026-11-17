@@ -1,0 +1,5 @@
+{
+  "name": "jhon",
+  "description": "Jhon's /jhon-ldd command, read-only MCP server, and the writers' return-shape hook, loaded only in a Jhon session started by jhon start",
+  "hooks": "./hooks/hooks.json"
+}

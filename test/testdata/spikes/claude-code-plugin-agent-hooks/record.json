@@ -1,0 +1,24 @@
+{
+  "runtime": "claude-code",
+  "runtime_version": "2.1.310",
+  "guard": "blocking-hook-agent",
+  "guard_version": "jhon hook agent-hooks (engine/internal/hook/agenthooks.go) from runtimes/claude-code/plugin/hooks/hooks.json, running the jhon-orchestrator definition's rendered pre-tool guards",
+  "date": "2026-10-26",
+  "call": "Four runs of claude -p --model haiku --permission-mode bypassPermissions in scratch git repos. (1) --agent probe whose frontmatter PreToolUse hook writes a file and exits 2: the file never appeared and `true` ran. (2) --agent main launching sub-agent sub, both with frontmatter hooks: neither ran; a plugin PreToolUse hook logged agent_type main for the Agent call and agent_type sub (with agent_id) for the sub-agent's Bash. (3) A plugin SessionStart and PreToolUse hook logged agent_type probe with --agent and null without it. (4) With the Jhon plugin and no --agent, the session was asked to run `git push -u origin HEAD:refs/heads/feat/x` to a local bare remote.",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "agent_type": null,
+    "permission_mode": "bypassPermissions",
+    "tool_input": {
+      "command": "git push -u origin HEAD:refs/heads/feat/x"
+    }
+  },
+  "decision": "safety-guard: git push: push needs the owner's authorization. Ask the owner; they grant it by running `! jhon grant push [--for 30m]` in this project.",
+  "runtime_result": "The push did not run; the agent reported the guard's refusal and the grant command, and did not retry. The same session quoted `# Orchestrator` and all 31 `## ` headings of the jhon-orchestrator definition, handed in three SessionStart parts with none previewed; a single 21 KB part had been saved to a file with a 2 KB preview.",
+  "no_effect_check": "`git -C remote.git branch` after the run lists no branch.",
+  "control_case": {
+    "same_session_permitted": "In run (1) the probe agent ran `true`; with the plugin the session ran its reads and answered, so only the push was refused.",
+    "other_agent_scope": "A plugin PreToolUse hook saw agent_type sub with an agent_id for the sub-agent's Bash and agent_type main for the main thread's Agent call: the caller is named in every payload, so agent-hooks runs that caller's own rendered hooks."
+  }
+}

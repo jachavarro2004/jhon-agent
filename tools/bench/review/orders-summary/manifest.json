@@ -1,0 +1,40 @@
+{
+  "id": "orders-summary",
+  "title": "orders summary endpoint and contract",
+  "change": "orders-summary",
+  "defects": [
+    {
+      "id": "D1",
+      "file": "orders/summary.py",
+      "lines": [
+        4,
+        68
+      ],
+      "lens": "readability",
+      "severity": "WARNING",
+      "what": "an unreadable function: 65 lines, 14 levels of nesting, one-letter names, dead else branches"
+    },
+    {
+      "id": "D2",
+      "file": "orders/summary.py",
+      "lines": [
+        68,
+        68
+      ],
+      "lens": "risk",
+      "severity": "CRITICAL",
+      "what": "breaks the contract: returns total (float, divided by 100) where api/openapi.yaml requires an integer total_cents"
+    },
+    {
+      "id": "D3",
+      "file": "orders/summary.py",
+      "lines": [
+        19,
+        38
+      ],
+      "lens": "reliability",
+      "severity": "WARNING",
+      "what": "float arithmetic on cents (tax and discount factors) gives non-integer by_status values the contract types as integer"
+    }
+  ]
+}

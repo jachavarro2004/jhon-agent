@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="t d">
+<title id="t">LDD: a change from its first slice to delivery</title>
+<desc id="d">A change is built in slices. Each slice gets a recorded failing run (RED), the code, a recorded passing run (GREEN), and a slice commit that route-guard checks is the tested tree. A light verify, or verify and the 4R lenses on the verified route, comes before delivery, which jhon deliver check and route-guard gate.</desc>
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#e7bbc8"/></marker>
+<marker id="arf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#d2c3c6"/></marker>
+<marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#e6c384"/></marker>
+<marker id="aro" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#98bb6c"/></marker>
+</defs>
+<rect x="0" y="0" width="1280" height="720" fill="#161618"/>
+<rect x="36" y="32" width="48" height="48" fill="#000000"/>
+<rect x="32" y="28" width="48" height="48" fill="#53343f"/>
+<text x="56" y="64" font-family="&apos;Noto Sans CJK JP&apos;, sans-serif" font-size="29" font-weight="700" fill="#f2c5d2" text-anchor="middle">力</text>
+<text x="98" y="44" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="start" letter-spacing="1.68">LDD · LEAPFROG-DRIVEN DEVELOPMENT</text>
+<text x="98" y="76" font-family="Fraunces, Georgia, serif" font-size="30" font-weight="500" fill="#e9e0e1" text-anchor="start">A change, slice by slice</text>
+<text x="1248" y="76" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="15" font-weight="400" fill="#9b8d90" text-anchor="end">value reaches the default branch proven</text>
+<line x1="32" y1="98" x2="1248" y2="98" stroke="#4f4447" stroke-width="1"/>
+<rect x="36" y="132" width="194" height="186" fill="#000000"/>
+<rect x="32" y="128" width="194" height="186" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="32" y="128" width="4" height="186" fill="#e7bbc8"/>
+<text x="48" y="156" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="start" letter-spacing="1.68">01 · CHANGE</text>
+<text x="48" y="186" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">Intent</text>
+<text x="48" y="214" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">branch · tasks.md</text>
+<text x="48" y="236" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">jhon risk → tier</text>
+<text x="48" y="258" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">route: standard</text>
+<text x="48" y="280" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">  or verified</text>
+<line x1="227" y1="221" x2="235" y2="221" stroke="#e7bbc8" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="240" y="132" width="194" height="186" fill="#000000"/>
+<rect x="236" y="128" width="194" height="186" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="236" y="128" width="4" height="186" fill="#e7bbc8"/>
+<text x="252" y="156" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="start" letter-spacing="1.68">02 · SLICE</text>
+<text x="252" y="186" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">One slice</text>
+<text x="252" y="214" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">## Slice &lt;n&gt;: &lt;name&gt;</text>
+<text x="252" y="236" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">Delivers: &lt;criteria&gt;</text>
+<text x="252" y="258" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">spec delta if needed</text>
+<line x1="431" y1="221" x2="439" y2="221" stroke="#e7bbc8" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="444" y="132" width="194" height="186" fill="#000000"/>
+<rect x="440" y="128" width="194" height="186" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="440" y="128" width="4" height="186" fill="#e7bbc8"/>
+<text x="456" y="156" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="start" letter-spacing="1.68">03 · RECORDED RUN</text>
+<text x="456" y="186" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">RED → GREEN</text>
+<text x="456" y="214" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">jhon executions run</text>
+<text x="456" y="236" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">  RED before the code</text>
+<text x="456" y="258" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">  --affected &lt;base&gt;</text>
+<text x="456" y="280" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">pytest-testmon narrows</text>
+<line x1="635" y1="221" x2="643" y2="221" stroke="#e7bbc8" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="648" y="132" width="194" height="186" fill="#000000"/>
+<rect x="644" y="128" width="194" height="186" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="644" y="128" width="4" height="186" fill="#e6c384"/>
+<text x="660" y="156" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="start" letter-spacing="1.68">04 · SLICE COMMIT</text>
+<text x="660" y="186" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">Tested tree</text>
+<text x="660" y="214" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">commit = tested tree</text>
+<text x="660" y="236" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">its scenarios named</text>
+<text x="660" y="258" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">real-database reach</text>
+<text x="660" y="280" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">(delivery: change)</text>
+<line x1="839" y1="221" x2="847" y2="221" stroke="#e7bbc8" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="852" y="132" width="194" height="186" fill="#000000"/>
+<rect x="848" y="128" width="194" height="186" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="848" y="128" width="4" height="186" fill="#e7bbc8"/>
+<text x="864" y="156" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="start" letter-spacing="1.68">05 · CHECK</text>
+<text x="864" y="186" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">Verify · 4R</text>
+<text x="864" y="214" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">light verify (standard)</text>
+<text x="864" y="236" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">verify-report.md +</text>
+<text x="864" y="258" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">4R lenses (high risk)</text>
+<line x1="1043" y1="221" x2="1051" y2="221" stroke="#e7bbc8" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="1056" y="132" width="194" height="186" fill="#000000"/>
+<rect x="1052" y="128" width="194" height="186" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="1052" y="128" width="4" height="186" fill="#e6c384"/>
+<text x="1068" y="156" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="start" letter-spacing="1.68">06 · DELIVERY</text>
+<text x="1068" y="186" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">Deliver</text>
+<text x="1068" y="214" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">jhon deliver check</text>
+<text x="1068" y="236" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">PR: RED before GREEN</text>
+<text x="1068" y="258" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">and a passing verify</text>
+<path d="M741,322 L741,366 L333,366 L333,326" fill="none" stroke="#d2c3c6" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arf)"/>
+<text x="537" y="356" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="middle">next slice: back to its spec or tasks, not over</text>
+<text x="32" y="410" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="start" letter-spacing="1.68">WHO CHECKS</text>
+<rect x="440" y="426" width="194" height="58" fill="#1f1f28" stroke="#e6c384" stroke-width="1"/>
+<text x="537" y="450" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="middle">audit:</text>
+<text x="537" y="472" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="middle">edit-before-red</text>
+<line x1="537" y1="320" x2="537" y2="422" stroke="#4f4447" stroke-width="1.5" stroke-dasharray="3 4"/>
+<rect x="644" y="426" width="194" height="58" fill="#1f1f28" stroke="#e6c384" stroke-width="1"/>
+<text x="741" y="450" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="middle">route-guard</text>
+<text x="741" y="472" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="middle">refuses</text>
+<line x1="741" y1="320" x2="741" y2="422" stroke="#4f4447" stroke-width="1.5" stroke-dasharray="3 4"/>
+<rect x="848" y="426" width="194" height="58" fill="#1f1f28" stroke="#e6c384" stroke-width="1"/>
+<text x="945" y="450" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="middle">jhon executions</text>
+<text x="945" y="472" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="middle">verify</text>
+<line x1="945" y1="320" x2="945" y2="422" stroke="#4f4447" stroke-width="1.5" stroke-dasharray="3 4"/>
+<rect x="1052" y="426" width="194" height="58" fill="#1f1f28" stroke="#e6c384" stroke-width="1"/>
+<text x="1149" y="450" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="middle">route-guard</text>
+<text x="1149" y="472" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="middle">opens the PR</text>
+<line x1="1149" y1="320" x2="1149" y2="422" stroke="#4f4447" stroke-width="1.5" stroke-dasharray="3 4"/>
+<rect x="32" y="528" width="1216" height="150" fill="#1f1f28" stroke="#4f4447" stroke-width="1"/>
+<text x="52" y="562" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="start" letter-spacing="1.68">THE RECORD</text>
+<text x="1228" y="562" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#9b8d90" text-anchor="end">the rigor rises with the risk; the record is always</text>
+<rect x="52" y="584" width="231" height="32" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<text x="64" y="606" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="16" font-weight="400" fill="#e9e0e1" text-anchor="start">execution-record.json</text>
+<rect x="295" y="584" width="103" height="32" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<text x="307" y="606" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="16" font-weight="400" fill="#e9e0e1" text-anchor="start">tasks.md</text>
+<rect x="410" y="584" width="132" height="32" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<text x="422" y="606" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="16" font-weight="400" fill="#e9e0e1" text-anchor="start">spec deltas</text>
+<rect x="554" y="584" width="182" height="32" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<text x="566" y="606" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="16" font-weight="400" fill="#e9e0e1" text-anchor="start">verify-report.md</text>
+<rect x="748" y="584" width="142" height="32" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<text x="760" y="606" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="16" font-weight="400" fill="#e9e0e1" text-anchor="start">review-4r.md</text>
+<rect x="902" y="584" width="152" height="32" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<text x="914" y="606" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="16" font-weight="400" fill="#e9e0e1" text-anchor="start">delivery.json</text>
+<rect x="52" y="626" width="191" height="32" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<text x="64" y="648" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="16" font-weight="400" fill="#e9e0e1" text-anchor="start">Engram: ldd state</text>
+</svg>

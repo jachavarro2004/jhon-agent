@@ -1,0 +1,21 @@
+{
+  "runtime": "claude-code",
+  "runtime_version": "2.1.299",
+  "guard": "a spike PreToolUse hook (deny.sh) in a user-level agent's frontmatter",
+  "guard_version": "spike script, no Jhon guard",
+  "date": "2026-10-14",
+  "call": "A temporary user-level agent ~/.claude/agents/zz-spike-main-hooks.md (model claude-haiku-5-5, tools Bash) whose frontmatter PreToolUse hook on Bash logs each payload and exits 2 on a command containing spike-main. Run 1: `claude -p \"Run: echo spike-main\" --agent zz-spike-main-hooks --allowedTools=Bash` in a scratch git repo. Run 2: a plain `claude -p` main session launched zz-spike-main-hooks as a sub-agent and told it to run the same command. The owner ran both with `!`; the agent file was removed afterwards.",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo spike-main"
+    }
+  },
+  "decision": "exit 2: spike: denied by agent frontmatter hook",
+  "runtime_result": "Run 1 (main thread under --agent): the tool result was `PreToolUse:Bash hook error: [.../deny.sh]: spike: denied by agent frontmatter hook`, the hook logged 1 payload, and the agent reported the refusal and stopped. Run 2 (sub-agent): the same refusal, 1 payload logged.",
+  "no_effect_check": "Neither run printed spike-main as command output; each reported the refusal instead.",
+  "control_case": {
+    "project_agent_untrusted_dir": "The same agent as a project-level agent (.claude/agents in an untrusted scratch directory) loaded (agentSetting spike, model claude-haiku-5-5) but its hook never ran, neither on the main thread nor as a sub-agent, and echo spike-main executed: project-level agent hooks do not load there, so Jhon's agents stay user-level."
+  }
+}

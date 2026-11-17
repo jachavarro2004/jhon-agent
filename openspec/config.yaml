@@ -1,0 +1,11 @@
+# Jhon's own project configuration, written with the owner's approval
+# (docket AY, 2026-10-25) for its risk rules; the LDD init phase may extend it.
+strict_tdd_policy: require
+
+# The UI's preference stores (lib/ui/*-policy.ts: animations, cards, double-Esc,
+# notifications, ...) carry the word "policy" but hold no security decision.
+# The UI's session-*.ts modules read pi's conversation history and
+# worktrees (stats, changes); "session" there is no login session.
+risk_rules:
+  "shell/lib/ui/*-policy.ts": medium
+  "shell/lib/ui/session-*.ts": medium

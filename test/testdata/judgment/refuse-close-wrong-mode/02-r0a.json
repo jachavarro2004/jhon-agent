@@ -1,0 +1,10 @@
+{
+  "event": "R0.A",
+  "judge": "A",
+  "result": {
+    "findings": [],
+    "evidence": [
+      "src/cache.ts"
+    ]
+  }
+}

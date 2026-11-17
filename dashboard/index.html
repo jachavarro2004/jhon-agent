@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jhon 監 · Dashboard</title>
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="palette.css">
+</head>
+<body>
+<div class="app" id="app">
+<header class="top">
+  <a class="brand" href="#/" aria-label="Home"><span class="seal" aria-hidden="true">監</span><b>Jhon <em>dashboard</em></b></a>
+  <nav class="nav" aria-label="Pages">
+    <a href="#/" data-page="home">Home <span aria-hidden="true">全体</span></a>
+    <a href="#/sessions" data-page="sessions">Sessions <span aria-hidden="true">履歴</span></a>
+    <a href="#/changes" data-page="changes">Changes <span aria-hidden="true">変更</span></a>
+    <a href="#/usage" data-page="usage">Usage <span aria-hidden="true">使用</span></a>
+    <a href="#/memory" data-page="memory">Memory <span aria-hidden="true">記憶</span></a>
+    <a href="#/telemetry" data-page="telemetry">Telemetry <span aria-hidden="true">測定</span></a>
+  </nav>
+  <span class="hint"><kbd>ctrl k</kbd> find <kbd>?</kbd> keys</span>
+</header>
+<main class="detail" id="detail"></main>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# The ldd variant's project marker: Jhon discovers a Python project only
+# through pyproject.toml, and openspec/config.yaml's test command needs one.
+[project]
+name = "bench-task"
+version = "0.0.0"

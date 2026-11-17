@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "synced_at": "2026-10-01T08:00:00Z",
+  "contacts": [
+    {"id": 1, "name": "Ana María Ruiz", "email": "ana@example.com", "crm_id": "C-17"},
+    {"id": 2, "name": "Bo", "email": "bo@example.com", "tags": ["vip"]}
+  ]
+}

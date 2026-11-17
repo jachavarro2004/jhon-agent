@@ -1,0 +1,14 @@
+{
+  "event": "R1.B",
+  "judge": "B",
+  "positions": [
+    {
+      "point": "A1",
+      "position": "adopt",
+      "reason": "I agree with A's proof",
+      "proof_refs": [
+        "git show 3f2a9c1 -- src/cache.ts: comparator reversed at line 44"
+      ]
+    }
+  ]
+}

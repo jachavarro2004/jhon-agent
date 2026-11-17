@@ -1,0 +1,24 @@
+ 力  jhon  update                                                                             0.1.0 
+                      │                                                                             
+▎  ✗ Check            │  ✗ Could not reach GitHub                                                   
+   ○ Review           │  api.github.com, jachavarro2004/jhon-agent releases: connection timed out   
+   ○ Update           │                                                                             
+   ○ Done             │  Jhon 0.1.0 is still installed and working. Nothing changed.                
+                      │  Check the connection or a proxy, then retry.                               
+                      │                                                                             
+                      │   Retry    Quit                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+ ←→ choose  enter confirm  q quit                                                                   

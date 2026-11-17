@@ -1,0 +1,24 @@
+ 力  jhon  setup                                                                              0.1.0 
+                      │                                                                             
+   ✓ Welcome          │  Dependencies   2 missing                                                   
+   ✓ Runtimes         │                                                                             
+   ✓ Integrations     │  ✓ git        2.47.1                                                        
+▎  ◐ Checks           │  ✓ claude     2.1.3  ~/.local/bin/claude                                    
+   ○ Install          │  ✓ node       22.11.0  for pi                                               
+   ○ Done             │▎ ✗ engram     not on PATH                                                   
+                      │    $ go install                                                             
+                      │    github.com/Gentleman-Programming/engram/v3/cmd/engram@latest             
+                      │  ✗ codegraph  not on PATH                                                   
+                      │    $ npm install -g @colbymchenry/codegraph                                 
+                      │                                                                             
+                      │  ─────────────────────────────────────────────────────────────────────────  
+                      │  Run the fix in another terminal, then r to check again.                    
+                      │  Install stays locked while a required check is missing.                    
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+ ↑↓ move  c copy fix  r check again  esc back  q quit                                Install locked 

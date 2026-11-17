@@ -1,0 +1,24 @@
+ 力  jhon  setup                                                                              0.1.0 
+                      │                                                                             
+   ✓ Welcome          │  Integrations                                                               
+   ✓ Runtimes         │  Required for now                                                           
+▎  ◐ Integrations     │  [●] Engram                  memory that survives sessions         locked on
+   ○ Checks           │      the guards and the rail read it; it ships coupled to the core for now  
+   ○ Install          │  [●] CodeGraph               a code map for search and impact      locked on
+   ○ Done             │      impact checks read it; it ships coupled to the core for now            
+                      │                                                                             
+                      │  Optional, off by default                                                   
+                      │▎ [●] Telemetry               record usage events on this machine   on       
+                      │      one JSON line per event under ~/.local/share/jhon/telemetry            
+                      │      Palette                 ● Rose Ink  ○ Desktop                          
+                      │                                                                             
+                      │  Each one toggles later in jhon settings                                    
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+ ↑↓ move  space toggle  enter continue  esc back  q quit                                            

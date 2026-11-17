@@ -1,0 +1,22 @@
+{
+  "event": "R2.B",
+  "judge": "B",
+  "positions": [
+    {
+      "point": "A1",
+      "position": "maintain",
+      "reason": "same as before",
+      "proof_refs": [
+        "contracts/judgment.md: the orchestrator transcribes events"
+      ]
+    },
+    {
+      "point": "B1",
+      "position": "maintain",
+      "reason": "same as before",
+      "proof_refs": [
+        "orchestrator.md: the list is closed"
+      ]
+    }
+  ]
+}

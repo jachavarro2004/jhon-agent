@@ -1,0 +1,145 @@
+name: validate
+
+# The contracts are prose, so nothing compiles and nothing type-checks. What
+# can be proven is that they do not contradict each other, and that the rules
+# which prove it still fire. Both run here.
+#
+# `jhon validate` is used rather than `jhon check`: check also compares the
+# rendered artifacts under ~/.claude and ~/.config/opencode, which do not
+# exist on a runner. Drift against a runtime nobody installed is not a defect.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same ref makes an older run moot: cancel it rather than
+# pay for both. Disabled on GitHub since L62 (hung runs cost the owner
+# ~35 USD in a day); every step below has its own limit should it come back.
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    # The whole suite takes about 3 minutes locally. Without a cap, a hung test
+    # held every run to GitHub's 6-hour limit from 2026-11-03 on (L159).
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        timeout-minutes: 5
+        with:
+          fetch-depth: 0   # the coverage matrix restores with git restore --source=HEAD
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        timeout-minutes: 5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        timeout-minutes: 5
+        with:
+          node-version: '26'   # the owner's runtime: on 22 the shell suite hung every run, on 26 it never has (L159)
+
+      - name: Build the binary
+        timeout-minutes: 10
+        run: go build -o build/jhon ./engine/cmd/jhon
+
+      - name: Contracts are internally consistent
+        timeout-minutes: 5
+        run: ./build/jhon validate
+
+      - name: Go tests, the conformance suite, and every rule in every layer it covers
+        timeout-minutes: 20
+        run: ./build/jhon test
+
+      - name: Rendering is reproducible
+        timeout-minutes: 10
+        # After one render, a check must find nothing to change. This catches a
+        # renderer whose output depends on the machine it ran on. `jhon check`
+        # does not forward --only, so the renderer is called directly. Only a
+        # release installs (docket AV1): build one from HEAD as `jhon sync`
+        # does, without publishing.
+        run: |
+          rel="$HOME/.local/share/jhon/releases/$(git rev-parse HEAD)"
+          mkdir -p "$rel" && git archive HEAD | tar -x -C "$rel"
+          (cd "$rel" && go build -trimpath -o build/jhon ./engine/cmd/jhon)
+          ln -sfn "$rel" "$HOME/.local/share/jhon/current"
+          JHON_ROOT="$rel" "$rel/build/jhon" render-engine --install --source "$PWD" --only claude-code >/dev/null
+          JHON_ROOT="$PWD" ./build/jhon render-engine --check --only claude-code
+
+  windows:
+    # Jhon runs on Linux; on Windows it runs inside WSL 2 (dist/public/install.ps1).
+    # This job proves what can be proven on a Windows runner (T52): the
+    # packages that compile for GOOS=windows build, vet and pass their tests,
+    # and install.ps1 parses and fails cleanly, in PowerShell 7 and 5.1, on a
+    # machine where it cannot install. The rest of the module is Linux-only
+    # today (engine/internal/js's signal table, test/support's syscall.Stat_t,
+    # tools/bench's process groups, and everything that imports them); the
+    # job lists it rather than hiding it. install.ps1 has no local source (it
+    # runs install.sh from GitHub inside WSL), so no install runs here.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      # Every package that `GOOS=windows go vet` accepts; test/release checks the list.
+      PORTABLE: >-
+        ./engine/internal/auditcheck ./engine/internal/contract
+        ./engine/internal/isodate ./engine/internal/lazyre
+        ./engine/internal/palette ./engine/internal/project
+        ./engine/internal/settings ./engine/internal/setupui
+        ./engine/internal/sh ./engine/internal/telemetry
+        ./engine/internal/version ./test/hygiene ./tools/coverage
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        timeout-minutes: 5
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        timeout-minutes: 5
+        with:
+          go-version-file: go.mod
+
+      - name: Build and vet the portable packages
+        timeout-minutes: 10
+        run: |
+          # go build refuses a package with only test files (test/hygiene).
+          go build $(go list -f '{{if .GoFiles}}{{.ImportPath}}{{end}}' $PORTABLE)
+          go vet $PORTABLE
+
+      - name: Test the portable packages
+        timeout-minutes: 10
+        run: go test -count=1 -timeout 300s $PORTABLE
+
+      - name: The Linux-only packages, not built here
+        timeout-minutes: 2
+        run: |
+          portable=$(go list $PORTABLE)
+          go list ./... | grep -vxF "$portable" || true
+
+      - name: install.ps1 parses and fails cleanly without a WSL distro to install into
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $script = Join-Path $PWD 'dist/public/install.ps1'
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$null, [ref]$errors)
+          if ($errors) { $errors | ForEach-Object { Write-Error "install.ps1: $_" }; exit 1 }
+          foreach ($shell in 'pwsh', 'powershell') {
+            $out = Join-Path $env:RUNNER_TEMP "$shell.out"
+            $err = Join-Path $env:RUNNER_TEMP "$shell.err"
+            # A distro no runner has: every path stops before wsl.exe runs install.sh.
+            $p = Start-Process -FilePath $shell -NoNewWindow -Wait -PassThru `
+              -ArgumentList '-NoProfile', '-NonInteractive', '-File', $script, '-Distro', 'JhonCiNoSuchDistro' `
+              -RedirectStandardOutput $out -RedirectStandardError $err
+            $said = (Get-Content -Raw $err) + ''
+            Write-Host "${shell}: exit $($p.ExitCode): $said"
+            if ($p.ExitCode -ne 1) { Write-Error "$shell install.ps1 exited $($p.ExitCode), want 1"; exit 1 }
+            if ($said -notmatch '^jhon: ') { Write-Error "$shell install.ps1 did not fail with a 'jhon: ' message"; exit 1 }
+          }

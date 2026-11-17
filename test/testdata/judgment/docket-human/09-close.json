@@ -1,0 +1,10 @@
+{
+  "event": "CLOSE",
+  "verdict": "CLOSED",
+  "option": "keep",
+  "conditions": [
+    "the entry names jhon judgment append explicitly",
+    "no fifth entry without a new deliberate raise"
+  ],
+  "summary": "Keep: a fourth named entry, under two conditions."
+}

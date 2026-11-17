@@ -1,0 +1,14 @@
+#!/bin/sh
+# A fake reference build for `certify --replay-guard` tests: it keeps each
+# argv, payload and environment under its HOME, then refuses, asks, breaks
+# or passes by what the payload's command holds.
+p=$(cat)
+printf '%s\n' "$*" >> "$HOME/argv.txt"
+printf '%s\n' "$p" >> "$HOME/payloads.jsonl"
+env >> "$HOME/env.txt"
+case $p in
+*refuse-me*|*'data/*.json'*) echo "safety-guard: refused: fake" >&2; exit 2 ;;
+*ask-me*|*OLDPWD*) echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"fake"}}'; exit 0 ;;
+*boom*) echo "fake: broken" >&2; exit 1 ;;
+esac
+exit 0

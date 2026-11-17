@@ -1,0 +1,22 @@
+{
+  "event": "R1.B",
+  "judge": "B",
+  "positions": [
+    {
+      "point": "A1",
+      "position": "maintain",
+      "reason": "disputed",
+      "proof_refs": [
+        "git diff base..3f2a9c1 -- src/queue.ts: early return removed at line 88"
+      ]
+    },
+    {
+      "point": "B1",
+      "position": "maintain",
+      "reason": "the early return is gone",
+      "proof_refs": [
+        "git diff base..3f2a9c1 -- src/queue.ts: early return removed at line 88"
+      ]
+    }
+  ]
+}

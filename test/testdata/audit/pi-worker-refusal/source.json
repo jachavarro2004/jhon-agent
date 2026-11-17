@@ -1,0 +1,9 @@
+{
+  "real": true,
+  "session": "2026-10-25T08-18-05-119Z_01a17223-66bf-737a-906d-2d47be503d33",
+  "runtime": "pi",
+  "pi": "1.4.0",
+  "session_format": 3,
+  "recorded": "PI_CODING_AGENT_DIR=<scratch>/.pi/jhon pi --print --thinking low, in a scratch git repository, on a scratch install (render-engine --install --only pi, mcp.json removed)",
+  "shows": "the main session runs worker as a saved child session; the worker runs git log, safety-guard refuses its git clean -fdx and it does not retry, and it edits a.txt, its one allowed surface"
+}

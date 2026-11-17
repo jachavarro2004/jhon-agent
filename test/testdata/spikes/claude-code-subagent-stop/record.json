@@ -1,0 +1,13 @@
+{
+  "runtime": "claude-code",
+  "runtime_version": "2.1.304",
+  "guard": "hooks/return-shape.mjs",
+  "guard_version": "the working tree of 2026-10-22, before its first commit",
+  "date": "2026-10-22",
+  "call": "claude -p --model claude-haiku-5-5 --permission-mode bypassPermissions in scratch git repos. Run 1: a settings-level SubagentStop hook that logged the payload and blocked the first stop, around one general-purpose sub-agent. Runs 2-4: the same hook declared instead as Stop, then SubagentStop, in a project sub-agent's own frontmatter, then as SubagentStop in the frontmatter of the main agent (`--agent boss`). Run 5: a plugin (--plugin-dir) declaring it in hooks/hooks.json, named by plugin.json `hooks`. Run 6: Jhon's own plugin directory, whose hooks.json runs return-shape.mjs for worker and jd-fix-agent, around a project `worker` and a project `helper`, each asked only to say hello.",
+  "payload": "SubagentStop carried hook_event_name, agent_type, agent_id, agent_transcript_path, transcript_path, last_assistant_message (the sub-agent's final text), stop_hook_active (false on the first stop, true after a block), cwd, permission_mode, and session_id.",
+  "decision": "A blocking SubagentStop is honoured, and the sub-agent ends again with the asked shape, when the hook comes from settings or a plugin; an agent definition's frontmatter Stop or SubagentStop never ran for a sub-agent (runs 2-4 logged nothing). Jhon carries the hook in the release plugin, which only `jhon start` loads, and binds it to the bounded writers by argument.",
+  "runtime_result": "Runs 1, 5, and 6: the first stop was blocked and the sub-agent's next final text began `status: success` with summary, files_changed, and validation lines; the second stop (stop_hook_active true) was allowed. Runs 2-4: no payload logged. Run 6: the worker returned the shape; the helper returned `Hello!`, untouched.",
+  "no_effect_check": "Not a refusal of an effect: the hook only withholds the stop once. Run 6's helper, which the hook does not bind, ended on its first stop.",
+  "control_case": "Run 6's helper, under the same plugin, and runs 2-4, where no hook ran, ended in plain prose."
+}

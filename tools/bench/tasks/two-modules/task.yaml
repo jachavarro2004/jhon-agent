@@ -1,0 +1,29 @@
+id: two-modules
+kind: long
+model: sonnet
+max_turns: 80
+timeout: 40m
+hidden: hidden
+check: python3 -B -m unittest -q test_acceptance
+tests: test_*.py
+test_command: python3 -m unittest
+scope: |
+  importer.py
+  exporter.py
+  cli.py
+  catalog.py
+  README.md
+prompt: |
+  Acme's catalog needs two modules that do not depend on each other:
+  - importer.py with import_products(path), which reads a supplier's CSV file
+    and returns (products, rejected): the products as catalog.Product and the
+    number of rows it rejected;
+  - exporter.py with export_products(products, path), which writes the
+    storefront's JSON Lines file.
+  The rules for each are in docs/IMPORT.md and docs/EXPORT.md; follow them
+  exactly. Then wire both into cli.py:
+    python3 cli.py convert <supplier.csv> <out.jsonl>
+  which prints "<n> products, <m> rejected": <n> is the number of products
+  import_products returned (before the export drops any) and <m> the number
+  of rows it rejected. Add tests.
+  Run the tests with: python3 -m unittest

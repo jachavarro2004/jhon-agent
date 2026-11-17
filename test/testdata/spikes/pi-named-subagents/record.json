@@ -1,0 +1,20 @@
+{
+  "runtime": "pi",
+  "runtime_version": "1.4.0",
+  "guard": "named-subagents",
+  "guard_version": "runtimes/pi/agents.ts (the subagent tool), main 2026-10-25",
+  "date": "2026-10-25",
+  "call": "PI_CODING_AGENT_DIR=<scratch>/.pi/jhon pi --print --no-session, on the directory the renderer wrote (plain pi with pi-claude-bridge@0.9.3, pi-web-access@0.43.0, and runtimes/pi/jhon.ts), in a scratch git repository with one commit and an uncommitted change to a.txt. The main session launched agents/review-risk.md, and in later runs agents/worker.md and agents/explore.md, by name with the subagent tool; review-risk was asked to run `git show --stat HEAD` through the inspect tool.",
+  "payload": {
+    "tool": "subagent",
+    "agent": "review-risk",
+    "task": "BASE is HEAD and CANDIDATE is HEAD (a frozen revision). Use the inspect tool to run exactly: git show --stat HEAD and report its output verbatim."
+  },
+  "decision": "the subagent tool resolved <agent dir>/agents/<name>.md and started a child pi process with its frontmatter: `pi --print --no-session --model claude-bridge/claude-sonnet-5-5 --thinking medium --tools read,grep,find,ls,edit,write,bash,mcp__engram__… --append-system-prompt <its body> -- <task>` for worker, claude-bridge/claude-opus-5-5 for explore, with JHON_PI_CHILD=1 and JHON_PI_AGENT=<name> in its environment (recorded by a wrapper set as JHON_PI_BIN).",
+  "runtime_result": "the review-risk child returned the `git show --stat HEAD` output verbatim (commit, author, `a.txt | 1 +`) inside its review JSON; the worker and explore children answered their tasks.",
+  "no_effect_check": "the reviewer's run left the repository as it was (` M a.txt`); it holds no write tool.",
+  "control_case": {
+    "writer_admission": "the subagent tool refuses a bounded agent's task without a `## Allowed edit surfaces` heading before it starts a child (test/pi/agents.test.ts); the worker task that carried the heading ran",
+    "unknown_agent": "a name with no agents/<name>.md is refused, naming the known agents (test/pi/agents.test.ts)"
+  }
+}

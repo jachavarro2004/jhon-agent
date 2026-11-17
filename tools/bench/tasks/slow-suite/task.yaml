@@ -1,0 +1,26 @@
+id: slow-suite
+kind: long
+model: sonnet
+max_turns: 80
+timeout: 40m
+hidden: hidden
+check: python3 -B -m unittest -q test_acceptance
+check_1: python3 -B -m unittest -q test_s1
+check_2: python3 -B -m unittest -q test_s2
+tests: test_*.py
+test_command: python3 -m unittest
+scope: |
+  ledger.py
+  README.md
+prompt_1: |
+  Acme's ledger has two bugs, and the full suite fails because of them. The full
+  suite runs with
+    python3 run_suite.py
+  and takes about 90 seconds; the fast unit tests run with
+    python3 -m unittest
+  Find and fix both bugs, and add unit tests that would have caught them. The
+  full suite must pass when you are done.
+prompt_2: |
+  New rule from Finance: an entry with "voided": true counts nowhere, neither in
+  balance nor in monthly_totals. Add it, with unit tests. The full suite must
+  still pass.

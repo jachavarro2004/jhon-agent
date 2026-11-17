@@ -1,0 +1,24 @@
+ 力  jhon  setup                                                                              0.1.0 
+                      │                                                                             
+   ✓ Welcome          │  Install stopped   at step 2 of 6                                           
+   ✓ Runtimes         │                                                                             
+   ✓ Integrations     │  ✓ Download jhon 0.1.0 linux/amd64   18.4 MB                                
+   ✓ Checks           │  ✗ Verify signature                  the signature does not match           
+▎  ✗ Install          │  ○ Install the core                                                         
+   ○ Done             │  ○ Render runtimes                                                          
+                      │  ○ Install pi                                                               
+                      │  ○ Set up integrations                                                      
+                      │                                                                             
+                      │  Nothing was installed and your settings were not written.                  
+                      │  The file may be damaged or not from jachavarro2004/jhon-agent.             
+                      │  Retry downloads it again; it is safe to repeat.                            
+                      │                                                                             
+                      │   Retry    Show log    Quit                                                 
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+ ←→ choose  enter confirm  q quit                                                                   

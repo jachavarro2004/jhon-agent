@@ -1,0 +1,24 @@
+ 力  jhon  setup                                                                              0.1.0 
+                      │                                                                             
+   ✓ Welcome          │  ✓ Jhon 0.1.0 is installed                                                  
+   ✓ Runtimes         │                                                                             
+   ✓ Integrations     │  runtimes      Claude Code, pi (claude-bridge)                              
+   ✓ Checks           │  integrations  Engram, CodeGraph, Telemetry                                 
+   ✓ Install          │  binary        ~/.local/bin/jhon                                            
+   ✓ Done             │  settings      ~/.config/jhon/settings.toml   edit with jhon settings       
+                      │                                                                             
+                      │  Next                                                                       
+                      │  jhon start       open Claude Code in this project                          
+                      │  jhon start pi    open pi in this project                                   
+                      │  jhon setup       come back here to update or change choices                
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+ enter close  q quit                                                                                

@@ -1,0 +1,72 @@
+package js
+
+import "testing"
+
+// The messages node's JSON.parse throws, recorded from node 26.
+func TestJSONSyntaxError(t *testing.T) {
+	for _, c := range []struct{ src, want string }{
+		{"{ not json", "Expected property name or '}' in JSON at position 2 (line 1 column 3)"},
+		{"", "Unexpected end of JSON input"},
+		{"{\"a\":", "Unexpected end of JSON input"},
+		{"[1,]", "Unexpected token ']', \"[1,]\" is not valid JSON"},
+		{"{\"a\" 1}", "Expected ':' after property name in JSON at position 5 (line 1 column 6)"},
+		{"nul", "Unexpected end of JSON input"},
+		{"\"abc", "Unterminated string in JSON at position 4 (line 1 column 5)"},
+		{"{\"a\":1}x", "Unexpected non-whitespace character after JSON at position 7 (line 1 column 8)"},
+		{"{a:1}", "Expected property name or '}' in JSON at position 1 (line 1 column 2)"},
+		{"\"a\\x01\"", "Bad escaped character in JSON at position 3 (line 1 column 4)"},
+		{"x", "Unexpected token 'x', \"x\" is not valid JSON"},
+		{"tru", "Unexpected end of JSON input"},
+		{"trux", "Unexpected token 'x', \"trux\" is not valid JSON"},
+		{"{\"a\":1,}", "Expected double-quoted property name in JSON at position 7 (line 1 column 8)"},
+		{"[1 2]", "Expected ',' or ']' after array element in JSON at position 3 (line 1 column 4)"},
+		{"{\"a\":1 \"b\"}", "Expected ',' or '}' after property value in JSON at position 7 (line 1 column 8)"},
+		{"\"a\nb\"", "Bad control character in string literal in JSON at position 2 (line 1 column 3)"},
+		{"\"\\u12g4\"", "Bad Unicode escape in JSON at position 5 (line 1 column 6)"},
+		{"-", "No number after minus sign in JSON at position 1 (line 1 column 2)"},
+		{"1.", "Unterminated fractional number in JSON at position 2 (line 1 column 3)"},
+		{"1e", "Exponent part is missing a number in JSON at position 2 (line 1 column 3)"},
+		{"1e+", "Exponent part is missing a number in JSON at position 3 (line 1 column 4)"},
+		{"01", "Unexpected number in JSON at position 1 (line 1 column 2)"},
+		{"-a", "No number after minus sign in JSON at position 1 (line 1 column 2)"},
+		{"{,}", "Expected property name or '}' in JSON at position 1 (line 1 column 2)"},
+		{"[,]", "Unexpected token ',', \"[,]\" is not valid JSON"},
+		{"{\"a\":1}}", "Unexpected non-whitespace character after JSON at position 7 (line 1 column 8)"},
+		{"abcdefghijklmnopqrstuvwxyz", "Unexpected token 'a', \"abcdefghij\"... is not valid JSON"},
+		{"{\"key\": \"value\", \"other\": nope, \"more\": \"stuff and stuff\"}", "Unexpected token 'o', ...\"\"other\": nope, \"more\"... is not valid JSON"},
+		{"[1,2,3,4,5,6,7,8,9,0,1,2,3,4,x]", "Unexpected token 'x', ...\"0,1,2,3,4,x]\" is not valid JSON"},
+		{"{\"aaaaaaaaaaaaaaaaaa\": x", "Unexpected token 'x', ...\"aaaaaaa\": x\" is not valid JSON"},
+		{"  ", "Unexpected end of JSON input"},
+		{"\"\\x\"", "Bad escaped character in JSON at position 2 (line 1 column 3)"},
+		{"{\"é\": x}", "Unexpected token 'x', \"{\"é\": x}\" is not valid JSON"},
+		{"\"\t\"", "Bad control character in string literal in JSON at position 1 (line 1 column 2)"},
+		{"[", "Unexpected end of JSON input"},
+		{"{", "Expected property name or '}' in JSON at position 1 (line 1 column 2)"},
+		{"{\"a\"", "Expected ':' after property name in JSON at position 4 (line 1 column 5)"},
+		{"{\"a\":1", "Expected ',' or '}' after property value in JSON at position 6 (line 1 column 7)"},
+		{"[1", "Expected ',' or ']' after array element in JSON at position 2 (line 1 column 3)"},
+		{"nulL", "Unexpected token 'L', \"nulL\" is not valid JSON"},
+		{"1 2", "Unexpected non-whitespace character after JSON at position 2 (line 1 column 3)"},
+		{"-01", "Unexpected number in JSON at position 2 (line 1 column 3)"},
+		{".5", "Unexpected token '.', \".5\" is not valid JSON"},
+		{"{\"a\":01}", "Unexpected number in JSON at position 6 (line 1 column 7)"},
+		{"'a'", "Unexpected token ''', \"'a'\" is not valid JSON"},
+		{"[}", "Unexpected token '}', \"[}\" is not valid JSON"},
+		{"{]", "Expected property name or '}' in JSON at position 1 (line 1 column 2)"},
+		{"\"\\", "Unexpected end of JSON input"},
+		{"\"\\u12", "Bad Unicode escape in JSON at position 5 (line 1 column 6)"},
+		{"x1234567890123456789", "Unexpected token 'x', \"x1234567890123456789\" is not valid JSON"},
+		{"x12345678901234567890", "Unexpected token 'x', \"x123456789\"... is not valid JSON"},
+		{"{\r\n\"a\" 1}", "Expected ':' after property name in JSON at position 7 (line 2 column 5)"},
+		{"{\"a\":1}\n\n x", "Unexpected non-whitespace character after JSON at position 10 (line 3 column 2)"},
+		{"[-]", "No number after minus sign in JSON at position 2 (line 1 column 3)"},
+		{"[1.e5]", "Unterminated fractional number in JSON at position 3 (line 1 column 4)"},
+		{"{\"a\" :1, \"b\":2,  \"c\"}", "Expected ':' after property name in JSON at position 20 (line 1 column 21)"},
+		{"{\"ok\": [1, 2.5e-3, true, null, \"\\u00e9\"]}", ""},
+		{"\"😀\" x", "Unexpected non-whitespace character after JSON at position 5 (line 1 column 6)"},
+	} {
+		if got := JSONSyntaxError(c.src); got != c.want {
+			t.Errorf("JSONSyntaxError(%q) = %q, want %q", c.src, got, c.want)
+		}
+	}
+}

@@ -1,0 +1,9 @@
+{
+  "real": true,
+  "session": "2026-10-25T08-16-27-738Z_01a17221-ea5a-7541-b421-e245e0ca439f",
+  "runtime": "pi",
+  "pi": "1.4.0",
+  "session_format": 3,
+  "recorded": "PI_CODING_AGENT_DIR=<scratch>/.pi/jhon pi --print --thinking low, in a scratch git repository, on a scratch install (render-engine --install --only pi, mcp.json removed)",
+  "shows": "the main session reads two files, safety-guard refuses its git clean -fdx and it does not retry, and it runs review-risk as a saved child session"
+}

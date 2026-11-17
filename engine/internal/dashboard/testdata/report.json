@@ -1,0 +1,349 @@
+{
+  "ok": true,
+  "status": "findings",
+  "version": "2.1.299",
+  "session": {
+    "sessionKind": "interactive",
+    "agentSetting": "jhon-orchestrator"
+  },
+  "errors": [],
+  "notes": [],
+  "findings": [
+    {
+      "check": "refusal-bypass",
+      "validationStatus": "pending-real-fixture",
+      "severity": "suspect",
+      "kind": "would-be-violation",
+      "transcript": "s.jsonl",
+      "line": 4,
+      "agent": "main",
+      "agentType": "main",
+      "evidence": "e",
+      "message": "m1"
+    },
+    {
+      "check": "refusal-bypass",
+      "validationStatus": "verified",
+      "severity": "violation",
+      "kind": "finding",
+      "transcript": "s.jsonl",
+      "line": 9,
+      "agent": "main",
+      "agentType": "main",
+      "evidence": "e",
+      "message": "m2"
+    },
+    {
+      "check": "delivered-untested",
+      "validationStatus": "verified",
+      "severity": "suspect",
+      "kind": "indeterminate",
+      "transcript": "s.jsonl",
+      "line": 12,
+      "agent": "main",
+      "agentType": "main",
+      "evidence": "e",
+      "message": "m3"
+    }
+  ],
+  "context_use": {
+    "agents": [
+      {
+        "agent": "a1",
+        "agent_type": "worker",
+        "phase": null,
+        "change": "alpha",
+        "runtime": "claude-code",
+        "version": "2.1.299",
+        "transcript": "s/subagents/agent-a1.jsonl",
+        "turns": 100,
+        "turns_without_usage": 0,
+        "peak_context_per_turn": 280000,
+        "total_processed_context": 9000000,
+        "input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 9000000,
+        "tool_result_bytes": {
+          "total": 300,
+          "full_read_bytes": 100,
+          "ranged_read_bytes": 0,
+          "shell_read_bytes": 0,
+          "codegraph_bytes": 200,
+          "engram_bytes": 0,
+          "search_bytes": 0,
+          "other_bytes": 0
+        },
+        "same_file_rereads": 1,
+        "redundant_reloads": 0,
+        "whole_reads_over_limit": 0
+      },
+      {
+        "agent": "a2",
+        "agent_type": "worker",
+        "phase": null,
+        "change": "beta",
+        "runtime": "claude-code",
+        "version": "2.1.299",
+        "transcript": "s/subagents/agent-a2.jsonl",
+        "turns": 20,
+        "turns_without_usage": 0,
+        "peak_context_per_turn": 90000,
+        "total_processed_context": 1000000,
+        "input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 1000000,
+        "tool_result_bytes": {
+          "total": 300,
+          "full_read_bytes": 100,
+          "ranged_read_bytes": 0,
+          "shell_read_bytes": 0,
+          "codegraph_bytes": 200,
+          "engram_bytes": 0,
+          "search_bytes": 0,
+          "other_bytes": 0
+        },
+        "same_file_rereads": 1,
+        "redundant_reloads": 0,
+        "whole_reads_over_limit": 0
+      },
+      {
+        "agent": "a3",
+        "agent_type": "verify",
+        "phase": null,
+        "change": "alpha",
+        "runtime": "claude-code",
+        "version": "2.1.299",
+        "transcript": "s/subagents/agent-a3.jsonl",
+        "turns": 10,
+        "turns_without_usage": 0,
+        "peak_context_per_turn": 60000,
+        "total_processed_context": 500000,
+        "input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 500000,
+        "tool_result_bytes": {
+          "total": 300,
+          "full_read_bytes": 100,
+          "ranged_read_bytes": 0,
+          "shell_read_bytes": 0,
+          "codegraph_bytes": 200,
+          "engram_bytes": 0,
+          "search_bytes": 0,
+          "other_bytes": 0
+        },
+        "same_file_rereads": 1,
+        "redundant_reloads": 0,
+        "whole_reads_over_limit": 0
+      },
+      {
+        "agent": "m",
+        "agent_type": "main",
+        "phase": null,
+        "change": null,
+        "runtime": "claude-code",
+        "version": "2.1.299",
+        "transcript": "s/subagents/agent-m.jsonl",
+        "turns": 400,
+        "turns_without_usage": 0,
+        "peak_context_per_turn": 500000,
+        "total_processed_context": 89500000,
+        "input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 89500000,
+        "tool_result_bytes": {
+          "total": 300,
+          "full_read_bytes": 100,
+          "ranged_read_bytes": 0,
+          "shell_read_bytes": 0,
+          "codegraph_bytes": 200,
+          "engram_bytes": 0,
+          "search_bytes": 0,
+          "other_bytes": 0
+        },
+        "same_file_rereads": 1,
+        "redundant_reloads": 0,
+        "whole_reads_over_limit": 0
+      }
+    ],
+    "long_agents": [
+      {
+        "agent": "a1",
+        "agent_type": "worker",
+        "change": "alpha",
+        "turns": 100,
+        "peak": 280000,
+        "why": "280K context in one turn"
+      }
+    ],
+    "by_phase": [],
+    "by_runtime_version": [],
+    "by_change": [
+      {
+        "key": null,
+        "agents": 1,
+        "turns": 10,
+        "turns_without_usage": 0,
+        "total_processed_context": 89500000,
+        "peak_context_per_turn_max": 500000,
+        "input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 89500000,
+        "tool_result_bytes": {
+          "total": 0,
+          "full_read_bytes": 0,
+          "ranged_read_bytes": 0,
+          "shell_read_bytes": 0,
+          "codegraph_bytes": 0,
+          "engram_bytes": 0,
+          "search_bytes": 0,
+          "other_bytes": 0
+        },
+        "same_file_rereads": 0,
+        "redundant_reloads": 0,
+        "whole_reads_over_limit": 0
+      },
+      {
+        "key": "alpha",
+        "agents": 2,
+        "turns": 10,
+        "turns_without_usage": 0,
+        "total_processed_context": 9500000,
+        "peak_context_per_turn_max": 280000,
+        "input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 9500000,
+        "tool_result_bytes": {
+          "total": 0,
+          "full_read_bytes": 0,
+          "ranged_read_bytes": 0,
+          "shell_read_bytes": 0,
+          "codegraph_bytes": 0,
+          "engram_bytes": 0,
+          "search_bytes": 0,
+          "other_bytes": 0
+        },
+        "same_file_rereads": 0,
+        "redundant_reloads": 0,
+        "whole_reads_over_limit": 0
+      },
+      {
+        "key": "beta",
+        "agents": 1,
+        "turns": 10,
+        "turns_without_usage": 0,
+        "total_processed_context": 1000000,
+        "peak_context_per_turn_max": 90000,
+        "input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 1000000,
+        "tool_result_bytes": {
+          "total": 0,
+          "full_read_bytes": 0,
+          "ranged_read_bytes": 0,
+          "shell_read_bytes": 0,
+          "codegraph_bytes": 0,
+          "engram_bytes": 0,
+          "search_bytes": 0,
+          "other_bytes": 0
+        },
+        "same_file_rereads": 0,
+        "redundant_reloads": 0,
+        "whole_reads_over_limit": 0
+      }
+    ],
+    "by_agent_type": []
+  },
+  "outcomes": {
+    "session": {
+      "start": "2026-10-08T19:00:00.000Z",
+      "end": "2026-10-08T23:00:00.000Z",
+      "elapsed_ms": 14400000,
+      "active_ms": 7200000,
+      "attributed_ms": 3000000,
+      "unattributed_ms": 4200000,
+      "resumes": 2
+    },
+    "changes": [
+      {
+        "change": "alpha",
+        "agents": 3,
+        "launches": {
+          "verify": 1,
+          "worker": 2,
+          "explore": 1
+        },
+        "start": "2026-10-08T20:00:00.000Z",
+        "end": "2026-10-08T21:00:00.000Z",
+        "elapsed_ms": 3600000,
+        "active_ms": 1800000,
+        "agent_ms": 1200000,
+        "main_ms": 600000,
+        "main_commands": 40,
+        "verify_runs": 1,
+        "verify_verdicts": {
+          "pass": 1,
+          "fail": 0,
+          "unknown": 0
+        },
+        "replans": 0,
+        "unfinished": 0,
+        "relaunches": 0,
+        "test_runs": {
+          "count": 2,
+          "total_ms": 0,
+          "max_ms": 0,
+          "timeouts": 0,
+          "failed": 0,
+          "unknown": 2
+        },
+        "record": {
+          "timestamp": "2026-10-08T20:30:00.000Z",
+          "passed": true,
+          "executions": 19,
+          "duration_ms": 60000,
+          "timeouts": 0
+        }
+      },
+      {
+        "change": "beta",
+        "agents": 3,
+        "launches": {
+          "verify": 1,
+          "worker": 2,
+          "explore": 1
+        },
+        "start": "2026-10-08T20:00:00.000Z",
+        "end": "2026-10-08T21:00:00.000Z",
+        "elapsed_ms": 3600000,
+        "active_ms": 1800000,
+        "agent_ms": 1200000,
+        "main_ms": 600000,
+        "main_commands": 40,
+        "verify_runs": 2,
+        "verify_verdicts": {
+          "pass": 0,
+          "fail": 2,
+          "unknown": 0
+        },
+        "replans": 1,
+        "unfinished": 1,
+        "relaunches": 1,
+        "test_runs": {
+          "count": 2,
+          "total_ms": 0,
+          "max_ms": 0,
+          "timeouts": 0,
+          "failed": 0,
+          "unknown": 2
+        },
+        "record": {
+          "timestamp": "2026-10-08T20:30:00.000Z",
+          "passed": false,
+          "executions": 19,
+          "duration_ms": 60000,
+          "timeouts": 1
+        }
+      }
+    ]
+  }
+}

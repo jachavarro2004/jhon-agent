@@ -1,0 +1,12 @@
+{
+  "real": true,
+  "session": "0b712a44-f695-4b44-8882-a7eb1a9ec0a0",
+  "claude_code": "2.1.310",
+  "setup": "the same setup as background-run-delivered, with the project test failing",
+  "shows": "a background jhon executions run whose task notification reports exit 1 and whose output file records a failing project, then a push to the default branch: a delivery of an untested revision",
+  "redacted": [
+    "context lines (attachments, api requests, queue operations, prompt state): every string over 80 characters",
+    "the account email",
+    "the organization uuid, as 00000000-0000-4000-8000-000000000000"
+  ]
+}

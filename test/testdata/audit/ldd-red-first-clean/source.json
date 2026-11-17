@@ -1,0 +1,13 @@
+{
+  "real": true,
+  "session": "04ff18f1-1c43-42f1-a658-59f4fc661633",
+  "claude_code": "2.1.310",
+  "setup": "a Jhon bench run (task pagination-bug, LDD variant, claude-opus-5-5 under jhon start) in a scratch git repository with a Python project whose paginate skips the first page",
+  "shows": "the test edited first, a failing jhon executions run of the change (RED, exit 1), then the code edit and a passing run (GREEN): no code edit before the change's RED",
+  "redacted": [
+    "context lines (attachments, api requests, queue operations, prompt state): every string over 80 characters",
+    "the account email",
+    "the home directory, as /home/owner",
+    "the organization uuid, as 00000000-0000-4000-8000-000000000000"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "event": "R0.B",
+  "judge": "B",
+  "result": {
+    "findings": [
+      {
+        "location": "src/queue.ts:88",
+        "severity": "BLOCKER",
+        "claim": "drain() never resolves when the queue is empty",
+        "evidence_class": "deterministic",
+        "causal_disposition": "introduced",
+        "proof_refs": [
+          "git diff base..3f2a9c1 -- src/queue.ts: early return removed at line 88"
+        ]
+      }
+    ],
+    "evidence": [
+      "src/cache.ts",
+      "src/queue.ts"
+    ]
+  }
+}
