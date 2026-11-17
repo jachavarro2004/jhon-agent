@@ -125,7 +125,7 @@ func TestOrchestratorResearchesDecisionsFirst(t *testing.T) {
 	wants := []string{
 		"**Existing decisions first.** Before deciding, proposing a design, or asking the owner, look for a decision already made:",
 		"CodeGraph first when the session has it, then reads",
-		"`mem_search` for each entity the request names, and the project's file memory when present",
+		"{{runtime:mem-search}} for each entity the request names, and the project's file memory when present",
 		"Cite the decision ids found.",
 		"A recorded owner decision overrides the source document's wording: state the deviation, never follow the document against it.",
 		"An explore or worker task carries the standing decisions found, each id with one line, and asks it to search for more on what it covers.",
@@ -145,7 +145,7 @@ func TestOrchestratorResearchesDecisionsFirst(t *testing.T) {
 		}
 		t.Logf("%s orchestrator prompt: %d bytes", rt, len(got))
 		for _, w := range wants {
-			if !strings.Contains(got, w) {
+			if w = inRuntime(rt, w); !strings.Contains(got, w) {
 				t.Errorf("%s's orchestrator does not say %q", rt, w)
 			}
 		}

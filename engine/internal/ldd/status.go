@@ -622,8 +622,11 @@ type Status struct {
 	Tasks     TaskProgress
 	// Next is one advisory suggestion (`next_action`); never a gate, and any
 	// phase may run or be skipped.
-	Next  string
-	Notes []string
+	Next string
+	// Command is the exact command the next step runs, the change's name
+	// filled in; "" when the next step is no command. Human and Brief print it.
+	Command string
+	Notes   []string
 	// Tests is the change's last recorded test run (`jhon executions run`), or nil.
 	Tests *execution.LastRun
 	// StrictTdd is the project's Strict TDD preference: what agents follow, never a gate.
@@ -1260,10 +1263,57 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 		notes = append(notes, "the route asks for a proposal and a design now ("+strings.Join(route.Spans, ", ")+"): write them before the next slice")
 	}
 
+	// The exact next command, the name filled in (T146, L1211): the run that
+	// records RED and GREEN, or the delivery check.
+	command := ""
+	switch {
+	case next == apply && behaviour && !redGreen && (tddOnly || st("tasks.md") == v.done && tasks.Finished()):
+		command = "jhon executions run " + change
+		if base := g.baseName(root); base != "" {
+			command += " --affected " + base
+		}
+	case next == Merge() && branch != "":
+		command = "jhon deliver check " + change
+		if vcs.CandidateOf(root, execution.ChangeRecordPaths(root, change)).Clean != true {
+			command += "  (once the tested tree is committed)"
+		}
+	}
+	// A small change (T146 FA2): no folder, and its record needs no tasks.md
+	// (one component, under the advisory size, not high risk).
+	if branch != "" && needs != nil && !needs.Tasks {
+		notes = append(notes, SmallChangeNote(change))
+	}
+
 	return Status{
-		Ok: true, Change: &change, Directory: directory, Artifacts: shown, Tasks: tasks, Next: next, Notes: notes,
+		Ok: true, Change: &change, Directory: directory, Artifacts: shown, Tasks: tasks, Next: next, Command: command, Notes: notes,
 		Tests: tests, StrictTdd: tdd, Projects: resolved.Projects, Vcs: state, Route: route, Needs: needs, Branch: branch,
 	}, nil
+}
+
+// baseName is how a command names the base the change in root is measured
+// from: the ref baseOf names it by, else, when the branch has no commit of
+// its own yet, the default branch at that commit, else the commit; "" when
+// there is none.
+func (g gitReads) baseName(root string) string {
+	commit, label, ok := g.baseOf(root, nil)
+	if !ok {
+		return ""
+	}
+	if label != "HEAD" {
+		return label
+	}
+	for _, ref := range g.defaultBranches(root) {
+		if c, ok := g.git(root, "rev-parse", "--verify", "--quiet", ref+"^{commit}"); ok && js.Trim(c) == commit {
+			return ref
+		}
+	}
+	return commit
+}
+
+// SmallChangeNote is what status tells a small change: no bookkeeping, and
+// its GREEN run is its delivery evidence once the tree it tested is committed.
+func SmallChangeNote(change string) string {
+	return "small change (no folder, one component, under the advisory size, not high risk): write no tasks.md, save no memory or session summary, keep no todo list; the run that records its GREEN is its delivery evidence: commit the tree it tested and run `jhon deliver check " + change + "`, with no re-run"
 }
 
 // ── views ───────────────────────────────────────────────────────────────────
@@ -1398,6 +1448,9 @@ func Human(s Status) string {
 	}
 	out = append(out, "", "tests       "+testsLine(s.Tests), "", tdd, "")
 	out = append(append(out, projects...), "", "next        "+s.Next+"  (suggestion)")
+	if s.Command != "" {
+		out = append(out, "command     "+s.Command)
+	}
 	if len(s.Notes) > 0 {
 		out = append(append(out, "", "notes"), list(s.Notes)...)
 	}
@@ -1414,8 +1467,11 @@ func Brief(s Status) string {
 	out := []string{
 		"change      " + change,
 		"next        " + s.Next + "  (suggestion)",
-		fmt.Sprintf("tasks       %d/%d checked", s.Tasks.Completed, s.Tasks.Total),
 	}
+	if s.Command != "" {
+		out = append(out, "command     "+s.Command)
+	}
+	out = append(out, fmt.Sprintf("tasks       %d/%d checked", s.Tasks.Completed, s.Tasks.Total))
 	if sl := slicesLine(s.Tasks); sl != "" {
 		out = append(out, sl)
 	}

@@ -7,7 +7,8 @@ and session protocol; this adds only what it does not.
 per completed request, batched with other tool calls, never per fix or
 event, and before the final answer; end every turn with the complete answer and no
 tool call after it, and deliver the answer even when a memory call fails or
-times out (note the failure briefly).
+times out (note the failure briefly). A small change (`jhon status` says so)
+saves nothing.
 
 **Prompt capture.** Pass `capture_prompt: false` only for automated saves
 (LDD step output, caches, registries); leave it unset for human and

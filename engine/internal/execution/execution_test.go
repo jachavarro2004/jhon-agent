@@ -256,16 +256,16 @@ func TestReadLastRun(t *testing.T) {
 	}
 	for src, want := range map[string]*LastRun{
 		`{"timestamp":"t","complete":true,"scope":"affected","dirty":true,"candidate_commit":"c","candidate_tree":"tr","working_tree_clean":true,
-		  "executions":[{"project":"a","status":"pass"},{"project":"b","status":"timeout","exit_code":0}]}`: {"t", false, []string{"b"}, "affected", true, true, "c", "tr", true, false, nil, false},
+		  "executions":[{"project":"a","status":"pass"},{"project":"b","status":"timeout","exit_code":0}]}`: {"t", false, []string{"b"}, "affected", true, true, "c", "tr", true, false, nil, false, ""},
 		// v1: no status, no complete; read by exit codes.
-		`{"executions":[{"project":"a","exit_code":0},{"project":2,"exit_code":1},{"exit_code":null}],"working_tree_clean":"unknown"}`: {"", false, []string{"2", "undefined"}, Full, true, false, "", "", false, false, nil, false},
-		`{"complete":false,"executions":[{"project":"a","status":"pass"}]}`:                                                            {"", false, []string{}, Full, false, false, "", "", false, false, nil, false},
-		`{"timestamp":1e21,"executions":[{"project":"a","exit_code":-0}]}`:                                                             {"1e+21", true, []string{}, Full, true, false, "", "", false, false, nil, false},
-		`{"executions":[]}`: {"", false, []string{}, Full, true, false, "", "", false, false, nil, false},
+		`{"executions":[{"project":"a","exit_code":0},{"project":2,"exit_code":1},{"exit_code":null}],"working_tree_clean":"unknown"}`: {"", false, []string{"2", "undefined"}, Full, true, false, "", "", false, false, nil, false, ""},
+		`{"complete":false,"executions":[{"project":"a","status":"pass"}]}`:                                                            {"", false, []string{}, Full, false, false, "", "", false, false, nil, false, ""},
+		`{"timestamp":1e21,"executions":[{"project":"a","exit_code":-0}]}`:                                                             {"1e+21", true, []string{}, Full, true, false, "", "", false, false, nil, false, ""},
+		`{"executions":[]}`: {"", false, []string{}, Full, true, false, "", "", false, false, nil, false, ""},
 		// A pass after a failing run the history keeps: RED before GREEN.
-		`{"timestamp":"t","executions":[{"project":"a","status":"pass"}],"history":[{"timestamp":"s","passed":false}]}`: {"t", true, []string{}, Full, true, false, "", "", false, true, nil, false},
+		`{"timestamp":"t","executions":[{"project":"a","status":"pass"}],"history":[{"timestamp":"s","passed":false}]}`: {"t", true, []string{}, Full, true, false, "", "", false, true, nil, false, ""},
 		// A unit's run (T133): the narrow kind; a record without the field reads as wide.
-		`{"timestamp":"t","unit":true,"since":"main","executions":[{"project":"a","status":"pass"}]}`: {"t", true, []string{}, Full, true, false, "", "", false, false, nil, true},
+		`{"timestamp":"t","unit":true,"since":"main","executions":[{"project":"a","status":"pass"}]}`: {"t", true, []string{}, Full, true, false, "", "", false, false, nil, true, ""},
 		`{"executions":{}}`: nil,
 		`not json`:          nil,
 		`{} x`:              nil,

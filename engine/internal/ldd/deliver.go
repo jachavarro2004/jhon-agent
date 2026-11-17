@@ -163,25 +163,41 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 		if run.Dirty {
 			reasons = append(reasons, "the candidate changed during the last test run: what was tested is not one revision; run the tests again")
 		}
-		if !run.Clean {
+		// outsideRecord is the paths that differ between two trees, but for
+		// the change's records (Judgment Day's under it included), written
+		// after the run; ok is false when a tree does not resolve.
+		outsideRecord := func(a, b string) ([]string, bool) {
+			diff, ok := vcs.TreeDiff(root, a, b)
+			judged := layout.For(root).Artifact(change, "judgments") + "/"
+			outside := []string{}
+			for _, p := range diff {
+				if !exempt[p] && !strings.HasPrefix(p, judged) && !strings.Contains(p, "/"+judged) {
+					outside = append(outside, p)
+				}
+			}
+			return outside, ok
+		}
+		// A run on uncommitted work tested the working tree it recorded: once
+		// that tree is committed, HEAD is the tested revision, and the run
+		// that recorded GREEN is the delivery evidence, with no re-run (T146).
+		committed := false
+		if !run.Clean && !run.Dirty && now.Clean == true && isSha(run.WorkingTree) && isSha(now.Tree) {
+			if outside, ok := outsideRecord(run.WorkingTree, now.Tree); ok && len(outside) == 0 {
+				committed = true
+				run.Tree = run.WorkingTree
+				notes = append(notes, "the last test run tested this tree before its commit: its run is the delivery evidence, with no re-run")
+			}
+		}
+		if !run.Clean && !committed {
 			reasons = append(reasons, "the last test run started on a working tree that was not clean"+deliverOrder)
 		}
-		if isSha(run.Tree) && isSha(now.Tree) && run.Tree != now.Tree {
-			diff, ok := vcs.TreeDiff(root, run.Tree, now.Tree)
+		if committed {
+		} else if isSha(run.Tree) && isSha(now.Tree) && run.Tree != now.Tree {
+			outside, ok := outsideRecord(run.Tree, now.Tree)
 			if !ok {
 				reasons = append(reasons, fmt.Sprintf("the tested tree %s does not resolve in this repository", run.Tree))
-			} else {
-				// Judgment Day records under the change are written after the run, as its other records are.
-				judged := layout.For(root).Artifact(change, "judgments") + "/"
-				outside := []string{}
-				for _, p := range diff {
-					if !exempt[p] && !strings.HasPrefix(p, judged) && !strings.Contains(p, "/"+judged) {
-						outside = append(outside, p)
-					}
-				}
-				if len(outside) > 0 {
-					reasons = append(reasons, fmt.Sprintf("HEAD's tree is not the tested tree: %d path(s) differ (%s); test this revision", len(outside), listed(outside))+deliverOrder)
-				}
+			} else if len(outside) > 0 {
+				reasons = append(reasons, fmt.Sprintf("HEAD's tree is not the tested tree: %d path(s) differ (%s); test this revision", len(outside), listed(outside))+deliverOrder)
 			}
 		} else if !isSha(run.Tree) {
 			reasons = append(reasons, "the last test run recorded no tree: it ran outside a git repository")

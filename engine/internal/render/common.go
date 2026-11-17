@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/contract"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/profiles"
@@ -210,6 +211,11 @@ var runtimeTerms = map[string]map[string]string{
 		"claude-code": "launch every `Agent` call with `run_in_background: true` where the tool offers it (an interactive session already runs them there)",
 		"pi":          "`subagent` returns a task id at once and shows the agent on the agents rail",
 	},
+	// T146 (L1211): the tools a background job runs with, each runtime's own.
+	"background-jobs": {
+		"claude-code": "Bash with `run_in_background: true` or `Monitor`",
+		"pi":          "`bash_background` or `monitor`",
+	},
 	"owner-grant": {
 		"claude-code": "by running it with `!`",
 		"pi":          "from `/jhon:grants` in the shell",
@@ -241,6 +247,23 @@ var runtimeTerms = map[string]map[string]string{
 		"claude-code": "In plan mode, write the plan to the file the runtime names under\n~/.claude/plans/ and end with `ExitPlanMode`.",
 		"pi":          "",
 	},
+}
+
+// T146 (L1211, FA1): an MCP tool the prose names is named as the runtime
+// calls it. pi registers each server tool as mcp__<server>__<tool>; Claude
+// Code mounts Engram under two server names and resolves the bare name.
+func init() {
+	for server, tools := range map[string][]string{
+		integrations.Engram:    {"mem_search", "mem_get_observation", "mem_context", "mem_current_project", "mem_review", "mem_merge_projects", "mem_session_summary"},
+		integrations.CodeGraph: {"codegraph_explore"},
+	} {
+		for _, t := range tools {
+			runtimeTerms[strings.ReplaceAll(t, "_", "-")] = map[string]string{
+				"claude-code": "`" + t + "`",
+				"pi":          "`mcp__" + server + "__" + t + "`",
+			}
+		}
+	}
 }
 
 // bodyFor is an agent's body as runtime renders it: each runtime term in

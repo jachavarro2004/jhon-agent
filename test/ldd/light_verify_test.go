@@ -99,7 +99,7 @@ func TestExecutionsVerifyRefusesBadInput(t *testing.T) {
 	// `run` is unchanged.
 	r = jhonGit(t, root, "executions", "nope", smallChange)
 	equal(t, r.Code, 2)
-	match(t, r.Stderr, `usage: jhon executions run <change>`)
+	match(t, r.Stderr, `usage: jhon executions run \[<change>\]`)
 }
 
 const lightVerifyDue = `^light verify due for feat-small-fix: its GREEN run is newer than its last light verify; launch the ` + "`verify`" + ` agent in light mode \(read the diff and the tests, run the focused tests\), which records ` + "`jhon executions verify feat-small-fix --verdict pass\\|fail`$"
