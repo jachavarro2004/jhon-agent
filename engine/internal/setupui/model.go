@@ -42,7 +42,7 @@ const (
 )
 
 // The integration rows: the required integrations' first, locked on
-// (Engram and CodeGraph, by their manifests' order; view.go's integrations
+// (Engram and CodeGraph, manifests.Core, read by name; view.go's integrations
 // holds one row for each), then Jhon's own.
 const (
 	rowEngram = iota
@@ -346,7 +346,8 @@ func (m *Model) runtimesKey(k string) {
 func (m *Model) toggleIntegration() {
 	switch m.cursor {
 	case rowEngram, rowCodeGraph:
-		m.note = manifests.Required()[m.cursor].Setup.LockedNote
+		core, _ := manifests.Get(manifests.Core[m.cursor])
+		m.note = core.Setup.LockedNote
 	case rowTelemetry:
 		m.c.Telemetry = !m.c.Telemetry
 	case rowPalette:

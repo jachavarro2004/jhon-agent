@@ -34,16 +34,17 @@ type System struct {
 
 // Pins are the versions setup installs (T50g): the CLI passes render's
 // versions table, so setup and the render pin from one place. Engram and
-// CodeGraph are the required integrations' pins, by their manifests' order.
+// CodeGraph are the core integrations' pins (manifests.Core), by name.
 type Pins struct{ ClaudeCode, Engram, CodeGraph string }
 
-// of is the pin of an integration's binary: a required one's from Pins,
+// of is the pin of an integration's binary: a core one's from Pins,
 // another's its manifest's.
 func (p Pins) of(m manifests.Manifest) string {
-	for i, r := range manifests.Required() {
-		if r.Name == m.Name {
-			return [...]string{p.Engram, p.CodeGraph}[i]
-		}
+	switch m.Name {
+	case manifests.Engram:
+		return p.Engram
+	case manifests.CodeGraph:
+		return p.CodeGraph
 	}
 	return m.Doctor.Version
 }

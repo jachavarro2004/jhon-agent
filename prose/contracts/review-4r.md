@@ -51,9 +51,12 @@ In Claude Code, `jhon review run [--base <ref>]` does all of it in one Bash
 call: each prompt runs through `claude -p` with no tools, one turn, no
 session and no settings (no hook or MCP server loads), on the profile's
 Claude Code model and effort for its routing key, the lenses at once, each
-call bounded in time and output. A call that fails (no
+call bounded in time and output. Run it as a Bash call with
+`run_in_background: true`: a review outlasts the Bash tool's 2-minute
+default, which would cut it short; its notification brings the result. A call that fails (no
 `claude`, a non-zero exit, an answer that is not JSON, a timeout) records
-nothing: its one line says why and names the lens agents.
+nothing: its one line says why and names the lens agents; the first failure
+stops the other calls, and so does an interrupt (SIGINT, SIGTERM).
 
 ## Fallback: lens agents
 

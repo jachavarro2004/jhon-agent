@@ -6,8 +6,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/jachavarro2004/jhon-agent/test/support"
 )
@@ -37,9 +40,11 @@ const claudeProfile = `{"active":"p","profiles":{"p":{"agents":{` +
 // fakeClaude writes a `claude` into a fresh directory: each call appends its
 // model to order, writes its argv (one per line) to <model>.args and its
 // stdin to <model>.stdin; a lens call waits until both lenses have arrived
-// (10 s at most, else exit 3), so lenses run one after the other fail. Then
-// exit.<model> makes it exit with that code, sleep.<model> makes it hang,
-// else it prints answer.<model>.
+// (10 s at most, else exit 3), so lenses run one after the other fail, and
+// after.<model> makes it wait (as long) for the file it names. Then
+// exit.<model> makes it exit with that code, sleep.<model> makes it hang
+// (a child `sleep 60` it waits for; <model>.child and then <model>.pid hold
+// their pids), else it prints answer.<model>.
 func fakeClaude(t *testing.T) (dir string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -61,8 +66,15 @@ case "$model" in m-risk|m-rel)
     sleep 0.05
   done ;;
 esac
+if [ -f "$log/after.$model" ]; then
+  i=0
+  while [ ! -f "$log/$(cat "$log/after.$model")" ]; do
+    i=$((i+1)); [ $i -gt 200 ] && { echo "after: $(cat "$log/after.$model") never came" >&2; exit 3; }
+    sleep 0.05
+  done
+fi
 [ -f "$log/exit.$model" ] && { echo "API Error: overloaded" >&2; exit "$(cat "$log/exit.$model")"; }
-[ -f "$log/sleep.$model" ] && exec sleep 30
+[ -f "$log/sleep.$model" ] && { sleep 60 & echo $! > "$log/$model.child"; echo $$ > "$log/$model.pid"; wait; exit 0; }
 cat "$log/answer.$model"
 `
 	support.Write(t, dir, map[string]string{"claude": script})
@@ -222,6 +234,10 @@ func TestReviewRunClaudeFailures(t *testing.T) {
 		{name: "a timeout", why: `the risk lens call failed: claude did not answer within 1s`, args: []string{"--timeout", "1"}, set: func(t *testing.T, fake, _ string) {
 			support.Write(t, fake, map[string]string{"sleep.m-risk": ""})
 		}},
+		{name: "an answer over 256 KiB", why: `the risk lens call failed: claude's output passed 256 KiB`, set: func(t *testing.T, fake, subject string) {
+			big := envelope(t, strings.Repeat("x", 300<<10)+"\n"+mustJSON(t, lensJSON(subject, "risk")))
+			support.Write(t, fake, map[string]string{"answer.m-risk": big})
+		}},
 		{name: "the refuter fails", why: `the refuter call failed: claude exited 1: API Error: overloaded`, set: func(t *testing.T, fake, _ string) {
 			support.Write(t, fake, map[string]string{"exit.m-ref": "1"})
 		}},
@@ -279,4 +295,182 @@ func TestReviewRunUsage(t *testing.T) {
 		equal(t, r.Code, 2, args)
 		match(t, r.Stderr, `jhon review run \[--base <ref>\] \[--change <name>\] \[--timeout <seconds>\]`, args)
 	}
+}
+
+// hungGone fails unless the hung fake for model and its child have been
+// killed: neither pid answers a signal within 3 s of the run's end.
+func hungGone(t *testing.T, fake, model string) {
+	t.Helper()
+	for _, f := range []string{model + ".pid", model + ".child"} {
+		pid, err := strconv.Atoi(strings.TrimSpace(support.Read(t, filepath.Join(fake, f))))
+		if err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+		deadline := time.Now().Add(3 * time.Second)
+		for syscall.Kill(pid, 0) == nil {
+			if time.Now().After(deadline) {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+				t.Errorf("%s (pid %d) still runs after the run ended", f, pid)
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+}
+
+// noScratch fails when a call's scratch directory is left in tmp.
+func noScratch(t *testing.T, tmp string) {
+	t.Helper()
+	left, _ := filepath.Glob(filepath.Join(tmp, "jhon-review-*"))
+	if len(left) > 0 {
+		t.Errorf("scratch directories left behind: %v", left)
+	}
+}
+
+// F1 (L1159): the first failed lens call cancels its siblings at once: the
+// reliability lens fails while the risk lens hangs (a `sleep 60` under it);
+// the run returns in seconds, the hung call and its child are killed (its
+// process group), its scratch directory is gone, and the one line names the
+// failure.
+func TestReviewRunClaudeSiblingCancel(t *testing.T) {
+	t.Parallel()
+	root := nativeRepo(t)
+	fake := fakeClaude(t)
+	tmp := temp(t)
+	env := append(withPath(nativeEnv(t, claudeProfile), fake), "TMPDIR="+tmp)
+	subject := startReview(t, root, env)["subject"].(string)
+	claudeAnswers(t, fake, subject)
+	// reliability fails once risk hangs, its child started.
+	support.Write(t, fake, map[string]string{"sleep.m-risk": "", "exit.m-rel": "7", "after.m-rel": "m-risk.pid"})
+
+	began := time.Now()
+	r := reviewRun(t, root, env, "", "run")
+	took := time.Since(began)
+	equal(t, r.Code, 1, r.Stderr)
+	match(t, r.Stderr, `^jhon review run: the reliability lens call failed: claude exited 7: API Error: overloaded; nothing recorded\. Fallback: launch the review-risk and review-reliability agents`)
+	equal(t, strings.Count(r.Stderr, "\n"), 1, "one line")
+	if took > 15*time.Second {
+		t.Errorf("the run took %s: the hung sibling was not cancelled", took)
+	}
+	hungGone(t, fake, "m-risk")
+	noScratch(t, tmp)
+	if exists(filepath.Join(root, "openspec/changes/c1/review-4r.md")) {
+		t.Error("a failed run records nothing")
+	}
+}
+
+// F2 (L1159): SIGTERM to `jhon review run` kills every call (its process
+// group), removes their scratch directories, prints K2's one line naming the
+// fallback and exits non-zero.
+func TestReviewRunClaudeSignal(t *testing.T) {
+	t.Parallel()
+	root := nativeRepo(t)
+	fake := fakeClaude(t)
+	tmp := temp(t)
+	env := append(withPath(nativeEnv(t, claudeProfile), fake), "TMPDIR="+tmp)
+	subject := startReview(t, root, env)["subject"].(string)
+	claudeAnswers(t, fake, subject)
+	support.Write(t, fake, map[string]string{"sleep.m-risk": "", "sleep.m-rel": ""})
+
+	var stdout, stderr strings.Builder
+	cmd := exec.Command(support.Bin(t), "review", "run")
+	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = root, env, &stdout, &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	deadline := time.Now().Add(15 * time.Second)
+	for !exists(filepath.Join(fake, "m-risk.pid")) || !exists(filepath.Join(fake, "m-rel.pid")) {
+		if time.Now().After(deadline) {
+			_ = cmd.Process.Kill()
+			t.Fatalf("the lens calls never started:\n%s", stderr.String())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatal("the run did not end within 15 s of SIGTERM")
+	}
+	code := cmd.ProcessState.ExitCode()
+	if code == 0 || code == -1 {
+		t.Errorf("exit %d (%s), want a non-zero exit of its own", code, cmd.ProcessState)
+	}
+	equal(t, stdout.String(), "", "nothing on stdout")
+	match(t, stderr.String(), `^jhon review run: stopped by SIGTERM; nothing recorded\. Fallback: launch the review-risk and review-reliability agents, then the review-refuter and review-validator agents, as the 4R contract's fallback says\n$`)
+	hungGone(t, fake, "m-risk")
+	hungGone(t, fake, "m-rel")
+	noScratch(t, tmp)
+	if exists(filepath.Join(root, "openspec/changes/c1/review-4r.md")) {
+		t.Error("an interrupted run records nothing")
+	}
+}
+
+// F6 (L1159): the validator is skipped only when every finding is refuted,
+// counted by distinct known finding ids: a refuted id given twice, or one
+// that names no finding, leaves a finding standing, so the validate step
+// runs (and refuses the answer) instead of record.
+func TestReviewRunClaudeRefutedDistinct(t *testing.T) {
+	t.Parallel()
+	f := func(at string) map[string]any {
+		return map[string]any{"location": at, "severity": "WARNING", "claim": "sum of nothing is 0", "proof_refs": []string{at}}
+	}
+	for _, c := range []struct {
+		name    string
+		results []map[string]any
+		want    string
+	}{
+		{"a refuted id given twice", []map[string]any{
+			{"finding_id": "reliability-1", "outcome": "refuted", "reason": "src/app.py:2"},
+			{"finding_id": "reliability-1", "outcome": "refuted", "reason": "src/app.py:2"},
+		}, `^jhon review validate: the refuter answers reliability-1 twice\n$`},
+		{"a refuted id that names no finding", []map[string]any{
+			{"finding_id": "reliability-1", "outcome": "refuted", "reason": "src/app.py:2"},
+			{"finding_id": "risk-9", "outcome": "refuted", "reason": "src/app.py:2"},
+		}, `^jhon review validate: the refuter answers "risk-9", a finding it was not given\n$`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			root := nativeRepo(t)
+			fake := fakeClaude(t)
+			env := withPath(nativeEnv(t, claudeProfile), fake)
+			subject := startReview(t, root, env)["subject"].(string)
+			support.Write(t, fake, map[string]string{
+				"answer.m-risk": envelope(t, mustJSON(t, lensJSON(subject, "risk"))),
+				"answer.m-rel":  envelope(t, mustJSON(t, lensJSON(subject, "reliability", f("src/app.py:2"), f("src/app.py:1")))),
+				"answer.m-ref":  envelope(t, mustJSON(t, role(subject, "refuter", c.results...))),
+			})
+			r := reviewRun(t, root, env, "", "run")
+			equal(t, r.Code, 1, r.Stderr)
+			match(t, r.Stderr, c.want, c.name)
+			if exists(filepath.Join(root, "openspec/changes/c1/review-4r.md")) {
+				t.Error("nothing is recorded")
+			}
+		})
+	}
+	t.Run("every finding refuted skips the validator", func(t *testing.T) {
+		t.Parallel()
+		root := nativeRepo(t)
+		fake := fakeClaude(t)
+		env := withPath(nativeEnv(t, claudeProfile), fake)
+		subject := startReview(t, root, env)["subject"].(string)
+		support.Write(t, fake, map[string]string{
+			"answer.m-risk": envelope(t, mustJSON(t, lensJSON(subject, "risk"))),
+			"answer.m-rel":  envelope(t, mustJSON(t, lensJSON(subject, "reliability", f("src/app.py:2"), f("src/app.py:1")))),
+			"answer.m-ref": envelope(t, mustJSON(t, role(subject, "refuter",
+				map[string]any{"finding_id": "reliability-1", "outcome": "refuted", "reason": "src/app.py:2"},
+				map[string]any{"finding_id": "reliability-2", "outcome": "refuted", "reason": "src/app.py:1"}))),
+		})
+		r := reviewRun(t, root, env, "", "run")
+		equal(t, r.Code, 0, r.Stderr)
+		match(t, r.Stdout, `(?m)^correction set 0 · for verify 0 · follow-ups 0 · information 0 · refuted 2 · unavailable 0$`)
+		if slices.Contains(lines(t, filepath.Join(fake, "order")), "m-val") {
+			t.Error("no validator call when every finding is refuted")
+		}
+	})
 }

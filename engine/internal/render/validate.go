@@ -1,8 +1,10 @@
 package render
 
 import (
+	"errors"
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1065,11 +1067,21 @@ func delegationRegionProblems(text string) []string {
 }
 
 // integrationProblems are the tree's integration manifests' problems
-// (integrations/<name>/manifest.yaml, T58a): each malformed one, and a
-// capability its manifest grants that agents.yaml does not declare, or
-// whose Claude Code tools are not its servers'.
+// (integrations/<name>/manifest.yaml, T58a): each malformed one, a set the
+// engine cannot use (integrations.Assumed), and a capability its manifest
+// grants that agents.yaml does not declare, or whose Claude Code tools are
+// not its servers'. A tree without integrations/ (a root older than v0.3.3,
+// or one that does not ship it) has the compiled-in manifests judged
+// instead (embeddedIntegrations).
 func (e *engine) integrationProblems() []integrations.Problem {
-	ms, probs := integrations.Load(os.DirFS(filepath.Join(e.root, "integrations")))
+	var ms []integrations.Manifest
+	var probs []integrations.Problem
+	if e.embeddedIntegrations() {
+		ms, probs = integrations.Embedded()
+	} else {
+		ms, probs = integrations.Load(os.DirFS(filepath.Join(e.root, "integrations")))
+		probs = append(probs, integrations.Assumed(ms)...)
+	}
 	for _, m := range ms {
 		for _, c := range m.Capabilities {
 			list, ok := e.m.Capabilities.Get(c)
@@ -1085,4 +1097,11 @@ func (e *engine) integrationProblems() []integrations.Problem {
 		}
 	}
 	return probs
+}
+
+// embeddedIntegrations is whether the tree has no integrations/ folder, so
+// validation judges the manifests compiled into jhon (L1159, F5).
+func (e *engine) embeddedIntegrations() bool {
+	_, err := os.Stat(filepath.Join(e.root, "integrations"))
+	return errors.Is(err, fs.ErrNotExist)
 }

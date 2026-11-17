@@ -6,6 +6,12 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-17
+
+### Fixed
+
+- `jhon review run` stops every `claude` call at the first failure or at SIGINT/SIGTERM (each call in a process group of its own, killed whole; scratch removed; the one line naming the `review-*` fallback printed at once), applies its 256 KiB output cap (it was bypassed), and skips the validator only when every distinct known finding is refuted; Claude Code's orchestrator runs it with `run_in_background: true`, past the Bash tool's 2-minute default. The embedded integration manifests no longer panic at start when reshaped: lookups go by name, `jhon validate` refuses a set the engine cannot use naming the file and field, and validates the compiled-in manifests (saying so) in a tree without `integrations/` (L1159).
+
 ## [0.3.3] - 2026-11-17
 
 ### Added
