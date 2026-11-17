@@ -502,12 +502,14 @@ func TestExecutionsWideRunWithNoTestModuleRunsUnderTestmon(t *testing.T) {
 	match(t, c.Stderr, `1 file\(s\) changed after its last test run \(lib/other\.py\)`)
 	support.Write(t, p.root, map[string]string{"lib/other.py": "Y = 2\n"})
 
-	// A touched test module still runs alone: the modules-touched path.
+	// A touched test module still runs alone: the modules-touched path. The
+	// record holds no test of it, so it runs whole, and the reason says so
+	// (T145 E1).
 	support.Write(t, p.root, map[string]string{"lib/tests/test_util.py": "def test_x(): assert True\n"})
 	command, tests, notes = p.plan(t, "--affected", "slice")
 	equal(t, command, "uv run --extra dev pytest 'tests/test_util.py'", "a touched module")
 	equal(t, tests, "own")
-	match(t, notes, `only the 1 test module\(s\) the change touched run here, and the rest is left to the PR's CI`)
+	match(t, notes, `only the 1 test module\(s\) the change touched run here; 1 its record holds no test of \(new, or unknown to it\) runs whole: tests/test_util\.py, and the rest is left to the PR's CI`)
 }
 
 // A unit's run (a bare `--affected`) in the same place still runs none: a
@@ -605,4 +607,60 @@ func TestDeliverOnARunOfNothingNamesTheFullRun(t *testing.T) {
 	equal(t, slices.Contains(wide, any(nothing)), true, wide)
 	equal(t, anyMatch(wide, `--affected`), false, wide)
 	equal(t, reasonsOf(0), []any{}, "the full run clears it")
+}
+
+// T145 E1 (L1174): a wide run of a project whose pytest-testmon record is
+// usable runs the test modules the change touched narrowed by pytest-testmon
+// (only their tests its record marks affected), not whole: a touched module
+// is named only to the pytest-testmon command, so a test of it the change
+// does not reach is deselected. A module the record holds no test of (new,
+// or unknown to it) still runs whole, and the scope reason says which. A
+// change pytest-testmon does not track (a non-Python file) runs the touched
+// modules whole, as before.
+func TestExecutionsWideRunNarrowsTheTouchedModulesByTestmon(t *testing.T) {
+	t.Parallel()
+	p := newPytestProject(t)
+	// lib/util.py reaches test_x for twelve minutes, past WideSeconds;
+	// test_untouched, in the same touched module, reaches only lib/other.py.
+	wide := filepath.Join(filepath.Dir(p.log), "wide.db")
+	script := `import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+c.executescript("create table test_execution (id integer primary key, environment_id integer, test_name text, duration float, failed bit, forced bit); create table file_fp (id integer primary key, filename text, method_checksums blob, mtime float, fsha text); create table test_execution_file_fp (test_execution_id integer, fingerprint_id integer)")
+c.execute("insert into file_fp values (1, 'lib/util.py', x'00', 0, 'a'), (2, 'lib/other.py', x'00', 0, 'b')")
+c.execute("insert into test_execution values (1, 1, 'lib/tests/test_util.py::test_x', 720, 0, 0), (2, 1, 'lib/tests/test_util.py::test_untouched', 1, 0, 0), (3, 1, 'lib/tests/test_other.py::test_z', 1, 0, 0)")
+c.execute("insert into test_execution_file_fp values (1, 1), (2, 2), (3, 2)")
+c.commit()`
+	if out, err := exec.Command("python3", "-I", "-c", script, wide).CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	if err := os.MkdirAll(filepath.Dir(p.data), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(wide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.Write(t, filepath.Dir(p.data), map[string]string{filepath.Base(p.data): string(b)})
+	support.Write(t, p.root, map[string]string{"lib/tests/test_new.py": "def test_new(): pass\n"})
+
+	command, tests, notes := p.plan(t, "--affected", "base")
+	equal(t, command, "uv run --extra dev pytest 'tests/test_new.py' && "+p.narrowed()+" 'tests/test_util.py'", "the new module whole, the held one under pytest-testmon")
+	equal(t, tests, "own")
+	match(t, notes, `(?m)^lib: the change reaches about 1 of its 3 tests, 12 min of 12 min by the last recorded durations; only the 2 test module\(s\) the change touched run here; pytest-testmon narrows 1 of them to the tests its record marks affected: tests/test_util\.py; 1 its record holds no test of \(new, or unknown to it\) runs whole: tests/test_new\.py, and the rest is left to the PR's CI, whose green checks test the delivery$`)
+
+	// The run: the touched module reaches uv only beside --testmon, so its
+	// test the change does not reach (test_untouched) is never run whole.
+	r := p.jhon(t, []string{"FAKE_UV_RECORD=" + wide}, "executions", "run", "c1", "--affected", "base")
+	equal(t, r.Code, 0, r.Out())
+	equal(t, p.calls(t), []string{
+		"|run --extra dev pytest tests/test_new.py",
+		p.data + "|run --with pytest-testmon --extra dev pytest --testmon --rootdir=" + p.root + " tests/test_util.py",
+	}, "uv ran the new module whole, then the touched one under pytest-testmon")
+
+	// A file pytest-testmon does not track: the touched modules run whole.
+	support.Write(t, p.root, map[string]string{"lib/fixtures.json": "{}\n"})
+	command, tests, notes = p.plan(t, "--affected", "base")
+	match(t, command, `^uv run --extra dev pytest '[^']+\.py' '[^']+\.py'$`)
+	equal(t, tests, "own")
+	match(t, notes, `(?m)^lib: lib/fixtures\.json changed, and pytest-testmon tracks Python files only; only the 2 test module\(s\) the change touched run here, and the rest is left to the PR's CI, whose green checks test the delivery$`)
 }

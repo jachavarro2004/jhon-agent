@@ -21,9 +21,9 @@ for the owner; a technical rework is not.
 - When the change has a tasks.md, check each task off (`- [x]`) there as
   it is done. A task already
   checked is done: skip it. That file is the progress record.
-- Run each unit's tests (`jhon executions run {change-name} --affected`)
-  and, at the slice's close, `--affected <base-ref>`; report each with its
-  observed result.
+- Every pass in between is a unit's run (`--affected`); only the RED
+  record and the slice's close take `--affected <base-ref>`. Report each
+  run's observed result.
 - A remediation fixes only the verify report's blocking findings.
 - A runtime isolation refusal of a write is a stop: report it verbatim and
   never create or select another worktree or root to make the write there.

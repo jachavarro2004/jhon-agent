@@ -76,6 +76,17 @@ retired switch had).
   exists, edits pass and delivery follows LDD's rules; an OpenSpec project
   is unchanged. A folder in no git repository is not refused.
 
+## Test runs: the inner loop
+
+Every intermediate pass is a unit's run, `jhon executions run <change>
+--affected` with no base: it runs what changed since the change's last
+passing run. The slice base, `--affected <base-ref>`, is only for the RED
+record and the slice's closing run, which a slice commit and delivery
+require (a unit's run closes no slice). In a wide selection a project with
+a usable pytest-testmon record runs the test modules the change touched
+narrowed by it, and a test of another project selects it only by naming a
+changed file's whole path or import path (`jhon executions --help`).
+
 ## A worktree per change
 
 By default a change works on its own branch in the main checkout.

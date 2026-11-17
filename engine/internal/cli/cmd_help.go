@@ -292,16 +292,21 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            feat/x, also names; earlier runs are kept, so a
                            RED before GREEN shows); --affected selects the projects
                            changed since the base, those whose tests name a
-                           changed file's path or document, and their dependents
-                           (every project, with the reason, when that cannot be
-                           told); with no base it is a unit's run: what changed
-                           since the change's last passing run, else since its
-                           base, and its record closes no slice and delivers
-                           nothing (those take --affected <base-ref> or a full
-                           run); a uv-run pytest project is narrowed by
+                           changed file's whole path or import path, or a
+                           changed document, and their dependents (every
+                           project, with the reason, when that cannot be
+                           told); with no base it is a unit's run, the default
+                           for every intermediate pass: what changed since the
+                           change's last passing run, else since its base; its
+                           record closes no slice and delivers nothing, so the
+                           slice base (--affected <base-ref>, or a full run) is
+                           for the RED record and the slice's closing run only;
+                           a uv-run pytest project is narrowed by
                            pytest-testmon, and one with no record runs whole
                            once to build it (a first run its deadline cut is
-                           left to jhon executions prime);
+                           left to jhon executions prime); a wide one runs only
+                           the test modules the change touched, those its
+                           record holds narrowed by it;
                            projects run in parallel, --jobs at a time
                            (executions_jobs in openspec/config.yaml, else the
                            CPUs, at most 4); the projects of one

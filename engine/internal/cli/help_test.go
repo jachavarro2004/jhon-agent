@@ -196,3 +196,25 @@ func TestHelpListsReviewRun(t *testing.T) {
 		}
 	}
 }
+
+// T145 (L1174 E2): `jhon executions --help` says once that a unit's run (a
+// bare --affected) is the default for intermediate passes and the slice base
+// is for the RED record and the slice's close only; and how a wide run and a
+// test that names another project's file are read (E1, E3).
+func TestExecutionsHelpNamesTheInnerLoop(t *testing.T) {
+	_, out := capture(t, []string{"executions", "--help"})
+	flat := strings.Join(strings.Fields(out), " ")
+	for _, want := range []string{
+		"with no base it is a unit's run, the default for every intermediate pass: what changed since the change's last passing run, else since its base;",
+		"so the slice base (--affected <base-ref>, or a full run) is for the RED record and the slice's closing run only;",
+		"those whose tests name a changed file's whole path or import path, or a changed document,",
+		"a wide one runs only the test modules the change touched, those its record holds narrowed by it;",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("jhon executions --help lacks %q", want)
+		}
+		if strings.Count(flat, want) > 1 {
+			t.Errorf("jhon executions --help says %q more than once", want)
+		}
+	}
+}
