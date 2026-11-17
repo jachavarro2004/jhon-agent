@@ -6,6 +6,10 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The `validate` workflow's failures on GitHub's runners are fixed: text files check out with LF on every platform (`.gitattributes`; the CRLF fixtures stay CRLF), the Windows-portable packages' tests expect Windows paths where Windows shows them, the sandbox pass-through test uses a program of its own instead of the system `printf --help`, the cross-run executions test proves the overlap with a barrier instead of a timed race, and the Linux job is pinned to `ubuntu-24.04` (L1142).
+
 ## [0.3.2] - 2026-11-16
 
 ### Changed

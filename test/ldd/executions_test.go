@@ -688,16 +688,22 @@ func TestExecutionsExclusiveGroups(t *testing.T) {
 
 // An executions_exclusive group holds across processes too: two runs at the
 // same time (two sessions, a worker and its verifier) take a lock per group
-// and repository, so the group's projects still run one at a time. a fails
-// when another a is running.
+// and repository, so the group's projects still run one at a time. In the
+// group, a fails when another a is running; without it, each a waits for the
+// other and fails when they meet, so a pass of the second case proves the
+// two runs' a ran at the same time, however slowly each run started.
 func TestExecutionsExclusiveGroupsAcrossRuns(t *testing.T) {
 	t.Parallel()
-	// Long enough that the two runs' a overlap even when the machine is busy
-	// and a process takes seconds to start (it flaked at 0.5 s under the
-	// pre-push suite, L385).
+	// With the lock, a never sees another a running: the hold only gives a
+	// broken lock the chance to show.
 	alone := "mkdir ../a-running || exit 1; sleep 3; rmdir ../a-running"
-	both := func(config string) [2]int {
-		root := workspace(t, "a", alone, "b", "true", "c", "true")
+	// Without it, a barrier rather than a race: each a leaves its mark and
+	// waits up to 60 s for the other's (a sleep-based overlap flaked at 0.5 s
+	// under the pre-push suite, L385, and at 3 s on a 2-core runner, L1142).
+	// The marks stay, so the second to look still sees the first.
+	meet := "mkdir ../a-met.$$; i=0; until [ $(ls -d ../a-met.* | wc -l) -ge 2 ]; do i=$((i+1)); [ $i -gt 1200 ] && exit 0; sleep 0.05; done; exit 1"
+	both := func(a, config string) [2]int {
+		root := workspace(t, "a", a, "b", "true", "c", "true")
 		support.Write(t, root, map[string]string{"openspec/config.yaml": support.Read(t, filepath.Join(root, "openspec/config.yaml")) + config})
 		support.GitRepo(t, root)
 		var codes [2]int
@@ -708,9 +714,8 @@ func TestExecutionsExclusiveGroupsAcrossRuns(t *testing.T) {
 		wg.Wait()
 		return codes
 	}
-	equal(t, both("executions_exclusive:\n  shared-db: [a]\n"), [2]int{0, 0}, "the group's lock keeps the two runs' a apart")
-	free := both("")
-	equal(t, slices.Contains(free[:], 1), true, "without a group, the two runs' a overlap")
+	equal(t, both(alone, "executions_exclusive:\n  shared-db: [a]\n"), [2]int{0, 0}, "the group's lock keeps the two runs' a apart")
+	equal(t, both(meet, ""), [2]int{1, 1}, "without a group, the two runs' a overlap: each saw the other")
 }
 
 // An affected run narrows an Nx workspace to the projects Nx's own graph

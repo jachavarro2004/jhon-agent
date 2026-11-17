@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -108,8 +109,11 @@ func TestSystemInstallsThroughTheInjectedInstaller(t *testing.T) {
 
 func TestSystemDetectsAndChecksOnPath(t *testing.T) {
 	s, _ := scratch(t, "claude", "git", "codegraph")
+	// A path under the home is shown as ~ and the rest in the OS's own form
+	// (~\bin\claude on Windows).
+	tilde := func(rest string) string { return filepath.Join("~", filepath.FromSlash(rest)) }
 	d := s.Detect()
-	if d.Claude != "~/bin/claude" || d.Pi != "" {
+	if d.Claude != tilde("bin/claude") || d.Pi != "" {
 		t.Errorf("Detect = %+v", d)
 	}
 	// A runtime's directory under the home is detected too (T10g), as
@@ -117,7 +121,7 @@ func TestSystemDetectsAndChecksOnPath(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(s.Home, ".pi"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if d := s.Detect(); d.Claude != "~/bin/claude" || d.Pi != "~/.pi" {
+	if d := s.Detect(); d.Claude != tilde("bin/claude") || d.Pi != tilde(".pi") {
 		t.Errorf("Detect with ~/.pi = %+v", d)
 	}
 	var names []string
@@ -129,7 +133,7 @@ func TestSystemDetectsAndChecksOnPath(t *testing.T) {
 	if got := strings.Join(names, " "); got != "git claude node engram codegraph" {
 		t.Errorf("checks %s", got)
 	}
-	if c := byName["git"]; !c.OK || c.Detail != "~/bin/git" {
+	if c := byName["git"]; !c.OK || c.Detail != tilde("bin/git") {
 		t.Errorf("git = %+v", c)
 	}
 	if c := byName["engram"]; c.OK || c.Detail != "not on PATH" || c.Fix != "" || c.Advice != engramAdvice {
@@ -149,7 +153,7 @@ func TestSystemDetectsAndChecksOnPath(t *testing.T) {
 	if got := strings.Join(names, " "); got != "git claude engram codegraph" {
 		t.Errorf("checks without pi %s", got)
 	}
-	if p := s.Paths(); p.Settings != "~/config/jhon/settings.toml" || p.Binary != "~/bin/jhon" {
+	if p := s.Paths(); p.Settings != tilde("config/jhon/settings.toml") || p.Binary != tilde("bin/jhon") {
 		t.Errorf("Paths = %+v", p)
 	}
 }
@@ -354,6 +358,9 @@ func TestEngramFixFallsBackToBrewWhenGoInstallFails(t *testing.T) {
 	c := missing(t, "engram", "brew", "go")
 	if c.Fix != "go install github.com/Gentleman-Programming/engram/v3/cmd/engram@v9.9.2 || brew install gentleman-programming/tap/engram" || c.Advice != "" {
 		t.Fatalf("engram = %+v", c)
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("runs the fix with /bin/sh and #!/bin/sh stand-ins for go and brew, which Windows does not have; the fix's text is checked above")
 	}
 	if ran := runFix(t, c.Fix, 1, "go", "brew"); strings.Join(ran, " ") != "go brew" {
 		t.Errorf("go fails: ran %v, want go then brew", ran)
