@@ -2296,7 +2296,8 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		// demand; the orchestrator carries the pointer, the contract the rule.
 		match(t, b, "run `jhon risk` in its tree and read `contracts/delivery\\.md`", "the risk tier drives verification, read before delivery")
 		match(t, b, "Before writing a delegation prompt, read `contracts/delegation\\.md`", "the delegation rules, read before delegating")
-		match(t, b, "`contracts/<name>\\.md` here is `~/\\.local/share/jhon/current/prose/contracts/<name>\\.md`, binding once its trigger applies", "a contract the orchestrator names resolves")
+		// T146c K3 (L1222): at the install's real path, not the literal `~`.
+		match(t, b, "`contracts/<name>\\.md` here is `"+regexp.QuoteMeta(filepath.Join(renderedHome(t), ".local/share/jhon/current/prose/contracts"))+"/<name>\\.md`, binding once its trigger applies", "a contract the orchestrator names resolves")
 		delivery := flat(support.Read(t, treePath(repoRoot, "contracts/delivery.md")))
 		delegation := flat(support.Read(t, treePath(repoRoot, "contracts/delegation.md")))
 		match(t, delivery, "`verify` and an automatic 4R with only the pertinent lenses", "L9: risk high gets verify and a 4R by need")

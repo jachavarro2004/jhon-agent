@@ -94,7 +94,8 @@ func TestContext7OffLeavesNoTrace(t *testing.T) {
 				t.Errorf("%s: %s holds the capability", name, a.Name)
 			}
 			for _, rt := range []string{"claude-code", "pi"} {
-				if strings.Contains(strings.ToLower(e.bodyFor(rt, a)), "context7") {
+				// The install's path (atInstall) holds the test's name.
+				if strings.Contains(strings.ToLower(strings.ReplaceAll(e.bodyFor(rt, a), e.current(), "")), "context7") {
 					t.Errorf("%s: %s's %s body names context7", name, a.Name, rt)
 				}
 			}

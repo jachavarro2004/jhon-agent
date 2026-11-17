@@ -329,7 +329,7 @@ func integrationPiTools(m integrations.Manifest, c string, list []string) []stri
 // promptText is the orchestrator's appended text for pi before its
 // guarantees: its body and the always-on layer, with pi's edits (pilean.go).
 func (p pi) promptText() string {
-	text, _ := piLean(p.promptFull(), filepath.Join(p.current(), ProseDir))
+	text, _ := piLean(p.promptFull())
 	return text
 }
 
