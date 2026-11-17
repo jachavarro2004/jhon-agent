@@ -33,6 +33,11 @@ type Metrics struct {
 	// ProjectSettings are the KEY=VALUE settings written into the repo's
 	// LDD config before the agent started (T86): part of the cell.
 	ProjectSettings []string `json:"project_settings,omitempty"`
+	// TaskSize is the task's size (T146 FB1), which picks its `bench value`
+	// gates; SteadyState is whether the run's repo started already set up
+	// for LDD (T146 FB2).
+	TaskSize    string `json:"task_size,omitempty"`
+	SteadyState bool   `json:"steady_state,omitempty"`
 	// JhonCommit and JhonVersion are the bench HOME's `jhon version --json`
 	// when the batch started (T60).
 	JhonCommit  string `json:"jhon_commit,omitempty"`

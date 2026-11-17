@@ -24,6 +24,8 @@ Either way the task's timeout and turn cap cover the whole run, not each message
 
 Both Claude Code conditions pass `--allowedTools Bash,Edit,MultiEdit,Write,Read,Glob,Grep,Agent,Monitor,TaskOutput,TaskStop`: the agent and background tools (names from the claude 2.1.310 binary; Bash itself runs in the background), for parity with the shell's `subagent` and `bash_background`.
 
+**Isolation of `jhon` (T146 FB4).** `clean`'s `--safe-mode` drops every CLAUDE.md and the auto-memory; `jhon` cannot take it (it drops `--agent`, SPIKE.md R4), and `--setting-sources` does not keep out a CLAUDE.md found on the way up from the run's repo: the results live under your HOME, so your `~/.claude/CLAUDE.md` loaded as a "Project" memory (SPIKE.md R3). The `jhon` runs therefore get `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` and `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` (read by Claude Code 2.1.323), the dry run shows them, and no run inherits `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD`. Jhon's own text is in its plugin, never in a CLAUDE.md, and no task ships one.
+
 Every run uses the bench HOME (default `~/.local/share/jhon-bench/home`, `--home` to change it), never your own `~/.claude`, `~/.config/jhon` or `~/.pi`. Each run gets a fresh git copy of the task's template (with a repo-local identity, `bench <bench@localhost>`, so the agent's commits work, and `__pycache__/` in its `.gitignore`), its own `XDG_CACHE_HOME`, a fixed session id, and the task's timeout and turns (30 minutes and 60 turns for the six short tasks, 40-45 minutes and 80-90 turns for the long ones).
 
 ### Any pi model (T77)
@@ -101,7 +103,7 @@ Both Jhon conditions carry engram, as in the owner's real use (L424), with the s
 
 ## Tasks
 
-`tasks/<id>/task.yaml` holds the id, kind, prompt, default model, `max_turns`, `timeout`, the hidden test's directory and the `check` command (exit 0 is success). It also names the test files' pattern (`tests`, default `test_*.py`), the project's test command as an agent runs it (`test_command`, default `python3 -m unittest`) and the `scope`: one `path.Match` pattern per line, the files a correct solution may touch. The agent works in a copy of `tasks/<id>/template`. The hidden test (`tasks/<id>/hidden`) is copied in only after the run. The reference solutions live in `testdata/solutions` and the trap tasks' naive solutions in `testdata/naive`; neither is ever copied into a run.
+`tasks/<id>/task.yaml` holds the id, kind, `size` (`small` or `large`, T146: it picks the task's `bench value` gates and default repeats), prompt, default model, `max_turns`, `timeout`, the hidden test's directory and the `check` command (exit 0 is success). It also names the test files' pattern (`tests`, default `test_*.py`), the project's test command as an agent runs it (`test_command`, default `python3 -m unittest`) and the `scope`: one `path.Match` pattern per line, the files a correct solution may touch. The agent works in a copy of `tasks/<id>/template`. The hidden test (`tasks/<id>/hidden`) is copied in only after the run. The reference solutions live in `testdata/solutions` and the trap tasks' naive solutions in `testdata/naive`; neither is ever copied into a run.
 
 | Task | Kind |
 |---|---|
@@ -114,6 +116,10 @@ Both Jhon conditions carry engram, as in the owner's real use (L424), with the s
 | `invoice-slices` | long: 3 owner messages, a requirement change in message 2 |
 | `slow-suite` | long: 2 owner messages, a ~90-second full suite |
 | `two-modules` | long: 2 independent modules whose rules are only in `docs/` |
+
+`pagination-bug`, `shipping-rules` and `account-import` are `size: small`; the trap and long tasks are `size: large`.
+
+**The one-time set-up (T146 FB2).** `setup/ldd-setup` is a tiny repo with no LDD (one module, one test) and the prompt "Set this repository up for LDD. Change no code and no test."; its hidden check wants `ldd/config.yaml` (or `openspec/config.yaml`) and the code unchanged. A full `bench run` (no `--tasks`) adds it, and `--tasks ldd-setup` names it: it runs once per Jhon condition (`ldd-setup-plain-jhon-1`, `ldd-setup-plain-pi-jhon-1`), plain, on a fresh repo, whatever `--repeats` says, never under `clean`, `pi-clean` or `--smoke`. `bench report` and `bench value` show it on its own line (`one-time set-up …`) and `report.json`/`value.json` under `setup`; it is in no cell, no sum and no certification cell.
 
 The first three are easy: in the first full run every condition passed 45/45 (L397), so they measure Jhon's cost, not its value. The trap tasks (T40) are the ones a hasty agent plausibly fails and a careful one (reading the repo, running the whole suite, a test first) gets right:
 
@@ -141,7 +147,7 @@ Each task runs in one of four variants (L395, L483), chosen with `--variants`. `
 
 | Variant | The agent's repository |
 |---|---|
-| `plain` | the template as it is; under `jhon` and `pi-jhon` the run sets LDD up itself (`ldd/` with a record), since Jhon always works under LDD (L554-L559) |
+| `plain` | the template as it is; under `jhon` and `pi-jhon` the template plus the LDD set-up, `ldd/config.yaml` from `ldd/steady-config.yaml` (what Jhon's init writes with the recommended values: `strict_tdd_policy: require`, `test_command_override` `"."`: `python3 -m unittest`, a short `context`), committed with the template before the agent starts: the steady state of a project after day one (T146 FB2). The run must still end with `ldd/` and its record (L554-L559). metrics.json says `steady_state: true`. |
 | `ldd` | the template plus `ldd/config.yaml` as `openspec/config.yaml` and `ldd/pyproject.toml` at its root |
 | `ldd-native` | the template plus the same config at `ldd/config.yaml` (Jhon's native layout, no `openspec/`) and the same `pyproject.toml` |
 | `ldd-ask` | the plain template; the first owner message starts with **"Use LDD for this work."** and a blank line |
@@ -187,6 +193,8 @@ All commands run from the checkout root.
    ```sh
    go run ./tools/bench run --tasks pagination-bug --repeats 2 --model haiku --dry-run
    ```
+
+   Without `--repeats`, each task runs its size's default (T146 FB5): 5 times for a small task, 3 for a large one (or one with no size); the one-time set-up runs once.
 
 4. **Pilot.** 1 task × 3 conditions × 2 repeats, plain variant only = 6 runs:
 
@@ -250,7 +258,7 @@ All commands run from the checkout root.
    1. **Results**, per task × variant × condition: passed (the final hidden check, runs that passed / runs), final checks (the per-message checks run after the last message, passed / run, summed over the runs) and regressions (summed). Each row's `quality` in report.json.
    2. **Methodology fidelity** (L437), per task × variant × condition: `test_changed`, `red_before_green` and `tests_run_before_end` as runs where it holds / runs that know it, the median of `out_of_scope_files`, the findings by check summed over the runs, regressions, rework and the pi dialogs declined (`ui_requests_declined`, summed). Each row's `process` and `quality`.
    3. **By condition**, every task together, per condition × variant: the results and the fidelity summed. Read the results across every condition against `clean` (does the methodology bring better results than a clean runtime?) and the fidelity of `jhon` against `pi-jhon` (which runtime runs the methodology more fully?). `by_condition` in report.json.
-   4. **Tokens and time**: the medians of turns, input, output, cache-read and cache-write tokens, tokens processed (cache read + cache write + input + output), cache hit, active, elapsed and wall time, agents launched, verify runs, findings and quota points. Each row's `medians`.
+   4. **Tokens and time**: each cell's median with its spread, `median (min-max)` (T146 FB5; report.json's `spread`, `[min, max]` per measure), of turns, input, output, cache-read and cache-write tokens, tokens processed (cache read + cache write + input + output), cache hit, active, elapsed and wall time, agents launched, verify runs, findings, quota points, `cost_weighted` (tokens weighted by the run's provider's prices, `cost.go`) and `cost_usd` (only when the stream gave one). Each row's `medians`.
    5. **Per message**, for multi-message tasks: the medians of each message's turns, tokens processed, cache-write tokens and wall time, over the runs that reached it (a cache write that stays flat after message 1 is the shell's cache reuse). Each row's `message_medians`.
    6. **Overhead vs clean**: for each task, every condition × variant's median tokens processed and active time as a ratio to the task's clean plain median (for example `4.5×`).
 
@@ -412,15 +420,15 @@ certify.json: <candidate dir>/certify.json
 
 One line per metric: PASS or FAIL and how many cells hold it, and for the cost and discipline metrics the geometric mean or the pooled counts with the Fisher p; under it, each failing cell with the candidate's value and the baseline's, the cells worse than their baseline for a pooled metric, and the cost cells flagged for review. Then one line per gate and the verdict. `jhon sync` only after `verdict: PASS`. certify.json holds the same: `metrics` (one verdict per metric, with the aggregate under `detail` for the cost and pooled metrics), `checks` (every cell's every metric with its detail), `gates`, `notes`, `verdict` and, with `--replay-guard`, `replay`.
 
-## Value (T70)
+## Value (T70, T146)
 
-`bench value` answers what Jhon adds over not using it, with the owner's criterion (L552): "Igual o mejor calidad, mejor disciplina"; extra cost is reported and the owner judges it.
+`bench value` answers what Jhon adds over not using it, with the owner's criterion (L552): "Igual o mejor calidad, mejor disciplina", and, since T146, the owner's cost and time targets per task size (L1205).
 
 ```sh
-go run ./tools/bench value [--json] [--out DIR] <results dirs>
+go run ./tools/bench value [--json] [--out DIR] [--tasks-dir DIR] <results dirs>
 ```
 
-The results dirs (comma-separated or several arguments) are read as certify reads a side: `runs/*/metrics.json`, or a `report.json`. Each Jhon cell (task × variant) is compared with its counterpart, the same task's `plain` cell of the condition without Jhon: `jhon` against `clean`, `pi-jhon` against `pi-clean`. The no-Jhon conditions run `plain` only, so an `ldd` cell is compared with the plain one (a note says so). A cell PASSes when:
+The results dirs (comma-separated or several arguments) are read as certify reads a side: `runs/*/metrics.json`, or a `report.json`. Each Jhon cell (task × variant) is compared with its counterpart, the same task's `plain` cell of the condition without Jhon: `jhon` against `clean`, `pi-jhon` against `pi-clean`. The no-Jhon conditions run `plain` only, so an `ldd` cell is compared with the plain one (a note says so). A Jhon `plain` cell starts on a repo already set up for LDD (the steady state, T146 FB2); the one-time set-up is the `ldd-setup` run, shown on its own line and never in a cell. The task's size comes from its runs' `task_size`, else from its `task.yaml` under `--tasks-dir`. A cell PASSes when:
 
 | Metric | Rule |
 |---|---|
@@ -429,9 +437,16 @@ The results dirs (comma-separated or several arguments) are read as certify read
 | red before green | more often than the clean one, or in every run of both |
 | tests run before end | more often than the clean one, or in every run of both |
 | out of scope | median files no higher than the clean one's |
-| quota-weighted tokens, turns, active time | shown as `<jhon> vs clean <clean> (<ratio>×)`, marked `COST`, never failed |
+| size | the task has one (`small` or `large`); none is FAIL |
+| weighted tokens | the median tokens weighted by the provider's prices (`cost_weighted`) at most the size's limit × the clean median: small 1.1×, large 1.25× |
+| cost usd | the same limit, when both cells have `cost_usd` (the stream gave one); absent otherwise |
+| active time | the same limit on the median active time |
+| better quality | large only: a higher hidden-test pass rate than clean, or, where both pass every run, fewer regressions and rework per run |
+| turns, quota points | shown (`INFO`), never failed; quota points are the subscription's weekly quota, never mixed into the cost |
 
-A metric unknown on either side is FAIL, and so is a Jhon cell with no counterpart (`no pi-clean run of <task> plain: run --conditions pi-clean`). Then one line per runtime (`runtime claude-code (jhon vs clean)`, `runtime pi (pi-jhon vs pi-clean)`): PASS when every cell of it passed, with the count. The verdict is PASS when every runtime is. `value.json` (`results`, `notes`, `cells` with their `checks`, `runtimes`, `verdict`) goes to the first results dir (`--out` to change it); `--json` prints it in place of the lines. The exit code is 0 on PASS, 1 on FAIL, 2 on a usage or read error.
+The limits live in one place, `valueGates` in `value.go`, with the owner's decision (L1205: D1 small "≤ 1,1×", D2 large "≤ 1,25×" with strictly better quality). Every measure is shown as `median (min-max)` on each side. The token weights per provider are one table, `providerTokenWeights` in `cost.go`, with its sources: Claude's (input 1, cache write 1.25, cache read 0.1, output 5) for Claude Code and claude-bridge, GLM's (Z.ai's GLM-4.6 prices: cache read 0.11/0.60, output 2.20/0.60, cache write as input) for a GLM model on any provider; another provider takes Claude's with a note. A `report.json` from before T146 has no `cost_weighted`: it is weighed from the token medians, with a note.
+
+A metric unknown on either side is FAIL, and so is a Jhon cell with no counterpart (`no pi-clean run of <task> plain: run --conditions pi-clean`). Then one line per runtime (`runtime claude-code (jhon vs clean)`, `runtime pi (pi-jhon vs pi-clean)`): PASS when every cell of it passed, with the count. The verdict is PASS when every runtime is. `value.json` (`results`, `notes`, `cells` with their `size` and `checks`, `setup`, `runtimes`, `verdict`) goes to the first results dir (`--out` to change it); `--json` prints it in place of the lines. The exit code is 0 on PASS, 1 on FAIL, 2 on a usage or read error.
 
 ## The pi-jhon condition is unverified
 

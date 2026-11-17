@@ -1,5 +1,6 @@
 id: invoice-slices
 kind: long
+size: large
 model: sonnet
 max_turns: 90
 timeout: 45m

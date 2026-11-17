@@ -1,0 +1,9 @@
+# The steady state's ldd/config.yaml (T146 FB2): what Jhon's init writes in a
+# Python repository with no project marker, with the recommended values
+# (prose/skills/ldd/references/init.md). It is committed with the template
+# before a Jhon plain run starts, as in a project after day one.
+context: |
+  A small Python project, tested with the standard library's unittest.
+strict_tdd_policy: require
+test_command_override:
+  ".": python3 -m unittest

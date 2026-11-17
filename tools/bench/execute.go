@@ -57,6 +57,11 @@ func execute(o *Options, r *Run) (*Metrics, error) {
 	if err := prepareRepo(r.Task, r.Variant, r.Repo); err != nil {
 		return nil, err
 	}
+	if r.Steady {
+		if err := writeSteadySetup(r.Repo); err != nil {
+			return nil, err
+		}
+	}
 	// Committed with the template, as the variant's config is (T86).
 	if err := writeProjectSettings(r.Repo, r.Variant, r.ProjectSettings); err != nil {
 		return nil, err
@@ -91,7 +96,7 @@ func execute(o *Options, r *Run) (*Metrics, error) {
 	}
 	facts := r.Cond.Stream(res.stream)
 	m := &Metrics{Task: r.Task.ID, Variant: r.Variant, Condition: r.Cond.Name(), Repeat: r.Repeat, SessionID: r.SessionID, Model: r.Model, PiEnv: r.PassEnv, Profile: r.Profile, ProjectSettings: r.ProjectSettings,
-		Exit: res.exit, TimedOut: res.timedOut, TurnCapped: res.turnCapped, UIRequestsDeclined: res.uiDeclined, Turns: facts.Turns,
+		TaskSize: r.Task.Size, SteadyState: r.Steady, Exit: res.exit, TimedOut: res.timedOut, TurnCapped: res.turnCapped, UIRequestsDeclined: res.uiDeclined, Turns: facts.Turns,
 		OutputTokens: facts.OutputTokens, CostUSD: facts.CostUSD, WallMs: float64(res.wall.Milliseconds()), Utilization: facts.Utilization}
 	m.Messages = messageMetrics(res.stream, m.WallMs)
 	// Refusals come from the stream, the replay's source, on both runtimes (T105).

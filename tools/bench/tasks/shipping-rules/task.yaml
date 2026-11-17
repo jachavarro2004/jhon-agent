@@ -1,5 +1,6 @@
 id: shipping-rules
 kind: rules
+size: small
 model: sonnet
 max_turns: 60
 timeout: 30m

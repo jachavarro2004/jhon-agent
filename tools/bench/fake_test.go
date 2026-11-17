@@ -19,6 +19,7 @@ import (
 
 const fakeClaude = `#!/bin/sh
 echo "claude $* |HOME=$HOME|XDG_CACHE_HOME=$XDG_CACHE_HOME|PWD=$(pwd -P)|JHON_ROOT=$JHON_ROOT|ENGRAM_DATA_DIR=$ENGRAM_DATA_DIR|ENGRAM_URL=$ENGRAM_URL|ENGRAM_PORT=$ENGRAM_PORT" >> "$FAKE_DIR/calls.log"
+echo "claude env |HOME=$HOME|CLAUDE_CODE_DISABLE_CLAUDE_MDS=$CLAUDE_CODE_DISABLE_CLAUDE_MDS|CLAUDE_CODE_DISABLE_AUTO_MEMORY=$CLAUDE_CODE_DISABLE_AUTO_MEMORY|CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR|CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=$CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD|PWD=$(pwd -P)" >> "$FAKE_DIR/calls.log"
 if [ "$1" = auth ]; then cat "$FAKE_DIR/auth.json"; exit 0; fi
 sid=""; prev=""; resume=""
 for a in "$@"; do [ "$prev" = --session-id ] && sid=$a; [ "$prev" = --resume ] && sid=$a && resume=1; prev=$a; done

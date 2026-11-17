@@ -1,5 +1,6 @@
 id: pagination-bug
 kind: bug
+size: small
 model: sonnet
 max_turns: 60
 timeout: 30m

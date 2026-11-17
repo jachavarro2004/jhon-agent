@@ -123,8 +123,9 @@ func TestAPlainFakeRunHasNoCeremonyAndAnLDDOneHasNone(t *testing.T) {
 		t.Errorf("plain clean: ceremony %+v layout %+v", m.Ceremony, m.LddLayout)
 	}
 	// Jhon always works under LDD (T72b): a Jhon plain run's layout and
-	// record are read, here none (the fake writes nothing).
-	if m := metricsOf(t, o, "pagination-bug-plain-jhon-1"); m.Ceremony == nil || m.Ceremony.Total() != 0 || m.LddLayout == nil || m.LddLayout.Layout != "none" {
+	// record are read. It starts set up (T146 FB2), so its layout is ldd
+	// although the fake writes nothing.
+	if m := metricsOf(t, o, "pagination-bug-plain-jhon-1"); m.Ceremony == nil || m.LddLayout == nil || m.LddLayout.Layout != "ldd" {
 		t.Errorf("plain jhon: ceremony %+v layout %+v", m.Ceremony, m.LddLayout)
 	}
 	if m := metricsOf(t, o, "pagination-bug-ldd-jhon-1"); m.Ceremony != nil || m.LddLayout == nil || m.LddLayout.Layout != "openspec" {

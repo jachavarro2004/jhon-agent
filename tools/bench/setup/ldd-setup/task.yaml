@@ -1,0 +1,16 @@
+id: ldd-setup
+kind: setup
+size: small
+model: sonnet
+max_turns: 30
+timeout: 15m
+hidden: hidden
+check: python3 -B -m unittest -q test_acceptance
+tests: test_*.py
+test_command: python3 -m unittest
+scope: |
+  ldd/*
+  ldd/*/*
+prompt: |
+  Set this repository up for LDD. Change no code and no test.
+  Run the tests with: python3 -m unittest

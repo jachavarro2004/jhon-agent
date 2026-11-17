@@ -1,5 +1,6 @@
 id: two-modules
 kind: long
+size: large
 model: sonnet
 max_turns: 80
 timeout: 40m

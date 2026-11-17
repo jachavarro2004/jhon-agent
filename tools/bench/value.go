@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -16,10 +17,34 @@ import (
 // pi-jhon vs pi-clean). The owner's criterion: the same or better quality
 // and better discipline. A cell PASSes when its hidden test passes at least
 // as often as the clean one's, RED before GREEN and tests before the end
-// happen more often (or in every run of both), and its out-of-scope median
-// is no higher. Cost — quota-weighted tokens, turns, active time — is shown
-// as a ratio for the owner to judge, never failed. Fewer than 3 runs on
-// either side, or a metric unknown on either, is FAIL (L483).
+// happen more often (or in every run of both), its out-of-scope median is
+// no higher, and it meets its task size's gates (valueGates, T146): cost and
+// active time within the size's limit of the clean cell's, and for a large
+// task strictly better quality. Turns and quota points are shown, never
+// failed. Fewer than 3 runs on either side, or a metric unknown on either,
+// is FAIL (L483). The one-time set-up run (SetupTaskID) is no cell: it is
+// reported on its own line (T146 FB2).
+
+// SizeGate is a task size's limits against the no-Jhon cell.
+type SizeGate struct {
+	// Cost and Time are the most the Jhon cell's median weighted tokens (and
+	// cost_usd, when both sides have it) and active time may be, as a
+	// multiple of the clean cell's.
+	Cost, Time float64
+	// BetterQuality asks for strictly better quality: a higher hidden-test
+	// pass rate, or, where both pass every run, fewer regressions and rework
+	// per run.
+	BetterQuality bool
+}
+
+// valueGates are the size gates, the one place they live. The owner's
+// decision (L1205, T146): D1 small "≤ 1,1×" (a small task costs and takes
+// no more with Jhon, 10 % for noise); D2 large "≤ 1,25×" with strictly
+// better quality.
+var valueGates = map[string]SizeGate{
+	SizeSmall: {Cost: 1.1, Time: 1.1},
+	SizeLarge: {Cost: 1.25, Time: 1.25, BetterQuality: true},
+}
 
 // ValueCheck is one metric of one cell; Informational ones never fail.
 type ValueCheck struct {
@@ -35,9 +60,19 @@ type ValueCell struct {
 	Variant   string       `json:"variant"`
 	Condition string       `json:"condition"`
 	Model     string       `json:"model,omitempty"`
+	Size      string       `json:"size,omitempty"`
 	Against   string       `json:"against"`
 	Pass      bool         `json:"pass"`
 	Checks    []ValueCheck `json:"checks"`
+}
+
+// SetupValue is a Jhon runtime's one-time LDD set-up, measured apart.
+type SetupValue struct {
+	Condition string `json:"condition"`
+	Model     string `json:"model,omitempty"`
+	Runs      int    `json:"runs"`
+	Passed    int    `json:"passed"`
+	Detail    string `json:"detail"`
 }
 
 // RuntimeValue is a runtime's cells: PASS when every one passed.
@@ -56,6 +91,7 @@ type Value struct {
 	Results  []string       `json:"results"`
 	Notes    []string       `json:"notes"`
 	Cells    []ValueCell    `json:"cells"`
+	Setup    []SetupValue   `json:"setup,omitempty"`
 	Runtimes []RuntimeValue `json:"runtimes"`
 	Verdict  string         `json:"verdict"`
 }
@@ -63,8 +99,8 @@ type Value struct {
 // runtimes are the Jhon conditions by runtime, in print order.
 var runtimes = []struct{ name, cond string }{{"claude-code", "jhon"}, {"pi", "pi-jhon"}}
 
-// valueCell judges Jhon cell j against clean cell c.
-func valueCell(j, c Row) []ValueCheck {
+// valueCell judges Jhon cell j against clean cell c, a task of size.
+func valueCell(j, c Row, size string) []ValueCheck {
 	var out []ValueCheck
 	add := func(metric string, pass bool, format string, args ...any) {
 		out = append(out, ValueCheck{Metric: metric, Pass: pass, Detail: fmt.Sprintf(format, args...)})
@@ -93,21 +129,102 @@ func valueCell(j, c Row) []ValueCheck {
 	} else {
 		add("out of scope", *jo <= *co, "median %s vs clean %s", num2(*jo), num2(*co))
 	}
-	cost := func(metric string, jv, cv float64, unit string) {
-		out = append(out, ValueCheck{Metric: metric, Pass: true, Informational: true,
-			Detail: fmt.Sprintf("%s%s vs clean %s%s (%s×)", num2(jv), unit, num2(cv), unit, num2(jv/math.Max(cv, 1e-9)))})
+	gate, sized := valueGates[size]
+	if !sized {
+		add("size", false, "task %s has no size: its task.yaml needs size: %s or %s (T146)", j.Task, SizeSmall, SizeLarge)
 	}
-	jw, _ := weighted(j)
-	cw, _ := weighted(c)
-	cost("quota-weighted tokens", jw, cw, "")
-	cost("turns", j.Medians["turns"], c.Medians["turns"], "")
-	cost("active time", j.Medians["active_ms"]/1000, c.Medians["active_ms"]/1000, " s")
+	// side is a measure's median (min-max) on one side, scaled.
+	side := func(r Row, measure string, scale float64, unit string) string {
+		s := num2(r.Medians[measure]/scale) + unit
+		if mm, ok := r.Spread[measure]; ok {
+			s += fmt.Sprintf(" (%s-%s)", num2(mm[0]/scale), num2(mm[1]/scale))
+		}
+		return s
+	}
+	// gated is a cost measure within the size's limit of clean's.
+	gated := func(metric, measure string, limit, scale float64, unit, note string) {
+		jv, jok := j.Medians[measure]
+		cv, cok := c.Medians[measure]
+		if !jok || !cok || cv <= 0 {
+			add(metric, false, "unknown: %s vs clean %s%s", side(j, measure, scale, unit), side(c, measure, scale, unit), note)
+			return
+		}
+		ratio := jv / cv
+		detail := fmt.Sprintf("%s vs clean %s (%s×", side(j, measure, scale, unit), side(c, measure, scale, unit), num2(ratio))
+		if !sized {
+			out = append(out, ValueCheck{Metric: metric, Pass: true, Informational: true, Detail: detail + ")" + note})
+			return
+		}
+		// A ratio at the limit passes, floating-point noise aside.
+		add(metric, ratio <= limit*(1+1e-9), "%s, limit %s× for a %s task, L1205)%s", detail, num2(limit), size, note)
+	}
+	j, c = withCostWeighted(j), withCostWeighted(c)
+	note := ""
+	if _, ok := tokenWeightsFor(j.Model); !ok {
+		note = fmt.Sprintf("; no token weights for %s: Claude's", j.Model)
+	}
+	if j.Medians["cost_weighted_from_medians"] == 1 || c.Medians["cost_weighted_from_medians"] == 1 {
+		note += "; weighed from the token medians"
+	}
+	gated("weighted tokens", "cost_weighted", gate.Cost, 1, "", note)
+	_, jusd := j.Medians["cost_usd"]
+	_, cusd := c.Medians["cost_usd"]
+	if jusd && cusd {
+		gated("cost usd", "cost_usd", gate.Cost, 1, " $", "")
+	}
+	gated("active time", "active_ms", gate.Time, 1000, " s", "")
+	if gate.BetterQuality {
+		jp, cp := frac(j.Passed, j.Runs), frac(c.Passed, c.Runs)
+		jl, cl := lapses(j), lapses(c)
+		switch {
+		case jp > cp:
+			add("better quality", true, "hidden tests %d/%d vs clean %d/%d", j.Passed, j.Runs, c.Passed, c.Runs)
+		case jp == 1 && cp == 1:
+			add("better quality", jl < cl, "both pass every run; regressions and rework per run %s vs clean %s, need fewer", num2(jl), num2(cl))
+		default:
+			add("better quality", false, "hidden tests %d/%d vs clean %d/%d, need a higher pass rate", j.Passed, j.Runs, c.Passed, c.Runs)
+		}
+	}
+	info := func(metric, measure string, scale float64, unit string) {
+		out = append(out, ValueCheck{Metric: metric, Pass: true, Informational: true,
+			Detail: fmt.Sprintf("%s vs clean %s (%s×)", side(j, measure, scale, unit), side(c, measure, scale, unit), num2(j.Medians[measure]/math.Max(c.Medians[measure], 1e-9)))})
+	}
+	info("turns", "turns", 1, "")
+	if _, ok := j.Medians["quota_points"]; ok {
+		// The subscription's quota, apart from the token cost (T146 FB3).
+		out = append(out, ValueCheck{Metric: "quota points", Pass: true, Informational: true,
+			Detail: fmt.Sprintf("%s vs clean %s, the subscription's weekly quota, never in the cost", side(j, "quota_points", 1, ""), side(c, "quota_points", 1, ""))})
+	}
 	return out
+}
+
+// lapses are a row's regressions and rework per run (rework only when known).
+func lapses(r Row) float64 {
+	return frac(r.Quality.Regressions+deref(r.Quality.Rework), r.Runs)
+}
+
+// withCostWeighted is r with a cost_weighted median: a row from before
+// T146 (a report.json) has none, so it is weighed from its token medians by
+// its provider's weights, and marked so.
+func withCostWeighted(r Row) Row {
+	if _, ok := r.Medians["cost_weighted"]; ok {
+		return r
+	}
+	if _, ok := r.Medians["input_tokens"]; !ok {
+		return r
+	}
+	m := maps.Clone(r.Medians)
+	w, _ := tokenWeightsFor(r.Model)
+	m["cost_weighted"] = w.weigh(m["input_tokens"], m["cache_write_tokens"], m["cache_read_tokens"], m["output_tokens"])
+	m["cost_weighted_from_medians"] = 1
+	r.Medians = m
+	return r
 }
 
 // Judge is every Jhon cell of rows against its counterpart: the same task's
 // plain cell of the no-Jhon condition, which runs the plain variant only.
-func (v *Value) Judge(rows map[[3]string]Row) {
+// sizes are the task sizes by id for rows with no size (taskSizes).
+func (v *Value) Judge(rows map[[3]string]Row, sizes map[string]string) {
 	keys := slices.SortedFunc(func(yield func([3]string) bool) {
 		for k := range rows {
 			if !yield(k) {
@@ -121,11 +238,19 @@ func (v *Value) Judge(rows map[[3]string]Row) {
 		if !ok {
 			continue
 		}
+		if k[0] == SetupTaskID {
+			// The one-time set-up, apart from every cell (T146 FB2).
+			r := withCostWeighted(rows[k])
+			v.Setup = append(v.Setup, SetupValue{Condition: condOf(k[2]), Model: identity(r.Model, r.Profile, r.ProjectSettings), Runs: r.Runs, Passed: r.Passed,
+				Detail: fmt.Sprintf("weighted tokens %s, active time %s ms, turns %s, cost usd %s, quota points %s", spread(r, "cost_weighted"), spread(r, "active_ms"), spread(r, "turns"), spread(r, "cost_usd"), spread(r, "quota_points"))})
+			continue
+		}
 		// The counterpart runs the same model (T77).
 		cell := ValueCell{Task: k[0], Variant: k[1], Condition: condOf(k[2]), Model: identity(rows[k].Model, rows[k].Profile, rows[k].ProjectSettings), Against: against}
 		// The no-Jhon counterpart has no profile: its model alone (T77b).
+		cell.Size = cmpOr(rows[k].Size, sizes[k[0]])
 		if c, ok := rows[[3]string{k[0], "plain", cellKey(against, withoutProfile(modelOf(k[2])))}]; ok {
-			cell.Checks = valueCell(rows[k], c)
+			cell.Checks = valueCell(rows[k], c, cell.Size)
 		} else {
 			on := ""
 			if cell.Model != "" {
@@ -187,17 +312,24 @@ func printValue(w io.Writer, v Value, file string) {
 		if many[c.Condition] {
 			on = ", model " + c.Model
 		}
-		fmt.Fprintf(w, "%s  %s %s %s vs %s plain%s\n", verdict(c.Pass), c.Task, c.Variant, c.Condition, c.Against, on)
+		size := ""
+		if c.Size != "" {
+			size = " (" + c.Size + ")"
+		}
+		fmt.Fprintf(w, "%s  %s %s %s vs %s plain%s%s\n", verdict(c.Pass), c.Task, c.Variant, c.Condition, c.Against, on, size)
 		for _, ch := range c.Checks {
 			mark := verdict(ch.Pass)
 			if ch.Informational {
-				mark = "COST"
+				mark = "INFO"
 			}
 			fmt.Fprintf(w, "        %s  %-22s %s\n", mark, ch.Metric, ch.Detail)
 		}
 	}
 	if len(v.Cells) == 0 {
 		fmt.Fprint(w, "no Jhon cell (jhon or pi-jhon) in the results\n")
+	}
+	for _, s := range v.Setup {
+		fmt.Fprintf(w, "one-time set-up %s %s (apart from every cell): %d/%d passed, %s\n", s.Condition, s.Model, s.Passed, s.Runs, s.Detail)
 	}
 	for _, r := range v.Runtimes {
 		rt := r.Runtime
@@ -215,6 +347,7 @@ func valueCLI(args []string, out, errOut io.Writer) int {
 	fs.SetOutput(errOut)
 	asJSON := fs.Bool("json", false, "print value.json instead of the lines")
 	outDir := fs.String("out", "", "where value.json goes (default: the first results dir)")
+	tasksDir := fs.String("tasks-dir", filepath.Join(source(), "tasks"), "where the tasks are: a cell whose runs have no task_size takes its task.yaml's size")
 	if fs.Parse(args) != nil {
 		return 2
 	}
@@ -232,7 +365,7 @@ func valueCLI(args []string, out, errOut io.Writer) int {
 		return 2
 	}
 	v := Value{Results: dirs, Notes: []string{}, Cells: []ValueCell{}, Runtimes: []RuntimeValue{}}
-	v.Judge(rows)
+	v.Judge(rows, taskSizes(*tasksDir))
 	dir := cmpOr(*outDir, dirs[0])
 	file := filepath.Join(dir, "value.json")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

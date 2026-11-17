@@ -456,6 +456,19 @@ func Certify(baseline, candidate map[[3]string]Row) (checks []CertCheck, notes [
 	if baseSkipped+candSkipped > 0 {
 		notes = append(notes, fmt.Sprintf("skipped %d clean and pi-clean runs (candidate %d, baseline %d): they are not certification cells, `bench value` compares them", baseSkipped+candSkipped, candSkipped, baseSkipped))
 	}
+	// The one-time set-up run is measured apart (T146 FB2): no cell.
+	setupRuns := 0
+	for _, side := range []map[[3]string]Row{baseline, candidate} {
+		for k, r := range side {
+			if k[0] == SetupTaskID {
+				setupRuns += r.Runs
+				delete(side, k)
+			}
+		}
+	}
+	if setupRuns > 0 {
+		notes = append(notes, fmt.Sprintf("skipped %d one-time set-up runs (%s): measured apart, they are not certification cells", setupRuns, SetupTaskID))
+	}
 	keys := slices.Collect(func(yield func([3]string) bool) {
 		for k := range candidate {
 			if !yield(k) {

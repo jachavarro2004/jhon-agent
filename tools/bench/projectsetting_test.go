@@ -144,7 +144,7 @@ func TestProjectSettingIsWrittenCommittedAndRecorded(t *testing.T) {
 func TestValueAndReportKeepProjectSettingsApart(t *testing.T) {
 	on, off := t.TempDir(), t.TempDir()
 	modelRuns(t, on, "pi-jhon", "zai/glm-5.3", 1, func(m *Metrics) { m.ProjectSettings = []string{wtOn} })
-	modelRuns(t, on, "pi-clean", "zai/glm-5.3", 0.5, func(m *Metrics) {
+	modelRuns(t, on, "pi-clean", "zai/glm-5.3", 1, func(m *Metrics) {
 		if m.Repeat == 1 {
 			m.RedBeforeGreen = bp(false)
 		}
@@ -153,7 +153,7 @@ func TestValueAndReportKeepProjectSettingsApart(t *testing.T) {
 	code, out, errOut := value(t, on, off)
 	for _, s := range []string{
 		"PASS  invoice-slices plain pi-jhon vs pi-clean plain, model zai/glm-5.3 with worktree_per_change=true",
-		"FAIL  invoice-slices plain pi-jhon vs pi-clean plain, model zai/glm-5.3\n",
+		"FAIL  invoice-slices plain pi-jhon vs pi-clean plain, model zai/glm-5.3 (large)\n",
 		"runtime pi zai/glm-5.3 with worktree_per_change=true (pi-jhon vs pi-clean): PASS — 1/1 cells",
 	} {
 		if !strings.Contains(out, s) {

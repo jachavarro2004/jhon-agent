@@ -191,7 +191,7 @@ func TestNoProfileKeepsRunsAsBefore(t *testing.T) {
 func TestValueAndReportKeepProfilesApart(t *testing.T) {
 	glm, plain := t.TempDir(), t.TempDir()
 	modelRuns(t, glm, "pi-jhon", "zai/glm-5.3", 1, func(m *Metrics) { m.Profile = "glm" })
-	modelRuns(t, glm, "pi-clean", "zai/glm-5.3", 0.5, func(m *Metrics) {
+	modelRuns(t, glm, "pi-clean", "zai/glm-5.3", 1, func(m *Metrics) {
 		if m.Repeat == 1 {
 			m.RedBeforeGreen = bp(false)
 		}
@@ -201,7 +201,7 @@ func TestValueAndReportKeepProfilesApart(t *testing.T) {
 	code, out, errOut := value(t, glm, plain)
 	for _, s := range []string{
 		"PASS  invoice-slices plain pi-jhon vs pi-clean plain, model zai/glm-5.3 profile glm",
-		"FAIL  invoice-slices plain pi-jhon vs pi-clean plain, model zai/glm-5.3\n",
+		"FAIL  invoice-slices plain pi-jhon vs pi-clean plain, model zai/glm-5.3 (large)\n",
 		"runtime pi zai/glm-5.3 profile glm (pi-jhon vs pi-clean): PASS — 1/1 cells",
 	} {
 		if !strings.Contains(out, s) {
