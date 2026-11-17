@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -199,6 +200,55 @@ func TestVitestNarrowing(t *testing.T) {
 		}
 		if got := VitestOnly(dir); got != want {
 			t.Errorf("VitestOnly(%s) = %v", pkg, got)
+		}
+	}
+}
+
+// T145c H1 (L1191): a wide step's two parts both run, the second even when
+// the first fails, and the step exits with the worse (higher) of their
+// statuses, so the failures of both are reported in one pass.
+func TestBothCommandRunsEachPartAndExitsWithTheWorse(t *testing.T) {
+	dir := t.TempDir()
+	for i, c := range []struct{ a, b, want int }{{0, 0, 0}, {1, 0, 1}, {0, 1, 1}, {2, 1, 2}, {1, 2, 2}} {
+		log := filepath.Join(dir, strconv.Itoa(i))
+		part := func(name string, code int) string {
+			return "(echo " + name + " >> " + shq(log) + "; exit " + strconv.Itoa(code) + ")"
+		}
+		err := exec.Command("sh", "-c", BothCommand(part("a", c.a), part("b", c.b))).Run()
+		got := 0
+		if x, ok := err.(*exec.ExitError); ok {
+			got = x.ExitCode()
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := os.ReadFile(log)
+		if got != c.want || string(b) != "a\nb\n" {
+			t.Errorf("parts exiting %d, %d: exit %d, ran %q; want exit %d, both run", c.a, c.b, got, b, c.want)
+		}
+	}
+}
+
+// T145c H1: the test runs a command the engine writes is made of, and
+// whether each runs whatever those before it did (BothCommand) or only when
+// they passed (`&&`); a pytest-testmon run keeps the prefix that makes its
+// record's directory.
+func TestCommandParts(t *testing.T) {
+	testmon := "mkdir -p '/c' && TESTMON_DATAFILE='/c/x.db' uv run --with pytest-testmon pytest --testmon --rootdir='/r'"
+	for _, c := range []struct {
+		command string
+		parts   []string
+		each    bool
+	}{
+		{"uv run pytest", []string{"uv run pytest"}, true},
+		{testmon + " 'tests/a.py'", []string{testmon + " 'tests/a.py'"}, true},
+		{BothCommand("uv run pytest 'tests/a.py'", testmon+" 'tests/b.py'"), []string{"uv run pytest 'tests/a.py'", testmon + " 'tests/b.py'"}, true},
+		{BothCommand(testmon+" 'tests/b.py'", "uv run pytest 'tests/a.py'"), []string{testmon + " 'tests/b.py'", "uv run pytest 'tests/a.py'"}, true},
+		{"uv run pytest 'tests/r.py' && " + testmon, []string{"uv run pytest 'tests/r.py'", testmon}, false},
+		{testmon + " && uv run pytest 'tests/r.py'", []string{testmon, "uv run pytest 'tests/r.py'"}, false},
+	} {
+		parts, each := CommandParts(c.command)
+		if !slices.Equal(parts, c.parts) || each != c.each {
+			t.Errorf("CommandParts(%q) = %q, %v; want %q, %v", c.command, parts, each, c.parts, c.each)
 		}
 	}
 }

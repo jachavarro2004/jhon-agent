@@ -329,6 +329,40 @@ func TestmonModulesCommand(precise string, files []string) string {
 	return out
 }
 
+// BothCommand is first and then second, second run even when first fails,
+// exiting with the higher (worse) of their statuses: a wide step's modules
+// run whole and its pytest-testmon part (T145c, L1191 H1), so the failures
+// of both are reported in one pass. CommandParts reads it back.
+func BothCommand(first, second string) string {
+	return first + bothThen + second + bothEnd
+}
+
+const (
+	bothThen = "; s1=$?; "
+	bothEnd  = "; s2=$?; [ $s1 -gt $s2 ] && exit $s1; exit $s2"
+)
+
+// CommandParts is the test runs a command the engine wrote is made of, in
+// order, and whether each runs whatever those before it did (BothCommand,
+// or a single run) or only when they passed (an `&&` chain, as a document's
+// readers before pytest-testmon). A pytest-testmon run (Precise) keeps the
+// `mkdir -p` that makes its record's directory.
+func CommandParts(command string) (parts []string, each bool) {
+	if body, ok := strings.CutSuffix(command, bothEnd); ok {
+		if first, second, ok := strings.Cut(body, bothThen); ok {
+			return []string{first, second}, true
+		}
+	}
+	for _, s := range strings.Split(command, " && ") {
+		if n := len(parts); n > 0 && strings.HasPrefix(parts[n-1], "mkdir -p ") && !strings.Contains(parts[n-1], " && ") {
+			parts[n-1] += " && " + s
+			continue
+		}
+		parts = append(parts, s)
+	}
+	return parts, len(parts) == 1
+}
+
 // PytestCov is whether the Python project at dir declares pytest-cov in its
 // pyproject.toml.
 func PytestCov(dir string) bool {
@@ -521,25 +555,37 @@ func testModules(root, projectPath string, fn func(rel, src string)) {
 }
 
 // sourceRef is a whole reference to a changed source file in a test
-// module's source (T145, L1174 E3): its path relative to the root, or, for a
-// Python module, its import path.
+// module's source (T145, L1174 E3): its path relative to the root, that
+// path without its extension (bare), or, for a Python module, its import
+// path.
 type sourceRef struct {
 	s      string
 	dotted bool
+	bare   bool
 }
 
 // sourcePaths is the whole references by which a test module of another
 // project names the changed source file f (relative to the root) of the
-// project owner: f itself, and for a Python module its import path relative
-// to owner, a `src/` layout's `src.` dropped (app/routers/items.py is
-// app.routers.items), when that has at least two segments. A fragment of
-// either (a directory such as `tests/unit/` or `app/routers/`, a bare file
-// name, a package) names nothing: a comment in many projects carries one.
+// project owner: f itself; for a Python module its import path relative to
+// owner, a `src/` layout's `src.` dropped (app/routers/items.py is
+// app.routers.items), when that has at least two segments; for any other
+// source, f without its extension, as a JS/TS import names it
+// (`../svc_a/src/x` for svc_a/src/x.ts, T145c H3), when that has at least
+// two segments. A fragment of any (a directory such as `tests/unit/` or
+// `app/routers/`, a bare file name, a package) names nothing: a comment in
+// many projects carries one.
 func sourcePaths(f, owner string) []sourceRef {
 	f = filepath.ToSlash(f)
 	out := []sourceRef{{s: f}}
 	mod, ok := strings.CutSuffix(f, ".py")
-	if !ok || path.Base(mod) == "__init__" {
+	if !ok {
+		stem := strings.TrimSuffix(f, path.Ext(f))
+		if stem != f && strings.Contains(stem, "/") && !strings.HasSuffix(stem, "/") {
+			out = append(out, sourceRef{s: stem, bare: true})
+		}
+		return out
+	}
+	if path.Base(mod) == "__init__" {
 		return out
 	}
 	if owner != "" {
@@ -560,11 +606,12 @@ var pyModule = lazyre.New(`^[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)+$`)
 
 // in is whether src names r whole: not inside a longer name. A path may
 // follow a `/` (`../lib/app/x.py`) or a quote and is not followed by more of
-// a name (`x.pyc`); an import path is not inside a longer dotted name, but
+// a name (`x.pyc`), nor, without its extension, by an extension
+// (`lib/src/x.test`); an import path is not inside a longer dotted name, but
 // for a name under it (`app.routers.items.ITEMS`).
 func (r sourceRef) in(src string) bool {
 	before := func(c byte) bool { return isNameByte(c) || c == '.' || c == '-' }
-	after := func(c byte) bool { return isNameByte(c) || c == '/' || c == '-' }
+	after := func(c byte) bool { return isNameByte(c) || c == '/' || c == '-' || r.bare && c == '.' }
 	if r.dotted {
 		before = func(c byte) bool { return isNameByte(c) || c == '.' || c == '/' }
 		after = isNameByte

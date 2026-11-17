@@ -450,25 +450,33 @@ func runExecutions(argv []string) (int, error) {
 				// With a usable record whose reach made the run wide, the
 				// touched modules it holds tests of run under pytest-testmon,
 				// which keeps only their tests it marks affected (T145, L1174
-				// E1); a document's readers and executions_always run whole.
+				// E1); a document's readers and executions_always, touched or
+				// not (T145c H2), run whole.
 				var held []string
 				if byReach {
 					var unheld []string
-					held, unheld = heldModules(top, root, p, touch, readers)
+					var read bool
+					held, unheld, read = heldModules(top, root, p, touch, slices.Concat(readers, execution.AlwaysTests(root, p, always, nil)))
 					if len(held) > 0 {
 						ran += "; pytest-testmon narrows " + strconv.Itoa(len(held)) + " of them to the tests its record marks affected: " + listShort(held)
 					}
-					if len(unheld) > 0 {
+					switch {
+					case len(unheld) > 0 && !read:
+						ran += "; the testmon record could not be read, so " + strconv.Itoa(len(unheld)) + " of them " + runs(len(unheld)) + " whole: " + listShort(unheld)
+					case len(unheld) > 0:
 						ran += "; " + strconv.Itoa(len(unheld)) + " its record holds no test of (new, or unknown to it) " + runs(len(unheld)) + " whole: " + listShort(unheld)
 					}
 				}
 				own = append(own, kept...)
 				whole := slices.DeleteFunc(slices.Clone(own), func(m string) bool { return slices.Contains(held, m) })
 				steps[p][i].command = execution.OwnTestsCommand(s.command, whole, cov)
+				// Both parts run, the narrowed one even when the whole one
+				// fails, so the failures of both are reported in one pass
+				// (T145c H1).
 				if len(held) > 0 {
 					narrow := execution.TestmonModulesCommand(c, held)
 					if len(whole) > 0 {
-						narrow = steps[p][i].command + " && " + narrow
+						narrow = execution.BothCommand(steps[p][i].command, narrow)
 					}
 					steps[p][i].command = narrow
 				}
@@ -1071,14 +1079,15 @@ func lastRuns(root string, projects []string) string {
 // heldModules splits touch, the test modules (relative to the project at
 // projectPath under root) a wide run's change touched, into those the
 // project's pytest-testmon record holds tests of, which it can narrow, and
-// those it holds none of (new, or unknown to it), which run whole. A
-// document's reader (readers) runs whole and is in neither. With a record
-// python3 cannot read, every module runs whole.
-func heldModules(top, root, projectPath string, touch, readers []string) (held, unheld []string) {
+// those it holds none of (new, or unknown to it), which run whole. A module
+// of whole (a document's reader, executions_always) runs whole and is in
+// neither. read is false when python3 could not read the record (no
+// python3, an unreadable file): every module then runs whole.
+func heldModules(top, root, projectPath string, touch, whole []string) (held, unheld []string, read bool) {
 	var byTop []string
 	at := map[string]string{}
 	for _, m := range touch {
-		if slices.Contains(readers, m) {
+		if slices.Contains(whole, m) {
 			continue
 		}
 		rel, err := filepath.Rel(top, filepath.Join(root, projectPath, m))
@@ -1097,7 +1106,7 @@ func heldModules(top, root, projectPath string, touch, readers []string) (held, 
 			unheld = append(unheld, at[rel])
 		}
 	}
-	return held, unheld
+	return held, unheld, ok
 }
 
 // listShort is names joined, the first five and how many more.
