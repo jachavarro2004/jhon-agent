@@ -10,6 +10,7 @@ import (
 
 	"github.com/muesli/termenv"
 
+	manifests "github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
 )
 
@@ -32,8 +33,31 @@ type System struct {
 }
 
 // Pins are the versions setup installs (T50g): the CLI passes render's
-// versions table, so setup and the render pin from one place.
+// versions table, so setup and the render pin from one place. Engram and
+// CodeGraph are the required integrations' pins, by their manifests' order.
 type Pins struct{ ClaudeCode, Engram, CodeGraph string }
+
+// of is the pin of an integration's binary: a required one's from Pins,
+// another's its manifest's.
+func (p Pins) of(m manifests.Manifest) string {
+	for i, r := range manifests.Required() {
+		if r.Name == m.Name {
+			return [...]string{p.Engram, p.CodeGraph}[i]
+		}
+	}
+	return m.Doctor.Version
+}
+
+// binaries are the integrations setup checks for, by their binary's name.
+func binaries() []manifests.Manifest {
+	var out []manifests.Manifest
+	for _, m := range manifests.All() {
+		if m.Doctor.Binary != "" {
+			out = append(out, m)
+		}
+	}
+	return out
+}
 
 // NewSystem is a System on PATH and the user's home.
 func NewSystem(settingsPath, binaryPath string, pins Pins, install InstallFunc) *System {
@@ -42,37 +66,50 @@ func NewSystem(settingsPath, binaryPath string, pins Pins, install InstallFunc) 
 }
 
 // fix is how to install name on this machine, at its pin: a command it can
-// run, or advice when it has none of the tools one needs. Engram's
-// INSTALLATION.md names brew, go install of its v3 module, and its release
-// binaries; brew's tap has no pin, so go install comes first and brew is
-// the fallback (jhon doctor warns when it installed another version): when
-// go install fails, brew runs if it is on PATH, else the advice is to
-// download the release (T51). CodeGraph's README names npm.
+// run, or advice when it has none of the tools one needs.
 func (s *System) fix(name string) (cmd, adv string) {
-	switch name {
-	case "claude":
+	if name == "claude" {
 		return "npm install -g @anthropic-ai/claude-code@" + s.Pins.ClaudeCode, ""
-	case "engram":
-		const brew = "brew install gentleman-programming/tap/engram"
-		download := "download engram v" + s.Pins.Engram + " from https://github.com/Gentleman-Programming/engram/releases/tag/v" + s.Pins.Engram
-		goInstall := "go install github.com/Gentleman-Programming/engram/v3/cmd/engram@v" + s.Pins.Engram
-		hasBrew := s.find("brew") != ""
-		switch {
-		case s.find("go") != "" && hasBrew:
-			return goInstall + " || " + brew, ""
-		case s.find("go") != "":
-			return goInstall, "if that fails, " + download
-		case hasBrew:
-			return brew, ""
+	}
+	for _, m := range binaries() {
+		if m.Doctor.Binary == name {
+			return s.install(m)
 		}
-		return "", download
-	case "codegraph":
-		if s.find("npm") != "" || s.find("node") != "" {
-			return "npm install -g @colbymchenry/codegraph@" + s.Pins.CodeGraph, ""
-		}
-		return "", "install codegraph " + s.Pins.CodeGraph + " as https://github.com/colbymchenry/codegraph#install says"
 	}
 	return "", advice[name]
+}
+
+// install is an integration's fix from its manifest's setup.install: the
+// ways it lists, in order, that this machine has the tool for (go; npm,
+// which node brings; brew). Two found: the first, and the second when it
+// fails. One found: it, with the manual way as advice when a later way it
+// lists is missing (Engram: go install of its v3 module first, brew's
+// unpinned tap the fallback, else download the release, T51). None: the
+// manual way as advice.
+func (s *System) install(m manifests.Manifest) (cmd, adv string) {
+	version := s.Pins.of(m)
+	have := map[string]bool{"go": s.find("go") != "", "npm": s.find("npm") != "" || s.find("node") != "", "brew": s.find("brew") != ""}
+	var found []string
+	missingAfter := false
+	for _, via := range m.InstallVias() {
+		switch {
+		case via == "manual":
+		case have[via]:
+			found = append(found, m.InstallCommand(via, version))
+		case len(found) > 0:
+			missingAfter = true
+		}
+	}
+	manual := m.InstallCommand("manual", version)
+	switch {
+	case len(found) == 0:
+		return "", manual
+	case len(found) > 1:
+		return found[0] + " || " + found[1], ""
+	case missingAfter:
+		return found[0], "if that fails, " + manual
+	}
+	return found[0], ""
 }
 
 // advice is what to do for a dependency no one command installs everywhere.
@@ -138,7 +175,8 @@ func (s *System) Saved() Saved {
 }
 
 // Checks are git, claude when Claude Code is chosen, node when pi is (setup
-// installs pi itself with npm), engram and codegraph.
+// installs pi itself with npm), and each integration's binary (Engram,
+// CodeGraph).
 func (s *System) Checks(c Choices) []Check {
 	names := []string{"git"}
 	if c.ClaudeCode {
@@ -147,7 +185,9 @@ func (s *System) Checks(c Choices) []Check {
 	if c.Pi {
 		names = append(names, "node")
 	}
-	names = append(names, "engram", "codegraph")
+	for _, m := range binaries() {
+		names = append(names, m.Doctor.Binary)
+	}
 	out := make([]Check, 0, len(names))
 	for _, n := range names {
 		if p := s.find(n); p != "" {
@@ -196,21 +236,29 @@ func (s *System) RunStep(c Choices, i int) error {
 // SetupKeys are the settings `jhon setup` shows and writes (T15.7, L96): the
 // runtimes and the integrations. The shell's own, shell.*, are its Settings
 // overlay's (/jhon:customize); Elsewhere names where each remaining one is set.
-var SetupKeys = []string{
-	"runtimes.claude_code", "runtimes.pi",
-	"integrations.engram", "integrations.codegraph",
-	"integrations.telemetry", "integrations.theme.palette",
-}
+var SetupKeys = func() []string {
+	keys := []string{"runtimes.claude_code", "runtimes.pi"}
+	for _, m := range manifests.Required() {
+		keys = append(keys, m.Setting)
+	}
+	return append(keys, "integrations.telemetry", "integrations.theme.palette")
+}()
 
-// Elsewhere are the settings neither setup nor the shell shows, and where each is set.
-var Elsewhere = map[string]string{
-	"pi.profile":             "jhon profile use, or /jhon:profile in the shell",
-	"claude_code.connectors": "jhon settings set claude_code.connectors true|false",
-	"agents.act_on_announce": "jhon settings set agents.act_on_announce true|false",
-	"integrations.context7":  "jhon settings set integrations.context7 true|false",
-	"sandbox.mode":           "jhon settings set sandbox.mode on|off",
-	"sandbox.allow_write":    "jhon settings set sandbox.allow_write <folder>,<folder>",
-}
+// Elsewhere are the settings neither setup nor the shell shows, and where
+// each is set; an optional integration's own setting among them.
+var Elsewhere = func() map[string]string {
+	e := map[string]string{
+		"pi.profile":             "jhon profile use, or /jhon:profile in the shell",
+		"claude_code.connectors": "jhon settings set claude_code.connectors true|false",
+		"agents.act_on_announce": "jhon settings set agents.act_on_announce true|false",
+		"sandbox.mode":           "jhon settings set sandbox.mode on|off",
+		"sandbox.allow_write":    "jhon settings set sandbox.allow_write <folder>,<folder>",
+	}
+	for _, m := range manifests.Optional() {
+		e[m.Setting] = "jhon settings set " + m.Setting + " true|false"
+	}
+	return e
+}()
 
 // writeSettings sets every choice. A runtime turned on is written before
 // one turned off, so the file never holds two runtimes off in between.
@@ -219,11 +267,11 @@ func (s *System) writeSettings(c Choices) error {
 		key string
 		on  bool
 	}
-	vals := []kv{
-		{"runtimes.claude_code", c.ClaudeCode}, {"runtimes.pi", c.Pi},
-		{"integrations.engram", true}, {"integrations.codegraph", true},
-		{"integrations.telemetry", c.Telemetry},
+	vals := []kv{{"runtimes.claude_code", c.ClaudeCode}, {"runtimes.pi", c.Pi}}
+	for _, m := range manifests.Required() {
+		vals = append(vals, kv{m.Setting, true})
 	}
+	vals = append(vals, kv{"integrations.telemetry", c.Telemetry})
 	if !c.ClaudeCode {
 		vals[0], vals[1] = vals[1], vals[0]
 	}

@@ -1,0 +1,35 @@
+# Engram: memory that survives sessions, an MCP server over stdio.
+# Schema jhon.integration/v1 (integrations/README.md); engine/internal/integrations reads it.
+schema: jhon.integration/v1
+name: engram
+display: Engram
+kind: mcp-stdio
+order: 1
+# Required for now: integrations.engram cannot be false (settings refuses it).
+setting: integrations.engram
+default: true
+required: true
+when_off: refused
+# The capabilities of prose/agents.yaml whose tools are this server's.
+capabilities: [memory, memory-read, memory-session]
+claude-code:
+  # A tool is mcp__<server>__<tool>; Engram is mounted under either name.
+  servers: [engram, plugin_engram_engram]
+pi:
+  server: engram
+  command: engram
+  args: [mcp, --tools=agent]
+doctor:
+  binary: engram
+  version: 3.7.2
+  source: github.com/Gentleman-Programming/engram/v3
+  probe: --version
+setup:
+  summary: memory that survives sessions
+  summary_narrow: memory across sessions
+  detail: the guards and the rail read it; it ships coupled to the core for now
+  locked_note: "Engram stays on for now: it ships coupled to the core."
+  install:
+    go: go install github.com/Gentleman-Programming/engram/v3/cmd/engram@v{version}
+    brew: brew install gentleman-programming/tap/engram
+    manual: download engram v{version} from https://github.com/Gentleman-Programming/engram/releases/tag/v{version}

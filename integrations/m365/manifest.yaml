@@ -1,0 +1,18 @@
+# Microsoft 365: the owner's claude.ai Microsoft 365 connector, a server
+# claude.ai mounts in Claude Code; a server name grants every tool of it
+# (verified on Claude Code 2.1.304). pi's claude-bridge loads no connector.
+# Schema jhon.integration/v1 (integrations/README.md); engine/internal/integrations reads it.
+schema: jhon.integration/v1
+name: m365
+display: Microsoft 365
+kind: mcp-connector
+order: 4
+# claude_code.connectors (off by default) lets jhon start load the claude.ai
+# connectors; off, the launch keeps them out and the render is unchanged.
+setting: claude_code.connectors
+default: false
+required: false
+when_off: launch
+capabilities: [ms365]
+claude-code:
+  servers: [claude_ai_Microsoft_365]

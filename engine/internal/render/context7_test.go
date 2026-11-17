@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
 )
 
 // writeFile is a settings file holding text.
@@ -48,6 +49,9 @@ func TestContext7IsAHostedEndpointWithNoPin(t *testing.T) {
 // pi names a server's tool with every character but letters, digits and `_`
 // written `_` (pi-coding-agent's createMcpToolName); the capability's Claude
 // Code names are the server's own.
+// context7Cap is the capability integrations/context7/manifest.yaml grants.
+const context7Cap = "context7"
+
 func TestContext7ToolsInEachRuntime(t *testing.T) {
 	t.Setenv("JHON_SETTINGS", filepath.Join(t.TempDir(), "none.toml"))
 	e := engineAt(t, repo, "--validate")
@@ -60,8 +64,8 @@ func TestContext7ToolsInEachRuntime(t *testing.T) {
 	for _, name := range claude {
 		want = append(want, other.ReplaceAllString(name, "_"))
 	}
-	if !slices.Equal(piTools[context7Cap], want) {
-		t.Errorf("pi's context7 tools = %v, want %v", piTools[context7Cap], want)
+	if !slices.Equal(e.piTools(manifest.Agent{Caps: []string{context7Cap}}), want) {
+		t.Errorf("pi's context7 tools = %v, want %v", e.piTools(manifest.Agent{Caps: []string{context7Cap}}), want)
 	}
 	var holders []string
 	for _, a := range e.m.Agents {
