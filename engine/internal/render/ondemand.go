@@ -14,28 +14,44 @@ import (
 // applies. A contract read on demand is raw prose: it names no runtime term.
 
 // onDemandContract is one contract read on demand: its file under prose/,
-// the pointer the rendered orchestrator carries (whitespace flattened), and
-// the key sentence of each rule moved into it.
+// the pointers to it the fixed context carries, and the key sentence of
+// each rule moved into it (both whitespace flattened).
 type onDemandContract struct {
 	file     string
-	pointers []string
+	pointers []pointer
 	rules    []string
 }
 
-// contractsRoot is how the orchestrator's header resolves a
-// `contracts/<name>.md` it names, and how the always-on layer names one.
-const contractsRoot = "~/.local/share/jhon/current/prose/contracts/"
+// pointer is a sentence that sends the agent to a contract, and in, the
+// prose file of the fixed context that holds it (relative to prose/): the
+// orchestrator or an always-on contract.
+type pointer struct{ in, text string }
+
+// contractsRoot is how the prose names the contracts directory in a
+// pointer; the renderer writes the install's real path in its place
+// (atInstall, T146c K3).
+const contractsRoot = runtimeRef + "/prose/contracts/"
+
+// atInstall is text with each contractsRoot written as the contracts
+// directory of the install this render projects, `current`.
+func (e *engine) atInstall(text string) string {
+	return strings.ReplaceAll(text, contractsRoot, filepath.Join(e.current(), ProseDir, "contracts")+"/")
+}
 
 var onDemandContracts = []onDemandContract{
 	{
 		file: "contracts/delivery.md",
-		pointers: []string{
-			"`contracts/<name>.md` here is `" + contractsRoot + "<name>.md`, binding once its trigger applies.",
-			"Before delivering a change (a commit the owner will push, a merge, a release), before its delivery test run, and before a 4R or a Judgment Day, run `jhon risk` in its tree and read `contracts/delivery.md`.",
+		pointers: []pointer{
+			{"orchestrator.md", "`contracts/<name>.md` here is `" + contractsRoot + "<name>.md`, binding once its trigger applies."},
+			{"orchestrator.md", "Before delivering a change (a commit the owner will push, a merge, a release), before its delivery test run, and before a 4R or a Judgment Day, run `jhon risk` in its tree and read `contracts/delivery.md`."},
 		},
 		rules: []string{
 			"| passive | read the diff back | not asked | none |",
-			"| high | an independent verification on record (`contracts/ldd.md`, \"Delivery\") |",
+			// T146c K1 (L1222): the high tier's concrete definition, the
+			// record sentence and the hand-run note, which FA3 dropped.
+			"| high | an independent verification on record: the `verify` agent's passing `verify-report.md`, or a Judgment Day record closed `APPROVED`; `jhon deliver check` is not ready without one |",
+			"Every change that alters behaviour carries the LDD record it needs: always its RED and GREEN runs and the commit or PR text that says what was asked; tasks.md when Jhon asks for it.",
+			"A whole suite run by hand gets a note, never a refusal.",
 			"`verify` and an automatic 4R with only the pertinent lenses, recorded in `review-4r.md`; `review_required` always wins; Judgment Day only when the owner asks",
 			"A session no one can answer proceeds and reports the tier and its reasons instead of asking.",
 			"**The record is always; the rigor is the change's, not yours.**",
@@ -58,9 +74,9 @@ var onDemandContracts = []onDemandContract{
 	},
 	{
 		file: "contracts/delegation.md",
-		pointers: []string{
-			"Before writing a delegation prompt, read `contracts/delegation.md`;",
-			"On return, read `contracts/delegation.md` before merging.",
+		pointers: []pointer{
+			{"orchestrator.md", "Before writing a delegation prompt, read `contracts/delegation.md`;"},
+			{"orchestrator.md", "On return, read `contracts/delegation.md` before merging."},
 		},
 		rules: []string{
 			"A count or a price ratio never sizes a task; the counts below are notes.",
@@ -84,8 +100,8 @@ var onDemandContracts = []onDemandContract{
 	},
 	{
 		file: "contracts/asked-operations.md",
-		pointers: []string{
-			"Before any remote access, push, `gh` write, publish, deploy, or a deletion that loses work or data, read `" + contractsRoot + "asked-operations.md`.",
+		pointers: []pointer{
+			{"contracts/remote-auth.md", "Before any remote access, push, `gh` write, publish, deploy, or a deletion that loses work or data, read `" + contractsRoot + "asked-operations.md`."},
 		},
 		rules: []string{
 			"Ambient SSH agents, sockets, credentials, and authenticated sessions are not permission to use them.",
@@ -95,14 +111,14 @@ var onDemandContracts = []onDemandContract{
 			"One command that needs several classes asks one question that names them all.",
 			"A grant and a mode are the owner's act alone.",
 			"The modes' history records every change with `by: \"owner\"`, and `jhon audit` reads it.",
-			"(a forced branch delete or worktree removal, `reset --hard`, `clean -f`, a dropped stash, a destructive Docker command, a path in the home directory outside the project) runs once the owner approves it (class `destroy`).",
-			"name each one, say which keep data and which delete it, and run it once the owner approves (the guard's question, or their `jhon grant destroy`).",
+			"(a forced branch delete or worktree removal, `reset --hard`, `clean -f`, a dropped stash, a destructive Docker command: `docker compose down -v`, `docker volume rm`, `prune`, `docker rm -f`; a path in the home directory outside the project)",
+			"name each one, say which keep data and which delete it, and run it once the owner approves (class `destroy`: the guard's question, or their `jhon grant destroy`).",
 		},
 	},
 	{
 		file: "contracts/witness.md",
-		pointers: []string{
-			"Before testing behavior that already exists or reporting a witness, read `" + contractsRoot + "witness.md`.",
+		pointers: []pointer{
+			{"contracts/tdd.md", "Before testing behavior that already exists or reporting a witness, read `" + contractsRoot + "witness.md`."},
 		},
 		rules: []string{
 			"For behavior that already exists, the witness is a mutation: break the code temporarily, see the test fail, restore, see it pass.",
@@ -114,45 +130,86 @@ var onDemandContracts = []onDemandContract{
 	},
 }
 
+// flattened is s with each run of whitespace one space, so a sentence
+// matches across line breaks.
+func flattened(s string) string { return strings.Join(strings.Fields(s), " ") }
+
 // fixedText is the orchestrator's fixed context as runtime renders it: its
 // body, then the always-on layer it carries.
 func (e *engine) fixedText(runtime string) string {
 	return e.bodyFor(runtime, e.mainAgent(piMain)) + "\n\n" + e.alwaysOnSection(runtime, true)
 }
 
-// onDemandProblems are the moved rules a contract no longer states, the
-// pointers a runtime's orchestrator lost, a moved rule still in the fixed
-// context, and a runtime term in a contract read on demand.
-func (e *engine) onDemandProblems() []string {
-	flat := func(s string) string { return strings.Join(strings.Fields(s), " ") }
-	var out []string
+// fixedParts are the prose files the fixed context of runtime is made of,
+// relative to prose/, each as runtime renders it, flattened: the
+// orchestrator's body, then each always-on file.
+func (e *engine) fixedParts(runtime string) [][2]string {
+	parts := [][2]string{{"orchestrator.md", flattened(e.bodyFor(runtime, e.mainAgent(piMain)))}}
+	for _, rel := range alwaysOn() {
+		parts = append(parts, [2]string{rel, flattened(e.atInstall(inRuntime(runtime, readText(filepath.Join(e.prose, rel)))))})
+	}
+	return parts
+}
+
+// where names the prose file of the fixed context that holds a pointer.
+func where(in string) string {
+	if in == "orchestrator.md" {
+		return "orchestrator (orchestrator.md)"
+	}
+	return "always-on " + in
+}
+
+// onDemandProblems are, each against the prose file at fault: a contract
+// that is missing, names a runtime term, or no longer states a moved rule;
+// a pointer its file does not hold or a runtime's fixed context lost; and
+// a moved rule some file of the fixed context still states.
+func (e *engine) onDemandProblems() []problem {
+	var out []problem
+	add := func(rel, msg string) { out = append(out, problem{filepath.Join(e.prose, rel), 0, "on-demand", msg}) }
+	parts := map[string][][2]string{}
+	fixed := map[string]string{}
+	for _, rt := range []string{"claude-code", "pi"} {
+		parts[rt], fixed[rt] = e.fixedParts(rt), flattened(e.fixedText(rt))
+	}
 	for _, c := range onDemandContracts {
 		path := filepath.Join(e.prose, c.file)
 		if !exists(path) {
-			out = append(out, c.file+" is missing")
+			add(c.file, c.file+" is missing")
 			continue
 		}
 		body := mustReadText(path)
 		if m := runtimePlaceholder.FindString(body); m != "" {
-			out = append(out, fmt.Sprintf("%s is read raw, yet names runtime term %s", c.file, m))
+			add(c.file, fmt.Sprintf("%s is read raw, yet names runtime term %s", c.file, m))
 		}
-		text := flat(body)
+		text := flattened(body)
 		for _, r := range c.rules {
 			if !strings.Contains(text, r) {
-				out = append(out, fmt.Sprintf("%s does not state %q", c.file, r))
+				add(c.file, fmt.Sprintf("%s does not state %q", c.file, r))
+			}
+		}
+		for _, p := range c.pointers {
+			if !strings.Contains(flattened(readText(filepath.Join(e.prose, p.in))), p.text) {
+				add(p.in, fmt.Sprintf("%s does not hold the pointer to %s: %q", p.in, c.file, p.text))
+			}
+			for _, rt := range []string{"claude-code", "pi"} {
+				if !strings.Contains(fixed[rt], e.atInstall(p.text)) {
+					add(p.in, fmt.Sprintf("%s's %s does not point to %s with %q", rt, where(p.in), c.file, p.text))
+				}
 			}
 		}
 		for _, rt := range []string{"claude-code", "pi"} {
-			fixed := flat(e.fixedText(rt))
-			for _, p := range c.pointers {
-				if !strings.Contains(fixed, p) {
-					out = append(out, fmt.Sprintf("%s's orchestrator does not point to %s with %q", rt, c.file, p))
-				}
-			}
 			for _, r := range c.rules {
-				if strings.Contains(fixed, r) {
-					out = append(out, fmt.Sprintf("%s's fixed context still states %q, moved to %s", rt, r, c.file))
+				if !strings.Contains(fixed[rt], r) {
+					continue
 				}
+				in := "templates/claude-md-block.md"
+				for _, part := range parts[rt] {
+					if strings.Contains(part[1], r) {
+						in = part[0]
+						break
+					}
+				}
+				add(in, fmt.Sprintf("%s's fixed context still states %q (%s), moved to %s", rt, r, in, c.file))
 			}
 		}
 	}

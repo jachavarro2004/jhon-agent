@@ -73,7 +73,7 @@ func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 		}
 	}
 	for ref, pointer := range map[string]string{
-		"contracts/asked-operations.md": contractsRoot + "asked-operations.md",
+		"contracts/asked-operations.md": e.atInstall(contractsRoot + "asked-operations.md"),
 		"contracts/delivery.md":         "read `contracts/delivery.md`",
 		"contracts/review-4r.md":        "(`contracts/review-4r.md`",
 		"contracts/judgment.md":         "Judgment Day (`contracts/judgment.md`)",
@@ -116,7 +116,7 @@ func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 			continue
 		}
 		cc := flatText(promptOf(t, r, filepath.Join(e.claudeAgents(), "jhon-orchestrator.md")))
-		for _, kept := range []string{"(Read, Grep, Glob, Edit)", "these bind.**", contractsRoot + "asked-operations.md", "read `contracts/delivery.md`"} {
+		for _, kept := range []string{"(Read, Grep, Glob, Edit)", "these bind.**", e.atInstall(contractsRoot + "asked-operations.md"), "read `contracts/delivery.md`"} {
 			if !strings.Contains(cc, kept) {
 				t.Errorf("Claude Code's orchestrator lost %q", kept)
 			}
@@ -131,8 +131,8 @@ func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 
 // An edit whose text is gone is reported, never applied elsewhere.
 func TestPiLeanReportsAnEditWhoseTextIsGone(t *testing.T) {
-	out, missing := piLean("nothing to edit", "/p")
-	if out != "nothing to edit" || len(missing) != len(piEdits("/p")) {
+	out, missing := piLean("nothing to edit")
+	if out != "nothing to edit" || len(missing) != len(piEdits()) {
 		t.Errorf("out %q, missing %v", out, missing)
 	}
 }
@@ -215,27 +215,33 @@ func TestOrchestratorKeepsWorkingAndPlansLifecycle(t *testing.T) {
 	}
 }
 
-// saysOrPointsTo is whether prompt, flattened, states w, or w is a rule
-// moved on demand (T146 FA3, L1217) that its contract states and prompt
-// points to.
+// saysOrPointsTo is whether prompt states w, or w is a rule moved on demand
+// (T146 FA3, L1217) that some listed contract both lists and states, with
+// prompt carrying every pointer to that contract. Every text it compares
+// (prompt, w, the listed rules, the contract, the pointers at the install's
+// path) is compared with its whitespace flattened, and every listed
+// contract is tried before it answers no.
 func (e *engine) saysOrPointsTo(prompt, w string) bool {
+	prompt, w = flatText(prompt), flatText(w)
 	if strings.Contains(prompt, w) {
 		return true
 	}
 	for _, c := range onDemandContracts {
 		listed := false
 		for _, r := range c.rules {
+			r = flatText(r)
 			listed = listed || strings.Contains(r, w) || strings.Contains(w, r)
 		}
 		if !listed || !strings.Contains(flatText(mustReadText(filepath.Join(e.prose, c.file))), w) {
 			continue
 		}
+		pointed := true
 		for _, p := range c.pointers {
-			if !strings.Contains(prompt, p) {
-				return false
-			}
+			pointed = pointed && strings.Contains(prompt, flatText(e.atInstall(p.text)))
 		}
-		return true
+		if pointed {
+			return true
+		}
 	}
 	return false
 }

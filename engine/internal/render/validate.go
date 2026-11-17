@@ -548,24 +548,18 @@ func (e *engine) validate() []problem {
 	// 31b. pi's appended text (pilean.go): every edit applies once, and every
 	// reference it adds resolves.
 	{
-		_, missing := piLean(pi{e}.promptFull(), filepath.Join(e.current(), ProseDir))
+		_, missing := piLean(pi{e}.promptFull())
 		for _, m := range missing {
 			add(filepath.Join(e.root, "engine/internal/render/pilean.go"), 0, "pi-prompt", m)
-		}
-		for _, ed := range piEdits(filepath.Join(e.current(), ProseDir)) {
-			for _, ref := range ed.refs {
-				if !exists(filepath.Join(e.prose, ref)) {
-					add(filepath.Join(e.root, "engine/internal/render/pilean.go"), 0, "pi-prompt", fmt.Sprintf("edit %q names %s, which does not resolve", ed.name, ref))
-				}
-			}
 		}
 	}
 
 	// 31d. The contracts read on demand (ondemand.go, T146 FA3): each moved
 	// rule stays in its contract, out of the fixed context, and the
-	// orchestrator of each runtime points to it.
-	for _, m := range e.onDemandProblems() {
-		add(filepath.Join(e.root, "engine/internal/render/ondemand.go"), 0, "on-demand", m)
+	// orchestrator of each runtime points to it; each problem is reported
+	// against the prose file at fault.
+	for _, p := range e.onDemandProblems() {
+		add(p.file, p.line, p.rule, p.msg)
 	}
 
 	// 31c. Writer mode (T117b): the shell splices the writer rules over the

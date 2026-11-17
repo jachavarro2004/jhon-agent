@@ -221,9 +221,11 @@ var runtimeTerms = map[string]map[string]string{
 		"pi":          "from `/jhon:grants` in the shell",
 	},
 	"track-slice": {
-		// T134 (L1019): the agent's own next steps, never a copy of the change's tasks.
-		"claude-code": "keep in `TaskCreate` tasks your own next steps for this request, each moved with `TaskUpdate` (`in_progress` before you start it, `completed` as soon as it is), never a copy of the change's tasks, which stay in `jhon status` and tasks.md",
-		"pi":          "keep in `todo` your own next steps for this request, each moved with `update` (`in_progress` before you start it, `done` as soon as it is), never a copy of the change's tasks, which stay in `jhon status` and tasks.md",
+		// T134 (L1019): the agent's own next steps; that it never copies the
+		// change's tasks, routing.md says in the same always-on layer
+		// (T146c: stated once in the fixed context).
+		"claude-code": "keep in `TaskCreate` tasks your own next steps for this request, each moved with `TaskUpdate` (`in_progress` before you start it, `completed` as soon as it is)",
+		"pi":          "keep in `todo` your own next steps for this request, each moved with `update` (`in_progress` before you start it, `done` as soon as it is)",
 	},
 	"grant-how": {
 		"claude-code": "run by the owner with `!`",
@@ -267,12 +269,12 @@ func init() {
 }
 
 // bodyFor is an agent's body as runtime renders it: each runtime term in
-// its words. A term with no words for it stays as written, which
+// its words, the contracts at the install's path (atInstall). A term with no words for it stays as written, which
 // validation reports. An agent that does not hold an optional integration's
 // capability (context7, or one that is off: context7.go) reads no sentence
 // about it.
 func (e *engine) bodyFor(runtime string, a manifest.Agent) string {
-	return inRuntime(runtime, withoutUnheld(e.bodyOf(a), a.Caps))
+	return e.atInstall(inRuntime(runtime, withoutUnheld(e.bodyOf(a), a.Caps)))
 }
 
 // inRuntime is text with each runtime term in runtime's words, so a runtime
@@ -300,7 +302,8 @@ func (e *engine) claudeMdTemplate() string {
 // alwaysOnSection is the always-on layer as a Jhon agent of runtime
 // receives it, after its own body: the template's fixed prose with each
 // group's placeholder replaced by that group's files, whole and in load
-// order, each runtime term in runtime's words.
+// order, each runtime term in runtime's words, the contracts at the
+// install's path (atInstall).
 func (e *engine) alwaysOnSection(runtime string, primary bool) string {
 	var v manifest.Map[string]
 	for _, g := range alwaysOnGroups {
@@ -315,7 +318,7 @@ func (e *engine) alwaysOnSection(runtime string, primary bool) string {
 		v.Set(g.name, strings.Join(texts, "\n\n"))
 	}
 	text, _, _ := expandTemplate(readText(e.claudeMdTemplate()), &v)
-	return inRuntime(runtime, js.Trim(text))
+	return e.atInstall(inRuntime(runtime, js.Trim(text)))
 }
 
 // runtimeGuarantees is the runtime guarantees of runtime (docket AG4,
@@ -325,11 +328,12 @@ func (e *engine) runtimeGuarantees(runtime string) string {
 }
 
 // alwaysOnBundle is the layer as a runtime without imports receives it:
-// every file concatenated, then that runtime's guarantees.
+// every file concatenated, the contracts at the install's path, then that
+// runtime's guarantees.
 func (e *engine) alwaysOnBundle(runtime string) string {
 	var parts []string
 	for _, rel := range alwaysOn() {
-		parts = append(parts, inRuntime(runtime, js.Trim(mustReadText(filepath.Join(e.prose, rel)))))
+		parts = append(parts, e.atInstall(inRuntime(runtime, js.Trim(mustReadText(filepath.Join(e.prose, rel))))))
 	}
 	return strings.Join(append(parts, e.runtimeGuarantees(runtime)), "\n\n---\n\n")
 }
