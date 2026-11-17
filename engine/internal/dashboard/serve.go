@@ -397,6 +397,9 @@ func Server(projects string, audit Auditor, assets string, summaries *Summaries)
 			body, _ := json.Marshal(u)
 			send(200, "application/json", string(body))
 			return
+		case "/api/integrations":
+			send(200, "application/json", js.StringifyValueCompact(integrationRows(r.URL.Query().Get("probe") == "1")))
+			return
 		case "/api/version":
 			b, _ := json.Marshal(Build)
 			send(200, "application/json", string(b))
@@ -414,7 +417,7 @@ func Server(projects string, audit Auditor, assets string, summaries *Summaries)
 			return
 		}
 		switch path {
-		case "/api/memory/files", "/api/memory/file", "/api/memory/engram":
+		case "/api/memory/files", "/api/memory/file", engramRoute:
 			q := r.URL.Query()
 			s, status, msg := memoryProject(projects, q.Get("project"))
 			if status != 0 {
@@ -441,7 +444,7 @@ func Server(projects string, audit Auditor, assets string, summaries *Summaries)
 			}
 			return
 		}
-		if id, ok := strings.CutPrefix(path, "/api/memory/engram/"); ok {
+		if id, ok := strings.CutPrefix(path, engramRoute+"/"); ok {
 			if !observation.MatchString(id) {
 				send(400, "text/plain", "an observation id is digits\n")
 				return

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 )
 
@@ -55,8 +56,8 @@ func checkOf(name any) (Check, bool) {
 
 // readFields is each read source and its field in tool_result_bytes.
 var readFields = [][2]string{
-	{"full", "full_read_bytes"}, {"ranged", "ranged_read_bytes"}, {"shell", "shell_read_bytes"}, {"codegraph", "codegraph_bytes"},
-	{"engram", "engram_bytes"}, {"search", "search_bytes"}, {"other", "other_bytes"},
+	{"full", "full_read_bytes"}, {"ranged", "ranged_read_bytes"}, {"shell", "shell_read_bytes"}, {integrations.CodeGraph, "codegraph_bytes"},
+	{integrations.Engram, "engram_bytes"}, {"search", "search_bytes"}, {"other", "other_bytes"},
 }
 
 func reads(b any) *js.Object {

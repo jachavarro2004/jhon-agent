@@ -166,29 +166,31 @@ func envCompactAt(v string) (any, bool) {
 	return n, err == nil && n > 0 && n < 100
 }
 
-// schema is every key, in the order list shows them.
-var schema = func() []spec {
+// schema is every key, in the order list shows them, read each time from
+// the integrations' manifests (a test's set too: integrations.Use).
+func schema() []spec {
 	s := []spec{
 		{key: "runtimes.claude_code", kind: kBool, def: true},
 		{key: "runtimes.pi", kind: kBool, def: true},
 	}
 	// The integrations' own keys, integrations.<name>, by their manifests'
 	// order (integrations/<name>/manifest.yaml, T58a): a required one takes
-	// only true; context7's (T133e, L1016) turns its hosted endpoint off, and
-	// the render then mounts and names nothing of it.
-	for _, m := range integrations.All() {
-		if m.Setting == "integrations."+m.Name {
-			s = append(s, spec{key: m.Setting, kind: kBool, def: m.Default, required: m.Required})
-		}
-	}
+	// only true; an optional one false turns it off as its manifest's
+	// when_off says (T58b, L1167). A manifest setting in a runtime's
+	// namespace comes later (manifestKeys).
+	s = append(s, manifestKeys(func(m integrations.Manifest) bool { return m.Setting == "integrations."+m.Name })...)
 	s = append(s, []spec{
 		{key: "integrations.telemetry", kind: kBool, def: false, env: "JHON_TELEMETRY", fromEnv: envOnOff},
 		// T15.7 (L97): one palette, Jhon's own Rose Ink or the desktop palette
 		// file (T50f: "ryoku" is its older name).
 		{key: "integrations.theme.palette", kind: kEnum, def: "rose-ink", enum: []string{"rose-ink", "desktop"}, aliases: map[string]string{"ryoku": "desktop"}},
-		// T42a (L403): the claude.ai account connectors in a Claude Code Jhon
-		// session, off by default (jhon start keeps them out).
-		{key: "claude_code.connectors", kind: kBool, def: false},
+	}...)
+	// The integrations' settings in a runtime's namespace, by their
+	// manifests' order: m365's claude_code.connectors (T42a, L403), the
+	// claude.ai account connectors in a Claude Code Jhon session, off by
+	// default (jhon start keeps them out).
+	s = append(s, manifestKeys(func(m integrations.Manifest) bool { return m.Setting != "integrations."+m.Name })...)
+	s = append(s, []spec{
 		// T135 (L1055): in both runtimes, a main session's turn that ends with a
 		// reply announcing an action of its own, undone, is sent back once to
 		// do it or say why not (hook/announcestop.go); false lets it end.
@@ -245,15 +247,28 @@ var schema = func() []spec {
 		s = append(s, spec{key: "shell.notifications.audio.events." + quoteSegment(e), kind: kSound, def: defaultSound(e)})
 	}
 	return s
-}()
+}
+
+// manifestKeys are the boolean keys of the manifests which, by Order, a
+// required one taking only true.
+func manifestKeys(which func(integrations.Manifest) bool) []spec {
+	var s []spec
+	for _, m := range integrations.All() {
+		if m.Setting != "" && which(m) {
+			s = append(s, spec{key: m.Setting, kind: kBool, def: m.Default, required: m.Required})
+		}
+	}
+	return s
+}
 
 // extraPrefix is the passthrough section T15.3 removed (retired.go reads what it held).
 const extraPrefix = "shell.extra."
 
 // Keys are the schema's keys, in order.
 func Keys() []string {
-	out := make([]string, len(schema))
-	for i, s := range schema {
+	keys := schema()
+	out := make([]string, len(keys))
+	for i, s := range keys {
 		out[i] = s.key
 	}
 	return out
@@ -263,7 +278,7 @@ func lookup(key string) (spec, bool) {
 	if path, err := splitKey(key); err == nil {
 		key = joinKey(path)
 	}
-	for _, s := range schema {
+	for _, s := range schema() {
 		if s.key == key {
 			return s, true
 		}
@@ -586,7 +601,7 @@ func Load(path string, env func(string) (string, bool)) ([]Value, error) {
 		return nil, err
 	}
 	var out []Value
-	for _, s := range schema {
+	for _, s := range schema() {
 		v := Value{Key: s.key, Value: s.def, Source: SourceDefault, Kind: kindNames[s.kind], Values: s.enum}
 		if rt, ok := runtimeOfKey[s.key]; ok {
 			v.Value = Detected(rt)

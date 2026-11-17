@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/hook"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/release"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/render"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sandbox"
@@ -75,12 +76,14 @@ func agentLoadedEnv(argv, env []string) []string {
 // --strict-mcp-config would drop them all.
 const claudeAIConnectors = "ENABLE_CLAUDEAI_MCP_SERVERS"
 
-// connectorsEnv is env with the claude.ai connectors off unless
-// claude_code.connectors is on (T42a, L403) or the owner set the variable.
-// pi's claude-bridge loads no claude.ai connectors, so only this launch
-// takes it.
+// connectorsEnv is env with the claude.ai connectors off unless every
+// integration its manifest turns off at launch (when_off: launch; m365's
+// claude_code.connectors, T42a, L403) is on, or the owner set the variable
+// (T58b, L1167). The variable loads or keeps out every connector at once,
+// so one of them off keeps them all out. pi's claude-bridge loads no
+// claude.ai connectors, so only this launch takes it.
 func connectorsEnv(env []string) []string {
-	if os.Getenv(claudeAIConnectors) != "" || settings.On("claude_code.connectors") {
+	if os.Getenv(claudeAIConnectors) != "" || !slices.ContainsFunc(integrations.OffAt("launch"), func(m integrations.Manifest) bool { return !settings.On(m.Setting) }) {
 		return env
 	}
 	return withEnv(env, claudeAIConnectors+"=false")

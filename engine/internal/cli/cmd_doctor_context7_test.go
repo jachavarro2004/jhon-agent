@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/release"
-	"github.com/jachavarro2004/jhon-agent/engine/internal/render"
 )
 
 // T133e (L1016, G6): doctor says how context7 is mounted and asks its
@@ -26,18 +26,18 @@ func context7Rows(t *testing.T, settings string, remote bool, probe error) (rows
 		must(t, os.WriteFile(path, []byte(settings), 0o600))
 	}
 	t.Setenv("JHON_SETTINGS", path)
-	saved := probeContext7
-	defer func() { probeContext7 = saved }()
-	probeContext7 = func(url string) error {
+	saved := probeRemote
+	defer func() { probeRemote = saved }()
+	probeRemote = func(url string) error {
 		asked++
-		if url != render.Context7URL {
-			t.Errorf("asked %s; want %s", url, render.Context7URL)
+		if url != "https://mcp.context7.com/mcp" {
+			t.Errorf("asked %s; want context7's", url)
 		}
 		return probe
 	}
 	var b strings.Builder
 	o := &release.Out{W: &b, E: &b}
-	doctor{o: o}.context7(remote)
+	doctor{o: o, src: repoRoot(t)}.remoteProbed(remote)
 	return b.String(), asked, o.Failed
 }
 
@@ -85,18 +85,47 @@ func TestProbeContext7(t *testing.T) {
 		w.WriteHeader(status)
 	}))
 	defer srv.Close()
-	if err := probeContext7(srv.URL); err != nil {
+	if err := probeRemote(srv.URL); err != nil {
 		t.Errorf("a 200 answer: %v", err)
 	}
 	if got.method != "POST" || got.accept != "application/json, text/event-stream" || !strings.Contains(got.body, `"method":"initialize"`) {
 		t.Errorf("the probe sent %+v", got)
 	}
 	status = http.StatusServiceUnavailable
-	if err := probeContext7(srv.URL); err == nil || err.Error() != "HTTP 503" {
+	if err := probeRemote(srv.URL); err == nil || err.Error() != "HTTP 503" {
 		t.Errorf("a 503 answer: %v", err)
 	}
 	srv.Close()
-	if err := probeContext7(srv.URL); err == nil {
+	if err := probeRemote(srv.URL); err == nil {
 		t.Error("no answer is an error")
+	}
+}
+
+// T58b O1 (L1167): doctor's remote row is every optional integration whose
+// manifest probes it remotely, by its own setting and url: a fixture set's
+// extra one is said off, and asked only with --remote, as context7 is.
+func TestDoctorRemoteRowsFollowTheManifests(t *testing.T) {
+	extra := integrations.Manifest{Name: "docsfixture", Kind: "mcp-http", Order: 9, Setting: "integrations.docsfixture", Default: true,
+		WhenOff: "render", Capabilities: []string{"docsfixture"}, Doctor: integrations.Doctor{Probe: "remote", URL: "https://docs.example.invalid/mcp"}}
+	t.Cleanup(integrations.Use(append(integrations.All(), extra)))
+	path := filepath.Join(t.TempDir(), "settings.toml")
+	must(t, os.WriteFile(path, []byte("schema = 1\n\n[integrations]\ncontext7 = false\ndocsfixture = false\n"), 0o600))
+	t.Setenv("JHON_SETTINGS", path)
+	saved := probeRemote
+	defer func() { probeRemote = saved }()
+	asked := 0
+	probeRemote = func(string) error { asked++; return nil }
+	var b strings.Builder
+	o := &release.Out{W: &b, E: &b}
+	doctor{o: o, src: repoRoot(t)}.remoteProbed(true)
+	want := "  context7 is off (integrations.context7 = false)\n  docsfixture is off (integrations.docsfixture = false)\n"
+	if b.String() != want || asked != 0 {
+		t.Errorf("asked %d\n got %q\nwant %q", asked, b.String(), want)
+	}
+	must(t, os.WriteFile(path, []byte("schema = 1\n\n[integrations]\ncontext7 = false\n"), 0o600))
+	b.Reset()
+	doctor{o: o, src: repoRoot(t)}.remoteProbed(true)
+	if want := "  context7 is off (integrations.context7 = false)\n  ok    docsfixture answers at https://docs.example.invalid/mcp\n"; b.String() != want || asked != 1 {
+		t.Errorf("asked %d\n got %q\nwant %q", asked, b.String(), want)
 	}
 }

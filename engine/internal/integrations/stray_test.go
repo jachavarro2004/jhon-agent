@@ -13,37 +13,19 @@ import (
 	"testing"
 )
 
-// pending are the integration literals still in engine code outside this
-// reader, file (relative to engine/) and literal, each a known call site
-// T58a did not move: the packages another lane was editing (cli, hook, ldd),
-// the transcript audit's classifiers and the dashboard's routes, and the
-// always-on contract files. A new literal is refused; moving one of these
-// out of the code removes its line here.
-var pending = []string{
-	"internal/cli/cmd_audit_all.go: codegraph",
-	"internal/cli/cmd_context_state.go: integrations.engram",
-	"internal/hook/routeguard_state.go: integrations.engram",
-	"internal/hook/launchcontext.go: codegraph",
-	"internal/hook/launchcontext.go: .codegraph",
-	"internal/hook/launchcontext.go: .codegraph-wsl",
-	"internal/hook/launchcontext.go: codegraph.db",
-	"internal/ldd/state.go: engram",
-	"internal/ldd/state.go: .codegraph",
-	"internal/ldd/state.go: codegraph",
-	"internal/ldd/context.go: engram",
-	// audit: how a transcript's tool calls are classed, by server and program.
-	"internal/audit/integrations.go: codegraph",
-	"internal/audit/contextuse.go: codegraph",
-	"internal/audit/contextuse.go: engram",
-	// dashboard: its memory routes, an HTTP contract (dashboard/CONTRACT.md).
-	"internal/dashboard/serve.go: /api/memory/engram",
-	"internal/dashboard/serve.go: /api/memory/engram/",
-	// dashboard: the context-use columns, named as the audit's sources.
-	"internal/dashboard/view.go: codegraph",
-	"internal/dashboard/view.go: engram",
-	// render: the always-on layer's contract files, prose paths in load order.
-	"internal/render/render.go: contracts/codegraph.md",
-	"internal/render/render.go: contracts/engram.md",
+// exceptions are the integration literals engine code may still hold
+// outside this reader, file (relative to engine/) and literal, each with
+// the one-line reason it stays (T58b O4, L1167). A new literal is refused;
+// moving one of these out of the code removes its line here.
+var exceptions = []struct{ lit, reason string }{
+	{"internal/cli/cmd_context_state.go: integrations.engram", "outside this slice's surfaces"},
+	{"internal/ldd/state.go: engram", "outside this slice's surfaces"},
+	{"internal/ldd/state.go: .codegraph", "outside this slice's surfaces"},
+	{"internal/ldd/state.go: codegraph", "outside this slice's surfaces"},
+	{"internal/ldd/context.go: engram", "outside this slice's surfaces"},
+	{"internal/hook/launchcontext.go: .codegraph", "CodeGraph's own index folder; v1 has no field for it, and a new field is v2 (integrations/README.md)"},
+	{"internal/hook/launchcontext.go: .codegraph-wsl", "CodeGraph's own index folder under WSL; v1 has no field for it, and a new field is v2"},
+	{"internal/hook/launchcontext.go: codegraph.db", "CodeGraph's own database file; v1 has no field for it, and a new field is v2"},
 }
 
 // TestNoIntegrationLiteralsOutsideTheReader (M2, L1150): engine code names
@@ -109,13 +91,18 @@ func TestNoIntegrationLiteralsOutsideTheReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range pending {
-		if !slices.Contains(found, p) {
-			t.Errorf("%s is no longer in the code: remove it from pending", p)
+	var listed []string
+	for _, e := range exceptions {
+		if e.reason == "" {
+			t.Errorf("%s: an exception gives its reason", e.lit)
+		}
+		listed = append(listed, e.lit)
+		if !slices.Contains(found, e.lit) {
+			t.Errorf("%s is no longer in the code: remove it from exceptions", e.lit)
 		}
 	}
 	for _, f := range found {
-		if !slices.Contains(pending, f) {
+		if !slices.Contains(listed, f) {
 			t.Errorf("%s: an integration literal; read it from engine/internal/integrations", f)
 		}
 	}

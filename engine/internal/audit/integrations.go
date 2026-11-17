@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 )
 
@@ -92,17 +93,23 @@ func plainShellRead(command string) bool {
 // codegraph, an MCP server's codegraph_*), or a shell command whose first
 // program is codegraph.
 func asksCodegraph(u ToolUse) bool {
-	if strings.HasPrefix(ownName(u.Name), "codegraph") {
+	if strings.HasPrefix(ownName(u.Name), integrations.CodeGraph) {
 		return true
 	}
-	if server, ok := mcpServer(u.Name); ok && strings.Contains(server, "codegraph") {
+	if server, ok := mcpServer(u.Name); ok && strings.Contains(server, integrations.CodeGraph) {
 		return true
 	}
 	if c, ok := shellCommand(u); ok {
 		x, ok := firstProgram(c)
-		return ok && x.Program == "codegraph"
+		return ok && x.Program == codegraphBinary()
 	}
 	return false
+}
+
+// codegraphBinary is CodeGraph's program, its manifest's doctor.binary.
+func codegraphBinary() string {
+	m, _ := integrations.Get(integrations.CodeGraph)
+	return m.Doctor.Binary
 }
 
 // shellCommand is a shell call's command line; ok is false for any other call.

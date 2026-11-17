@@ -18,20 +18,33 @@
 package integrations
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
+	"net/url"
 	"path"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	embedded "github.com/jachavarro2004/jhon-agent/integrations"
 )
 
-// Schema is the one schema version this reader knows.
+// Schema is the one schema version this reader knows. A manifest names its
+// major version only, jhon.integration/v<N>; one of another major is
+// refused, naming the file, the field and this version (the policy:
+// integrations/README.md).
 const Schema = "jhon.integration/v1"
+
+// schemaForm is a schema of any major version.
+var schemaForm = regexp.MustCompile(`^jhon\.integration/v[1-9][0-9]*$`)
 
 // Kinds are how an integration is reached: an MCP server over stdio or
 // http, a connector the runtime's account mounts, or a CLI.
@@ -159,16 +172,17 @@ func (m Manifest) InstallCommand(via, version string) string {
 }
 
 // The integrations the engine still reads by name (L1159, F4): setup's
-// locked rows and the pins it installs (Core, in row order), and the one
-// doctor probes over the network. Assumed refuses a set that breaks this,
-// so a lookup by one of them never finds a shape it cannot use.
+// locked rows and the pins it installs (Core, in row order). Assumed refuses
+// a set that breaks this, so a lookup by one of them never finds a shape it
+// cannot use. No optional integration is read by name (T58b, L1167): its
+// manifest's setting, when_off and doctor block decide its on and off.
 const (
 	Engram    = "engram"
 	CodeGraph = "codegraph"
-	Context7  = "context7"
 )
 
-// Core are setup's locked rows and the pins it installs, in row order.
+// Core are setup's locked rows and the pins it installs, in row order:
+// required, and kept so by Assumed (owner, L1166).
 var Core = []string{Engram, CodeGraph}
 
 // embeddedSet is the compiled-in manifests and their problems, read once.
@@ -177,13 +191,31 @@ var embeddedSet = sync.OnceValues(func() ([]Manifest, []Problem) {
 	return ms, append(probs, Assumed(ms)...)
 })
 
+// used is a set a test made the one every lookup reads (Use); nil reads
+// the compiled-in one.
+var used atomic.Pointer[[]Manifest]
+
 // All are the compiled-in manifests, by Order (a malformed one as far as it
 // reads). They never stop the binary: a lookup that finds nothing gives a
 // zero Manifest, `jhon validate` reports their problems (Embedded), and
 // integrations_test.go keeps a malformed set from shipping.
 func All() []Manifest {
+	if ms := used.Load(); ms != nil {
+		return *ms
+	}
 	ms, _ := embeddedSet()
 	return ms
+}
+
+// Use makes ms, by Order, the set All and every lookup read until restore
+// is called: a test turns a fixture set's integrations on and off through
+// the same path as the compiled-in ones (T58b, O1). Never called outside a
+// test.
+func Use(ms []Manifest) (restore func()) {
+	ms = slices.Clone(ms)
+	sort.SliceStable(ms, func(i, j int) bool { return ms[i].Order < ms[j].Order })
+	prev := used.Swap(&ms)
+	return func() { used.Store(prev) }
 }
 
 // Embedded are the compiled-in manifests and every problem of them: of
@@ -196,8 +228,8 @@ func Embedded() ([]Manifest, []Problem) {
 // Assumed are the problems of a set that breaks what the engine still
 // assumes of it, each naming the file and the field: every Core integration
 // is there, required, with a pinned binary, and no other is required (setup
-// shows a locked row for each Core one and no other); Context7 is there and
-// probed remotely (doctor reads its url and setting by name).
+// shows a locked row for each Core one and no other). An optional
+// integration may be absent: nothing reads one by name.
 func Assumed(ms []Manifest) []Problem {
 	var probs []Problem
 	file := func(name string) string { return "integrations/" + name + "/manifest.yaml" }
@@ -226,16 +258,6 @@ func Assumed(ms []Manifest) []Problem {
 			probs = append(probs, Problem{m.File, "required", "setup shows a locked row only for " + strings.Join(Core, " and ")})
 		}
 	}
-	switch m, ok := find(Context7); {
-	case !ok:
-		probs = append(probs, Problem{file(Context7), "name", "no manifest is named " + Context7 + "; doctor and the render read its url and setting by name"})
-	case m.Doctor.Probe != "remote":
-		probe := m.Doctor.Probe + " is not remote"
-		if probe == " is not remote" {
-			probe = "missing"
-		}
-		probs = append(probs, Problem{m.File, "doctor.probe", probe + "; doctor probes " + Context7 + " at doctor.url"})
-	}
 	return probs
 }
 
@@ -262,9 +284,22 @@ func Required() []Manifest {
 	return slices.DeleteFunc(slices.Clone(All()), func(m Manifest) bool { return !m.Required })
 }
 
-// Optional are the integrations their setting turns off at render, by Order.
+// Optional are the integrations their setting can turn off, by Order:
+// every one not required, whatever its when_off.
 func Optional() []Manifest {
-	return slices.DeleteFunc(slices.Clone(All()), func(m Manifest) bool { return m.WhenOff != "render" })
+	return slices.DeleteFunc(slices.Clone(All()), func(m Manifest) bool { return m.Required })
+}
+
+// OffAt are the optional integrations whose setting, false, acts at stage
+// (a when_off: render or launch), by Order.
+func OffAt(stage string) []Manifest {
+	return slices.DeleteFunc(Optional(), func(m Manifest) bool { return m.WhenOff != stage })
+}
+
+// RemoteProbed are the optional integrations doctor asks over the network
+// (doctor.probe: remote, at doctor.url) only when told to, by Order.
+func RemoteProbed() []Manifest {
+	return slices.DeleteFunc(Optional(), func(m Manifest) bool { return m.Doctor.Probe != "remote" || m.Doctor.URL == "" })
 }
 
 // Load reads every <name>/manifest.yaml of fsys (the integrations folder)
@@ -518,7 +553,11 @@ func parse(file, dir, text string) (Manifest, []Problem) {
 
 	m.Schema = str("schema", true)
 	if m.Schema != "" && m.Schema != Schema {
-		bad("schema", m.Schema+" is not "+Schema)
+		if schemaForm.MatchString(m.Schema) {
+			bad("schema", m.Schema+" is another major version; this binary reads "+Schema+" (integrations/README.md)")
+		} else {
+			bad("schema", m.Schema+" is not jhon.integration/v<N>; this binary reads "+Schema)
+		}
 		return m, probs // another version's fields are not v1's to judge
 	}
 	m.Name = str("name", true)
@@ -603,4 +642,33 @@ func parse(file, dir, text string) (Manifest, []Problem) {
 		}
 	}
 	return m, probs
+}
+
+// ProbeRemote asks endpoint, an integration's doctor.url, one MCP
+// initialize, with no credential, bounded to 5 seconds: nil when it answers
+// 200. Only doctor --remote and the dashboard's ?probe=1 call it.
+func ProbeRemote(endpoint string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	const initialize = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"jhon-doctor","version":"0"}}}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(initialize))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		// The caller names the endpoint itself: only why it did not answer.
+		var sent *url.Error
+		if errors.As(err, &sent) {
+			return sent.Err
+		}
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return nil
 }

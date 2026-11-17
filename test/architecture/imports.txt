@@ -8,6 +8,7 @@ internal/audit -> internal/contract
 internal/audit -> internal/grant
 internal/audit -> internal/guard
 internal/audit -> internal/hook
+internal/audit -> internal/integrations
 internal/audit -> internal/isodate
 internal/audit -> internal/js
 internal/audit -> internal/lazyre
@@ -23,6 +24,7 @@ internal/cli -> internal/execution
 internal/cli -> internal/grant
 internal/cli -> internal/guard
 internal/cli -> internal/hook
+internal/cli -> internal/integrations
 internal/cli -> internal/isodate
 internal/cli -> internal/js
 internal/cli -> internal/judgment
@@ -50,12 +52,14 @@ internal/compose -> internal/js
 internal/compose -> internal/lazyre
 internal/compose -> internal/requirements
 internal/dashboard -> internal/discover
+internal/dashboard -> internal/integrations
 internal/dashboard -> internal/isodate
 internal/dashboard -> internal/js
 internal/dashboard -> internal/lazyre
 internal/dashboard -> internal/ldd
 internal/dashboard -> internal/palette
 internal/dashboard -> internal/project
+internal/dashboard -> internal/settings
 internal/dashboard -> internal/telemetry
 internal/discover -> internal/contract
 internal/discover -> internal/js
@@ -85,6 +89,7 @@ internal/hook -> internal/discover
 internal/hook -> internal/execution
 internal/hook -> internal/grant
 internal/hook -> internal/guard
+internal/hook -> internal/integrations
 internal/hook -> internal/isodate
 internal/hook -> internal/js
 internal/hook -> internal/lazyre
