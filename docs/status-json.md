@@ -80,7 +80,9 @@ which clears it. A unit's run that selects nothing leaves the record
 as the last run wrote it; `tests.unit` appears here only for a unit's run.
 The record also keeps `after_working_tree`, the working tree taken again
 when the run ends: when it differs from `working_tree` the run is dirty,
-and `jhon deliver check` never takes it as the tested tree (T146d).
+and `jhon deliver check` never takes it as the tested tree (T146d). A
+record with no `after_working_tree` (one an earlier jhon wrote) is not
+taken either: the refusal says to run the tests again (T146e).
 
 A uv-run pytest project is narrowed by pytest-testmon, whose record lives
 in `~/.cache/jhon/testmon/`, one file per checkout and project. With no

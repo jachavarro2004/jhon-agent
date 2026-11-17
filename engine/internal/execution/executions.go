@@ -366,6 +366,10 @@ type LastRun struct {
 	// (Record.WorkingTree): what delivery compares a committed tree with
 	// when the run started on uncommitted work. Not in status's JSON.
 	WorkingTree string `json:"-"`
+	// AfterWorkingTree is WorkingTree read again when the run ended
+	// (Record.AfterWorkingTree); a record an earlier binary wrote has none.
+	// Not in status's JSON.
+	AfterWorkingTree string `json:"-"`
 }
 
 // Empty is a complete run that holds no execution: it selected no project,
@@ -453,6 +457,8 @@ func ReadLastRun(root, change string) (*LastRun, error) {
 		LightVerify:    lastLightVerify(root, change),
 		Unit:           obj["unit"] == true,
 		WorkingTree:    str("working_tree"),
+
+		AfterWorkingTree: str("after_working_tree"),
 	}, nil
 }
 
