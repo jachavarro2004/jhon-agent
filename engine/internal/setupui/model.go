@@ -2,6 +2,7 @@ package setupui
 
 import (
 	"errors"
+	manifests "github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -40,7 +41,9 @@ const (
 	iFailed
 )
 
-// The integration rows: Engram and CodeGraph are locked on.
+// The integration rows: the required integrations' first, locked on
+// (Engram and CodeGraph, by their manifests' order; view.go's integrations
+// holds one row for each), then Jhon's own.
 const (
 	rowEngram = iota
 	rowCodeGraph
@@ -342,10 +345,8 @@ func (m *Model) runtimesKey(k string) {
 
 func (m *Model) toggleIntegration() {
 	switch m.cursor {
-	case rowEngram:
-		m.note = "Engram stays on for now: it ships coupled to the core."
-	case rowCodeGraph:
-		m.note = "CodeGraph stays on for now: it ships coupled to the core."
+	case rowEngram, rowCodeGraph:
+		m.note = manifests.Required()[m.cursor].Setup.LockedNote
 	case rowTelemetry:
 		m.c.Telemetry = !m.c.Telemetry
 	case rowPalette:

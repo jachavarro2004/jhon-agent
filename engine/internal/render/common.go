@@ -185,6 +185,11 @@ var runtimeTerms = map[string]map[string]string{
 		"claude-code": "continue it with `SendMessage` to its agent id",
 		"pi":          "continue it with `subagent_continue` and the id `subagent` returned",
 	},
+	// T118d: the native 4R review is one call in each runtime.
+	"native-review": {
+		"claude-code": "`jhon review run`",
+		"pi":          "`jhon_review`",
+	},
 	"own-worktree": {
 		"claude-code": "is launched with `isolation: \"worktree\"`, a git worktree of its own",
 		"pi":          "is launched with `worktree: true`, a git worktree of its own beside the repository, on a new branch from HEAD",
@@ -235,14 +240,11 @@ var runtimeTerms = map[string]map[string]string{
 
 // bodyFor is an agent's body as runtime renders it: each runtime term in
 // its words. A term with no words for it stays as written, which
-// validation reports. An agent that does not hold context7 (it is off,
-// context7.go) reads no sentence about it.
+// validation reports. An agent that does not hold an optional integration's
+// capability (context7, or one that is off: context7.go) reads no sentence
+// about it.
 func (e *engine) bodyFor(runtime string, a manifest.Agent) string {
-	body := e.bodyOf(a)
-	if !slices.Contains(a.Caps, context7Cap) {
-		body = withoutContext7(body)
-	}
-	return inRuntime(runtime, body)
+	return inRuntime(runtime, withoutUnheld(e.bodyOf(a), a.Caps))
 }
 
 // inRuntime is text with each runtime term in runtime's words, so a runtime

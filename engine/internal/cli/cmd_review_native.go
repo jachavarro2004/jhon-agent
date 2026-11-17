@@ -50,6 +50,12 @@ type reviewArgs struct {
 }
 
 func runReviewNative(sub string, argv []string) (int, error) {
+	return reviewNative(sub, argv, os.Stdin, os.Stdout, os.Stderr), nil
+}
+
+// reviewNative is one native 4R step over stdin, stdout and stderr, its
+// exit code; `jhon review run` calls it in process.
+func reviewNative(sub string, argv []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var a reviewArgs
 	for i := 0; i < len(argv); i++ {
 		switch {
@@ -64,17 +70,17 @@ func runReviewNative(sub string, argv []string) (int, error) {
 			i++
 			a.subject = argv[i]
 		default:
-			fmt.Fprintln(os.Stderr, reviewUsage)
-			return 2, nil
+			fmt.Fprintln(stderr, reviewUsage)
+			return 2
 		}
 	}
 	if sub != "start" && a.subject == "" {
-		fmt.Fprintf(os.Stderr, "jhon review %s: --subject <hash> is required (the subject `jhon review start` printed)\n", sub)
-		return 2, nil
+		fmt.Fprintf(stderr, "jhon review %s: --subject <hash> is required (the subject `jhon review start` printed)\n", sub)
+		return 2
 	}
-	fail := func(code int, format string, v ...any) (int, error) {
-		fmt.Fprintf(os.Stderr, "jhon review "+sub+": "+format+"\n", v...)
-		return code, nil
+	fail := func(code int, format string, v ...any) int {
+		fmt.Fprintf(stderr, "jhon review "+sub+": "+format+"\n", v...)
+		return code
 	}
 	top := vcs.GitTopLevel(cwd())
 	if top == "" {
@@ -114,9 +120,9 @@ func runReviewNative(sub string, argv []string) (int, error) {
 	files := ldd.FilesBlock(top, f)
 	switch sub {
 	case "start":
-		return reviewStart(fail, root, template, risk, f, files, ldd.TestsToJudgeBlock(execution.TurnedGreenOf(top, a.change)))
+		return reviewStart(stdout, fail, root, template, risk, f, files, ldd.TestsToJudgeBlock(execution.TurnedGreenOf(top, a.change)))
 	case "refute", "validate":
-		raw, _ := io.ReadAll(os.Stdin)
+		raw, _ := io.ReadAll(stdin)
 		var findings []ldd.Finding
 		if sub == "refute" {
 			lenses, err := ldd.ParseLensResults(raw)
@@ -156,11 +162,11 @@ func runReviewNative(sub string, argv []string) (int, error) {
 		}
 		agent := map[string]string{"refute": "review-refuter", "validate": "review-validator"}[sub]
 		model, effort, source := reviewModel(m, activeProfile(), agent)
-		reviewJSON(map[string]any{"routing_key": agent, "model": model, "effort": effort, "model_source": source,
+		reviewJSON(stdout, map[string]any{"routing_key": agent, "model": model, "effort": effort, "model_source": source,
 			"prompt": prompt, "bytes": len(prompt), "est_tokens": ldd.EstTokens(len(prompt))})
-		return 0, nil
+		return 0
 	}
-	raw, _ := io.ReadAll(os.Stdin)
+	raw, _ := io.ReadAll(stdin)
 	rr, err := ldd.ParseReviewResults(raw)
 	if err == nil {
 		rr.Lenses, err = ldd.CheckLenses(rr.Lenses, f.Subject)
@@ -188,15 +194,15 @@ func runReviewNative(sub string, argv []string) (int, error) {
 	if err := writeAtomic(layout.At(top, rel), ldd.RecordText(a.change, f.Subject, f.Base, red)); err != nil {
 		return fail(2, "%v", err)
 	}
-	reviewJSON(map[string]any{"record": filepath.ToSlash(rel), "subject": f.Subject, "base": f.Base, "lenses": red.Lenses, "verdict": red.Verdict,
+	reviewJSON(stdout, map[string]any{"record": filepath.ToSlash(rel), "subject": f.Subject, "base": f.Base, "lenses": red.Lenses, "verdict": red.Verdict,
 		"correction_set": ldd.IDs(red.CorrectionSet), "for_verify": ldd.IDs(red.ForVerify), "follow_ups": ldd.IDs(red.FollowUps),
 		"information": ldd.IDs(red.Information), "refuted": ldd.IDs(red.Refuted), "unavailable": red.Unavailable})
-	return 0, nil
+	return 0
 }
 
 // reviewStart prints `jhon review start`'s object. judge is the change's
 // tests to judge (T137), which each lens prompt ends with; "" for none.
-func reviewStart(fail func(int, string, ...any) (int, error), root string, template func(string) (string, error), risk ldd.Risk, f vcs.Frozen, files, judge string) (int, error) {
+func reviewStart(stdout io.Writer, fail func(int, string, ...any) int, root string, template func(string) (string, error), risk ldd.Risk, f vcs.Frozen, files, judge string) int {
 	t, err := template("lens")
 	if err != nil {
 		return fail(2, "its prompt template cannot be read: %v", err)
@@ -226,8 +232,8 @@ func reviewStart(fail func(int, string, ...any) (int, error), root string, templ
 		lenses = append(lenses, map[string]any{"lens": lens, "routing_key": agent, "model": model, "effort": effort, "model_source": source,
 			"prompt": prompt, "bytes": len(prompt), "est_tokens": n})
 	}
-	reviewJSON(map[string]any{"subject": f.Subject, "base": f.Base, "candidate": f.Candidate, "lenses": lenses})
-	return 0, nil
+	reviewJSON(stdout, map[string]any{"subject": f.Subject, "base": f.Base, "candidate": f.Candidate, "lenses": lenses})
+	return 0
 }
 
 // activeProfile is the active profile, nil when none.
@@ -242,11 +248,16 @@ func activeProfile() any {
 // else its tier, else agents.yaml's tier), and where it came from:
 // profile-agent, profile-tier or agents.yaml; all "" when unresolved.
 func reviewModel(m manifest.Manifest, profile any, agent string) (model, effort, source string) {
+	return reviewModelIn(m, profile, "pi", agent)
+}
+
+// reviewModelIn is reviewModel in runtime (pi or claude-code).
+func reviewModelIn(m manifest.Manifest, profile any, runtime, agent string) (model, effort, source string) {
 	i := slices.IndexFunc(m.Agents, func(a manifest.Agent) bool { return a.Name == agent })
 	if i < 0 {
 		return "", "", ""
 	}
-	v, ok := profiles.ModelFor(m.TierTable(), profile, "pi", profiles.Agent{Name: agent, Tier: m.Agents[i].Tier})
+	v, ok := profiles.ModelFor(m.TierTable(), profile, runtime, profiles.Agent{Name: agent, Tier: m.Agents[i].Tier})
 	if !ok {
 		return "", "", ""
 	}
@@ -273,13 +284,13 @@ func nonNil(findings []ldd.Finding) []ldd.Finding {
 	return findings
 }
 
-// reviewJSON prints v as one line of JSON, HTML characters unescaped.
-func reviewJSON(v any) {
+// reviewJSON prints v to w as one line of JSON, HTML characters unescaped.
+func reviewJSON(w io.Writer, v any) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
 	_ = enc.Encode(v)
-	os.Stdout.Write(b.Bytes())
+	w.Write(b.Bytes())
 }
 
 // writeAtomic writes text to file through a temporary file in its directory.

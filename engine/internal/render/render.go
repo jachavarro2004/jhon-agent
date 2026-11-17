@@ -162,8 +162,9 @@ type engine struct {
 	absent map[string]bool
 	// chosen are the runtimes a setting turns on: created where absent.
 	chosen map[string]bool
-	// context7 is whether integrations.context7 is on (context7.go).
-	context7 bool
+	// optionalOn is whether each optional integration's setting is on, by
+	// name (context7.go).
+	optionalOn map[string]bool
 }
 
 // ReadProfiles is the owner's profiles file with its active profile settled
@@ -207,9 +208,7 @@ func newEngine(root string, a args, out, errw io.Writer) (*engine, error) {
 	e.profiles, e.profErrs = ReadProfiles()
 	e.active, e.profile = profiles.Active(e.profiles)
 	e.off, e.absent, e.chosen = map[string]string{}, map[string]bool{}, map[string]bool{}
-	if e.context7 = settings.On(Context7Setting); !e.context7 {
-		e.m.Agents = withoutCap(e.m.Agents, context7Cap)
-	}
+	e.m.Agents, e.optionalOn = withoutOff(e.m.Agents, settings.On)
 	for _, r := range m.Matrix.Runtimes {
 		on, key, source := settings.RuntimeSetting(r)
 		if !on {

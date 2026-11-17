@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	manifests "github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/version"
 )
 
@@ -397,11 +398,20 @@ type integration struct {
 	name, short, desc, narrowDesc, long string
 }
 
+// The required integrations' rows are their manifests' display name and
+// setup text (integrations/<name>/manifest.yaml); there must be one for each
+// locked row (model.go).
 var integrations = [rowCount]integration{
-	{"Engram", "Engram", "memory that survives sessions", "memory across sessions", "the guards and the rail read it; it ships coupled to the core for now"},
-	{"CodeGraph", "CodeGraph", "a code map for search and impact", "code map for impact", "impact checks read it; it ships coupled to the core for now"},
+	core(rowEngram),
+	core(rowCodeGraph),
 	{"Telemetry", "Telemetry", "record usage events on this machine", "usage events, local", "one JSON line per event under ~/.local/share/jhon/telemetry"},
 	{"Palette", "Palette", "Jhon's colours, or your wallpaper's", "Rose Ink or Desktop", "Rose Ink is Jhon's own; Desktop follows a desktop palette file (JHON_DESKTOP_COLORS)"},
+}
+
+// core is the row of the i-th required integration.
+func core(i int) integration {
+	m := manifests.Required()[i]
+	return integration{m.Display, m.Display, m.Setup.Summary, m.Setup.SummaryNarrow, m.Setup.Detail}
 }
 
 // stateWidth is the integrations' state column: its widest value, "locked on"
@@ -603,7 +613,10 @@ func (m Model) chosen() (runtimes, integrations string) {
 	if m.c.Pi {
 		r = append(r, "pi (claude-bridge)")
 	}
-	in := []string{"Engram", "CodeGraph"}
+	var in []string
+	for _, x := range manifests.Required() {
+		in = append(in, x.Display)
+	}
 	for _, x := range []struct {
 		on   bool
 		name string

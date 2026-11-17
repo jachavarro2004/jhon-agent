@@ -2885,8 +2885,11 @@ func TestRenderFourRNativeFirst(t *testing.T) {
 	match(t, c, "completions in parallel, then a refuter and a validator", "lenses in parallel, then refuter and validator")
 	match(t, c, "`jhon review record` re-freezes and writes review-4r\\.md bound to the frozen subject", "the record is bound to the subject")
 	match(t, c, "~100K tokens means the slice is too big: split it", "an oversized lens prompt splits the slice")
-	match(t, c, "When the native review cannot run \\(no model or registry, or Claude Code\\), launch the read-only `review-<lens>` agents", "agents are the fallback")
+	match(t, c, "When the native review cannot run \\(no model or registry, or `jhon review run` names the lens agents\\), launch the read-only `review-<lens>` agents", "agents are the fallback")
+	match(t, c, "in Claude Code, one Bash call to `jhon review run`", "Claude Code's native review is one Bash call (T118d)")
+	match(t, c, "In Claude Code, `jhon review run \\[--base <ref>\\]` does all of it in one Bash call: each prompt runs through `claude -p`", "through claude -p")
+	match(t, c, "records nothing: its one line says why and names the lens agents", "a failed call falls back to the lens agents")
 	match(t, c, "Independence stays with `verify`", "independence stays with verify")
 	o := flat(support.Read(t, filepath.Join(repoRoot, "prose", "orchestrator.md")))
-	match(t, o, "A 4R is one call to the native review, the lens agents only when it cannot run", "the orchestrator calls the native review first")
+	match(t, o, "A 4R is one call to the native review \\(\\{\\{runtime:native-review\\}\\}\\), the lens agents only when it cannot run", "the orchestrator calls the native review first, in each runtime's own words")
 }

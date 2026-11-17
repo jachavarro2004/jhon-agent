@@ -849,6 +849,28 @@ func TestRouteGuardFourROnlyPertinentLenses(t *testing.T) {
 	}
 }
 
+// Claude Code's native 4R is one Bash call (T118d, L1150 K3): the 4R
+// refusal names it beside pi's tool, and the guard admits `jhon review run`
+// silently when the 4R is due; the lens agents stay admitted as its fallback.
+func TestRouteGuardFourRNativeInClaudeCode(t *testing.T) {
+	t.Parallel()
+	r := newRG(t, "")
+	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n"})
+	support.Write(t, r.p, map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/verify-report.md": "verdict: pass\n",
+		"openspec/changes/c1/execution-record.json": redGreenRecord})
+	res := r.call(t, "Bash", cmd("gh pr create --title x --body y"), true)
+	code(t, res, 2, "4R due")
+	matches(t, res.Stderr, "run the pertinent lenses \\(risk\\) with the native review \\(`jhon_review` in pi, `jhon review run` in Claude Code; the lens agents when it cannot run\\)", "the refusal names the native review per runtime")
+	for _, c := range []string{"jhon review run", "jhon review run --base main", "cd " + r.p + " && jhon review run --change c1"} {
+		ok := r.call(t, "Bash", cmd(c), true)
+		code(t, ok, 0, c)
+		if ok.Stdout != "" || ok.Stderr != "" {
+			t.Errorf("%s runs silently when the 4R is due: %q %q", c, ok.Stdout, ok.Stderr)
+		}
+	}
+	code(t, r.call(t, "Agent", map[string]any{"subagent_type": "review-risk", "prompt": "x"}, true), 0, "the fallback lens agent")
+}
+
 // redGreenRecord is an execution record whose last run passed after a
 // failing one: the change's RED before its GREEN (T31), with a passing light
 // verify of the tree it tested (T31.5), as a standard-route PR needs.
