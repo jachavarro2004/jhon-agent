@@ -223,10 +223,10 @@ type Record struct {
 	TurnedGreen []TurnedGreen `json:"turned_green,omitempty"`
 }
 
-// RecordPath is the record's path, relative to the workspace root, for one
-// change of an OpenSpec layout; its base name is every layout's.
-func RecordPath(change string) string {
-	return filepath.Join(filepath.FromSlash(layout.OpenSpec.ChangesDir()), change, recordFile())
+// RecordPath is the record's path, relative to root, for one change in its
+// folder under root's layout; its base name is every layout's.
+func RecordPath(root, change string) string {
+	return filepath.Join(ChangesOf(root), change, recordFile())
 }
 
 // ChangeFile is the absolute path of file, one of change's record files,

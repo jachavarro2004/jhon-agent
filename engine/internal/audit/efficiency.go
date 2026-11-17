@@ -261,7 +261,7 @@ func writerEfficiency(a *Subagent) *WriterEfficiency {
 	if phase == "apply" && change != "" {
 		for _, base := range bases {
 			for _, d := range changeDirs(base, change) {
-				for _, f := range []string{"tasks.md", "design.md"} {
+				for _, f := range []string{lddlayout.For(base).Tasks(), "design.md"} {
 					if b, err := os.ReadFile(filepath.Join(d, f)); err == nil {
 						scope += "\n" + js.DecodeUTF8(b)
 					}

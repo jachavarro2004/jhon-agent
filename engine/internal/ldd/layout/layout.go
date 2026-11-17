@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 )
 
 // Layout is one way a project keeps its LDD record.
@@ -40,6 +42,25 @@ type Layout interface {
 	// Ignored is whether rel, a path relative to the root, is the
 	// record's: no code, and no test, of the project.
 	Ignored(rel string) bool
+
+	// The grammar of the record (T57 slice 1): what a change's artifacts
+	// are called and how its tasks and specs are read.
+
+	// Tasks is the name of a change's tasks artifact, under its directory.
+	Tasks() string
+	// DeltaSpecs is the name of a change's spec-delta directory, under its
+	// directory; its specs are spec.md files at any depth.
+	DeltaSpecs() string
+	// MainSpec is the main spec, relative to the root, a delta spec at
+	// delta (a path under DeltaSpecs, `/` separators) updates.
+	MainSpec(delta string) string
+	// SliceHeading matches a slice's heading in the tasks artifact, its
+	// name the first group.
+	SliceHeading() *lazyre.Regexp
+	// Scenarios are the requirements of the spec src, each with its
+	// scenarios, its requirement headings at depth (0: a delta's fixed
+	// depth). The error is a delta grammar that cannot be read.
+	Scenarios(src string, depth int) ([]Requirement, error)
 }
 
 // Native is Jhon's own layout, the same shape under ldd/: ldd/config.yaml,
@@ -142,7 +163,14 @@ func (l shaped) ArchiveDir() string                  { return path.Join(l.Change
 func (l shaped) Archive(date, change string) string {
 	return path.Join(l.ArchiveDir(), date+"-"+change)
 }
-func (l shaped) SpecsDir() string { return path.Join(l.dir, "specs") }
+func (l shaped) SpecsDir() string             { return path.Join(l.dir, "specs") }
+func (l shaped) Tasks() string                { return "tasks.md" }
+func (l shaped) DeltaSpecs() string           { return "specs" }
+func (l shaped) MainSpec(delta string) string { return path.Join(l.SpecsDir(), delta) }
+func (l shaped) SliceHeading() *lazyre.Regexp { return sliceHeading }
+func (l shaped) Scenarios(src string, depth int) ([]Requirement, error) {
+	return shapedScenarios(src, depth)
+}
 func (l shaped) Ignored(rel string) bool {
 	return strings.HasPrefix(filepath.ToSlash(rel), l.dir+"/")
 }

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 )
 
 // The record a PR waits for (S23): at risk passive or medium a tasks.md with
@@ -40,7 +42,7 @@ func TestDocumentedByTier(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if got := Documented(dir, c.tier); got != c.want {
+		if got := Documented(layout.OpenSpec, dir, c.tier); got != c.want {
 			t.Errorf("%s: Documented = %v, want %v", c.what, got, c.want)
 		}
 	}
