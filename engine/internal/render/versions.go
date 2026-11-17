@@ -32,13 +32,20 @@ var Tools = func() []Tool {
 	return out
 }()
 
-// EngramVersion and CodeGraphVersion are the required integrations' pins,
-// by their manifests' order, for setupui.Pins (cli/cmd_setup.go), whose
-// shape the CLI's tests fix; T58b reads every pin from Tools instead.
+// EngramVersion and CodeGraphVersion are the core integrations' pins, by
+// name ("" when the set lacks one: jhon validate refuses that set), for
+// setupui.Pins (cli/cmd_setup.go), whose shape the CLI's tests fix; T58b
+// reads every pin from Tools instead.
 var (
-	EngramVersion    = integrations.Required()[0].Doctor.Version
-	CodeGraphVersion = integrations.Required()[1].Doctor.Version
+	EngramVersion    = pin(integrations.Engram)
+	CodeGraphVersion = pin(integrations.CodeGraph)
 )
+
+// pin is the doctor.version of the integration called name, "" without one.
+func pin(name string) string {
+	m, _ := integrations.Get(name)
+	return m.Doctor.Version
+}
 
 // pi's pinned packages.
 const (

@@ -408,9 +408,10 @@ var integrations = [rowCount]integration{
 	{"Palette", "Palette", "Jhon's colours, or your wallpaper's", "Rose Ink or Desktop", "Rose Ink is Jhon's own; Desktop follows a desktop palette file (JHON_DESKTOP_COLORS)"},
 }
 
-// core is the row of the i-th required integration.
+// core is the row of the i-th core integration (manifests.Core), by name;
+// an empty row when the set lacks it (jhon validate refuses that set).
 func core(i int) integration {
-	m := manifests.Required()[i]
+	m, _ := manifests.Get(manifests.Core[i])
 	return integration{m.Display, m.Display, m.Setup.Summary, m.Setup.SummaryNarrow, m.Setup.Detail}
 }
 

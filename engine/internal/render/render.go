@@ -359,6 +359,9 @@ func (e *engine) main() int {
 	}
 
 	problems := append(e.validate(), e.validateRuntime()...)
+	if a.validate && e.embeddedIntegrations() {
+		e.println("validation: no integrations/ in this tree; validated the integration manifests compiled into jhon")
+	}
 	if len(problems) > 0 {
 		e.eprintln(fmt.Sprintf("validation: %d problem(s)\n", len(problems)))
 		for _, p := range problems {

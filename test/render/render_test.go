@@ -2889,6 +2889,7 @@ func TestRenderFourRNativeFirst(t *testing.T) {
 	match(t, c, "in Claude Code, one Bash call to `jhon review run`", "Claude Code's native review is one Bash call (T118d)")
 	match(t, c, "In Claude Code, `jhon review run \\[--base <ref>\\]` does all of it in one Bash call: each prompt runs through `claude -p`", "through claude -p")
 	match(t, c, "records nothing: its one line says why and names the lens agents", "a failed call falls back to the lens agents")
+	match(t, c, "Run it as a Bash call with `run_in_background: true`", "F3 (L1159): in the background, past the Bash tool's 2-minute default")
 	match(t, c, "Independence stays with `verify`", "independence stays with verify")
 	o := flat(support.Read(t, filepath.Join(repoRoot, "prose", "orchestrator.md")))
 	match(t, o, "A 4R is one call to the native review \\(\\{\\{runtime:native-review\\}\\}\\), the lens agents only when it cannot run", "the orchestrator calls the native review first, in each runtime's own words")

@@ -185,9 +185,14 @@ var runtimeTerms = map[string]map[string]string{
 		"claude-code": "continue it with `SendMessage` to its agent id",
 		"pi":          "continue it with `subagent_continue` and the id `subagent` returned",
 	},
-	// T118d: the native 4R review is one call in each runtime.
+	// T118d: the native 4R review is one call in each runtime. In Claude
+	// Code it runs in the background (L1159, F3): its lens calls took 32-231 s
+	// in a real review, past the Bash tool's 2-minute default, which would
+	// kill it without its cleanup or its one line; a background call has no
+	// such bound (each claude call keeps its own) and its notification wakes
+	// the orchestrator.
 	"native-review": {
-		"claude-code": "`jhon review run`",
+		"claude-code": "`jhon review run` as a Bash call with `run_in_background: true`, which the Bash tool's 2-minute default never cuts short; act on its notification, reading its output",
 		"pi":          "`jhon_review`",
 	},
 	"own-worktree": {
