@@ -26,6 +26,7 @@ All notable changes to Jhon are recorded here. The format follows
 - The delivery rules the fixed-context cut dropped are back (the high tier's verify report or Judgment Day record, the RED/GREEN record, hand-run suites get a note), the ambient-credential and owner-act rules are back in the always-on remote-auth contract, and contract pointers name the install's real path; validation reports an on-demand problem against the prose file at fault (T146c).
 - `jhon deliver check` no longer takes a run whose working tree changed while it ran as the tested tree (the run records its working tree again when it ends; a difference marks it dirty), and the committed-tree evidence applies only to a run that passed and finished (T146d).
 - `jhon deliver check` refuses a test record written by 0.3.1-0.3.5 (no `after_working_tree`) as evidence for the committed tree and says to run the tests again; the delivery-evidence note appears only on a run it accepts, never on a refused unit run (T146e).
+- A run no longer reuses passes from, measures a unit's run from, or closes a slice on a test record written by jhon 0.3.1-0.3.5 (no `after_working_tree`): such a record cannot show its working tree held until the run ended. After updating, a slice or delivery recorded by an older jhon needs one re-run, `jhon executions run <change> --affected <base>` (T146f).
 - Tests: the shell suite and the git hooks' Go tests no longer read the machine owner's Jhon settings or state (T147).
 
 ## [0.3.5] - 2026-11-17

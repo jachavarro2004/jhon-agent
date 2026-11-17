@@ -81,7 +81,7 @@ func ranOnTree(t *testing.T, root, command string) {
 	if tree == "" {
 		t.Fatal("the working tree cannot be read")
 	}
-	write(t, execution.RecordFile(root, "c1"), `{"complete": true, "scope": "affected", "working_tree": "`+tree+`", "executions": [{"project": "app", "command": "`+command+`", "status": "pass"}]}`+"\n")
+	write(t, execution.RecordFile(root, "c1"), `{"complete": true, "scope": "affected", "working_tree": "`+tree+`", "after_working_tree": "`+tree+`", "executions": [{"project": "app", "command": "`+command+`", "status": "pass"}]}`+"\n")
 }
 
 // closeDataSlice changes app/repo/query.py, checks off slice 1, records

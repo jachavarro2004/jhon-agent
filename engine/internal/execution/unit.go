@@ -22,8 +22,10 @@ type PassedRun struct {
 
 // LastPassOf is the last passing run a new run of change keeps: the current
 // record's run when it passed complete and undisturbed on a known working
-// tree, else the one that record kept. Nil when there is none, no record,
-// or one that cannot be read.
+// tree, read again the same at its end, else the one that record kept. A
+// complete record with no after_working_tree, an earlier binary's (T146f),
+// shows neither its run nor the one it kept tested one tree: nil. Nil too
+// when there is none, no record, or one that cannot be read.
 func LastPassOf(root, change string) *PassedRun {
 	last, err := ReadLastRun(root, change)
 	if err != nil || last == nil {
@@ -31,14 +33,18 @@ func LastPassOf(root, change string) *PassedRun {
 	}
 	b, err := os.ReadFile(RecordFile(root, change))
 	var r struct {
-		WorkingTree string     `json:"working_tree"`
-		LastPass    *PassedRun `json:"last_pass"`
+		WorkingTree      string     `json:"working_tree"`
+		AfterWorkingTree string     `json:"after_working_tree"`
+		LastPass         *PassedRun `json:"last_pass"`
 	}
 	if err != nil || json.Unmarshal(b, &r) != nil {
 		return nil
 	}
-	if last.Passed && !last.Dirty && r.WorkingTree != "" {
+	if last.Passed && !last.Dirty && r.WorkingTree != "" && r.AfterWorkingTree == r.WorkingTree {
 		return &PassedRun{last.Timestamp, r.WorkingTree}
+	}
+	if last.Complete && r.AfterWorkingTree == "" {
+		return nil
 	}
 	return r.LastPass
 }
