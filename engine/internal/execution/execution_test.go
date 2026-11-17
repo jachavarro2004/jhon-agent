@@ -180,8 +180,10 @@ func TestSelectAffected(t *testing.T) {
 	}
 
 	// A changed source file selects another project whose test modules name
-	// its path, never its bare file name.
-	for _, named := range []string{"lib/app/routers/items.py", "lib/app/routers", "app/routers/"} {
+	// its whole path or its module import path, never a fragment of either
+	// (T145 E3): a directory, a bare file name, or a path in a comment that
+	// is only a piece of it.
+	for _, named := range []string{"lib/app/routers/items.py", "ROOT / '../lib/app/routers/items.py'", "from app.routers.items import ITEMS", "import app.routers.items as items"} {
 		src := nodeWorkspace(t)
 		write(t, filepath.Join(src, "other/tests/test_infra.py"), "ROUTES = '"+named+"'\n")
 		gitT(t, src, "add", "-A")
@@ -193,7 +195,7 @@ func TestSelectAffected(t *testing.T) {
 			t.Errorf("a source path %q named by another project's test: %+v", named, s)
 		}
 	}
-	for _, named := range []string{"items.py", "routers/", "app/"} {
+	for _, named := range []string{"items.py", "routers/", "app/", "lib/app/routers", "app/routers/", "# fixtures live under tests/unit/ and app/routers/", "lib/app/routers/items.pyc", "xlib/app/routers/items.py", "app.routers.items_v2", "routers.items"} {
 		bare := nodeWorkspace(t)
 		write(t, filepath.Join(bare, "other/tests/test_infra.py"), "ROUTES = '"+named+"'\n")
 		gitT(t, bare, "add", "-A")

@@ -6,6 +6,10 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- jhon executions run: a wide run of a project with a usable pytest-testmon record runs the touched test modules narrowed by testmon (a module the record does not hold still runs whole, and the reason says which); another project is selected only when its tests name a changed file's whole path or import path, never a loose fragment; help, docs/ldd.md and the apply prose say intermediate passes are a unit's run (bare --affected), the slice base only for the RED record and the slice's close (T145).
+
 ## [0.3.4] - 2026-11-17
 
 ### Fixed

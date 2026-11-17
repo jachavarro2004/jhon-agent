@@ -112,10 +112,11 @@ func matchesAny(globs []string, f string) bool {
 
 // ranModule is whether a run of command in the project at projectPath
 // executed the test module (relative to the repository's top level): under
-// pytest-testmon, which selects every test whose executed code changed; a
-// whole run; or an own run (execution.OwnTestsCommand) that names it.
+// pytest-testmon, which selects every test whose executed code changed,
+// unless it is narrowed to named modules (execution.TestmonModulesCommand);
+// a whole run; or an own run (execution.OwnTestsCommand) that names it.
 func ranModule(command, projectPath, module string) bool {
-	if strings.Contains(command, "--testmon") || !quotedPy.MatchString(command) {
+	if i := strings.Index(command, "--testmon"); i >= 0 && !quotedPy.MatchString(command[i:]) || !quotedPy.MatchString(command) {
 		return true
 	}
 	rel, err := filepath.Rel(projectPath, module)

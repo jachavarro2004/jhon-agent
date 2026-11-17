@@ -186,3 +186,27 @@ func TestNoTestmonRecordLeavesTheReachUncheckedAndSaysSo(t *testing.T) {
 		t.Errorf("a usable record: %q", got)
 	}
 }
+
+// T145 E1: a wide run's pytest-testmon command that names the touched
+// modules ran only those; one that names none ran whatever its record
+// selected; a whole or own run as before.
+func TestRanModuleReadsATestmonCommandThatNamesModules(t *testing.T) {
+	testmon := "mkdir -p '/c' && TESTMON_DATAFILE='/c/x.db' uv run --with pytest-testmon pytest --testmon --rootdir='/r'"
+	for _, c := range []struct {
+		command string
+		want    bool
+	}{
+		{testmon, true},
+		{"uv run pytest", true},
+		{"uv run pytest 'tests/db/test_q.py'", true},
+		{"uv run pytest 'tests/test_u.py'", false},
+		{testmon + " 'tests/db/test_q.py'", true},
+		{testmon + " 'tests/test_u.py'", false},
+		{"uv run pytest 'tests/db/test_q.py' && " + testmon + " 'tests/test_u.py'", true},
+		{"uv run pytest 'tests/test_doc.py' && " + testmon, true},
+	} {
+		if got := ranModule(c.command, "svc", "svc/tests/db/test_q.py"); got != c.want {
+			t.Errorf("ranModule(%q) = %v, want %v", c.command, got, c.want)
+		}
+	}
+}

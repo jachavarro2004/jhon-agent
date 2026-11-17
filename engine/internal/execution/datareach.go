@@ -39,3 +39,30 @@ func TestmonReachers(data string, files []string) (map[string][]string, bool) {
 	}
 	return reach, true
 }
+
+// testmonHeld prints, as JSON, those of the test modules named after a
+// record that it holds a test of (`<module>::<test>`).
+const testmonHeld = `import sqlite3, sys, json
+c = sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True)
+held = {r[0] for r in c.execute("select distinct substr(test_name, 1, instr(test_name, '::') - 1) from test_execution where instr(test_name, '::') > 0")}
+print(json.dumps([m for m in sys.argv[2:] if m in held]))`
+
+// TestmonHeld is those of modules (test modules relative to the record's
+// rootdir, the repository's top level) that the record at data holds a test
+// of, in their order: what pytest-testmon can narrow, since a test it holds
+// no record of (a new module's) it runs whatever changed. ok is false when
+// there is no record or python3 cannot read it.
+func TestmonHeld(data string, modules []string) ([]string, bool) {
+	if !project.Exists(data) {
+		return nil, false
+	}
+	out, err := exec.Command("python3", append([]string{"-I", "-c", testmonHeld, data}, modules...)...).Output()
+	if err != nil {
+		return nil, false
+	}
+	var held []string
+	if json.Unmarshal(out, &held) != nil {
+		return nil, false
+	}
+	return held, true
+}
