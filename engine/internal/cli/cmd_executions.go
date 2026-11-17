@@ -921,8 +921,12 @@ func runExecutions(argv []string) (int, error) {
 
 	after := execution.Fields(vcs.CandidateOf(root, exempt))
 	record.After = &after
+	// The working tree is read again, as at the start: a run that started on
+	// uncommitted work and saw a file change, appear or go while it ran did
+	// not test one tree, however clean or dirty both ends are (T146d).
+	record.AfterWorkingTree = vcs.WorkingTree(root, exempt)
 	record.Dirty = after.CandidateCommit != record.CandidateCommit || after.CandidateTree != record.CandidateTree ||
-		after.WorkingTreeClean != record.WorkingTreeClean
+		after.WorkingTreeClean != record.WorkingTreeClean || record.AfterWorkingTree != record.WorkingTree
 	record.Complete = true
 	record.Timestamp = now()
 	// A test turned green by editing only its test is marked, never refused
@@ -962,8 +966,8 @@ func runExecutions(argv []string) (int, error) {
 		lines := []string{"", "record     " + recordPath, "scope      " + scope + affectedSince,
 			fmt.Sprintf("candidate  %s  tree %s  clean %v", record.CandidateCommit, record.CandidateTree, record.WorkingTreeClean)}
 		if record.Dirty {
-			lines = append(lines, fmt.Sprintf("dirty      the candidate changed during the run (after: %s tree %s clean %v)",
-				after.CandidateCommit, after.CandidateTree, after.WorkingTreeClean))
+			lines = append(lines, fmt.Sprintf("dirty      the candidate changed during the run (after: %s tree %s clean %v working tree %s)",
+				after.CandidateCommit, after.CandidateTree, after.WorkingTreeClean, record.AfterWorkingTree))
 		}
 		for _, e := range record.Executions {
 			lines = append(lines, js.PadEnd(e.Status, 8)+"   "+label(e.Project, step{kind: e.Kind, command: e.Command}))

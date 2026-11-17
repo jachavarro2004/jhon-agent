@@ -180,8 +180,10 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 		// A run on uncommitted work tested the working tree it recorded: once
 		// that tree is committed, HEAD is the tested revision, and the run
 		// that recorded GREEN is the delivery evidence, with no re-run (T146).
+		// Only a run that passed, finished, and saw its working tree unchanged
+		// to its end (not Dirty) is that evidence (T146d).
 		committed := false
-		if !run.Clean && !run.Dirty && now.Clean == true && isSha(run.WorkingTree) && isSha(now.Tree) {
+		if run.Passed && run.Complete && !run.Clean && !run.Dirty && now.Clean == true && isSha(run.WorkingTree) && isSha(now.Tree) {
 			if outside, ok := outsideRecord(run.WorkingTree, now.Tree); ok && len(outside) == 0 {
 				committed = true
 				run.Tree = run.WorkingTree
