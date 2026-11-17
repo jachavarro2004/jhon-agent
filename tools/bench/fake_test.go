@@ -13,6 +13,8 @@ import (
 // where the real one lands, solves the task by copying $FAKE_SOLUTION into
 // its working directory when that is set, and prints a scripted stream.
 // $FAKE_STREAM is a file of extra stream records each prints before it ends.
+// pi logs, to $FAKE_DIR/pi-models.log, whether its agent dir holds a
+// models.json and whether it is $FAKE_PI_MODELS byte for byte.
 // $FAKE_DIR/utils holds the seven_day utilization the n-th claude run reports.
 // With $FAKE_HOLD (seconds) each claude run holds that long and counts the
 // claude runs alive at once, the most in $FAKE_DIR/max (--parallel, T83).
@@ -50,6 +52,8 @@ exit ${FAKE_CLAUDE_EXIT:-0}
 
 const fakePi = `#!/bin/sh
 echo "pi $* |HOME=$HOME|XDG_CACHE_HOME=$XDG_CACHE_HOME|PWD=$(pwd -P)|PI_CODING_AGENT_DIR=$PI_CODING_AGENT_DIR|ENGRAM_DATA_DIR=$ENGRAM_DATA_DIR|ENGRAM_URL=$ENGRAM_URL|ENGRAM_PORT=$ENGRAM_PORT|CLAUDE_BRIDGE_DEBUG=$CLAUDE_BRIDGE_DEBUG|CLAUDE_BRIDGE_DEBUG_PATH=$CLAUDE_BRIDGE_DEBUG_PATH" >> "$FAKE_DIR/calls.log"
+models=absent; [ -f "$PI_CODING_AGENT_DIR/models.json" ] && { models=differs; [ -n "$FAKE_PI_MODELS" ] && cmp -s "$PI_CODING_AGENT_DIR/models.json" "$FAKE_PI_MODELS" && models=same; }
+echo "$PI_CODING_AGENT_DIR models=$models" >> "$FAKE_DIR/pi-models.log"
 [ "$CLAUDE_BRIDGE_DEBUG" = 1 ] && mkdir -p "$(dirname "$CLAUDE_BRIDGE_DEBUG_PATH")" && echo "systemPrompt: the dumped prompt" > "$CLAUDE_BRIDGE_DEBUG_PATH"
 sid=""; prev=""
 for a in "$@"; do [ "$prev" = --session-id ] && sid=$a; prev=$a; done
@@ -176,6 +180,7 @@ func newFake(t *testing.T, utils ...string) fake {
 	t.Setenv("FAKE_PROFILE_EXIT", "")
 	t.Setenv("FAKE_HOLD", "")
 	t.Setenv("FAKE_STREAM", "")
+	t.Setenv("FAKE_PI_MODELS", "")
 	t.Setenv("PATH", filepath.Join(f.dir, "bin")+":"+os.Getenv("PATH"))
 	return f
 }

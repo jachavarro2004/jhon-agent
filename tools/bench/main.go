@@ -4,9 +4,9 @@
 // the results. It is
 // not part of the release. See tools/bench/README.md.
 //
-//	go run ./tools/bench prepare [--home DIR] [--pi-profile FILE --profile NAME]
+//	go run ./tools/bench prepare [--home DIR] [--pi-profile FILE --profile NAME] [--pi-models FILE]
 //	go run ./tools/bench login-check [--home DIR]
-//	go run ./tools/bench run [--tasks a,b] [--variants plain,ldd,ldd-native,ldd-ask] [--conditions jhon,clean,pi-jhon,pi-clean] [--repeats N] [--model M] [--pi-model P/M[@T]] [--pi-env NAMES] [--project-setting KEY=VALUE[,KEY=VALUE]] [--budget-points P] [--parallel N] [--smoke] [--dry-run] [--debug-prompt]
+//	go run ./tools/bench run [--tasks a,b] [--variants plain,ldd,ldd-native,ldd-ask] [--conditions jhon,clean,pi-jhon,pi-clean] [--repeats N] [--model M] [--pi-model P/M[@T]] [--pi-env NAMES] [--pi-models FILE] [--project-setting KEY=VALUE[,KEY=VALUE]] [--budget-points P] [--parallel N] [--smoke] [--dry-run] [--debug-prompt]
 //	go run ./tools/bench report <results dir>
 //	go run ./tools/bench recheck [--home DIR] [--tasks-dir DIR] <results dir>
 //	go run ./tools/bench value [--json] [--out DIR] [--tasks-dir DIR] <results dirs>
@@ -26,11 +26,11 @@ import (
 	"time"
 )
 
-const usage = `usage: bench prepare [--home DIR] [--checkout DIR] [--ref COMMIT] [--pi-profile PROFILES_JSON] [--profile NAME]
+const usage = `usage: bench prepare [--home DIR] [--checkout DIR] [--ref COMMIT] [--pi-profile PROFILES_JSON] [--profile NAME] [--pi-models MODELS_JSON]
        bench login-check [--home DIR]
        bench run [--tasks a,b] [--variants plain,ldd,ldd-native,ldd-ask] [--conditions jhon,clean,pi-jhon,pi-clean] [--repeats N] [--model M]
                  [--budget-points P] [--home DIR] [--results DIR] [--allowed-tools LIST] [--expect-commit COMMIT] [--dry-run] [--debug-prompt]
-                 [--parallel N] [--smoke] [--pi-model PROVIDER/MODEL[@THINKING]] [--pi-env NAME[,NAME]]
+                 [--parallel N] [--smoke] [--pi-model PROVIDER/MODEL[@THINKING]] [--pi-env NAME[,NAME]] [--pi-models MODELS_JSON]
                  [--project-setting KEY=VALUE[,KEY=VALUE]]
        bench report <results dir>
        bench recheck [--home DIR] [--tasks-dir DIR] <results dir>
@@ -97,6 +97,7 @@ func cli(args []string, out, errOut io.Writer, now time.Time) int {
 		ref := fs.String("ref", "", "install this commit's build (a clone of the checkout at it, built in scratch) in place of the checkout's build/jhon")
 		piProfile := fs.String("pi-profile", "", "a profiles.json (yours, e.g. ~/.config/jhon/profiles.json) copied to the bench HOME's ~/.config/jhon/profiles.json")
 		profile := fs.String("profile", "", "the Jhon profile the bench HOME's `jhon profile use` activates after the install (every agent's model, sub-agents included)")
+		piModels := fs.String("pi-models", "", "a pi models.json (yours, e.g. ~/.pi/jhon/models.json, for a provider such as NaN) copied, mode 0600, to the bench HOME's ~/.pi/jhon/models.json, which pi-jhon and its sub-agents read; never printed")
 		if fs.Parse(args[1:]) != nil {
 			return 2
 		}
@@ -104,8 +105,20 @@ func cli(args []string, out, errOut io.Writer, now time.Time) int {
 			fmt.Fprintln(errOut, "bench prepare: --pi-profile needs --profile NAME, the profile to activate")
 			return 2
 		}
+		if *piModels != "" {
+			// Checked before the install, so a bad file costs nothing.
+			if _, err := readPiModels(*piModels); err != nil {
+				return fail(err)
+			}
+		}
 		if err := Prepare(*home, os.Getenv("HOME"), os.Environ(), releaseInstaller{checkout: filepath.Clean(*checkout), ref: *ref}, out); err != nil {
 			return fail(err)
+		}
+		if *piModels != "" {
+			abs, _ := filepath.Abs(*home)
+			if err := PutPiModels(abs, *piModels, out); err != nil {
+				return fail(err)
+			}
 		}
 		if *profile != "" {
 			abs, _ := filepath.Abs(*home)
@@ -159,6 +172,7 @@ func cli(args []string, out, errOut io.Writer, now time.Time) int {
 		results := fs.String("results", "", "this batch's results directory (default: under ~/.local/share/jhon-bench/results, named for the time and the --pi-model)")
 		piModel := fs.String("pi-model", "", "pi-jhon's and pi-clean's provider/model[@thinking], e.g. zai/glm-5.3 (default: claude-bridge on --model)")
 		piEnv := fs.String("pi-env", "", "comma-separated environment variable names the pi runs need (a provider's key, e.g. ZAI_API_KEY): passed by name, values never written")
+		piModels := fs.String("pi-models", "", "a pi models.json copied, mode 0600, into each pi-clean run's agent dir before pi starts; pi-jhon needs the same file in the bench HOME (bench prepare --pi-models); never printed")
 		var settings projectSettingsFlag
 		fs.Var(&settings, "project-setting", "KEY=VALUE written into each run's LDD config before the agent starts (repeatable or comma-separated; only the variants with a config at the start: "+strings.Join(configVariants(), ", ")+"; keys: worktree_per_change)")
 		allowed := fs.String("allowed-tools", DefaultAllowedTools, "--allowedTools for the Claude Code conditions")
@@ -193,7 +207,7 @@ func cli(args []string, out, errOut io.Writer, now time.Time) int {
 		}
 		o := &Options{Tasks: ts, Variants: split(*variants), Conditions: split(*conds), Repeats: *repeats, Model: *model, BudgetPoints: *budget,
 			Home: *home, Results: *results, AllowedTools: *allowed, DryRun: *dry, DebugPrompt: *debugPrompt, ExpectCommit: *expect, Out: out,
-			PiModel: *piModel, PiEnv: split(*piEnv), Parallel: *parallel, Smoke: *smoke, ProjectSettings: settings}
+			PiModel: *piModel, PiEnv: split(*piEnv), PiModels: *piModels, Parallel: *parallel, Smoke: *smoke, ProjectSettings: settings}
 		if _, err := Plan(o); err != nil {
 			return fail(err)
 		}

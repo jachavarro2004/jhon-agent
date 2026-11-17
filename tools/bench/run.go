@@ -44,6 +44,12 @@ type Options struct {
 	// by name, their values never written anywhere.
 	PiModel string
 	PiEnv   []string
+	// PiModels is the owner's pi models.json (T146 F5-b), "" for none:
+	// each pi-clean run's agent dir gets a copy before pi starts, and
+	// pi-jhon must find the same file in the bench HOME (bench prepare
+	// --pi-models). piModels are its bytes, read by Plan, never printed.
+	PiModels string
+	piModels []byte
 	// Profile is the bench HOME's active Jhon profile, "" for default
 	// (T77b); Plan reads it. Without --pi-model, profileMain, the
 	// profile's pi main model, is the pi conditions' model.
@@ -209,6 +215,13 @@ func Plan(o *Options) ([]*Run, error) {
 			return nil, fmt.Errorf("--pi-env %q: give environment variable names, comma-separated", n)
 		}
 	}
+	if o.PiModels != "" {
+		b, err := readPiModels(o.PiModels)
+		if err != nil {
+			return nil, err
+		}
+		o.piModels = b
+	}
 	if o.Profile == "" {
 		o.Profile = activeProfile(o.Home)
 	}
@@ -368,6 +381,7 @@ func printPlan(o *Options, runs []*Run) {
 		fmt.Fprintf(o.Out, "pi model: %s (%s); passed from the environment: %s\n", cmpOr(o.PiModel, BridgeProvider+" on --model"), strings.Join(pis, ", "), cmpOr(strings.Join(o.PiEnv, ", "), "none"))
 	}
 	printProfile(o)
+	printPiModels(o, runs)
 	if len(o.ProjectSettings) > 0 {
 		fmt.Fprintf(o.Out, "project settings: %s (written to each run's LDD config before the agent starts: %s)\n", strings.Join(o.ProjectSettings, ","), strings.Join(o.variants(), ", "))
 	}
@@ -439,6 +453,9 @@ func Execute(o *Options) error {
 		if _, ok := os.LookupEnv(n); !ok {
 			return fmt.Errorf("--pi-env %s is not set in the environment", n)
 		}
+	}
+	if err := checkBenchPiModels(o); err != nil {
+		return err
 	}
 	if slices.Contains(o.Conditions, "jhon") {
 		if err := writeEngramMCPConfig(o.Home); err != nil {

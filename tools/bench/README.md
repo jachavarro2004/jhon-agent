@@ -80,6 +80,34 @@ The file is `internal/profiles`' format: a profile overrides a runtime's tiers (
 
 The profile is part of a cell's model identity, written `MODEL profile NAME` (`zai/glm-5.3 profile glm`): `bench report` never merges two profiles' runs, `bench value` keeps one cell and one runtime line per model and profile and compares each with the `pi-clean`/`clean` cell of its main model, and `bench certify` refuses a cell whose profile changed (`… the baseline ran zai/glm-5.3, the candidate zai/glm-5.3 profile glm; certify compares a model with itself`) unless `--allow-model-change`. A bench HOME with no profile (or `default`) runs, records and prints exactly as before.
 
+### A provider from a pi models file (T146 F5-b)
+
+A provider pi has no built-in for (NaN, for example) is defined in a pi `models.json`. pi-jhon reads it from the bench HOME's `~/.pi/jhon/models.json` (the agent dir `jhon start pi` gives pi, which every sub-agent it spawns shares), and pi-clean from its own per-run agent dir, so both need a copy:
+
+- `bench prepare --pi-models FILE` copies `FILE` to `<bench HOME>/.pi/jhon/models.json`, before `--profile` is activated. A file that is not a JSON object is refused, naming it, before anything is installed.
+- `bench run --pi-models FILE` copies `FILE` into each pi-clean run's `pi-agent/models.json` before pi starts. A run with `pi-jhon` refuses to start unless the bench HOME holds the same bytes (`pi-jhon reads …/.pi/jhon/models.json, which is absent, not --pi-models FILE: run `bench prepare --pi-models FILE` first`), so both conditions resolve the same provider.
+
+The file is copied byte for byte with mode 0600 and only checked to be a JSON object; its `apiKey` may be a command (`!secret-tool …`), which the bench never runs, prints or logs (pi runs it, as it would for you). The dry run names the file, whether the bench HOME holds it, and the model of each condition: pi-jhon's main session and its sub-agents' models, read from the bench HOME's rendered `~/.pi/jhon/agents/*.md`. Without the option nothing changes.
+
+The sub-agents' models come from a Jhon profile (above): a profile with `agents.jhon-orchestrator.pi` for the main session and `tiers.pi.*` for every other agent. NaN with GLM-5.3 as the orchestrator and GLM-5.3-flash for every sub-agent (L1268), in a `profiles.json` of your own:
+
+```json
+{
+  "profiles": {
+    "nan-mix": {
+      "tiers": { "pi": { "cheap": "nan/glm5.3-flash", "mid": "nan/glm5.3-flash", "strong": "nan/glm5.3-flash", "frontier": "nan/glm5.3-flash" } },
+      "agents": { "jhon-orchestrator": { "pi": "nan/glm5.3" } }
+    }
+  }
+}
+```
+
+```sh
+go run ./tools/bench prepare --ref COMMIT --pi-models MODELS_JSON --pi-profile PROFILES_JSON --profile nan-mix
+go run ./tools/bench run --tasks account-import,pagination-bug,shipping-rules,ldd-setup --variants plain --conditions pi-jhon,pi-clean \
+  --pi-model nan/glm5.3 --pi-models MODELS_JSON --expect-commit COMMIT --dry-run
+```
+
 ### Project settings
 
 `bench run --project-setting KEY=VALUE` (repeatable or comma-separated) sets a project setting the product reads in each run's LDD config, after the repo is laid out and before the agent starts; it is committed with the template, as the variant's config is (T86, L615). The only key is `worktree_per_change` (`true` or `false`; engine/internal/ldd/config.go, docs/ldd.md "A worktree per change"); an unknown key, another value or a key given twice is refused. A setting applies to the variants whose repo has a config at the start, `ldd` (`openspec/config.yaml`) and `ldd-native` (`ldd/config.yaml`), where the line `worktree_per_change: true` is appended (or replaces the key's line); naming `plain` or `ldd-ask` (the default variants include `plain`) is refused: `--project-setting sets the task repo's LDD config; variant plain has none at the start (it applies to ldd, ldd-native)`.
