@@ -1,5 +1,6 @@
 id: contacts-migration
 kind: data
+size: large
 model: sonnet
 max_turns: 60
 timeout: 30m

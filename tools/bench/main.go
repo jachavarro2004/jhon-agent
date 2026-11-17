@@ -9,7 +9,7 @@
 //	go run ./tools/bench run [--tasks a,b] [--variants plain,ldd,ldd-native,ldd-ask] [--conditions jhon,clean,pi-jhon,pi-clean] [--repeats N] [--model M] [--pi-model P/M[@T]] [--pi-env NAMES] [--project-setting KEY=VALUE[,KEY=VALUE]] [--budget-points P] [--parallel N] [--smoke] [--dry-run] [--debug-prompt]
 //	go run ./tools/bench report <results dir>
 //	go run ./tools/bench recheck [--home DIR] [--tasks-dir DIR] <results dir>
-//	go run ./tools/bench value [--json] [--out DIR] <results dirs>
+//	go run ./tools/bench value [--json] [--out DIR] [--tasks-dir DIR] <results dirs>
 //	go run ./tools/bench certify --baseline <dirs> [--candidate <dirs>] [--gates <checkout>] [--replay-guard <jhon>] [--allow-model-change] [--json]
 //	go run ./tools/bench certify --plan
 //	go run ./tools/bench review-compare [--fixtures a,b] [--arms native,agents] [--repeats N] [--pi-model P/M[@T]] [--dry-run]
@@ -34,7 +34,7 @@ const usage = `usage: bench prepare [--home DIR] [--checkout DIR] [--ref COMMIT]
                  [--project-setting KEY=VALUE[,KEY=VALUE]]
        bench report <results dir>
        bench recheck [--home DIR] [--tasks-dir DIR] <results dir>
-       bench value [--json] [--out DIR] RESULTS_DIRS
+       bench value [--json] [--out DIR] [--tasks-dir DIR] RESULTS_DIRS
        bench certify --baseline DIRS [--candidate DIRS] [--gates CHECKOUT] [--replay-guard JHON] [--allow-model-change] [--allow-setting-change] [--out DIR] [--json]
        bench certify --plan [--results-root DIR]
        bench review-compare [--fixtures a,b] [--arms native,agents] [--repeats N] [--model M] [--pi-model PROVIDER/MODEL[@THINKING]]
@@ -153,7 +153,7 @@ func cli(args []string, out, errOut io.Writer, now time.Time) int {
 		tasks := fs.String("tasks", "", "comma-separated task ids (default: all)")
 		variants := fs.String("variants", strings.Join(DefaultVariants, ","), "comma-separated task variants: "+strings.Join(AllVariants, ", ")+" (clean runs plain only)")
 		conds := fs.String("conditions", strings.Join(AllConditions, ","), "comma-separated conditions: "+strings.Join(KnownConditions, ", ")+" (pi-clean only when named)")
-		repeats := fs.Int("repeats", 1, "runs per task and condition")
+		repeats := fs.Int("repeats", 0, "runs per task and condition (default: 5 for a small task, 3 for a large one, 1 for the one-time set-up)")
 		model := fs.String("model", "", "the model (default: each task's)")
 		budget := fs.Float64("budget-points", 10, "stop when the weekly utilization rises more than this many points")
 		results := fs.String("results", "", "this batch's results directory (default: under ~/.local/share/jhon-bench/results, named for the time and the --pi-model)")
@@ -177,7 +177,17 @@ func cli(args []string, out, errOut io.Writer, now time.Time) int {
 		if *results == "" {
 			*results = filepath.Join(root(), "results", resultsName(now, *piModel, settings...))
 		}
-		ts, err := LoadTasks(*tasksDir, split(*tasks))
+		ids := split(*tasks)
+		if len(ids) == 0 {
+			// A full run measures the one-time LDD set-up apart, once per
+			// Jhon runtime (T146 FB2).
+			all, err := listTaskIDs(*tasksDir)
+			if err != nil {
+				return fail(err)
+			}
+			ids = append(all, SetupTaskID)
+		}
+		ts, err := LoadTasks(*tasksDir, ids)
 		if err != nil {
 			return fail(err)
 		}

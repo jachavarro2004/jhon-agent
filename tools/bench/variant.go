@@ -37,12 +37,40 @@ var lddFiles = map[string][][2]string{
 	"ldd-native": {{"config.yaml", filepath.Join("ldd", "config.yaml")}, {"pyproject.toml", "pyproject.toml"}},
 }
 
+// steadyFiles are the LDD set-up a steady-state run's repo starts with
+// (T146 FB2): what Jhon's init writes in a Python repo with no project
+// marker, taking the recommended values (prose/skills/ldd/references/init.md),
+// committed with the template. init's empty ldd/specs and ldd/changes/archive
+// are made too; git keeps no empty directory, as in a clone of a real project.
+var steadyFiles = [][2]string{{"steady-config.yaml", filepath.Join("ldd", "config.yaml")}}
+
+// writeSteadySetup lays the LDD set-up into repo before its first commit.
+func writeSteadySetup(repo string) error {
+	for _, d := range []string{filepath.Join("ldd", "specs"), filepath.Join("ldd", "changes", "archive")} {
+		if err := os.MkdirAll(filepath.Join(repo, d), 0o755); err != nil {
+			return err
+		}
+	}
+	for _, f := range steadyFiles {
+		b, err := os.ReadFile(filepath.Join(source(), "ldd", f[0]))
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(repo, f[1]), b, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // isLDD is whether variant v is one of the LDD variants.
 func isLDD(v string) bool { return strings.HasPrefix(v, "ldd") }
 
-// setsUpLDD is whether a run of variant v under cond must set LDD up itself:
-// ldd-ask, and plain under a Jhon condition (L554-L559); the clean
-// conditions are the no-Jhon baseline and run plain repos (L552).
+// setsUpLDD is whether a run of variant v under cond must end with ldd/ and
+// its record, what it writes under ldd/ never out of scope: ldd-ask, and
+// plain under a Jhon condition (L554-L559), which since T146 starts on the
+// LDD set-up (steadyState); the clean conditions are the no-Jhon baseline
+// and run plain repos (L552).
 func setsUpLDD(cond, v string) bool { return v == "ldd-ask" || v == "plain" && !isClean(cond) }
 
 // asked is t as the ldd-ask variant sends it: AskSentence before its first

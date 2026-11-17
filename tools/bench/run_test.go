@@ -72,9 +72,9 @@ func TestThePlanRefusesAnUnknownConditionAndNoRepeats(t *testing.T) {
 	if _, err := Plan(o); err == nil || !strings.Contains(err.Error(), `unknown condition "other"`) {
 		t.Fatalf("err %v", err)
 	}
-	o, _ = options(t, f, "pagination-bug", AllConditions, 0)
+	o, _ = options(t, f, "pagination-bug", AllConditions, -1)
 	if _, err := Plan(o); err == nil {
-		t.Fatal("repeats 0 accepted")
+		t.Fatal("repeats -1 accepted")
 	}
 }
 

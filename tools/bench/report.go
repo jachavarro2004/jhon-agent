@@ -34,8 +34,13 @@ type Row struct {
 	Runs            int                `json:"runs"`
 	Passed          int                `json:"passed"`
 	Medians         map[string]float64 `json:"medians"`
-	Process         Process            `json:"process"`
-	Quality         Quality            `json:"quality"`
+	// Spread is each measure's [min, max] over the runs that have it, beside
+	// its median (T146 FB5).
+	Spread map[string][2]float64 `json:"spread,omitempty"`
+	// Size is the task's size, from the runs' task_size (T146 FB1).
+	Size    string  `json:"size,omitempty"`
+	Process Process `json:"process"`
+	Quality Quality `json:"quality"`
 	// MessageMedians are the medians of each owner message's measures, by
 	// message (index 0 is message 1), over the runs that reached it.
 	MessageMedians []map[string]float64 `json:"message_medians,omitempty"`
@@ -335,6 +340,15 @@ var measures = []struct {
 	}},
 	{"quota_points", func(m Metrics) *float64 { return m.QuotaPoints }},
 	{"quota_weighted", func(m Metrics) *float64 { return f(quotaWeighted(m)) }},
+	// cost_weighted are the tokens weighted by the run's provider's prices
+	// (tokenWeightsFor, T146 FB3); cost_usd only when the stream gave one.
+	{"cost_weighted", func(m Metrics) *float64 { return f(costWeighted(m)) }},
+	{"cost_usd", func(m Metrics) *float64 {
+		if m.CostUSD <= 0 {
+			return nil
+		}
+		return f(m.CostUSD)
+	}},
 	{"slices", func(m Metrics) *float64 { return m.Slices }},
 	{"refusals", func(m Metrics) *float64 {
 		if m.Refusals == nil {
@@ -501,7 +515,7 @@ func rowsOf(groups map[[3]string][]Metrics) []Row {
 	var rows []Row
 	for k, ms := range groups {
 		r := Row{Task: k[0], Variant: k[1], Condition: condOf(k[2]), Model: ms[0].Model, Profile: ms[0].Profile, ProjectSettings: ms[0].ProjectSettings, Runs: len(ms), Medians: map[string]float64{}, Process: process(ms),
-			Quality: quality(ms), MessageMedians: messageMedians(ms)}
+			Quality: quality(ms), MessageMedians: messageMedians(ms), Spread: map[string][2]float64{}, Size: ms[0].TaskSize}
 		for _, m := range ms {
 			if m.Success {
 				r.Passed++
@@ -516,6 +530,7 @@ func rowsOf(groups map[[3]string][]Metrics) []Row {
 			}
 			if len(vs) > 0 {
 				r.Medians[x.name] = median(vs)
+				r.Spread[x.name] = [2]float64{slices.Min(vs), slices.Max(vs)}
 			}
 		}
 		rows = append(rows, r)
@@ -538,9 +553,22 @@ func Report(dir string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	rows := rowsOf(groups)
+	// The one-time set-up runs are reported apart, never in a cell or a
+	// sum (T146 FB2).
+	setup := map[[3]string][]Metrics{}
+	for k, ms := range groups {
+		if k[0] == SetupTaskID {
+			setup[k] = ms
+			delete(groups, k)
+		}
+	}
+	rows, setupRows := rowsOf(groups), rowsOf(setup)
 	over, byCond := overheads(rows), summaries(groups)
-	if err := writeJSON(filepath.Join(dir, "report.json"), map[string]any{"rows": rows, "by_condition": byCond, "overhead": over}); err != nil {
+	doc := map[string]any{"rows": rows, "by_condition": byCond, "overhead": over}
+	if len(setupRows) > 0 {
+		doc["setup"] = setupRows
+	}
+	if err := writeJSON(filepath.Join(dir, "report.json"), doc); err != nil {
 		return err
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -575,7 +603,7 @@ func Report(dir string, out io.Writer) error {
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%d\t%s\t%s\t%s\t%d\t%d\t%d\n", label(Row{Condition: c.Condition, Model: c.Model, Profile: c.Profile, ProjectSettings: c.ProjectSettings}, many), c.Variant, c.Runs, c.Passed, c.FinalChecks, c.Regressions,
 			c.RedBeforeGreen, c.TestsRunBeforeEnd, c.TestChanged, c.OutOfScopeFiles, c.Findings, c.Rework)
 	}
-	fmt.Fprint(w, "\ntokens and time (medians over each task × variant × condition's runs)\ntask\tvariant\tcondition\tpassed")
+	fmt.Fprint(w, "\ntokens and time (median (min-max) over each task × variant × condition's runs)\ntask\tvariant\tcondition\tpassed")
 	for _, x := range measures {
 		fmt.Fprint(w, "\t"+x.name)
 	}
@@ -583,12 +611,7 @@ func Report(dir string, out io.Writer) error {
 	for _, r := range rows {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%d/%d", r.Task, r.Variant, label(r, many), r.Passed, r.Runs)
 		for _, x := range measures {
-			v, ok := r.Medians[x.name]
-			cell := "—"
-			if ok {
-				cell = strconv.FormatFloat(v, 'f', -1, 64)
-			}
-			fmt.Fprint(w, "\t"+cell)
+			fmt.Fprint(w, "\t"+spread(r, x.name))
 		}
 		fmt.Fprintln(w)
 	}
@@ -614,8 +637,26 @@ func Report(dir string, out io.Writer) error {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", o.Task, o.Variant, o.Condition, times(o.Tokens), times(o.Active))
 		}
 	}
+	for _, r := range setupRows {
+		fmt.Fprintf(w, "\none-time set-up %s (apart from every cell): %d run(s), passed %d/%d, weighted tokens %s, active time %s ms, turns %s, cost usd %s, quota points %s\n",
+			label(r, true), r.Runs, r.Passed, r.Runs, spread(r, "cost_weighted"), spread(r, "active_ms"), spread(r, "turns"), spread(r, "cost_usd"), spread(r, "quota_points"))
+	}
 	fmt.Fprintf(w, "\nreport.json in %s\n", dir)
 	return w.Flush()
+}
+
+// spread is r's median of measure with its min-max, as "12 (10-15)"; —
+// when no run has it (T146 FB5). A row from before T146 has no spread.
+func spread(r Row, measure string) string {
+	v, ok := r.Medians[measure]
+	if !ok {
+		return "—"
+	}
+	s := num2(v)
+	if mm, ok := r.Spread[measure]; ok {
+		s += " (" + num2(mm[0]) + "-" + num2(mm[1]) + ")"
+	}
+	return s
 }
 
 // count is n, or — when unknown.

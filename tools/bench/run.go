@@ -17,9 +17,12 @@ import (
 
 // Options are one `bench run`.
 type Options struct {
-	Tasks        []Task
-	Variants     []string // empty: every variant
-	Conditions   []string
+	Tasks      []Task
+	Variants   []string // empty: every variant
+	Conditions []string
+	// Repeats are the runs per task and condition; 0 is each task's
+	// DefaultRepeats (T146 FB5: 5 small, 3 large). The one-time set-up task
+	// runs once per Jhon condition whatever it is.
 	Repeats      int
 	Model        string // empty: each task's own
 	BudgetPoints float64
@@ -106,6 +109,41 @@ type Run struct {
 	Profile string
 	// ProjectSettings are written into the repo's LDD config (T86).
 	ProjectSettings []string
+	// Steady is a Jhon plain run on a repo already set up for LDD: the
+	// set-up (steadyFiles) is committed with the template before the agent
+	// starts, as in a project after day one (T146 FB2). The one-time set-up
+	// is measured apart, by the SetupTaskID run.
+	Steady bool
+}
+
+// steadyState is whether a run of task under cond in variant v starts on a
+// repo already set up for LDD: a Jhon condition's plain variant, every task
+// but the one-time set-up (T146 FB2).
+func steadyState(task, cond, v string) bool {
+	return isJhon(cond) && v == "plain" && task != SetupTaskID
+}
+
+// isolatedClaudeEnv keeps the jhon condition as isolated as clean, whose
+// --safe-mode drops every CLAUDE.md and the auto-memory (SPIKE.md R2; T146
+// FB4). jhon cannot take --safe-mode (it drops --agent, SPIKE.md R4), and
+// --setting-sources does not keep out a CLAUDE.md found on the way up from
+// the run's repo (SPIKE.md R3: the owner's ~/.claude/CLAUDE.md loaded as a
+// "Project" memory, since the results live under the owner's HOME). Jhon's
+// own text is in its plugin, never in a CLAUDE.md (engine/internal/render
+// claude.go), and no task ships one. Claude Code 2.1.323 reads both
+// variables (CLAUDE_CODE_DISABLE_CLAUDE_MDS: no Managed, User, Project or
+// Local memory).
+var isolatedClaudeEnv = []string{"CLAUDE_CODE_DISABLE_CLAUDE_MDS=1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"}
+
+// repeatsOf is how many times o runs t (Options.Repeats).
+func repeatsOf(o *Options, t Task) int {
+	switch {
+	case t.ID == SetupTaskID:
+		return 1
+	case o.Repeats > 0:
+		return o.Repeats
+	}
+	return t.DefaultRepeats()
 }
 
 // promptDump is where a --debug-prompt run keeps its prompt dump.
@@ -136,8 +174,8 @@ func (o *Options) variants() []string {
 // condition, then repeat 2, so a budget stop still leaves balanced data.
 // clean runs only the plain variant.
 func Plan(o *Options) ([]*Run, error) {
-	if o.Repeats < 1 {
-		return nil, fmt.Errorf("--repeats must be 1 or more")
+	if o.Repeats < 0 {
+		return nil, fmt.Errorf("--repeats must be 1 or more (0: each task's default)")
 	}
 	if o.Parallel < 0 {
 		return nil, fmt.Errorf("--parallel must be 1 or more")
@@ -190,16 +228,23 @@ func Plan(o *Options) ([]*Run, error) {
 			return nil, err
 		}
 	}
+	most := 0
+	for _, t := range o.Tasks {
+		most = max(most, repeatsOf(o, t))
+	}
 	var runs []*Run
-	for rep := 1; rep <= o.Repeats; rep++ {
+	for rep := 1; rep <= most; rep++ {
 		for _, t := range o.Tasks {
+			if rep > repeatsOf(o, t) || t.ID == SetupTaskID && o.Smoke {
+				continue
+			}
 			for _, v := range o.variants() {
 				for _, name := range o.Conditions {
 					c, err := conditionNamed(name)
 					if err != nil {
 						return nil, err
 					}
-					if !runsVariant(name, v) {
+					if !runsVariant(name, v) || t.ID == SetupTaskID && (v != "plain" || !isJhon(name)) {
 						continue
 					}
 					task := t
@@ -213,6 +258,10 @@ func Plan(o *Options) ([]*Run, error) {
 					}
 					if isJhon(name) {
 						r.Profile = o.Profile
+					}
+					r.Steady = steadyState(t.ID, name, v)
+					if name == "jhon" {
+						r.Env = append(r.Env, isolatedClaudeEnv...)
 					}
 					r.ProjectSettings = o.ProjectSettings
 					r.Dir = filepath.Join(o.Results, "runs", r.Name())
@@ -271,7 +320,7 @@ func cmpOr(vs ...string) string {
 // the developer's checkout, settings, Claude config or pi agent dir, or turn
 // on the bridge's debug log outside --debug-prompt. Every ENGRAM_ variable
 // goes too: one could name the owner's store, port or cloud.
-var stripped = []string{"JHON_ROOT", "JHON_SETTINGS", "CLAUDE_CONFIG_DIR", "PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR",
+var stripped = []string{"JHON_ROOT", "JHON_SETTINGS", "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD", "PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR",
 	"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "CLAUDE_BRIDGE_DEBUG", "CLAUDE_BRIDGE_DEBUG_PATH"}
 
 // benchEnv is base with the bench HOME in place of the owner's: HOME, the
@@ -337,6 +386,12 @@ func printPlan(o *Options, runs []*Run) {
 			r.N, r.Of, r.Name(), r.Timeout, r.Task.MaxTurns, r.Dir,
 			strings.Join(append([]string{"HOME=" + o.Home, "XDG_CACHE_HOME=" + r.Cache, "ENGRAM_DATA_DIR=" + engramStore(r.Cache)}, r.Env...), " "),
 			r.Repo, commandLine(r.Argv), r.Task.Check)
+		if r.Steady {
+			fmt.Fprintln(o.Out, "  steady state: ldd/config.yaml (the LDD set-up) committed with the template before the agent starts")
+		}
+		if r.Task.ID == SetupTaskID {
+			fmt.Fprintln(o.Out, "  one-time set-up: a fresh repo with no LDD, measured apart from the cells")
+		}
 		if len(r.PassEnv) > 0 {
 			fmt.Fprintf(o.Out, "  pass env: %s (names only, from the parent environment)\n", strings.Join(r.PassEnv, ","))
 		}

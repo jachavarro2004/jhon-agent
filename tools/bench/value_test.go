@@ -10,17 +10,20 @@ import (
 	"time"
 )
 
-// valueFixture is one results dir with 3 repeats of invoice-slices plain in
-// every condition: the Jhon ones at cost 1, every quality fact good; the
-// clean ones at cost 0.5, their first run with no RED before GREEN and no
-// tests before the end. edit changes the Jhon runs, cleanEdit the clean ones.
+// valueFixture is one results dir with 3 repeats of invoice-slices (a large
+// task) plain in every condition: every one at cost 1; the Jhon ones with
+// every quality fact good and 1 rework a run; the clean ones with 2 rework a
+// run (so Jhon's quality is strictly better, T146) and their first run with
+// no RED before GREEN and no tests before the end. edit changes the Jhon
+// runs, cleanEdit the clean ones.
 func valueFixture(t *testing.T, edit, cleanEdit func(m *Metrics)) string {
 	t.Helper()
 	dir := t.TempDir()
 	for rep := 1; rep <= 3; rep++ {
 		for _, cond := range KnownConditions {
 			if isClean(cond) {
-				m := cellRun("plain", cond, rep, 0.5)
+				m := cellRun("plain", cond, rep, 1)
+				m.Rework = ip(2)
 				if rep == 1 {
 					m.RedBeforeGreen, m.TestsRunBeforeEnd = bp(false), bp(false)
 				}
@@ -61,7 +64,11 @@ func TestValuePassesAJhonCellBetterOnDiscipline(t *testing.T) {
 		"PASS  red before green", "3/3 vs clean 2/3",
 		"PASS  tests run before end",
 		"PASS  out of scope", "median 0 vs clean 0",
-		"COST  quota-weighted tokens", "(2×)", "COST  turns", "20 vs clean 10 (2×)", "COST  active time", "100 s vs clean 50 s (2×)",
+		"PASS  invoice-slices plain jhon vs clean plain (large)",
+		"PASS  weighted tokens", "(1×, limit 1.25× for a large task, L1205)",
+		"PASS  active time", "100 s (100-100) vs clean 100 s (100-100) (1×",
+		"PASS  better quality", "regressions and rework per run 1 vs clean 2, need fewer",
+		"INFO  turns", "20 (20-20) vs clean 20 (20-20) (1×)",
 		"runtime claude-code (jhon vs clean): PASS — 1/1 cells",
 		"runtime pi (pi-jhon vs pi-clean): PASS — 1/1 cells",
 		"verdict: PASS", "value.json: " + filepath.Join(dir, "value.json"),
@@ -117,10 +124,11 @@ func TestValueBothAtEveryRunHoldDiscipline(t *testing.T) {
 	}
 }
 
-func TestValueCostIsShownNeverFailed(t *testing.T) {
-	dir := valueFixture(t, func(m *Metrics) { m.Turns, m.ActiveMs, m.OutputTokens = 200, 1000000, 500000 }, nil)
+// Turns are shown, never failed: the size gates judge cost and time (T146).
+func TestValueTurnsAreShownNeverFailed(t *testing.T) {
+	dir := valueFixture(t, func(m *Metrics) { m.Turns = 200 }, nil)
 	code, out, _ := value(t, dir)
-	if code != 0 || !strings.Contains(out, "200 vs clean 10 (20×)") || !strings.Contains(out, "1000 s vs clean 50 s (20×)") || !strings.Contains(out, "verdict: PASS") {
+	if code != 0 || !strings.Contains(out, "INFO  turns") || !strings.Contains(out, "200 (200-200) vs clean 20 (20-20) (10×)") || !strings.Contains(out, "verdict: PASS") {
 		t.Errorf("exit %d:\n%s", code, out)
 	}
 }
