@@ -185,6 +185,11 @@ var runtimeTerms = map[string]map[string]string{
 		"claude-code": "continue it with `SendMessage` to its agent id",
 		"pi":          "continue it with `subagent_continue` and the id `subagent` returned",
 	},
+	// T118d: the native 4R review is one call in each runtime.
+	"native-review": {
+		"claude-code": "`jhon review run`",
+		"pi":          "`jhon_review`",
+	},
 	"own-worktree": {
 		"claude-code": "is launched with `isolation: \"worktree\"`, a git worktree of its own",
 		"pi":          "is launched with `worktree: true`, a git worktree of its own beside the repository, on a new branch from HEAD",

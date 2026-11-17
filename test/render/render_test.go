@@ -2891,5 +2891,5 @@ func TestRenderFourRNativeFirst(t *testing.T) {
 	match(t, c, "records nothing: its one line says why and names the lens agents", "a failed call falls back to the lens agents")
 	match(t, c, "Independence stays with `verify`", "independence stays with verify")
 	o := flat(support.Read(t, filepath.Join(repoRoot, "prose", "orchestrator.md")))
-	match(t, o, "A 4R is one call to the native review \\(`jhon_review` in pi, `jhon review run` in Claude Code\\), the lens agents only when it cannot run", "the orchestrator calls the native review first, in each runtime")
+	match(t, o, "A 4R is one call to the native review \\(\\{\\{runtime:native-review\\}\\}\\), the lens agents only when it cannot run", "the orchestrator calls the native review first, in each runtime's own words")
 }
