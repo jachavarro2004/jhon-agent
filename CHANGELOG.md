@@ -6,6 +6,8 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-17
+
 ### Added
 
 - `jhon review run [--base <ref>]` runs the native 4R for Claude Code in one Bash call: each lens prompt `jhon review start` gives goes through `claude -p` (no tools, one turn, no session, no settings, the profile's Claude Code model and effort for its routing key) all at once, then the refuter and the validator, then the same `review-4r.md` record as pi's `jhon_review`; a failed call records nothing and names the `review-*` lens agents, which stay the fallback (T118d).
