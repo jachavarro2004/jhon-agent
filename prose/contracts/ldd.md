@@ -117,9 +117,9 @@ before its first behaviour-changing edit:
 
 1. Run `jhon status` and `jhon risk` in its tree.
 2. Write the record the change needs (below).
-3. Write the test first and run it through `jhon executions run <change>`
-   while it fails (RED); make the change; run it again once it passes
-   (GREEN). TDD always.
+3. Write the test first and run it through `jhon executions run <change>
+   --affected <base>` while it fails (RED); make the change; then once it
+   passes (GREEN), unit runs between ("Test runs"). TDD always.
 
 A change's record holds only what it needs:
 
@@ -209,9 +209,8 @@ whole change:
    only when a decision needs facts the code and memory do not give.
 2. **Per slice:** its spec delta when one is needed (the scenarios it adds
    or changes), its tasks under `## Slice <n>: <name>` when the change has
-   a tasks.md, a failing test run through `jhon executions run <change>`
-   (RED), the code, the affected tests (`jhon executions run <change>
-   --affected <base>`, GREEN), and delivery (`jhon deliver check`, then a commit or a merge
+   a tasks.md, a failing test (RED), the code, the affected tests (GREEN), each run
+   as "Test runs" says, and delivery (`jhon deliver check`, then a commit or a merge
    the owner authorizes). With `delivery: change` in
    `openspec/config.yaml`, a slice ends in a commit on the change's
    branch, and that commit is the tree its last test run tested (outside
@@ -291,7 +290,8 @@ and when it changes the file it tells the agent to read it again.
 tests and code checks and records them in `execution-record.json`, which
 `jhon deliver check` and `jhon audit` read; its scoping, parallelism,
 reuse, and `executions_*` keys are in `jhon executions run --help`. A
-unit's tests run with a bare `--affected`, a slice's close with a base. A
+unit's tests run with a bare `--affected`; the RED record and a slice's
+close with a base. A
 whole suite run by hand gets a note, never a refusal, and the audit
 counts it (`ByHand`).
 

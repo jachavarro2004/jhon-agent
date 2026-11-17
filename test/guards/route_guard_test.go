@@ -135,7 +135,7 @@ func TestRouteGuardOneLineRecord(t *testing.T) {
 	res := std.call(t, "Bash", pr, true)
 	code(t, res, 2, "a standard change with no record")
 	// It needs no tasks.md (T31): its record is its RED before GREEN.
-	matches(t, res.Stderr, "^route-guard: this change alters behaviour, and its RED before GREEN is not on record \\(LDD, contracts/ldd.md, TDD always\\): run `jhon executions run <change>` while its new test fails \\(RED\\), then again once it passes \\(GREEN\\), before the PR. Route: standard: ", "the refusal names the RED and GREEN runs")
+	matches(t, res.Stderr, "^route-guard: this change alters behaviour, and its RED before GREEN is not on record \\(LDD, contracts/ldd.md, TDD always\\): run `jhon executions run <change> --affected <base>` while its new test fails \\(RED\\), a unit's run \\(`--affected`\\) between, and `--affected <base>` again once it passes \\(GREEN\\), where <base> is the commit the slice started from \\(with none, a full `jhon executions run <change>`\\), before the PR. Route: standard: ", "the refusal names the RED and GREEN runs")
 	support.Write(t, std.p, map[string]string{"openspec/changes/c1/tasks.md": "## Intent\nWhy: X is wrong\n"})
 	code(t, std.call(t, "Bash", pr, true), 2, "an Intent without Delivers, and no runs")
 	redGreen(t, std.p, "openspec/changes/c1/execution-record.json")
@@ -898,7 +898,7 @@ func TestRouteGuardPRNeedsRedBeforeGreen(t *testing.T) {
 		"openspec/changes/c1/tasks.md": "## Intent\nDelivers: X is 2\n"})
 	res := r.call(t, "Bash", pr, true)
 	code(t, res, 2, "a written record and no runs")
-	matches(t, res.Stderr, "^route-guard: this change alters behaviour, and its RED before GREEN is not on record \\(LDD, contracts/ldd.md, TDD always\\): run `jhon executions run c1` while its new test fails \\(RED\\), then again once it passes \\(GREEN\\), before the PR. Route: standard: ", "the refusal names jhon executions")
+	matches(t, res.Stderr, "^route-guard: this change alters behaviour, and its RED before GREEN is not on record \\(LDD, contracts/ldd.md, TDD always\\): run `jhon executions run c1 --affected <base>` while its new test fails \\(RED\\), a unit's run \\(`--affected`\\) between, and `--affected <base>` again once it passes \\(GREEN\\), where <base> is the commit the slice started from \\(with none, a full `jhon executions run c1`\\), before the PR. Route: standard: ", "the refusal names jhon executions")
 	redGreen(t, r.p, "openspec/changes/c1/execution-record.json")
 	code(t, r.call(t, "Bash", pr, true), 0, "RED before GREEN on record")
 
@@ -911,7 +911,7 @@ func TestRouteGuardPRNeedsRedBeforeGreen(t *testing.T) {
 	support.Write(t, small.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"})
 	res = small.call(t, "Bash", pr, true)
 	code(t, res, 2, "a folderless change with no RED")
-	matches(t, res.Stderr, "run `jhon executions run fix-small` while its new test fails", "the branch names it")
+	matches(t, res.Stderr, "run `jhon executions run fix-small --affected <base>` while its new test fails", "the branch names it")
 	redGreen(t, small.p, ".git/jhon/changes/fix-small/execution-record.json")
 	code(t, small.call(t, "Bash", pr, true), 0, "a folderless change with its RED before GREEN")
 }

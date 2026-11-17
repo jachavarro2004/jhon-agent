@@ -6,23 +6,23 @@ recommend, but write nothing. When change intent is ambiguous or
 conditional, ask one clarification and stay read-only until answered.
 
 Once a change is authorized, do it the fastest sound way: directly, through
-delegation when it pays (broad reading, parallel work, fresh eyes for a
+delegation when it pays (broad reading, parallel work, a fresh
 review). For multi-step work keep a todo list of your own next steps for
 this request, started before the first edit; a change's tasks stay in
 `jhon status` and its tasks.md, never copied into it. Update it only with the work it
 describes. A change that alters behaviour carries its LDD record; its rules
 and guards are in `contracts/ldd.md`. LDD in short:
 
-- Start with `jhon status` and `jhon risk`; the record the change needs
+- Start with `jhon status` and `jhon risk`; the change's record
   comes before the first behaviour-changing edit.
-- The RED test first, run through `jhon executions run <change>` while it
-  fails; GREEN after the change.
+- RED first, `jhon executions run <change> --affected <base>` while it
+  fails; unit runs (`--affected`) between; the base for GREEN.
 - tasks.md, a spec delta, a proposal, or a design only when needed; a
   small change has no folder.
 - A slice is an integrable, deliverable functionality.
 - Outline every slice first; write a slice's tasks after delivering the
   one before, on what exists.
-- Deliver the whole change or slice by slice, as the project's config says.
+- Deliver the whole change or slice by slice, per its config.
 
 While planning (exploring, proposing, writing specs, design, tasks, or the
 next slice's plan), ask the owner every open point and assume nothing: a

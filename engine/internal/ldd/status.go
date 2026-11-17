@@ -1228,7 +1228,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 		next = apply
 	}
 	if next == apply && behaviour && !redGreen && (tddOnly || st("tasks.md") == v.done && tasks.Finished()) {
-		notes = append(notes, "no RED before GREEN on record for "+change+": run `jhon executions run "+change+"` while its new test fails (RED), then again once it passes (GREEN)")
+		notes = append(notes, "no RED before GREEN on record for "+change+": "+RedGreenHint(change))
 	}
 	if next == apply && appliedNothing {
 		notes = append(notes, "nothing applied yet for "+change+": no file outside "+layout.For(root).Dir()+"/ differs from the base or is new; apply the change (one that alters behaviour starts with its failing test)")
@@ -1428,4 +1428,12 @@ func Brief(s Status) string {
 	}
 	out = append(out, "tests       "+testsLine(s.Tests), fmt.Sprintf("strict_tdd  %t", s.StrictTdd.Value), "tree        "+tree)
 	return strings.Join(out, "\n")
+}
+
+// RedGreenHint is how change's RED before GREEN is recorded, as docs/ldd.md
+// says in "Test runs: the inner loop": the slice base for the RED record and
+// the slice's close, a unit's run between, a full run when there is no base.
+// The status note, the route guard's refusal, and a light verify's say it.
+func RedGreenHint(change string) string {
+	return "run `jhon executions run " + change + " --affected <base>` while its new test fails (RED), a unit's run (`--affected`) between, and `--affected <base>` again once it passes (GREEN), where <base> is the commit the slice started from (with none, a full `jhon executions run " + change + "`)"
 }
