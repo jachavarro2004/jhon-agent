@@ -130,6 +130,7 @@ internal/release -> internal/version
 internal/render -> internal/auditcheck
 internal/render -> internal/contract
 internal/render -> internal/guard
+internal/render -> internal/integrations
 internal/render -> internal/isodate
 internal/render -> internal/js
 internal/render -> internal/lazyre
@@ -145,7 +146,9 @@ internal/session -> internal/isodate
 internal/session -> internal/js
 internal/session -> internal/lazyre
 internal/session -> internal/project
+internal/settings -> internal/integrations
 internal/settings -> internal/project
+internal/setupui -> internal/integrations
 internal/setupui -> internal/settings
 internal/setupui -> internal/version
 internal/sh -> internal/lazyre

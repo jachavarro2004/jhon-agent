@@ -189,7 +189,8 @@ most about 20 lines per request).
 
 In pi the 4R runs natively in one tool call (`jhon review start`, then
 every pertinent lens at once, then the refuter and validator, then
-`jhon review record`); the `review-*` lens agents are its fallback.
+`jhon review record`); in Claude Code, `jhon review run` does the same in
+one Bash call through `claude -p`. The `review-*` lens agents are its fallback.
 
 **What each launch carries.** A sub-agent's first message is its brief,
 followed by what Jhon found for it, each block left out on any failure,
@@ -363,7 +364,7 @@ own help.
 | `jhon risk` | the change's risk tier against the default branch, with a reason per file |
 | `jhon executions run <change>` | run and record the change's tests (`--affected`, `prime`, `verify`) |
 | `jhon deliver check <change>` | whether HEAD is the change's tested revision |
-| `jhon review start` | the native 4R (`freeze`, `refute`, `validate`, `record`) |
+| `jhon review start` | the native 4R (`freeze`, `refute`, `validate`, `record`; `run` is all of it through `claude -p`, for Claude Code) |
 | `jhon context` | one delegation's launch context as JSON |
 | `jhon compose` | apply a delta spec to a main spec, atomically |
 | `jhon archive` | move a change into the archive and verify it |

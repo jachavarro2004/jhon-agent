@@ -21,6 +21,7 @@ package settings
 import (
 	"errors"
 	"fmt"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -79,7 +80,7 @@ func (e *FileError) Error() string {
 	return e.Path + ": " + strings.Join(e.Problems, "; ")
 }
 
-// requiredMsg is the refusal of engram or codegraph off.
+// requiredMsg is the refusal of a required integration off (engram, codegraph).
 const requiredMsg = "required for now: Jhon's own memory/indexer will make it optional"
 
 type kind int
@@ -170,11 +171,17 @@ var schema = func() []spec {
 	s := []spec{
 		{key: "runtimes.claude_code", kind: kBool, def: true},
 		{key: "runtimes.pi", kind: kBool, def: true},
-		{key: "integrations.engram", kind: kBool, def: true, required: true},
-		{key: "integrations.codegraph", kind: kBool, def: true, required: true},
-		// T133e (L1016): context7's hosted endpoint for explore and worker, on
-		// unless turned off; with it off the render mounts and names nothing of it.
-		{key: "integrations.context7", kind: kBool, def: true},
+	}
+	// The integrations' own keys, integrations.<name>, by their manifests'
+	// order (integrations/<name>/manifest.yaml, T58a): a required one takes
+	// only true; context7's (T133e, L1016) turns its hosted endpoint off, and
+	// the render then mounts and names nothing of it.
+	for _, m := range integrations.All() {
+		if m.Setting == "integrations."+m.Name {
+			s = append(s, spec{key: m.Setting, kind: kBool, def: m.Default, required: m.Required})
+		}
+	}
+	s = append(s, []spec{
 		{key: "integrations.telemetry", kind: kBool, def: false, env: "JHON_TELEMETRY", fromEnv: envOnOff},
 		// T15.7 (L97): one palette, Jhon's own Rose Ink or the desktop palette
 		// file (T50f: "ryoku" is its older name).
@@ -233,7 +240,7 @@ var schema = func() []spec {
 		{key: "shell.keys.rail", kind: kKey, def: "alt+r", env: "JHON_SHELL_RAIL_KEY", fromEnv: envKey},
 		{key: "shell.keys.commands", kind: kKey, def: "alt+k", env: "JHON_SHELL_COMMANDS_KEY", fromEnv: envKey},
 		{key: "shell.notifications.enabled", kind: kBool, def: false},
-	}
+	}...)
 	for _, e := range notificationEvents {
 		s = append(s, spec{key: "shell.notifications.audio.events." + quoteSegment(e), kind: kSound, def: defaultSound(e)})
 	}

@@ -1,0 +1,27 @@
+# Context7: library and framework documentation, context7's hosted MCP
+# endpoint over http, for explore and worker (L1000). Nothing is installed or
+# pinned; the render writes its URL and never reaches the network.
+# Schema jhon.integration/v1 (integrations/README.md); engine/internal/integrations reads it.
+schema: jhon.integration/v1
+name: context7
+display: Context7
+kind: mcp-http
+order: 3
+# Off: no agent holds its capability, no server is mounted, and a body's
+# lines that name it are not rendered.
+setting: integrations.context7
+default: true
+required: false
+when_off: render
+capabilities: [context7]
+claude-code:
+  # Jhon registers none: the tools exist where the owner's Claude Code has a server of this name.
+  servers: [context7]
+pi:
+  server: context7
+  url: https://mcp.context7.com/mcp
+  tools:
+    context7: [mcp__context7__resolve_library_id, mcp__context7__query_docs]
+doctor:
+  url: https://mcp.context7.com/mcp
+  probe: remote

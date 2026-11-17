@@ -500,6 +500,16 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            Each refuses (exit 1) a subject the candidate no
                            longer freezes to, and an answer it cannot read,
                            writing nothing
+  jhon review run [--base <ref>] [--change <name>] [--timeout <seconds>]
+                           the native 4R in one call, for Claude Code: start,
+                           each lens prompt through claude -p (no tools, one
+                           turn, no session, no settings, the profile's Claude
+                           Code model and effort for its routing key) all at
+                           once, then the refuter and validator the same way,
+                           then record; a failed
+                           call (no claude, a non-zero exit, output that is
+                           not its JSON, a timeout) records nothing, exits 1
+                           and names the review-* lens agents as the fallback
   jhon audit --all [--since <n>d | <YYYY-MM-DD>] [--json] [--draft [<dir>] [--min <n>] [--refresh]]
                            every Claude Code session and Jhon pi session changed
                            since then (default 30d), audited in parallel and

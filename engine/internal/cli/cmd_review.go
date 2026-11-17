@@ -20,20 +20,24 @@ import (
 // changes.
 //
 // `start`, `refute`, `validate` and `record` are the native 4R
-// (cmd_review_native.go).
+// (cmd_review_native.go); `run` is all of it through `claude -p`, Claude
+// Code's variant (cmd_review_claude.go).
 func init() { register("review", runReview) }
 
 const reviewUsage = "usage: jhon review freeze [--base <ref>] [--json]\n" +
 	"       jhon review start [--base <ref>] [--change <name>] [--json]\n" +
 	"       jhon review refute --subject <hash> [--base <ref>] [--change <name>] < lens-results.json\n" +
 	"       jhon review validate --subject <hash> [--base <ref>] [--change <name>] < refuted.json\n" +
-	"       jhon review record --subject <hash> [--base <ref>] [--change <name>] < results.json"
+	"       jhon review record --subject <hash> [--base <ref>] [--change <name>] < results.json\n" +
+	"       jhon review run [--base <ref>] [--change <name>] [--timeout <seconds>]"
 
 func runReview(argv []string) (int, error) {
 	if len(argv) > 0 {
 		switch argv[0] {
 		case "start", "refute", "validate", "record":
 			return runReviewNative(argv[0], argv[1:])
+		case "run":
+			return runReviewClaude(argv[1:])
 		}
 	}
 	return runReviewFreeze(argv)

@@ -1,0 +1,34 @@
+# CodeGraph: a code map for search and impact, an MCP server over stdio.
+# Schema jhon.integration/v1 (integrations/README.md); engine/internal/integrations reads it.
+schema: jhon.integration/v1
+name: codegraph
+display: CodeGraph
+kind: mcp-stdio
+order: 2
+# Required for now: integrations.codegraph cannot be false (settings refuses it).
+setting: integrations.codegraph
+default: true
+required: true
+when_off: refused
+capabilities: [codegraph]
+claude-code:
+  servers: [codegraph]
+pi:
+  server: codegraph
+  command: codegraph
+  args: [serve, --mcp]
+  tools:
+    codegraph: [mcp__codegraph__codegraph_explore]
+doctor:
+  binary: codegraph
+  version: 1.6.2
+  source: npm @colbymchenry/codegraph
+  probe: --version
+setup:
+  summary: a code map for search and impact
+  summary_narrow: code map for impact
+  detail: impact checks read it; it ships coupled to the core for now
+  locked_note: "CodeGraph stays on for now: it ships coupled to the core."
+  install:
+    npm: npm install -g @colbymchenry/codegraph@{version}
+    manual: install codegraph {version} as https://github.com/colbymchenry/codegraph#install says

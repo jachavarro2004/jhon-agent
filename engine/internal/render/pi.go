@@ -3,12 +3,12 @@ package render
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/profiles"
@@ -248,32 +248,45 @@ func piPretty() *js.Object {
 // letters, digits and `_` written `_`; `direct` exposure declares
 // them to the model as ordinary tools (the default reaches them only through
 // codemode, which the settings turn off), so an agent's --tools can name them.
+//
+// The integrations' servers are their manifests' pi blocks
+// (integrations/<name>/manifest.yaml): the required ones first, then
+// Jhon's own, then the others, an optional one only while it is on.
 func (p pi) piMcp() *js.Object {
-	servers := js.Obj(
-		"engram", js.Obj("command", "engram", "args", []any{"mcp", "--tools=agent"}, "exposure", "direct"),
-		"codegraph", js.Obj("command", "codegraph", "args", []any{"serve", "--mcp"}, "exposure", "direct"),
-		"jhon", js.Obj("command", p.bin(), "args", []any{"mcp"}, "exposure", "direct"),
-	)
-	if p.context7 {
-		servers.Set("context7", js.Obj("url", Context7URL, "exposure", "direct"))
+	servers := js.Obj()
+	mount := func(m integrations.Manifest) {
+		if m.Pi == nil {
+			return
+		}
+		if m.Pi.URL != "" {
+			servers.Set(m.Pi.Server, js.Obj("url", m.Pi.URL, "exposure", "direct"))
+			return
+		}
+		args := make([]any, len(m.Pi.Args))
+		for i, a := range m.Pi.Args {
+			args[i] = a
+		}
+		servers.Set(m.Pi.Server, js.Obj("command", m.Pi.Command, "args", args, "exposure", "direct"))
+	}
+	for _, m := range integrations.Required() {
+		mount(m)
+	}
+	servers.Set("jhon", js.Obj("command", p.bin(), "args", []any{"mcp"}, "exposure", "direct"))
+	for _, m := range integrations.All() {
+		if on, optional := p.optionalOn[m.Name]; !m.Required && (!optional || on) {
+			mount(m)
+		}
 	}
 	return js.Obj("mcpServers", servers)
 }
 
-// piTools are a capability's tools in pi; Engram's are its MCP tools as
-// mcp.json mounts it, mcp__engram__<tool>.
+// piTools are a capability's tools in pi, Jhon's own; an integration's are
+// its manifest's (integrationPiTools).
 var piTools = map[string][]string{
 	"read": {"read", "grep", "find", "ls"}, "write": {"edit", "write"}, "bash": {"bash"},
 	"web": {"web_search", "fetch_content"}, "web-search": {"web_search"},
-	"codegraph": {"mcp__codegraph__codegraph_explore"}, "inspect": {"inspect"}, "todo": {"todo"},
-	context7Cap: {"mcp__context7__resolve_library_id", "mcp__context7__query_docs"},
+	"inspect": {"inspect"}, "todo": {"todo"},
 }
-
-// engramPrefixes are the prefixes Engram's tools carry in Claude Code, one
-// per way it is mounted.
-var engramPrefixes = []string{"mcp__engram__", "mcp__plugin_engram_engram__"}
-
-var engramTool = lazyre.New(`^mcp__(?:plugin_engram_)?engram__`)
 
 func (e *engine) piTools(a manifest.Agent) []string {
 	var tools []string
@@ -282,17 +295,35 @@ func (e *engine) piTools(a manifest.Agent) []string {
 			tools = append(tools, t...)
 			continue
 		}
-		list, _ := e.m.Capabilities.Get(c)
-		for _, t := range list {
-			for _, p := range engramPrefixes {
-				if strings.HasPrefix(t, p) {
-					tools = append(tools, engramTool.ReplaceAllString(t, "mcp__engram__"))
-					break
-				}
-			}
+		if m, ok := integrations.ByCapability(c); ok {
+			list, _ := e.m.Capabilities.Get(c)
+			tools = append(tools, integrationPiTools(m, c, list)...)
 		}
 	}
 	return unique(tools)
+}
+
+// integrationPiTools are capability c's tools in pi: the manifest's pi.tools
+// for c, else each Claude Code tool of c (list) under the pi server's
+// prefix, mcp__<server>__<tool>, whichever Claude Code prefix it carries.
+// An integration pi mounts no server for has none.
+func integrationPiTools(m integrations.Manifest, c string, list []string) []string {
+	if m.Pi == nil {
+		return nil
+	}
+	if t, ok := m.Pi.Tools[c]; ok {
+		return t
+	}
+	var tools []string
+	for _, t := range list {
+		for _, p := range m.ClaudePrefixes() {
+			if rest, ok := strings.CutPrefix(t, p); ok {
+				tools = append(tools, m.PiPrefix()+rest)
+				break
+			}
+		}
+	}
+	return tools
 }
 
 // promptText is the orchestrator's appended text for pi before its

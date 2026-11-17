@@ -13,6 +13,7 @@ import (
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/auditcheck"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/contract"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/profiles"
@@ -21,6 +22,14 @@ import (
 // Validation. Byte-diffing generated output cannot catch a rule that is
 // internally inconsistent, so every rule below exists because a real
 // defect shipped past a clean `--check`. Validation runs before any write and aborts the render.
+
+// topLevelPrefixes are the Claude Code prefixes of the integration granting
+// memory-session, the top-level tools' capability: the primary agent holds
+// each top-level tool under every one of them.
+func topLevelPrefixes() []string {
+	m, _ := integrations.ByCapability("memory-session")
+	return m.ClaudePrefixes()
+}
 
 // problem is one validation finding; line 0 names no line.
 type problem struct {
@@ -262,6 +271,9 @@ func (e *engine) validate() []problem {
 		problems = append(problems, problem{rel(file), line, rule, msg})
 	}
 	manifestFile := filepath.Join(e.prose, "agents.yaml")
+	for _, p := range e.integrationProblems() {
+		add(filepath.Join(e.root, p.File), 0, "integration", strings.TrimPrefix(p.Field+": "+p.Msg, ": "))
+	}
 
 	files := e.repoMarkdown()
 	generated := e.generatedBodies()
@@ -484,7 +496,7 @@ func (e *engine) validate() []problem {
 		primary := a.Mode == "primary"
 		if primary {
 			for _, t := range top {
-				for _, p := range engramPrefixes {
+				for _, p := range topLevelPrefixes() {
 					if !slices.Contains(tools, p+t) {
 						add(manifestFile, 0, "top-level-tools", fmt.Sprintf("%s: lacks %s in Claude Code; grant it through memory-session", a.Name, p+t))
 					}
@@ -1050,4 +1062,27 @@ func delegationRegionProblems(text string) []string {
 		out = append(out, delegationEnd+" comes before "+delegationBegin)
 	}
 	return out
+}
+
+// integrationProblems are the tree's integration manifests' problems
+// (integrations/<name>/manifest.yaml, T58a): each malformed one, and a
+// capability its manifest grants that agents.yaml does not declare, or
+// whose Claude Code tools are not its servers'.
+func (e *engine) integrationProblems() []integrations.Problem {
+	ms, probs := integrations.Load(os.DirFS(filepath.Join(e.root, "integrations")))
+	for _, m := range ms {
+		for _, c := range m.Capabilities {
+			list, ok := e.m.Capabilities.Get(c)
+			if !ok {
+				probs = append(probs, integrations.Problem{File: m.File, Field: "capabilities", Msg: c + " is not a capability of agents.yaml"})
+				continue
+			}
+			for _, t := range list {
+				if !m.ClaudeTool(t) {
+					probs = append(probs, integrations.Problem{File: m.File, Field: "capabilities", Msg: c + " holds " + t + ", which is not a tool of claude-code.servers"})
+				}
+			}
+		}
+	}
+	return probs
 }
