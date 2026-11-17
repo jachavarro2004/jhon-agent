@@ -66,7 +66,7 @@ func TestExecutionsVerifyPassNeedsRedBeforeGreen(t *testing.T) {
 	r := jhonGit(t, root, "executions", "verify", smallChange, "--verdict", "pass")
 	equal(t, r.Code, 2, r.Stderr)
 	equal(t, r.Stdout, "")
-	equal(t, r.Stderr, "jhon executions: no RED before GREEN on record for "+smallChange+": a light verify passes a change whose new test failed first; run `jhon executions run "+smallChange+"` while its new test fails (RED), then again once it passes (GREEN)\n")
+	equal(t, r.Stderr, "jhon executions: no RED before GREEN on record for "+smallChange+": a light verify passes a change whose new test failed first; run `jhon executions run "+smallChange+" --affected <base>` while its new test fails (RED), a unit's run (`--affected`) between, and `--affected <base>` again once it passes (GREEN), where <base> is the commit the slice started from (with none, a full `jhon executions run "+smallChange+"`)\n")
 	equal(t, support.Read(t, filepath.Join(root, smallRecord)), before, "nothing written")
 	equal(t, jhonGit(t, root, "executions", "verify", smallChange, "--verdict", "fail").Code, 0, "a fail is recorded")
 	equal(t, len(lightVerifyNotes(t, filepath.Join(root, smallRecord))), 1)

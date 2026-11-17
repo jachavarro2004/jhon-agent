@@ -27,8 +27,9 @@ func piEdits(path string) []piEdit {
 	return []piEdit{
 		{
 			name: "Check proportionately",
-			old: "- **Check proportionately.** Focused tests while iterating; before\n" +
-				"  delivery, the affected tests: `jhon executions run <change> --affected\n" +
+			old: "- **Check proportionately.** Iterate with a unit's run,\n" +
+				"  `jhon executions run <change> --affected`; before delivery, the\n" +
+				"  affected tests: `jhon executions run <change> --affected\n" +
 				"  <base>` narrows each project to the tests the change reaches, a change\n" +
 				"  of shared behavior included. A suite the PR's CI runs whole is never\n" +
 				"  run whole here too: its green checks test the delivery. When the run\n" +
@@ -40,8 +41,7 @@ func piEdits(path string) []piEdit {
 				"  from the worktree that holds the change (each lane's from its own),\n" +
 				"  never as a loose `pytest` or `npm test`: only its record lets\n" +
 				"  `jhon deliver check` deliver. A whole suite run by hand gets a note,\n" +
-				"  never a refusal; a package, a directory, and focused commands stay for\n" +
-				"  iterating. A command that did not pass keeps its failed tests\n" +
+				"  never a refusal. A command that did not pass keeps its failed tests\n" +
 				"  (`failed_tests`) and the end of its output (`output_tail`) in the\n" +
 				"  record: read them there. For a wide or long run, tell the owner the\n" +
 				"  `--dry-run` estimate, and when it should end, as you start the run,\n" +
@@ -49,8 +49,9 @@ func piEdits(path string) []piEdit {
 				"  runs once, recorded (`jhon executions run`), in the background; never\n" +
 				"  pipe it through `tail`, `head`, or `grep` (the pipe hides its exit code\n" +
 				"  and failures): read its summary and record.\n",
-			new: "- **Check proportionately.** Focused tests while iterating; before\n" +
-				"  delivery, a slice's tests run as `jhon executions run <change> --affected <base>`\n" +
+			new: "- **Check proportionately.** Iterate with a unit's run,\n" +
+				"  `jhon executions run <change> --affected`; before delivery, a\n" +
+				"  slice's tests run as `jhon executions run <change> --affected <base>`\n" +
 				"  from the worktree that holds the change, never as a loose `pytest` or\n" +
 				"  `npm test`: only its record lets `jhon deliver check` deliver. Before a\n" +
 				"  delivery run, read \"Check proportionately\" in " + at("orchestrator.md") + "\n" +

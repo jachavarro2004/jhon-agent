@@ -5,7 +5,7 @@ apply, follow `~/.local/share/jhon/current/prose/skills/ldd/references/apply.md`
 and `~/.local/share/jhon/current/prose/contracts/ldd.md`: implement the
 tasks named, or every unchecked one, checking each off in any `tasks.md`; a remediation fixes only the verify report's blocking
 findings. Write each behaviour's test first and run it through
-`jhon executions run <change>` while it fails (RED), before the change,
+`jhon executions run <change> --affected <base>` while it fails (RED),
 then once it passes (GREEN).
 `jhon status <change> --json` gives the tasks and test commands.
 

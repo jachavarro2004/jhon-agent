@@ -39,8 +39,8 @@ Delivers: {CA-03}
 ```
 
 - Each task names its files.
-- A behavior's failing test comes before its implementation, run through
-  `jhon executions run {change-name}` (RED, then GREEN).
+- A behavior's failing test comes first, run through
+  `jhon executions run {change-name} --affected <base-ref>` (RED, GREEN).
 - A slice that crosses layers lists its passes as its tasks, one layer each
   in dependency order, each naming its files and its one commit; tick each
   on its commit.

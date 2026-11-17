@@ -13,9 +13,9 @@ for the owner; a technical rework is not.
 - `jhon status {change-name} --json` reports the tasks, `strict_tdd`, and
   each project's test command (`projects`); use that command as written.
 - Write each behavior's test first and run it through
-  `jhon executions run {change-name}` while it fails (RED) for the
-  expected reason, before the behaviour change; run it again once it
-  passes (GREEN). Report a witness for each new test (`contracts/tdd.md`).
+  `jhon executions run {change-name} --affected <base-ref>` while it fails
+  (RED) for the expected reason; run it again once it passes (GREEN).
+  Report a witness for each new test (`contracts/tdd.md`).
 - Match the project's patterns and conventions, and apply any `rules.apply`
   in `openspec/config.yaml`.
 - When the change has a tasks.md, check each task off (`- [x]`) there as
