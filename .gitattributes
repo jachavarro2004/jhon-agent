@@ -1,3 +1,23 @@
+# Line endings: every text file is LF in the working tree on every platform,
+# Windows included. The golden texts, the embedded contracts and the shell's
+# sources are compared byte for byte; a Windows checkout that turned them into
+# CRLF failed the portable packages' tests (L1142). eol=lf wins over a
+# runner's core.autocrlf, so no checkout needs configuring.
+* text=auto eol=lf
+
+# Binary: never converted, never diffed as text.
+*.png binary
+*.gif binary
+*.mp4 binary
+*.opus binary
+*.wav binary
+*.woff binary
+
+# CRLF on purpose: these fixtures prove that files a user wrote on Windows
+# (CRLF) compose and report as their LF twins do. They stay byte for byte.
+/test/testdata/compose/crlf/** -text
+/test/testdata/status/cycle/openspec/changes/crlf/** -text
+
 # What only development reads never ships (T10f): an installed release
 # validates what it carries; the repository's own evidence (README refs,
 # audit fixtures, matrix evidence) is checked in the checkout. third_party/

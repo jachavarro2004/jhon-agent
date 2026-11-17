@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -523,10 +524,21 @@ func TestRuntimeSettingUnreadableFileFallsBackToDetection(t *testing.T) {
 	}
 }
 
+// osAbs is p, an absolute POSIX path, as one absolute on the running OS: on
+// Windows it takes a drive (C:/opt/example; forward slashes need no TOML
+// escaping and Windows reads them as separators).
+func osAbs(p string) string {
+	if runtime.GOOS == "windows" {
+		return "C:" + p
+	}
+	return p
+}
+
 // T128a: sandbox.mode is off unless set, and sandbox.allow_write a list of
 // folders, each absolute or under ~/, never /, the home folder or one above.
 func TestSandboxKeys(t *testing.T) {
 	t.Setenv("HOME", "/home/u")
+	opt := osAbs("/opt/example")
 	vals, err := Load(filepath.Join(t.TempDir(), "settings.toml"), noEnv)
 	if err != nil {
 		t.Fatal(err)
@@ -537,23 +549,23 @@ func TestSandboxKeys(t *testing.T) {
 	if v := valueOf(t, vals, "sandbox.allow_write"); !same(v.Value, []string{}) || v.Kind != "paths" {
 		t.Errorf("sandbox.allow_write = %#v (%s), want an empty list of paths", v.Value, v.Kind)
 	}
-	vals, err = Load(write(t, "[sandbox]\nmode = \"on\"\nallow_write = [\"/opt/example\", \"~/.android\"]\n"), noEnv)
+	vals, err = Load(write(t, "[sandbox]\nmode = \"on\"\nallow_write = [\""+opt+"\", \"~/.android\"]\n"), noEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if v := valueOf(t, vals, "sandbox.mode"); v.Value != "on" || v.Source != SourceFile {
 		t.Errorf("sandbox.mode = %#v (%s), want on from the file", v.Value, v.Source)
 	}
-	if v := valueOf(t, vals, "sandbox.allow_write"); !same(v.Value, []string{"/opt/example", "~/.android"}) {
+	if v := valueOf(t, vals, "sandbox.allow_write"); !same(v.Value, []string{opt, "~/.android"}) {
 		t.Errorf("sandbox.allow_write = %#v, want the file's list as written", v.Value)
 	}
-	if got := Expand("~/.android"); got != "/home/u/.android" {
+	if got := Expand("~/.android"); got != filepath.Join("/home/u", ".android") {
 		t.Errorf("Expand(~/.android) = %s", got)
 	}
 	for _, c := range []struct{ text, bad string }{
 		{"[sandbox]\nmode = \"strict\"\n", `sandbox.mode: "strict" is not accepted (accepted: on, off)`},
 		{"[sandbox]\nmode = true\n", `sandbox.mode: true is not accepted (accepted: on, off)`},
-		{"[sandbox]\nallow_write = \"/opt/example\"\n", `sandbox.allow_write: "/opt/example" is not accepted`},
+		{"[sandbox]\nallow_write = \"" + opt + "\"\n", `sandbox.allow_write: "` + opt + `" is not accepted`},
 		{"[sandbox]\nallow_write = [\"relative\"]\n", `sandbox.allow_write: "relative" is not accepted`},
 		{"[sandbox]\nallow_write = [\"\"]\n", `sandbox.allow_write: "" is not accepted`},
 		{"[sandbox]\nallow_write = [\"/\"]\n", `sandbox.allow_write: "/" is not accepted`},
@@ -570,20 +582,21 @@ func TestSandboxKeys(t *testing.T) {
 
 func TestSetWritesAListOnOneLineAndReplacesIt(t *testing.T) {
 	t.Setenv("HOME", "/home/u")
-	path := write(t, "schema = 1\n\n[sandbox]\n# what a command may write\nallow_write = [\"/opt/old\", \"/opt/[x]\"] # mine\nmode = \"off\"\n")
-	v, err := Set(path, "sandbox.allow_write", "/opt/example, ~/.android")
+	opt := osAbs("/opt/example")
+	path := write(t, "schema = 1\n\n[sandbox]\n# what a command may write\nallow_write = [\""+osAbs("/opt/old")+"\", \""+osAbs("/opt/[x]")+"\"] # mine\nmode = \"off\"\n")
+	v, err := Set(path, "sandbox.allow_write", opt+", ~/.android")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !same(v.Value, []string{"/opt/example", "~/.android"}) {
+	if !same(v.Value, []string{opt, "~/.android"}) {
 		t.Errorf("Set returned %#v", v.Value)
 	}
-	want := "schema = 1\n\n[sandbox]\n# what a command may write\nallow_write = [\"/opt/example\", \"~/.android\"] # mine\nmode = \"off\"\n"
+	want := "schema = 1\n\n[sandbox]\n# what a command may write\nallow_write = [\"" + opt + "\", \"~/.android\"] # mine\nmode = \"off\"\n"
 	if got := read(t, path); got != want {
 		t.Errorf("the file holds\n%s\nwant\n%s", got, want)
 	}
 	// A refused entry writes nothing.
-	for _, raw := range []string{"", "relative", "/", "/home/u", "/opt/a,,/opt/b"} {
+	for _, raw := range []string{"", "relative", "/", "/home/u", osAbs("/opt/a") + ",," + osAbs("/opt/b")} {
 		var inv *InvalidError
 		if _, err := Set(path, "sandbox.allow_write", raw); !errors.As(err, &inv) {
 			t.Errorf("Set(%q) = %v, want it refused", raw, err)
@@ -593,8 +606,8 @@ func TestSetWritesAListOnOneLineAndReplacesIt(t *testing.T) {
 		t.Errorf("a refused value changed the file:\n%s", got)
 	}
 	// A list that runs over lines is the owner's to edit.
-	multi := write(t, "[sandbox]\nallow_write = [\n  \"/opt/old\",\n]\n")
-	if _, err := Set(multi, "sandbox.allow_write", "/opt/example"); err == nil || !strings.Contains(err.Error(), "edit the file by hand") {
+	multi := write(t, "[sandbox]\nallow_write = [\n  \""+osAbs("/opt/old")+"\",\n]\n")
+	if _, err := Set(multi, "sandbox.allow_write", opt); err == nil || !strings.Contains(err.Error(), "edit the file by hand") {
 		t.Errorf("Set over a multi-line list = %v, want it left to the owner", err)
 	}
 }

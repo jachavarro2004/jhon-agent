@@ -26,7 +26,9 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    # A fixed image: ubuntu-latest moves to a new release (and its coreutils)
+    # on GitHub's schedule, not ours (L1142).
+    runs-on: ubuntu-24.04
     # The whole suite takes about 3 minutes locally. Without a cap, a hung test
     # held every run to GitHub's 6-hour limit from 2026-11-03 on (L159).
     timeout-minutes: 30
