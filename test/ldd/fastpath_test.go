@@ -3,6 +3,7 @@ package ldd
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -220,10 +221,49 @@ func TestSmallChangeRefusesAnUntrackedFileRemovedBeforeCommit(t *testing.T) {
 func TestSmallChangeRefusesARunWhoseHeadMovedWhileItRan(t *testing.T) {
 	t.Parallel()
 	root := smallRepo(t)
-	r := whileItRuns(t, root, "true", func() { commit(t, root, "small fix, mid-run") })
+	r := whileItRuns(t, root, "true", func() { commitNow(t, root, "small fix, mid-run") })
 	equal(t, r.Code, 0, r.Out())
+	// The premise held: the run saw HEAD move (else the test lost its race).
+	equal(t, object(t, support.Read(t, filepath.Join(root, smallRecord)))["dirty"], true, "the record of a run whose HEAD moved")
 	commit(t, root, "small fix")
 	refused(t, root, `^the candidate changed during the last test run`)
+}
+
+// commitNow commits everything at once, outside support.Run's process slots,
+// which the runs whileItRuns starts may all hold: a mid-run commit that waited
+// for a slot would land after the run ended.
+func commitNow(t *testing.T, root, message string) {
+	t.Helper()
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "-q", "--allow-empty", "-m", message}} {
+		c := exec.Command("git", append([]string{"-c", "user.name=jhon-test", "-c", "user.email=jhon-test@example.invalid", "-c", "commit.gpgsign=false"}, args...)...)
+		c.Dir, c.Env = root, support.Env()
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+	}
+}
+
+// T146f (L1236): an earlier jhon's record on the very tree later committed
+// is reused by nothing: the re-run on the clean tree runs the test again.
+func TestSmallChangeOldRecordOnTheCommittedTreeReusesNothing(t *testing.T) {
+	t.Parallel()
+	root := smallRepo(t)
+	support.Write(t, root, map[string]string{"flag": "A\n"})
+	r := whileItRuns(t, root, "grep -qx B ../flag", func() { support.Write(t, root, map[string]string{"flag": "B\n"}) })
+	equal(t, r.Code, 0, r.Out())
+	rec := object(t, support.Read(t, filepath.Join(root, smallRecord)))
+	delete(rec, "after_working_tree") // as jhon 0.3.1-0.3.5 wrote it
+	rec["dirty"] = false
+	b, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.Write(t, root, map[string]string{smallRecord: string(b), "flag": "A\n"})
+	commit(t, root, "small fix")
+	again := jhonGit(t, root, "executions", "run", smallChange, "--affected", "main")
+	equal(t, strings.Contains(again.Stdout, "(reused:"), false, again.Out())
+	equal(t, again.Code, 1, again.Out())
+	refused(t, root, `^the last test run did not pass`)
 }
 
 // A failed run, a partial record and an old record with no working_tree are
