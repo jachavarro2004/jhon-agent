@@ -86,7 +86,9 @@ func TestTheOtherConditionsArgvIsUnchanged(t *testing.T) {
 		{jhon, "start", "pi", "--mode", "json", "--provider", "claude-bridge", "--model", "haiku", "--session-id", runs[2].SessionID, "--", p},
 	}
 	for i, r := range runs {
-		if !slices.Equal(r.Argv, want[i]) || r.Env != nil {
+		// jhon's env keeps the owner's CLAUDE.md and auto-memory out (T146 FB4).
+		wantEnv := map[string][]string{"jhon": isolatedClaudeEnv}[r.Cond.Name()]
+		if !slices.Equal(r.Argv, want[i]) || !slices.Equal(r.Env, wantEnv) {
 			t.Errorf("%s argv\n%q\nwant\n%q\nenv %q", r.Name(), r.Argv, want[i], r.Env)
 		}
 	}
@@ -99,7 +101,7 @@ func TestPiCleanRunsPlainOnlyAndIsAcceptedByRun(t *testing.T) {
 	f := newFake(t)
 	var out, errOut bytes.Buffer
 	code := cli([]string{"run", "--home", f.home, "--results", filepath.Join(t.TempDir(), "r"), "--tasks", "pagination-bug", "--variants", "plain,ldd",
-		"--conditions", "pi-jhon,pi-clean", "--dry-run"}, &out, &errOut, time.Now())
+		"--conditions", "pi-jhon,pi-clean", "--repeats", "1", "--dry-run"}, &out, &errOut, time.Now())
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errOut.String())
 	}

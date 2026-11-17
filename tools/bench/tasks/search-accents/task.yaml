@@ -1,5 +1,6 @@
 id: search-accents
 kind: regression
+size: large
 model: sonnet
 max_turns: 60
 timeout: 30m

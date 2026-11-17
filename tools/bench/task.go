@@ -21,6 +21,9 @@ import (
 type Task struct {
 	ID   string
 	Kind string
+	// Size is small or large (T146, L1205): it picks the task's `bench
+	// value` gates (valueGates) and its default repeats (DefaultRepeats).
+	Size string
 	// Prompt is the first owner message; Prompts are all of them, in order:
 	// task.yaml's `prompt:` alone, or `prompt_1:`, `prompt_2:` … with no gap.
 	Prompt  string
@@ -179,7 +182,10 @@ func LoadTask(dir string) (Task, error) {
 	if err != nil {
 		return Task{}, fmt.Errorf("%s: %v", filepath.Join(dir, "task.yaml"), err)
 	}
-	t := Task{ID: f["id"], Kind: f["kind"], Prompt: f["prompt"], Model: f["model"], Hidden: f["hidden"], Check: f["check"], Dir: dir}
+	t := Task{ID: f["id"], Kind: f["kind"], Size: f["size"], Prompt: f["prompt"], Model: f["model"], Hidden: f["hidden"], Check: f["check"], Dir: dir}
+	if t.Size != "" && t.Size != SizeSmall && t.Size != SizeLarge {
+		return Task{}, fmt.Errorf("%s: size %q: give %s or %s", dir, t.Size, SizeSmall, SizeLarge)
+	}
 	if err := t.messages(f); err != nil {
 		return Task{}, fmt.Errorf("%s: %v", dir, err)
 	}
@@ -209,29 +215,92 @@ func LoadTask(dir string) (Task, error) {
 	return t, nil
 }
 
-// LoadTasks reads the named tasks under root, or every task when ids is empty.
+// The task sizes (T146, L1205).
+const (
+	SizeSmall = "small"
+	SizeLarge = "large"
+)
+
+// DefaultRepeats are a task's runs per condition when --repeats is not
+// given (T146 FB5): 5 for a small task (cheap, so the spread shows), 3 for a
+// large one or one with no size (MinRepeats, L483), 1 for the one-time
+// set-up run.
+func (t Task) DefaultRepeats() int {
+	switch {
+	case t.ID == SetupTaskID:
+		return 1
+	case t.Size == SizeSmall:
+		return 5
+	}
+	return MinRepeats
+}
+
+// SetupTaskID is the one-time LDD set-up task (T146 FB2): a tiny repo with
+// no LDD that a Jhon condition sets up, measured apart from every cell. It
+// lives in setup/, not tasks/, and runs once per Jhon runtime.
+const SetupTaskID = "ldd-setup"
+
+// setupTaskDir is the set-up task's directory.
+func setupTaskDir() string { return filepath.Join(source(), "setup", SetupTaskID) }
+
+// LoadTasks reads the named tasks under root, or every task when ids is
+// empty; the one-time set-up task (SetupTaskID) loads from setup/ when named.
 func LoadTasks(root string, ids []string) ([]Task, error) {
 	if len(ids) == 0 {
-		entries, err := os.ReadDir(root)
-		if err != nil {
+		var err error
+		if ids, err = listTaskIDs(root); err != nil {
 			return nil, err
 		}
-		for _, e := range entries {
-			if e.IsDir() {
-				ids = append(ids, e.Name())
-			}
-		}
-		slices.Sort(ids)
 	}
 	var out []Task
 	for _, id := range ids {
-		t, err := LoadTask(filepath.Join(root, id))
+		dir := filepath.Join(root, id)
+		if id == SetupTaskID {
+			dir = setupTaskDir()
+		}
+		t, err := LoadTask(dir)
 		if err != nil {
 			return nil, fmt.Errorf("task %s: %v", id, err)
 		}
 		out = append(out, t)
 	}
 	return out, nil
+}
+
+// listTaskIDs are the ids of every task under root, sorted.
+func listTaskIDs(root string) ([]string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, e := range entries {
+		if e.IsDir() {
+			ids = append(ids, e.Name())
+		}
+	}
+	slices.Sort(ids)
+	return ids, nil
+}
+
+// taskSizes are the sizes of the tasks under root by id, the set-up task's
+// too; a task that does not load is left out (`bench value` reads results
+// whose metrics.json predates task_size).
+func taskSizes(root string) map[string]string {
+	sizes := map[string]string{}
+	entries, _ := os.ReadDir(root)
+	dirs := []string{setupTaskDir()}
+	for _, e := range entries {
+		if e.IsDir() {
+			dirs = append(dirs, filepath.Join(root, e.Name()))
+		}
+	}
+	for _, d := range dirs {
+		if t, err := LoadTask(d); err == nil && t.Size != "" {
+			sizes[t.ID] = t.Size
+		}
+	}
+	return sizes
 }
 
 // checkTimeout bounds the hidden acceptance test.

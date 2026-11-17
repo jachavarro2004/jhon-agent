@@ -172,6 +172,11 @@ func modelRuns(t *testing.T, dir, cond, model string, cost float64, edit func(m 
 	for rep := 1; rep <= 3; rep++ {
 		m := cellRun("plain", cond, rep, cost)
 		m.Model = model
+		if isClean(cond) {
+			// The no-Jhon runs rework twice as often, so a large task's
+			// Jhon cell has the strictly better quality its gate asks (T146).
+			m.Rework = ip(2)
+		}
 		if edit != nil {
 			edit(&m)
 		}
@@ -191,12 +196,12 @@ func TestValueComparesPiJhonWithPiCleanOfTheSameModel(t *testing.T) {
 	// Jhon on Opus leaves a file out of scope; GLM's clean runs miss RED
 	// before GREEN once, Opus's never: merged, the cells would mix them.
 	modelRuns(t, dir, "pi-jhon", "claude-bridge/opus", 1, func(m *Metrics) { m.OutOfScopeFiles = ip(1) })
-	modelRuns(t, dir, "pi-clean", "zai/glm-5.3", 0.5, func(m *Metrics) {
+	modelRuns(t, dir, "pi-clean", "zai/glm-5.3", 1, func(m *Metrics) {
 		if m.Repeat == 1 {
 			m.RedBeforeGreen = bp(false)
 		}
 	})
-	modelRuns(t, dir, "pi-clean", "opus", 0.5, nil)
+	modelRuns(t, dir, "pi-clean", "opus", 1, nil)
 	code, out, errOut := value(t, dir)
 	for _, s := range []string{
 		"PASS  invoice-slices plain pi-jhon vs pi-clean plain, model zai/glm-5.3",

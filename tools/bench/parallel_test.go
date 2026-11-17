@@ -57,7 +57,7 @@ func TestParallelOneIsTheSequentialBatch(t *testing.T) {
 			kinds = append(kinds, c[:min(len(c), 10)])
 		}
 	}
-	if !slices.Equal(calls0, calls1) || !slices.Equal(kinds, []string{"jhon versi", "claude -p ", "jhon audit", "claude -p ", "jhon audit"}) {
+	if !slices.Equal(calls0, calls1) || !slices.Equal(kinds, []string{"jhon versi", "claude -p ", "claude env", "jhon audit", "claude -p ", "claude env", "jhon audit"}) {
 		t.Errorf("calls\n%s\n--parallel 1\n%s", strings.Join(calls0, "\n"), strings.Join(calls1, "\n"))
 	}
 	if !slices.Equal(files0, files1) || len(files0) == 0 {
