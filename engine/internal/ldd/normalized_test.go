@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 )
 
 // normalized matches a scenario's name in a test's text: lowered, every run
@@ -47,7 +49,7 @@ func TestScenarioCoverageMatchesThePlainScan(t *testing.T) {
 			visit(string(rune('a'+i)), s)
 		}
 	}
-	got, err := ScenarioCoverage([]string{spec}, scan)
+	got, err := ScenarioCoverage(layout.OpenSpec, []string{spec}, scan)
 	if err != nil {
 		t.Fatal(err)
 	}

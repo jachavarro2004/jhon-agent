@@ -43,14 +43,15 @@ func SliceLinesOf(top, change string, r Route) SliceLines {
 
 func (g gitReads) sliceLines(top, change string, r Route) SliceLines {
 	s := SliceLines{Slice: "1", Advisory: r.VerifiedLines}
-	rel := layout.For(top).Artifact(change, "tasks.md")
+	lay := layout.For(top)
+	rel := lay.Artifact(change, lay.Tasks())
 	head, _ := g.git(top, "show", "HEAD:"+rel)
 	if head == "" {
 		if b, err := os.ReadFile(filepath.Join(top, rel)); err == nil {
 			head = string(b)
 		}
 	}
-	for _, x := range ProgressOf(&head).Slices {
+	for _, x := range ProgressOf(lay, &head).Slices {
 		if x.Total == 0 || x.Completed < x.Total {
 			if m := sliceNumber.FindStringSubmatch(x.Name); m != nil {
 				s.Slice = m[1]
@@ -76,12 +77,13 @@ func (g gitReads) sliceBase(top, change string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	rel := layout.For(top).Artifact(change, "tasks.md")
+	lay := layout.For(top)
+	rel := lay.Artifact(change, lay.Tasks())
 	log, _ := g.git(top, "log", "--format=%H", base+"..HEAD", "--", rel)
 	for _, c := range nonEmpty(log) {
 		after, _ := g.git(top, "show", c+":"+rel)
 		before, _ := g.git(top, "show", c+"^:"+rel)
-		if len(newlyClosed(before, after)) > 0 {
+		if len(newlyClosed(lay, before, after)) > 0 {
 			return c, true
 		}
 	}
@@ -164,21 +166,22 @@ func ClosesSlice(top string) bool {
 // closedSlices are the slices of change whose tasks are all checked in the
 // working tasks.md and were not in HEAD's.
 func closedSlices(top, change string) []string {
-	rel := layout.For(top).Artifact(change, "tasks.md")
+	lay := layout.For(top)
+	rel := lay.Artifact(change, lay.Tasks())
 	b, err := os.ReadFile(filepath.Join(top, rel))
 	if err != nil {
 		return nil
 	}
 	before, _ := riskGit(top, "show", "HEAD:"+rel)
-	return newlyClosed(before, string(b))
+	return newlyClosed(lay, before, string(b))
 }
 
 // newlyClosed are the slices whose tasks are all checked in the tasks.md
 // after and were not in before.
-func newlyClosed(before, after string) []string {
+func newlyClosed(lay layout.Layout, before, after string) []string {
 	done := func(src string) []string {
 		var out []string
-		for _, x := range ProgressOf(&src).Slices {
+		for _, x := range ProgressOf(lay, &src).Slices {
 			if x.Total > 0 && x.Completed == x.Total {
 				out = append(out, x.Name)
 			}

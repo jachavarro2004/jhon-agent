@@ -109,6 +109,7 @@ internal/ldd -> internal/ldd/layout
 internal/ldd -> internal/project
 internal/ldd -> internal/requirements
 internal/ldd -> internal/vcs
+internal/ldd/layout -> internal/lazyre
 internal/manifest -> internal/contract
 internal/manifest -> internal/js
 internal/manifest -> internal/lazyre

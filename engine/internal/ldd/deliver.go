@@ -251,7 +251,8 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 		}
 	}
 	// Each scenario of the change's delta specs is named by a test, as status counts them.
-	specFileList, err := specFiles(filepath.Join(root, execution.ChangesOf(root), change))
+	lay := layout.For(root)
+	specFileList, err := specFiles(lay, filepath.Join(root, execution.ChangesOf(root), change))
 	if err != nil {
 		return DeliverCheck{}, err
 	}
@@ -260,7 +261,7 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 		for i, f := range specFileList {
 			specs[i] = f[1]
 		}
-		coverage, err := ScenarioCoverage(specs, testFiles(root))
+		coverage, err := ScenarioCoverage(lay, specs, testFiles(root))
 		if err != nil {
 			return DeliverCheck{}, err
 		}
@@ -275,11 +276,11 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 	// delivery: change delivers the change in one merge, after its last slice.
 	if action == Merge() && DeliveryUnit(root) == "change" {
 		var src *string
-		if b, err := os.ReadFile(filepath.Join(root, execution.ChangesOf(root), change, "tasks.md")); err == nil {
+		if b, err := os.ReadFile(filepath.Join(root, execution.ChangesOf(root), change, lay.Tasks())); err == nil {
 			text := string(b)
 			src = &text
 		}
-		t := ProgressOf(src)
+		t := ProgressOf(lay, src)
 		outlined := t.Outlined()
 		if t.Pending > 0 {
 			reasons = append(reasons, fmt.Sprintf("delivery: change in openspec/config.yaml merges the change once, after its last slice; %d task(s) of tasks.md are unchecked (%s): commit each slice on the change's branch and merge when every slice is done", t.Pending, listed(t.Unchecked)))

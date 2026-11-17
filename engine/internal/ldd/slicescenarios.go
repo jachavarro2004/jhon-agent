@@ -32,40 +32,15 @@ func (s specScenario) key() string { return s.file + "\x00" + s.requirement + "\
 
 // scenariosOf are the named scenarios of the spec src at file, its
 // requirements at depth (0: a delta's fixed depth).
-func scenariosOf(file, src string, depth int, c requirements.DeltaContract) []specScenario {
-	parsed := requirements.ParseSpec(src, requirements.Options{Metadata: c.Metadata, Ops: c.Order, Depth: depth})
-	if depth == 0 {
-		depth = requirements.RequirementLevel
-	}
-	op := map[*requirements.Requirement]string{}
-	for _, s := range parsed.Sections {
-		if s.Op != nil {
-			for _, r := range s.Requirements {
-				op[r] = *s.Op
-			}
-		}
-	}
-	lines := requirements.MarkdownLines(src)
+func scenariosOf(l layout.Layout, file, src string, depth int) []specScenario {
+	reqs, _ := l.Scenarios(src, depth)
 	var out []specScenario
-	for _, r := range parsed.Requirements {
+	for _, r := range reqs {
 		for _, s := range r.Scenarios {
 			if s.Name == "" {
 				continue
 			}
-			var body []string
-			for i := s.Line; i < len(lines) && lines[i].Start < r.End; i++ {
-				if h := requirements.HeadingOf(lines[i]); h != nil && h.Level <= depth+1 {
-					break
-				}
-				body = append(body, strings.TrimRight(lines[i].Text, " \t\r"))
-			}
-			for len(body) > 0 && body[0] == "" {
-				body = body[1:]
-			}
-			for len(body) > 0 && body[len(body)-1] == "" {
-				body = body[:len(body)-1]
-			}
-			out = append(out, specScenario{file: filepath.ToSlash(file), requirement: r.Name, name: s.Name, op: op[r], body: strings.Join(body, "\n")})
+			out = append(out, specScenario{file: filepath.ToSlash(file), requirement: r.Name, name: s.Name, op: r.Op, body: s.Body})
 		}
 	}
 	return out
@@ -78,9 +53,10 @@ func scenariosOf(file, src string, depth int, c requirements.DeltaContract) []sp
 // that cannot be read, or fits no structural variant, holds no copy.
 func copiedScenarios(root string, deltas [][2]string, c requirements.DeltaContract) map[string]bool {
 	out := map[string]bool{}
+	l := layout.For(root)
 	for _, f := range deltas {
 		var modified []specScenario
-		for _, s := range scenariosOf(f[0], f[1], 0, c) {
+		for _, s := range scenariosOf(l, f[0], f[1], 0) {
 			if s.op == "MODIFIED" {
 				modified = append(modified, s)
 			}
@@ -88,7 +64,7 @@ func copiedScenarios(root string, deltas [][2]string, c requirements.DeltaContra
 		if len(modified) == 0 {
 			continue
 		}
-		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(layout.For(root).SpecsDir()), f[0]))
+		b, err := os.ReadFile(layout.At(root, l.MainSpec(filepath.ToSlash(f[0]))))
 		if err != nil {
 			continue
 		}
@@ -97,7 +73,7 @@ func copiedScenarios(root string, deltas [][2]string, c requirements.DeltaContra
 			continue
 		}
 		main := map[string]string{}
-		for _, s := range scenariosOf(f[0], string(b), depth, c) {
+		for _, s := range scenariosOf(l, f[0], string(b), depth) {
 			main[s.key()] = s.body
 		}
 		for _, s := range modified {
@@ -112,7 +88,8 @@ func copiedScenarios(root string, deltas [][2]string, c requirements.DeltaContra
 // deltaSpecsAt are the change's delta specs in commit, as specFiles lists
 // them from the working tree: path under specs/ and text.
 func (g gitReads) deltaSpecsAt(top, change, commit string) [][2]string {
-	dir := layout.For(top).ChangeDir(change) + "/specs/"
+	l := layout.For(top)
+	dir := l.ChangeDir(change) + "/" + l.DeltaSpecs() + "/"
 	names, ok := g.git(top, "ls-tree", "-r", "--name-only", commit, "--", dir)
 	if !ok {
 		return nil
@@ -141,7 +118,8 @@ func unnamedSliceScenarios(top, change string) string {
 	if err != nil {
 		return ""
 	}
-	now, err := specFiles(filepath.Join(top, execution.ChangesOf(top), change))
+	l := layout.For(top)
+	now, err := specFiles(l, filepath.Join(top, execution.ChangesOf(top), change))
 	if err != nil || len(now) == 0 {
 		return ""
 	}
@@ -149,7 +127,7 @@ func unnamedSliceScenarios(top, change string) string {
 	before := map[string]string{}
 	if base, ok := g.sliceBase(top, change); ok {
 		for _, f := range g.deltaSpecsAt(top, change, base) {
-			for _, s := range scenariosOf(f[0], f[1], 0, c) {
+			for _, s := range scenariosOf(l, f[0], f[1], 0) {
 				before[s.key()] = s.body
 			}
 		}
@@ -157,7 +135,7 @@ func unnamedSliceScenarios(top, change string) string {
 	copies := copiedScenarios(top, now, c)
 	var names []string
 	for _, f := range now {
-		for _, s := range scenariosOf(f[0], f[1], 0, c) {
+		for _, s := range scenariosOf(l, f[0], f[1], 0) {
 			if body, had := before[s.key()]; (had && body == s.body) || copies[s.key()] || slices.Contains(names, s.name) {
 				continue
 			}
@@ -185,9 +163,10 @@ func copiesNote(root string, deltas [][2]string, coverage Coverage) string {
 	if len(copies) == 0 {
 		return ""
 	}
+	l := layout.For(root)
 	var copied, own []string
 	for _, f := range deltas {
-		for _, s := range scenariosOf(f[0], f[1], 0, c) {
+		for _, s := range scenariosOf(l, f[0], f[1], 0) {
 			if copies[s.key()] {
 				copied = append(copied, s.name)
 			} else {

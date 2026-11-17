@@ -55,11 +55,11 @@ func SliceToPlan(t TaskProgress) *string {
 // any `## Slice <n>:` section, tasks in a later slice than the current one, a
 // slice without its value, and a slice past the advisory size. They are
 // notes, never a refusal: the plan grows as the change goes, on what exists.
-func TasksNotes(src *string) []string {
+func TasksNotes(lay layout.Layout, src *string) []string {
 	if src == nil {
 		return nil
 	}
-	progress := ProgressOf(src)
+	progress := ProgressOf(lay, src)
 	if progress.Total == 0 {
 		return nil
 	}
@@ -67,10 +67,10 @@ func TasksNotes(src *string) []string {
 	if len(progress.Slices) == 0 {
 		out = append(out, "tasks.md has no `## Slice <n>:` section; the adaptive flow plans each slice's tasks under its own")
 	}
-	if ahead := PlanAheadOf(*src); len(ahead.Slices) > 0 {
+	if ahead := PlanAheadOf(lay, *src); len(ahead.Slices) > 0 {
 		out = append(out, fmt.Sprintf("%d task(s) in a later slice than the current one (%s); write them when its turn comes, on what exists then", ahead.Tasks, strings.Join(ahead.Slices, ", ")))
 	}
-	if bare := SlicesWithoutValue(*src); len(bare) > 0 {
+	if bare := SlicesWithoutValue(lay, *src); len(bare) > 0 {
 		out = append(out, fmt.Sprintf("%s name(s) no value it delivers: add a `Delivers: <acceptance criteria or observable value>` line under each heading", strings.Join(bare, ", ")))
 	}
 	if limit, err := ReadSliceTasks(); err == nil {
@@ -91,7 +91,7 @@ var delivers = lazyre.New(`^\s*(?:[-*]\s+)?(?:\*\*)?Delivers:(?:\*\*)?\s*\S`)
 // lines ignored, with no `Delivers:` line naming the value the slice brings
 // (contracts/ldd.md, "Slices"): a slice is a piece of value, so it says
 // which. `jhon status` notes them.
-func SlicesWithoutValue(src string) []string {
+func SlicesWithoutValue(lay layout.Layout, src string) []string {
 	var out []string
 	current, level, valued := "", 0, false
 	flush := func() {
@@ -100,7 +100,7 @@ func SlicesWithoutValue(src string) []string {
 		}
 	}
 	for _, l := range unfenced(src) {
-		if h := sliceHeading.FindStringSubmatch(l.Text); h != nil {
+		if h := lay.SliceHeading().FindStringSubmatch(l.Text); h != nil {
 			flush()
 			current, valued = h[1], false
 			level = len(l.Text) - len(strings.TrimLeft(l.Text, "#"))
@@ -136,8 +136,8 @@ type PlanAhead struct {
 }
 
 // PlanAheadOf is the planning ahead of tasks.md, which `jhon status` notes.
-func PlanAheadOf(src string) PlanAhead {
-	t := ProgressOf(&src)
+func PlanAheadOf(lay layout.Layout, src string) PlanAhead {
+	t := ProgressOf(lay, &src)
 	var out PlanAhead
 	out.Tasks = t.Total
 	for _, x := range t.Slices {
@@ -214,14 +214,17 @@ func normalized(s string) string {
 // appears in a test file, in a test's title or a `scenario: <name>` comment,
 // matched case- and punctuation-insensitively. tests visits every test file.
 // The error is a broken delta contract.
-func ScenarioCoverage(specs []string, tests func(visit func(path, src string))) (Coverage, error) {
-	c, err := requirements.Delta()
-	if err != nil {
+func ScenarioCoverage(l layout.Layout, specs []string, tests func(visit func(path, src string))) (Coverage, error) {
+	if _, err := requirements.Delta(); err != nil {
 		return Coverage{}, err
 	}
 	var names []string
 	for _, src := range specs {
-		for _, r := range requirements.ParseSpec(src, requirements.Options{Metadata: c.Metadata, Ops: c.Order}).Requirements {
+		reqs, err := l.Scenarios(src, 0)
+		if err != nil {
+			return Coverage{}, err
+		}
+		for _, r := range reqs {
 			for _, s := range r.Scenarios {
 				if s.Name != "" && !slices.Contains(names, s.Name) {
 					names = append(names, s.Name)

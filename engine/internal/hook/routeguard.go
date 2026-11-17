@@ -345,17 +345,18 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		return ""
 	}
 	active, archived := ldd.BranchChanges(top)
-	dir := func(c string) string { return layout.At(top, layout.For(top).ChangeDir(c)) }
+	lay := layout.For(top)
+	dir := func(c string) string { return layout.At(top, lay.ChangeDir(c)) }
 	if byChange {
 		for _, c := range active {
-			if left := ldd.Unchecked(dir(c)); len(left) > 0 {
+			if left := ldd.Unchecked(lay, dir(c)); len(left) > 0 {
 				return fmt.Sprintf("delivery: change opens one PR per change, after its last slice: %s has %d unchecked task(s) (%s). Commit each slice on the branch and open the PR when every task is done.", c, len(left), strings.Join(left[:min(3, len(left))], ", "))
 			}
 		}
 		// An outlined slice is a slice not done (T127): the change's PR
 		// waits for it as `jhon deliver check --action merge` does.
 		for _, c := range active {
-			if left := ldd.Outlined(dir(c)); len(left) > 0 {
+			if left := ldd.Outlined(lay, dir(c)); len(left) > 0 {
 				return fmt.Sprintf("delivery: change opens one PR per change, after its last slice: %s has %d outlined slice(s) with no tasks yet (%s). Task and commit each slice on the branch and open the PR when every slice is done.", c, len(left), strings.Join(left[:min(3, len(left))], ", "))
 			}
 		}

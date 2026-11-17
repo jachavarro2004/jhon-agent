@@ -10,6 +10,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/contract"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/execution"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 )
 
@@ -26,6 +27,7 @@ const umbrellaKind = "umbrella"
 
 // IsUmbrella is whether change, active under root, is an umbrella.
 func IsUmbrella(root, change string) bool {
+	l := layout.For(root)
 	dir := filepath.Join(root, changesOf(root), change)
 	if b, err := os.ReadFile(filepath.Join(dir, ".openspec.yaml")); err == nil && contract.Scalar(string(b), "kind") == umbrellaKind {
 		return true
@@ -33,7 +35,7 @@ func IsUmbrella(root, change string) bool {
 	if !project.Exists(filepath.Join(dir, "exploration.md")) {
 		return false
 	}
-	return !slices.ContainsFunc([]string{"research.md", "proposal.md", "specs", "design.md", "tasks.md", filepath.Base(execution.RecordPath(change))}, func(f string) bool {
+	return !slices.ContainsFunc([]string{"research.md", "proposal.md", l.DeltaSpecs(), "design.md", l.Tasks(), filepath.Base(execution.RecordPath(root, change))}, func(f string) bool {
 		return project.Exists(filepath.Join(dir, f))
 	})
 }
@@ -64,7 +66,7 @@ func umbrellaNext(change string) string {
 // record (execution.RecordFile), the zero time without either.
 func moved(root, change string) time.Time {
 	var latest time.Time
-	for _, f := range []string{filepath.Join(root, changesOf(root), change, "tasks.md"), execution.RecordFile(root, change)} {
+	for _, f := range []string{filepath.Join(root, changesOf(root), change, layout.For(root).Tasks()), execution.RecordFile(root, change)} {
 		if st, err := os.Stat(f); err == nil && st.ModTime().After(latest) {
 			latest = st.ModTime()
 		}
@@ -81,12 +83,13 @@ func RankChanges(root string, changes []string) []string {
 		at      time.Time
 	}
 	rs := make([]ranked, len(changes))
+	l := layout.For(root)
 	for i, c := range changes {
 		var src *string
-		if b, err := os.ReadFile(filepath.Join(root, changesOf(root), c, "tasks.md")); err == nil {
+		if b, err := os.ReadFile(filepath.Join(root, changesOf(root), c, l.Tasks())); err == nil {
 			src = new(string(b))
 		}
-		p := ProgressOf(src)
+		p := ProgressOf(l, src)
 		rs[i] = ranked{c, p.Pending > 0 || len(p.Outlined()) > 0, moved(root, c)}
 	}
 	slices.SortStableFunc(rs, func(a, b ranked) int {
