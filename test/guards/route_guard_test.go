@@ -1194,3 +1194,20 @@ func TestRouteGuardDeliveryVerifyProbes(t *testing.T) {
 		}
 	}
 }
+
+// T146 (L1211, FA2): a small change (no folder, one component, under the
+// advisory size, not high risk) is delivered with no tasks.md, no memory and
+// no re-run: its commit and its PR pass once its RED before GREEN is on
+// record.
+func TestRouteGuardAcceptsASmallChangesFastPath(t *testing.T) {
+	t.Parallel()
+	small := newRG(t, "")
+	support.Git(t, small.p, "checkout", "-q", "-b", "fix/small")
+	support.Write(t, small.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"})
+	redGreen(t, small.p, ".git/jhon/changes/fix-small/execution-record.json")
+	code(t, small.call(t, "Bash", cmd("git add -A && git commit -q -m 'X is 2'"), true), 0, "the small change's commit")
+	code(t, small.call(t, "Bash", cmd("gh pr create --title x --body y"), true), 0, "the small change's PR")
+	if _, err := os.Stat(filepath.Join(small.p, "openspec/changes/fix-small")); err == nil {
+		t.Error("no folder is asked for")
+	}
+}

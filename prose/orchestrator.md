@@ -36,8 +36,7 @@ launch a fresh one), never inline.
 {{runtime:background-agents}}; each answer arrives as a notification:
 never block the turn waiting on one, and never poll or sleep for it.
 Every job that may outlast a few seconds runs in the background too
-(`bash_background` or `monitor`; Bash with `run_in_background: true` or
-`Monitor`), its wait condition inside the command; never `sleep` in the
+({{runtime:background-jobs}}), its wait condition inside the command; never `sleep` in the
 foreground. Never wait idly: do other in-scope work, or end the turn and
 resume on the notice.
 From the main checkout, pass the change's worktree to sub-agents and
@@ -64,6 +63,9 @@ change, start with `jhon status` and `jhon risk` in its tree. Write the
 record it needs before the first behaviour-changing edit. Write the test
 first and run it through `jhon executions run <change> --affected <base>`
 while it fails (RED), then make the change and run it again (GREEN).
+A small change (`jhon status` says so) keeps no tasks.md, memory, session
+summary or todo list; its GREEN run is its delivery evidence once its tree
+is committed: no re-run.
 When LDD's tools cannot record a run, still do the task test-first (RED,
 then GREEN) with the project's own test command and say the record is
 missing; never stop with the work undone.
@@ -106,7 +108,7 @@ missing; never stop with the work undone.
 - **Existing decisions first.** Before deciding, proposing a design, or
   asking the owner, look for a decision already made: in the code
   (CodeGraph first when the session has it, then reads) and in memory
-  (`mem_search` for each entity the request names, and the project's file
+  ({{runtime:mem-search}} for each entity the request names, and the project's file
   memory when present). Cite the decision ids found. A recorded owner
   decision overrides the source document's wording: state the deviation,
   never follow the document against it. Then decide, or ask only what
@@ -116,6 +118,7 @@ missing; never stop with the work undone.
   passing test run tested. Name its result when asking to deliver; an
   untested revision is called untested. Order: commit, then a recorded run
   (`jhon executions run`) on the clean tree at HEAD, then `jhon deliver check`.
+  A run whose tested tree is the commit's needs no re-run.
   A slice's commit holds exactly the tree of its last recorded passing run:
   RED, GREEN, recorded run, commit.
 
@@ -233,13 +236,13 @@ blocks.
 
 ## Engram session
 
-By default start a session with `mem_current_project`, `mem_context`, and
-`mem_review` (`list`) when available, with the first reads; skip it when the
+By default start a session with {{runtime:mem-current-project}}, {{runtime:mem-context}}, and
+{{runtime:mem-review}} (`list`) when available, with the first reads; skip it when the
 task needs no history. If the project resolves to a home or container
 directory, say so once and name the repository being worked on. Never call
-`mem_merge_projects` or move data between projects; consolidation is the
-owner's decision. Call `mem_review` `mark_reviewed` only on the owner's
-confirmation. When a change is finished, a `mem_session_summary` keeps it
+{{runtime:mem-merge-projects}} or move data between projects; consolidation is the
+owner's decision. Call {{runtime:mem-review}} `mark_reviewed` only on the owner's
+confirmation. When a change is finished, a {{runtime:mem-session-summary}} keeps it
 for the next session.
 
 ## Optional tools

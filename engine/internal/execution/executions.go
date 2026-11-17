@@ -357,6 +357,10 @@ type LastRun struct {
 	LightVerify *VerifyNote `json:"light_verify"`
 	// Unit is a unit's run, the narrow kind (Record.Unit).
 	Unit bool `json:"unit,omitempty"`
+	// WorkingTree is the tree of the working state the run tested
+	// (Record.WorkingTree): what delivery compares a committed tree with
+	// when the run started on uncommitted work. Not in status's JSON.
+	WorkingTree string `json:"-"`
 }
 
 // Empty is a complete run that holds no execution: it selected no project,
@@ -443,6 +447,7 @@ func ReadLastRun(root, change string) (*LastRun, error) {
 		RedBeforeGreen: redBeforeGreen(passedAll, pastRuns(root, change)),
 		LightVerify:    lastLightVerify(root, change),
 		Unit:           obj["unit"] == true,
+		WorkingTree:    str("working_tree"),
 	}, nil
 }
 

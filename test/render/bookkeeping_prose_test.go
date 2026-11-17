@@ -17,9 +17,9 @@ func TestBookkeepingRidesWithWork(t *testing.T) {
 	wants := map[string][]string{
 		"orchestrator.md": {
 			"**No bookkeeping turns.** A memory call, todo update, status check, or Log append rides with the work call it serves, never alone.",
-			"`mem_review` (`list`) when available, with the first reads;",
+			"{{runtime:mem-review}} (`list`) when available, with the first reads;",
 			// L716: every job, sub-agent and sleep goes in the background.
-			"Every job that may outlast a few seconds runs in the background too (`bash_background` or `monitor`; Bash with `run_in_background: true` or `Monitor`), its wait condition inside the command; never `sleep` in the foreground.",
+			"Every job that may outlast a few seconds runs in the background too ({{runtime:background-jobs}}), its wait condition inside the command; never `sleep` in the foreground.",
 			"Never wait idly: do other in-scope work, or end the turn and resume on the notice.",
 		},
 		"contracts/engram.md": {

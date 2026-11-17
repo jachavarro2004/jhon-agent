@@ -86,6 +86,20 @@ require (a unit's run closes no slice). In a wide selection a project with
 a usable pytest-testmon record runs the test modules the change touched
 narrowed by it, and a test of another project selects it only by naming a
 changed file's whole path or import path (`jhon executions --help`).
+With no change named, `jhon executions run` runs the change `jhon status`
+selects on the branch, a change with no folder included, and its first line
+names it; `jhon status` prints the exact next command (`command`), the
+change's name and base filled in.
+
+## A small change
+
+A change with no folder whose record needs no tasks.md (one component,
+under the advisory lines of code, not high risk) is small, and `jhon status`
+says so: it writes no tasks.md, saves no memory or session summary, and
+keeps no todo list. Its RED and GREEN runs are its record. When the run that
+recorded GREEN started on uncommitted work and the commit holds exactly the
+tree it tested, `jhon deliver check` takes that run as the delivery
+evidence: no re-run on the clean tree.
 
 ## A worktree per change
 
