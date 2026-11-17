@@ -82,7 +82,10 @@ The record also keeps `after_working_tree`, the working tree taken again
 when the run ends: when it differs from `working_tree` the run is dirty,
 and `jhon deliver check` never takes it as the tested tree (T146d). A
 record with no `after_working_tree` (one an earlier jhon wrote) is not
-taken either: the refusal says to run the tests again (T146e).
+taken either: the refusal says to run the tests again (T146e). Nor does a
+later run reuse its passes, a unit's run measure from it (or from the
+`last_pass` it kept), or a slice's close take its tree as tested: each needs
+`after_working_tree` equal to `working_tree` (T146f).
 
 A uv-run pytest project is narrowed by pytest-testmon, whose record lives
 in `~/.cache/jhon/testmon/`, one file per checkout and project. With no

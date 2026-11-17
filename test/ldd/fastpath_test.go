@@ -149,12 +149,22 @@ const evidenceNote = `^the last test run tested this tree before its commit`
 // start is read before and its test after), and returns the run's result.
 func whileItRuns(t *testing.T, root, test string, during func()) support.Result {
 	t.Helper()
-	support.Write(t, root, map[string]string{"openspec/config.yaml": "test_command_override:\n  a: \"sleep 3 && " + test + "\"\n" +
+	// The test marks its start outside the repository, so during() runs
+	// after the run took its first snapshot however slow the machine is.
+	started := filepath.Join(t.TempDir(), "started")
+	support.Write(t, root, map[string]string{"openspec/config.yaml": "test_command_override:\n  a: \"touch " + started + " && sleep 3 && " + test + "\"\n" +
 		"lint_command_override:\n  a: \"true\"\nformat_command_override:\n  a: \"true\"\n"})
 	support.Bin(t) // a build failure fails here, not in the goroutine
 	done := make(chan support.Result, 1)
 	go func() { done <- jhonGit(t, root, "executions", "run", smallChange, "--affected", "main") }()
-	time.Sleep(1200 * time.Millisecond)
+	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(50 * time.Millisecond) {
+		if _, err := os.Stat(started); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the run's test never started")
+		}
+	}
 	during()
 	select {
 	case r := <-done:
@@ -264,6 +274,30 @@ func TestSmallChangeRefusesARecordWithNoAfterWorkingTree(t *testing.T) {
 	support.Write(t, root, map[string]string{smallRecord: string(b)})
 	refused(t, root, `^the last test run recorded no working tree at its end.*run the tests again, `+
 		regexp.QuoteMeta("`jhon executions run "+smallChange+" --affected <base>`"))
+}
+
+// T146f (L1232-L1233): following that refusal, a re-run reuses nothing of
+// such a record: it cannot show the tree it started on is the one its
+// passes saw. Its test runs again, on the start's bytes, and fails.
+func TestSmallChangeNeverReusesARecordWithNoAfterWorkingTree(t *testing.T) {
+	t.Parallel()
+	root := smallRepo(t)
+	support.Write(t, root, map[string]string{"flag": "A\n"})
+	r := whileItRuns(t, root, "grep -qx B ../flag", func() { support.Write(t, root, map[string]string{"flag": "B\n"}) })
+	equal(t, r.Code, 0, r.Out())
+	rec := object(t, support.Read(t, filepath.Join(root, smallRecord)))
+	delete(rec, "after_working_tree")
+	rec["dirty"] = false
+	b, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.Write(t, root, map[string]string{smallRecord: string(b), "flag": "A\n"})
+	again := jhonGit(t, root, "executions", "run", smallChange, "--affected", "main")
+	equal(t, strings.Contains(again.Stdout, "(reused:"), false, again.Out())
+	equal(t, again.Code, 1, again.Out())
+	commit(t, root, "small fix")
+	refused(t, root, `^the last test run did not pass`)
 }
 
 // A unit's run (`--affected` with no base) on the uncommitted tree, then

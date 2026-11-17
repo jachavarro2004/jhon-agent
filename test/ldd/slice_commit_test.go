@@ -220,3 +220,42 @@ func TestASliceCommitFromAWorktreeIsJudgedAtTheMainCheckout(t *testing.T) {
 	equal(t, r.Code, 2, "outside any repository", r.Stderr)
 	match(t, r.Stderr, `closes Slice 1: a of c1`, r.Stderr)
 }
+
+// T146f (L1233): a record an earlier binary wrote (working_tree, no
+// after_working_tree) cannot show the tree its run started on is the one it
+// tested to its end: a commit that closes a slice on that tree is refused.
+func TestASliceCommitRefusesARecordWithNoAfterWorkingTree(t *testing.T) {
+	t.Parallel()
+	root := workspace(t, "a", "true", "b", "true", "c", "true", "d", "true")
+	config := filepath.Join(root, "openspec", "config.yaml")
+	b, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.Write(t, root, map[string]string{"openspec/config.yaml": string(b) + "delivery: change\n",
+		"openspec/changes/c1/tasks.md": "## Slice 1: a\n\nDelivers: CA-01\n\n- [ ] 1.1 a\n"})
+	support.GitRepo(t, root)
+	support.Git(t, root, "checkout", "-q", "-B", "main")
+	support.Git(t, root, "add", "-A")
+	support.Git(t, root, "commit", "-q", "-m", "base")
+	support.Git(t, root, "checkout", "-q", "-b", "feat")
+	support.Write(t, root, map[string]string{"a/feature.go": "package a\n", "openspec/changes/c1/tasks.md": "## Slice 1: a\n\nDelivers: CA-01\n\n- [x] 1.1 a\n"})
+	equal(t, jhonGit(t, root, "executions", "run", "c1").Code, 0, "the slice's tests pass")
+	commit := func() support.Result {
+		payload, _ := json.Marshal(map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": "git add -A && git commit -m 'slice 1'"},
+			"cwd": root, "permission_mode": "default"})
+		return support.Run(t, support.Cmd{Args: []string{support.Bin(t), "hook", "route-guard"}, Env: support.Env(), Stdin: string(payload)})
+	}
+	equal(t, commit().Code, 0, "a record that names both trees")
+	record := "openspec/changes/c1/execution-record.json"
+	rec := object(t, support.Read(t, filepath.Join(root, record)))
+	delete(rec, "after_working_tree")
+	out, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.Write(t, root, map[string]string{record: string(out)})
+	r := commit()
+	equal(t, r.Code, 2, r.Stderr)
+	match(t, r.Stderr, `closes Slice 1: a of c1, and its last test run recorded no working tree at its end, or another than at its start\. Run `+"`jhon executions run c1 --affected <base>`"+` on the slice as it will be committed, then commit`, r.Stderr)
+}
