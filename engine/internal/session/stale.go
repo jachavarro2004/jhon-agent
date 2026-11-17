@@ -20,13 +20,16 @@ import (
 	"time"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/isodate"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 )
 
 // InstallRecord is the install record, relative to HOME.
 var InstallRecord = filepath.Join(".cache", "jhon", "install.json")
 
-// Install is the install record: when the framework was last installed, and its commit.
-type Install struct{ InstalledAt, Commit string }
+// Install is the install record: when the framework was last installed, its
+// commit, and the source checkout `jhon sync` installed from ("" when no
+// checkout was ever recorded).
+type Install struct{ InstalledAt, Commit, Source string }
 
 // ReadInstall reads the install record under home; ok is false when it is absent or malformed.
 func ReadInstall(home string) (Install, bool) {
@@ -40,10 +43,29 @@ func ReadInstall(home string) (Install, bool) {
 	}
 	at, _ := r["installed_at"].(string)
 	commit, _ := r["commit"].(string)
+	source, _ := r["source"].(string)
 	if !isodate.IsDate(at) || commit == "" {
 		return Install{}, false
 	}
-	return Install{at, commit}, true
+	return Install{InstalledAt: at, Commit: commit, Source: source}, true
+}
+
+// WriteInstall writes r as the install record under home: the one writer of
+// it, for the render's install and `jhon sync`'s source.
+func WriteInstall(home string, r Install) error {
+	p := filepath.Join(home, InstallRecord)
+	if err := os.MkdirAll(filepath.Dir(p), 0o777); err != nil {
+		return err
+	}
+	text, err := js.Stringify(struct {
+		InstalledAt string `json:"installed_at"`
+		Commit      string `json:"commit"`
+		Source      string `json:"source,omitempty"`
+	}{r.InstalledAt, r.Commit, r.Source})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, []byte(js.WellFormed(text+"\n")), 0o666)
 }
 
 const headBytes = 1 << 20

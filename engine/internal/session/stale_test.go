@@ -49,7 +49,7 @@ func TestReadInstall(t *testing.T) {
 		t.Fatalf("ReadInstall = %v, %v", r, ok)
 	}
 	os.WriteFile(filepath.Join(home, InstallRecord), []byte(`{"installed_at":"2026-09-25T01:19:40.000Z","commit":"dirty"}`+"\n"), 0o644)
-	if r, ok := ReadInstall(home); !ok || r != (Install{"2026-09-25T01:19:40.000Z", "dirty"}) {
+	if r, ok := ReadInstall(home); !ok || r != (Install{InstalledAt: "2026-09-25T01:19:40.000Z", Commit: "dirty"}) {
 		t.Fatalf("ReadInstall = %v, %v", r, ok)
 	}
 	os.WriteFile(filepath.Join(home, InstallRecord), []byte(`{not json`), 0o644)

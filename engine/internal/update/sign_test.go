@@ -15,12 +15,8 @@ import (
 )
 
 // workflow is a signer IdentityPattern accepts: the public repository's
-// release workflow; bridgeWorkflow is one BridgeIdentityPattern accepts: the
-// old public repository's, which signs the v0.3.0 bridge release.
-const (
-	workflow       = "https://github.com/jachavarro2004/jhon-agent/.github/workflows/release.yml@refs/tags/v0.2.0"
-	bridgeWorkflow = "https://github.com/sdsoftwaresas/jhon/.github/workflows/release.yml@refs/tags/v0.2.0"
-)
+// release workflow.
+const workflow = "https://github.com/jachavarro2004/jhon-agent/.github/workflows/release.yml@refs/tags/v0.2.0"
 
 // signBundle is a cosign-style keyless bundle (v0.1: a certificate, the
 // message signature, a Rekor entry with its signed promise, an RFC 3161

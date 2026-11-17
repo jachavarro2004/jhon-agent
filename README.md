@@ -282,8 +282,10 @@ there (`jhon grant outside-write --session <id>`). See
 
 **Settings** are one file, `.config/jhon/settings.toml` in the home:
 `jhon settings list` shows every key with its value and source,
+`jhon settings get <key>` one of them, and
 `jhon settings set <key> <value>` writes one and refuses a value the schema
-does not accept. The main groups:
+does not accept; `jhon settings migrate` drops the keys a release removed,
+after a backup. The main groups:
 
 | Group | Holds |
 |---|---|
@@ -327,11 +329,19 @@ Jhon's source, its releases and its installers (`install.sh`,
 `install.ps1`) live in one public repository,
 [jachavarro2004/jhon-agent](https://github.com/jachavarro2004/jhon-agent),
 whose `.github/workflows/release.yml` builds, signs and publishes every
-release from v0.3.1 on. The user manual, with the installers, a first change
-step by step and release verification, is `dist/public/README.md`; it is
-kept as the old public repository's README for the v0.3.0 bridge release
-(`dist/README.md`), so its URLs and the signer it verifies name that
-repository, not this one.
+release (`dist/README.md`). To verify a release by hand, with its tarball,
+checksum and signature bundle in one directory:
+
+```sh
+sha256sum -c jhon-X.Y.Z-linux-amd64.tar.gz.sha256
+cosign verify-blob \
+  --bundle jhon-X.Y.Z-linux-amd64.tar.gz.sigstore.json \
+  --certificate-identity "https://github.com/jachavarro2004/jhon-agent/.github/workflows/release.yml@refs/tags/vX.Y.Z" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  jhon-X.Y.Z-linux-amd64.tar.gz
+```
+
+A signature from any other repository, workflow or ref is not Jhon's.
 
 ## Commands at a glance
 
@@ -405,9 +415,12 @@ first.
 
 ### Development workflow
 
-The source checkout is `~/dev/jhon` by default; `JHON_SOURCE` names
-another, and a checkout run directly (`build/jhon`, from
-`go build -o build/jhon ./engine/cmd/jhon`) is its own source.
+Clone the repository anywhere. A checkout run directly (`build/jhon`, from
+`go build -o build/jhon ./engine/cmd/jhon`) is its own source; `jhon sync`
+records the checkout it ran from in its install record, and the installed
+`jhon` works on that one outside a checkout. `JHON_SOURCE` names
+another. A checkout at `~/dev/jhon`, the old default, is still found when
+nothing is recorded.
 
 - Strict TDD for framework code (`contracts/tdd.md`).
 - `jhon validate` checks references, the manifest, the vocabulary the code

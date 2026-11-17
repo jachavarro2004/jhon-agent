@@ -1,5 +1,5 @@
-"""Static checks of install.ps1 (the repository root's, jachavarro2004/jhon-agent;
-dist/public/install.ps1 is the v0.3.0 bridge's copy). PowerShell is not run here (no
+"""Static checks of install.ps1 (the repository root's, jachavarro2004/jhon-agent).
+PowerShell is not run here (no
 pwsh on the Linux machine that wrote these): they read the script's text and
 check its command strings, its messages and its version regex, which is
 also run against install.sh's own valid_version."""
@@ -11,7 +11,6 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PUBLIC = ROOT / "dist" / "public"
 SCRIPT = (ROOT / "install.ps1").read_text()
 INSTALL_SH = ROOT / "install.sh"
 
@@ -121,17 +120,6 @@ class TestInstallPs1(unittest.TestCase):
         self.assertIn('"  wsl -d $name -e jhon start"', SCRIPT)
         self.assertIn("run: jhon start", SCRIPT)
         self.assertIn("Native Windows (no WSL) is not supported yet.", SCRIPT)
-
-    def test_bridge_copy_differs_only_by_repository(self):
-        # dist/public keeps the installers of the old public repository for
-        # the v0.3.0 bridge (T18): the same scripts, its own repository.
-        for name in ("install.ps1", "install.sh"):
-            bridge = (PUBLIC / name).read_text()
-            self.assertIn("sdsoftwaresas/jhon/main/install.sh", bridge)
-            moved = (bridge.replace("sdsoftwaresas/jhon/main/", "jachavarro2004/jhon-agent/main/")
-                     .replace('REPO="sdsoftwaresas/jhon"', 'REPO="jachavarro2004/jhon-agent"')
-                     .replace(r"github\.com/sdsoftwaresas/jhon/", r"github\.com/jachavarro2004/jhon-agent/"))
-            self.assertEqual(moved, (ROOT / name).read_text(), name)
 
 
 if __name__ == "__main__":

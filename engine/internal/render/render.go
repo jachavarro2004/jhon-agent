@@ -526,19 +526,18 @@ func (e *engine) write() int {
 	// The install record (docket AI1): when a write render installed
 	// anything, when and from which commit, for `jhon sessions` and the
 	// guards' stale-session note. The time moves only when something new
-	// was installed.
+	// was installed. The source checkout `jhon sync` recorded is sync's to
+	// write; a render keeps it.
 	if !e.args.check && s.installed {
 		record := filepath.Join(e.home, session.InstallRecord)
 		commit := e.releaseCommit()
 		prev, ok := session.ReadInstall(e.home)
 		moved := s.drift > 0 || !ok || prev.Commit != commit
 		if moved {
-			mkdirAll(filepath.Dir(record))
-			text, _ := js.Stringify(struct {
-				InstalledAt string `json:"installed_at"`
-				Commit      string `json:"commit"`
-			}{isodate.Format(time.Now()), commit})
-			writeText(record, text+"\n")
+			rec := session.Install{InstalledAt: isodate.Format(time.Now()), Commit: commit, Source: prev.Source}
+			if err := session.WriteInstall(e.home, rec); err != nil {
+				panic(js.FSError(err).Error())
+			}
 		}
 		e.println("install:")
 		state := "ok   "

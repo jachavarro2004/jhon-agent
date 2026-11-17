@@ -52,7 +52,7 @@ func (r Roots) HasSource() bool { return IsFile(filepath.Join(r.Source, SourceMa
 
 // NoSource is the line a command that needs the checkout refuses with.
 func NoSource(what, source string) string {
-	return fmt.Sprintf("%s needs the Jhon source checkout, not found at %s (set JHON_SOURCE); to update an installed Jhon run 'jhon update'", what, Tilde(source))
+	return fmt.Sprintf("%s needs the Jhon source checkout, not found at %s (run 'jhon sync' from your checkout once, or set JHON_SOURCE); to update an installed Jhon run 'jhon update'", what, Tilde(source))
 }
 
 // NeedNode is whether node is on PATH, for what still runs node: `jhon test`.
@@ -101,12 +101,33 @@ func Sync(r Roots, o *Out) int {
 	if code, ok := activate(r, o, commit, release, built, true); !ok {
 		return code
 	}
+	recordSource(r, o)
 	if dirty(r.Source, false) {
 		return o.Die("the install changed tracked files in the source; review them")
 	}
 	sessions(o)
 	fmt.Fprint(o.W, "\nactivated locally; nothing was pushed (publish with 'jhon publish')\n")
 	return 0
+}
+
+// recordSource writes the checkout sync ran from into the install record,
+// where Locate finds it when the installed CLI runs outside a checkout and
+// JHON_SOURCE is unset. With no record (no runtime installed) there is
+// nothing to add it to.
+func recordSource(r Roots, o *Out) {
+	src, err := filepath.Abs(r.Source)
+	if err != nil {
+		src = r.Source
+	}
+	home := project.Home()
+	rec, ok := session.ReadInstall(home)
+	if !ok || rec.Source == src {
+		return
+	}
+	rec.Source = src
+	if err := session.WriteInstall(home, rec); err != nil {
+		o.Warn(fmt.Sprintf("cannot record the source checkout in %s: %v", Tilde(filepath.Join(home, session.InstallRecord)), err))
+	}
 }
 
 // activate is the half sync and an artifact's install share: preflight the

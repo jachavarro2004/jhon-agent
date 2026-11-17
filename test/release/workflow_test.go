@@ -16,16 +16,13 @@ import (
 	"github.com/jachavarro2004/jhon-agent/test/support"
 )
 
-// releaseWorkflows are the two release workflows: the repository's own,
-// signed as IdentityPattern, and the old public repository's, kept only to
-// build and sign the v0.3.0 bridge as BridgeIdentityPattern (T18).
+// releaseWorkflows is the release workflow: the repository's own, signed as
+// IdentityPattern, the one signer jhon update trusts.
 var releaseWorkflows = []struct {
 	name, path, pattern, prefix string
 }{
 	{"release.yml", ".github/workflows/release.yml", "IdentityPattern",
 		"https://github.com/jachavarro2004/jhon-agent/.github/workflows/release.yml@refs/tags/"},
-	{"dist/public release.yml (bridge)", "dist/public/.github/workflows/release.yml", "BridgeIdentityPattern",
-		"https://github.com/sdsoftwaresas/jhon/.github/workflows/release.yml@refs/tags/"},
 }
 
 func TestReleaseWorkflow(t *testing.T) {
@@ -70,24 +67,12 @@ func TestReleaseWorkflow(t *testing.T) {
 		if regexp.MustCompile(`(?m)^\s+repository:`).MatchString(wf) {
 			t.Error("the repository's release.yml checks out another repository")
 		}
-		for _, bad := range []string{"ssh-key", "secrets.", "sdsoftwaresas", "DEPLOY_KEY"} {
+		for _, bad := range []string{"ssh-key", "secrets.", "DEPLOY_KEY"} {
 			if strings.Contains(wf, bad) {
 				t.Errorf("the repository's release.yml names %q", bad)
 			}
 		}
 		equal(t, strings.Count(wf, "uses: actions/checkout@"), 1)
-	})
-
-	t.Run("the bridge's release.yml says it serves only v0.3.0 and still builds from the old pair (T18)", func(t *testing.T) {
-		wf := files["dist/public/.github/workflows/release.yml"]
-		if !strings.HasPrefix(wf, "# BRIDGE ONLY (T18): this file serves only the v0.3.0 bridge release") {
-			t.Error("dist/public's release.yml does not open with its bridge-only header")
-		}
-		for _, s := range []string{"repository: sdsoftwaresas/jhon-agents", "ssh-key: ${{ secrets.JHON_AGENTS_DEPLOY_KEY }}"} {
-			if !strings.Contains(wf, s) {
-				t.Errorf("the bridge's release.yml lacks %q", s)
-			}
-		}
 	})
 
 	validateChecks(t)
@@ -107,7 +92,7 @@ func TestReleaseWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, text := range map[string]string{"release.yml": files[".github/workflows/release.yml"], "dist/public release.yml": files["dist/public/.github/workflows/release.yml"], "validate.yml": string(validate)} {
+	for name, text := range map[string]string{"release.yml": files[".github/workflows/release.yml"], "validate.yml": string(validate)} {
 		pinnedActions(t, name, text, tags)
 	}
 }

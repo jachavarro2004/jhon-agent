@@ -593,7 +593,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            (validation, settings.json without disableAllHooks),
                            switch ~/.local/share/jhon/current to it, install the
                            runtime projections from it; it pushes nothing and
-                           takes no argument. Only the runtimes on in
+                           takes no argument. It records the checkout it ran
+                           from in ~/.cache/jhon/install.json: the installed
+                           jhon works on that source outside a checkout unless
+                           JHON_SOURCE names another. Only the runtimes on in
                            settings.runtimes (claude_code, pi) are installed and
                            checked; one off is skipped and its directory left
                            as is. A running dashboard proven Jhon's from

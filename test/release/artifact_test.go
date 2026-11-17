@@ -348,7 +348,7 @@ func TestReleaseArtifactLeavesOutDevelopment(t *testing.T) {
 		for _, a := range [][]string{{"sync"}, {"release", "pack"}, {"test"}} {
 			r := run(t, env, jhon, a)
 			wantCode(t, r, 1)
-			match(t, r.Out(), `^jhon: `+regexp.QuoteMeta(strings.Join(a, " "))+` needs the Jhon source checkout, not found at ~/dev/jhon \(set JHON_SOURCE\); to update an installed Jhon run 'jhon update'\n$`)
+			match(t, r.Out(), `^jhon: `+regexp.QuoteMeta(strings.Join(a, " "))+` needs the Jhon source checkout, not found at ~/dev/jhon \(run 'jhon sync' from your checkout once, or set JHON_SOURCE\); to update an installed Jhon run 'jhon update'\n$`)
 		}
 	})
 

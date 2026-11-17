@@ -154,7 +154,7 @@ func joinPath(parts ...string) string {
 
 var ownSkillRef = lazyre.New(`^\.(?:claude|agents)/skills/([a-z0-9-]+)(/` + js.Dot + `*)?$`)
 
-// resolveRef resolves a documented path to a real one. The source
+// resolveRef resolves a documented path to a real one. The source's legacy paths
 // (`~/dev/jhon/...`, formerly `~/.agents/jhon/...`) and the active release (`~/.local/share/jhon/
 // current/...`) both name this repository, and `~/.claude/skills/<name>` or
 // `~/.agents/skills/<name>` a skill it owns, so they resolve against the
