@@ -447,3 +447,36 @@ func TestFailedTests(t *testing.T) {
 		t.Errorf("FailedTests = %q", got)
 	}
 }
+
+// T145c H3 (L1191): a source file of a language whose imports drop the
+// extension (JS/TS) selects another project whose test names its whole path
+// without it, relative (`../../lib/src/x`) or from the root (`lib/src/x`);
+// a directory fragment, a longer name or a path under it selects nothing.
+func TestSelectAffectedByAnExtensionlessReference(t *testing.T) {
+	for _, c := range []struct {
+		named    string
+		selected bool
+	}{
+		{"import { x } from '../../lib/src/x'", true},
+		{"import { x } from 'lib/src/x'", true},
+		{"const x = require(\"lib/src/x\")", true},
+		{"// fixtures live under src/ and tests/unit/", false},
+		{"import { x } from '../../lib/src'", false},
+		{"import { x } from '../../lib/src/xy'", false},
+		{"import { x } from '../../lib/src/x/y'", false},
+		{"import { x } from '../../lib/src/x.test'", false},
+		{"import { x } from '../../xlib/src/x'", false},
+	} {
+		root := nodeWorkspace(t)
+		write(t, filepath.Join(root, "other/tests/x.test.ts"), c.named+"\n")
+		gitT(t, root, "add", "-A")
+		gitT(t, root, "commit", "-qm", "a test that imports lib's module")
+		gitT(t, root, "tag", "-f", "base")
+		write(t, filepath.Join(root, "lib/src/x.ts"), "export const x = 1\n")
+		s, _, _ := SelectAffected(root, "base", projects, projects, nil)
+		if got := slices.ContainsFunc(s.Selected, func(x Selected) bool { return x.Project == "other" }); got != c.selected ||
+			got && !slices.Contains(s.Selected, Selected{"other", "changed: lib/src/x.ts"}) {
+			t.Errorf("%q selects other: %v, want %v (%+v)", c.named, got, c.selected, s)
+		}
+	}
+}

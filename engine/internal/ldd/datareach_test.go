@@ -205,8 +205,43 @@ func TestRanModuleReadsATestmonCommandThatNamesModules(t *testing.T) {
 		{"uv run pytest 'tests/db/test_q.py' && " + testmon + " 'tests/test_u.py'", true},
 		{"uv run pytest 'tests/test_doc.py' && " + testmon, true},
 	} {
-		if got := ranModule(c.command, "svc", "svc/tests/db/test_q.py"); got != c.want {
+		if got := ranModule(c.command, true, "svc", "svc/tests/db/test_q.py"); got != c.want {
 			t.Errorf("ranModule(%q) = %v, want %v", c.command, got, c.want)
+		}
+	}
+}
+
+// T145c H1 (L1191): a module counts as run only when its part of the
+// command really ran: a wide step's parts (execution.BothCommand) both run
+// whatever either's status, in either order; after a failed `&&` part the
+// rest may not have run, so only the first counts; a pytest-testmon part
+// that names no module ran whatever its record selected, wherever it is.
+func TestRanModuleCountsAPartOnlyWhenItRan(t *testing.T) {
+	testmon := "mkdir -p '/c' && TESTMON_DATAFILE='/c/x.db' uv run --with pytest-testmon pytest --testmon --rootdir='/r'"
+	q, u := "'tests/db/test_q.py'", "'tests/test_u.py'"
+	for _, c := range []struct {
+		command string
+		passed  bool
+		want    bool
+	}{
+		{execution.BothCommand("uv run pytest "+u, testmon+" "+q), false, true},
+		{execution.BothCommand("uv run pytest "+q, testmon+" "+u), false, true},
+		{execution.BothCommand(testmon+" "+q, "uv run pytest "+u), false, true},
+		{execution.BothCommand(testmon+" "+u, "uv run pytest "+q), false, true},
+		{execution.BothCommand("uv run pytest "+u, testmon+" 'tests/test_v.py'"), true, false},
+		{"uv run pytest 'tests/test_doc.py' && " + testmon, true, true},
+		{"uv run pytest 'tests/test_doc.py' && " + testmon, false, false},
+		{"uv run pytest " + q + " && " + testmon, false, true},
+		{"uv run pytest " + u + " && " + testmon + " " + q, false, false},
+		{testmon + " && uv run pytest " + u, true, true},
+		{testmon + " && uv run pytest " + u, false, true},
+		{testmon + " " + u + " && uv run pytest " + q, false, false},
+		{testmon + " " + u + " && uv run pytest " + q, true, true},
+		{"uv run pytest " + u, false, false},
+		{"uv run pytest", false, true},
+	} {
+		if got := ranModule(c.command, c.passed, "svc", "svc/tests/db/test_q.py"); got != c.want {
+			t.Errorf("ranModule(%q, passed %v) = %v, want %v", c.command, c.passed, got, c.want)
 		}
 	}
 }
