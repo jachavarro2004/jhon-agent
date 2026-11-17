@@ -1,0 +1,311 @@
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { stripAnsi } from "./terminal-theme.ts";
+import { CARD_STYLE, type CardStyle } from "./shell-card.ts";
+import { paintHoverable } from "./shell-hover.ts";
+import { asciiText, glyph as tableGlyph } from "./primitives/glyphs.ts";
+import { shellSettings } from "../settings.ts";
+
+// Pure prompt chrome, as the Gentle Shell's: in the fullscreen chrome Pi's
+// rule/content/rule rows become the panel editor (a titled rule with the hint
+// at its right end, `›` rows, a blank last row); elsewhere neon keeps them in a
+// rounded frame and float paints them as status/content/padding rows.
+
+export const PROMPT_STATE = {
+	IDLE: "idle",
+	WORKING: "working",
+	QUEUED: "queued",
+} as const;
+
+export type PromptState = (typeof PROMPT_STATE)[keyof typeof PROMPT_STATE];
+
+const PETAL_TONE = {
+	BRIGHT: "borderAccent",
+	ROSE: "accent",
+	SOFT: "thinkingHigh",
+	DEEP: "mdQuoteBorder",
+	WARNING: "warning",
+} as const;
+
+export type PetalTone = (typeof PETAL_TONE)[keyof typeof PETAL_TONE];
+
+// Keep Pi's original loader cadence while carrying the banner's reflected-light
+// language into the compact working labels. The highlight enters before the
+// word, crosses it as a soft symmetric wave, then exits before wrapping.
+export const SHELL_PULSE_MS = 80;
+export const SHELL_SCANNER_STEPS = 15;
+const SCANNER_ENTRY_OFFSET = 3;
+
+/** Banner-style reflected-light wave across text; foreground only. */
+export function scanWorkingText(text: string, tick: number, fg: (role: string, text: string) => string): string {
+	const phase = ((Math.floor(tick) % SHELL_SCANNER_STEPS) + SHELL_SCANNER_STEPS) % SHELL_SCANNER_STEPS;
+	const head = phase - SCANNER_ENTRY_OFFSET;
+	return Array.from(text, (char, index) => {
+		const distance = Math.abs(head - index);
+		const role = distance === 0 ? "borderAccent" : distance === 1 ? "accent" : distance === 2 ? "thinkingHigh" : "muted";
+		return fg(role, char);
+	}).join("");
+}
+const PETAL_TONE_FRAMES = [PETAL_TONE.DEEP, PETAL_TONE.SOFT, PETAL_TONE.ROSE, PETAL_TONE.BRIGHT, PETAL_TONE.ROSE, PETAL_TONE.SOFT, PETAL_TONE.DEEP, PETAL_TONE.DEEP] as const;
+
+export interface PromptFrameOptions {
+	style?: CardStyle;
+	bg?: (role: string, text: string) => string;
+	state: PromptState;
+	tick: number;
+	borderColor: (text: string) => string;
+	fg: (color: string, text: string) => string;
+	bold?: (text: string) => string;
+	/**
+	 * Overrides the editor's own bottom scroll indicator (e.g. "esc again to
+	 * cancel"). Both share the bottom rule / float hint slot; an explicit
+	 * hint always wins because it reflects state the editor cannot render on
+	 * its own.
+	 */
+	escHint?: string;
+	/** Replaces "working…" while working (e.g. "waiting for Claude API · 72s"). */
+	workingLabel?: string;
+	/** The Gentle Shell's `[ Panel ]` at the rule's right end: no rail is shown, and it opens the panel sheet. */
+	panelButton?: boolean;
+	/** The pointer is over `[ Panel ]`. */
+	panelHovered?: boolean;
+	/** shell.appearance.ascii (read from the settings when absent): the chrome in its ASCII forms, the typed text untouched. */
+	ascii?: boolean;
+}
+
+// A terminal cell cannot grow, so the petal earns presence with weight and
+// the brightest rose in the theme. G's petal is its brand ✿ and its working
+// frames flowers of that family; Jhon's brand 力 takes them all (L146), so
+// working turns the petal's tone alone.
+export const PROMPT_PETAL = "力";
+export const PROMPT_HINT = "type, or / for commands";
+/** The idle label of the panel editor's rule and the float hint. */
+export const IDLE_LABEL = "waiting for input";
+const PANEL_PROMPT = "› ";
+/** The `›` mark's role, as the Gentle Shell's: the accent, bold. */
+const PROMPT_MARK_ROLE = "accent";
+/** The button the editor rule carries without the rail; a click opens the panel sheet (T15.12c). */
+export const PANEL_BUTTON = "[ Panel ]";
+export const DOUBLE_ESC_CANCEL_HINT = "esc again to cancel";
+export const IDLE_ESC_CLEAR_HINT = "esc again to clear";
+const LABEL_ROLE = "muted";
+const HINT_ROLE = "dim";
+// The fake cursor on an empty line: pi-tui 1.4.0 wraps it in APC markers the
+// TUI resolves to reverse video; earlier releases drew it with SGR directly.
+const FAKE_CURSORS = ["\x1b_pi:fc\x07 \x1b_pi:/fc\x07", "\x1b[7m \x1b[0m"] as const;
+const SCROLL_INDICATOR = /[↑↓] \d+ more/;
+const STATE_LABEL: Record<PromptState, string | undefined> = {
+	[PROMPT_STATE.IDLE]: undefined,
+	[PROMPT_STATE.WORKING]: "working…",
+	[PROMPT_STATE.QUEUED]: "queued",
+};
+
+export function petalTone(state: PromptState, tick: number): PetalTone {
+	if (state === PROMPT_STATE.QUEUED) return PETAL_TONE.WARNING;
+	if (state === PROMPT_STATE.WORKING) return PETAL_TONE_FRAMES[tick % PETAL_TONE_FRAMES.length];
+	return PETAL_TONE.BRIGHT;
+}
+
+export function petalGlyph(_state: PromptState, _tick: number): string {
+	return PROMPT_PETAL;
+}
+
+/** The petal as drawn: its ASCII form under shell.appearance.ascii, picked before the row is fitted. */
+function shownPetal(options: PromptFrameOptions): string {
+	// The brand's ASCII form is `jhon`; the petal's is `*` (L165).
+	return options.ascii ? "*" : petalGlyph(options.state, options.tick);
+}
+
+/** A chrome row (rules, petal, labels) in its ASCII forms; one cell each, so the width holds. */
+function chromeRow(row: string, options: PromptFrameOptions): string {
+	return options.ascii ? asciiText(row) : row;
+}
+
+function scrollIndicator(rule: string): string | undefined {
+	return stripAnsi(rule).match(SCROLL_INDICATOR)?.[0];
+}
+
+function rule(length: number): string {
+	return "─".repeat(Math.max(0, length));
+}
+
+function stateLabel(options: PromptFrameOptions): string | undefined {
+	if (options.state === PROMPT_STATE.WORKING && options.workingLabel) return options.workingLabel;
+	return STATE_LABEL[options.state];
+}
+
+function topRule(width: number, options: PromptFrameOptions, indicator: string | undefined): string {
+	const label = indicator ?? stateLabel(options);
+	const scanning = options.state === PROMPT_STATE.WORKING;
+	const glyph = shownPetal(options);
+	const petal = options.fg(petalTone(options.state, options.tick), options.bold ? options.bold(glyph) : glyph);
+	const paintedLabel = label && scanning && !indicator ? scanWorkingText(label, options.tick, options.fg) : label ? options.fg(LABEL_ROLE, label) : "";
+	const title = [petal, paintedLabel].filter(Boolean).join(" ");
+	const titleWidth = visibleWidth(glyph) + (label ? visibleWidth(label) + (glyph ? 1 : 0) : 0);
+	const fill = width - titleWidth - 5;
+	if (fill < 0) return options.borderColor(`╭${rule(width - 2)}╮`);
+	return options.borderColor("╭─ ") + title + options.borderColor(` ${rule(fill)}╮`);
+}
+
+function bottomRule(width: number, options: PromptFrameOptions, indicator: string | undefined): string {
+	if (!indicator) return options.borderColor(`╰${rule(width - 2)}╯`);
+	const fill = width - 3 - indicator.length - 1 - 1;
+	if (fill < 0) return options.borderColor(`╰${rule(width - 2)}╯`);
+	return options.borderColor("╰─ ") + options.fg(LABEL_ROLE, indicator) + options.borderColor(` ${rule(fill)}╯`);
+}
+
+function sideRules(line: string, innerWidth: number, options: PromptFrameOptions): string {
+	const clipped = innerWidth === 0 ? "" : truncateToWidth(line, innerWidth, "");
+	const padding = " ".repeat(Math.max(0, innerWidth - visibleWidth(clipped)));
+	const content = clipped + padding;
+	const side = tableGlyph("side", options.ascii);
+	return options.borderColor(side) + content + options.borderColor(side);
+}
+
+export interface PromptLayout {
+	width: number;
+	nativeWidth: number;
+	prefixWidth: number;
+	/** The float prompt's background opener; empty for neon. */
+	background: string;
+	/** The fullscreen chrome's editor: a titled rule over `›` rows, no frame. */
+	panel?: boolean;
+}
+
+/** Resolve fallback before native wrapping, selection, completion and mouse geometry, as G's: the panel editor in fullscreen chrome, else the float or neon card. */
+export function resolvePromptLayout(width: number, style?: CardStyle, bg?: PromptFrameOptions["bg"], panel = false): PromptLayout {
+	width = Math.max(0, Math.floor(width));
+	if (panel && width >= 4) return { width, nativeWidth: Math.max(1, width - PANEL_PROMPT.length), prefixWidth: PANEL_PROMPT.length, background: "", panel: true };
+	let background = "";
+	if (style === CARD_STYLE.FLOAT && width >= 10 && bg) {
+		try {
+			const painted = bg("toolSuccessBg", " ");
+			const match = painted.match(/^((?:\x1b\[[\d;]*m)+) (?:\x1b\[(?:49|0)?m)$/);
+			if (match) {
+				for (const sgr of match[1]!.matchAll(/\x1b\[([\d;]*)m/g)) {
+					for (const command of promptSgrCommands(sgr[1]!)) {
+						const code = command[0]!;
+						if (code === 0 || code === 49) background = "";
+						else if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107) ||
+							(code === 48 && ((command[1] === 5 && command.length === 3) || (command[1] === 2 && command.length === 5)))) {
+							background = `\x1b[${command.join(";")}m`;
+						}
+					}
+				}
+			}
+		} catch { /* Missing theme background: keep the neon path. */ }
+	}
+	return { width, nativeWidth: Math.max(1, width - (background ? 5 : 2)), prefixWidth: background ? 3 : 1, background };
+}
+
+// Extended-colour parameters belong to one command: zero RGB channels
+// must never be read as full styling resets.
+function promptSgrCommands(parameters: string): number[][] {
+	const codes = parameters.split(";").map(Number);
+	const commands: number[][] = [];
+	for (let i = 0; i < codes.length;) {
+		const extended = codes[i] === 38 || codes[i] === 48 || codes[i] === 58;
+		const length = extended && codes[i + 1] === 2 ? 5 : extended && codes[i + 1] === 5 ? 3 : 1;
+		commands.push(codes.slice(i, i + length));
+		i += length;
+	}
+	return commands;
+}
+
+// Rearm only the float background, leaving marker/inversion bytes intact.
+function rearmPromptBackground(text: string, background: string): string {
+	return text.replace(/\x1b\[([\d;]*)m/g, (sgr, parameters: string) =>
+		promptSgrCommands(parameters).some(([code]) => code === 0 || code === 49) ? sgr + background : sgr);
+}
+
+/** Same chrome and horizontal prefix for editable and native completion rows. */
+export function floatPromptRow(line: string, layout: PromptLayout, borderColor: PromptFrameOptions["borderColor"], ascii = shellSettings().ascii()): string {
+	const clipped = truncateToWidth(line, layout.nativeWidth, "");
+	const content = borderColor(tableGlyph("bar", ascii)) + " " + clipped + " ".repeat(Math.max(0, layout.nativeWidth - visibleWidth(clipped))) + " ";
+	return " " + layout.background + rearmPromptBackground(content, layout.background) + "\x1b[49m ";
+}
+
+function floatPromptHint(top: string, bottom: string, options: PromptFrameOptions, width: number): string {
+	const glyph = shownPetal(options);
+	const petal = options.fg(petalTone(options.state, options.tick), options.bold ? options.bold(glyph) : glyph);
+	const label = stateLabel(options) ?? IDLE_LABEL;
+	const paintedLabel = options.state === PROMPT_STATE.WORKING ? scanWorkingText(label, options.tick, options.fg) : options.fg(LABEL_ROLE, label);
+	const info = [scrollIndicator(top), options.escHint ?? scrollIndicator(bottom)]
+		.filter((text): text is string => Boolean(text))
+		.map((text) => options.fg(LABEL_ROLE, text));
+	const hint = truncateToWidth("  " + petal + " " + paintedLabel + (info.length ? " · " + info.join(" · ") : ""), width, "");
+	return chromeRow(hint + " ".repeat(Math.max(0, width - visibleWidth(hint))), options);
+}
+
+/** One input row behind the `›` prompt (or its indent), clipped and padded to the layout width. */
+export function panelPromptRow(line: string, layout: PromptLayout, prefix = " ".repeat(layout.prefixWidth)): string {
+	const clipped = truncateToWidth(line, layout.nativeWidth, "");
+	return prefix + clipped + " ".repeat(Math.max(0, layout.nativeWidth - visibleWidth(clipped)));
+}
+
+// The Gentle Shell's panel editor (its panelPromptRule): `─ ◆ waiting for
+// input ──── <hint> ─` across the width, the same petal, glyphs and state
+// words as the other styles, a scroll indicator in the label's place, and at
+// the right end the esc hint; without the rail it ends
+// `─ [ Panel ] <hint> ─` as G's narrow editor, the label giving way first.
+function ruleHeader(width: number, options: PromptFrameOptions, top: string | undefined, right: string | undefined): string {
+	const label = top ?? stateLabel(options) ?? IDLE_LABEL;
+	const glyph = shownPetal(options);
+	const petal = options.fg(petalTone(options.state, options.tick), options.bold ? options.bold(glyph) : glyph);
+	const paint = (text: string) => options.state === PROMPT_STATE.WORKING && !top ? scanWorkingText(text, options.tick, options.fg) : options.fg(LABEL_ROLE, text);
+	if (options.panelButton && width >= visibleWidth(PANEL_BUTTON)) {
+		const button = paintHoverable({ fg: options.fg }, PANEL_BUTTON, options.panelHovered ?? false, "accent");
+		if (width < visibleWidth(PANEL_BUTTON) + 3) return button + options.borderColor(rule(width - visibleWidth(PANEL_BUTTON)));
+		const hintWidth = Math.max(0, width - visibleWidth(PANEL_BUTTON) - 4);
+		const hint = right && hintWidth > 0 ? truncateToWidth(right, hintWidth, "…") : "";
+		const end = ` ${button}${hint ? ` ${options.fg(LABEL_ROLE, hint)}` : ""} ${options.borderColor("─")}`;
+		const available = width - visibleWidth(end);
+		if (available < 4) return options.borderColor(rule(available)) + end;
+		const lead = 3 + visibleWidth(glyph);
+		const clipped = truncateToWidth(label, Math.max(0, available - lead - 1), "…");
+		const fill = available - lead - visibleWidth(clipped);
+		return `${options.borderColor("─ ")}${petal} ${paint(clipped)}${options.borderColor(rule(fill))}${end}`;
+	}
+	const end = right ? ` ${options.fg(LABEL_ROLE, right)} ` : "";
+	const endWidth = right ? visibleWidth(right) + 2 : 0;
+	// As G's panelPromptRule: when the label and the hint do not fit, the rule blanks.
+	const fill = width - (2 + visibleWidth(glyph) + 1 + visibleWidth(label) + 1) - endWidth - 1;
+	if (fill < 1) return options.borderColor(rule(width));
+	return `${options.borderColor("─ ")}${petal} ${paint(label)} ${options.borderColor(rule(fill))}${end}${options.borderColor("─")}`;
+}
+
+export function framePromptLines(lines: string[], width: number, options: PromptFrameOptions, layout = resolvePromptLayout(width, options.style, options.bg)): string[] {
+	width = Math.max(0, Math.floor(width));
+	options = { ...options, ascii: options.ascii ?? shellSettings().ascii() };
+	if (layout.panel && lines.length >= 2) {
+		// G's panel editor: the hint rides the rule's right end, and the last row stays blank.
+		const mark = chromeRow(PANEL_PROMPT.trim(), options);
+		return [
+			chromeRow(ruleHeader(width, options, scrollIndicator(lines[0]!), options.escHint ?? scrollIndicator(lines[lines.length - 1]!)), options),
+			...lines.slice(1, -1).map((line, index) => panelPromptRow(line, layout, index === 0 ? `${options.fg(PROMPT_MARK_ROLE, options.bold ? options.bold(mark) : mark)} ` : " ".repeat(PANEL_PROMPT.length))),
+			" ".repeat(width),
+		];
+	}
+	if (layout.background && lines.length >= 2) {
+		return [
+			floatPromptRow(floatPromptHint(lines[0]!, lines[lines.length - 1]!, options, layout.nativeWidth).slice(2), layout, options.borderColor, options.ascii),
+			...lines.slice(1, -1).map((line) => floatPromptRow(line, layout, options.borderColor, options.ascii)),
+			floatPromptRow("", layout, options.borderColor, options.ascii),
+		];
+	}
+	if (lines.length < 2) return lines.map((line) => truncateToWidth(line, width, ""));
+	if (width < 2) return lines.map((_line, index) => width === 0 ? "" : chromeRow(options.borderColor(index === 0 ? "╭" : index === lines.length - 1 ? "╰" : "│"), options));
+	const innerWidth = width - 2;
+	const top = lines[0];
+	const bottom = lines[lines.length - 1];
+	const content = lines.slice(1, -1).map((line) => sideRules(line, innerWidth, options));
+	return [chromeRow(topRule(width, options, scrollIndicator(top)), options), ...content, chromeRow(bottomRule(width, options, options.escHint ?? scrollIndicator(bottom)), options)];
+}
+
+export function withPromptHint(line: string, hint: string, fg: PromptFrameOptions["fg"]): string {
+	const cursor = FAKE_CURSORS.find((candidate) => line.includes(candidate));
+	if (cursor === undefined) return line;
+	const afterCursor = line.indexOf(cursor) + cursor.length;
+	const trailing = line.slice(afterCursor);
+	if (trailing.trim() !== "" || trailing.length < hint.length + 1) return line;
+	return `${line.slice(0, afterCursor)} ${fg(HINT_ROLE, hint)}${" ".repeat(trailing.length - hint.length - 1)}`;
+}

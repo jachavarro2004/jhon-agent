@@ -1,0 +1,13 @@
+{
+  "runtime": "claude-code",
+  "runtime_version": "2.1.280",
+  "guard": "agent-tool-allowlist",
+  "guard_version": "render.ts tools: frontmatter at commit beac2a2 (explore: Read, Grep, Glob, codegraph_explore, mem_search, mem_get_observation)",
+  "date": "2026-10-03",
+  "call": "claude -p --model haiku --dangerously-skip-permissions, in the same scratch repo; the main session launched sub-agent explore and told it to call Bash (`touch spike-explore.txt`) and Write (spike-explore2.txt), and sub-agent general to run `touch spike-general.txt`.",
+  "payload": "No PreToolUse payload: the settings-level logging hook recorded no Bash or Write call from explore, because the runtime offered it no such tool. Explore listed its tools as Read, mcp__codegraph__codegraph_explore, mcp__plugin_engram_engram__mem_search, mcp__plugin_engram_engram__mem_get_observation, Grep, Glob, matching its rendered tools: line.",
+  "decision": "The runtime withheld Bash and Write from explore: they were not in the tools it was given, so no call could be made.",
+  "runtime_result": "Explore reported: \"I don't have a Bash tool or a Write tool in my available tool set at all, so I cannot attempt either call\".",
+  "no_effect_check": "After the run the repo holds spike-general.txt only; spike-explore.txt and spike-explore2.txt do not exist.",
+  "control_case": "Sub-agent general, whose tools include Bash, ran `touch spike-general.txt` and the file was created."
+}

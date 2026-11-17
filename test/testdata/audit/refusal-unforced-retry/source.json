@@ -1,0 +1,8 @@
+{
+  "real": true,
+  "session": "2026-10-30T05-00-43-200Z_01a18b2e-8140-73f6-a809-9fc0d78787ce",
+  "runtime": "pi",
+  "session_format": 3,
+  "recorded": "a real client-project pi session (2026-10-30 to 2026-11-03), trimmed to the refusal and its four later calls, thinking dropped, paths scrubbed",
+  "shows": "safety-guard refuses `git worktree remove --force` beside a plain `git worktree remove` in one command; the later plain removes, which git itself refuses where work would be lost, reach no refused effect"
+}

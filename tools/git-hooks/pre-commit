@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+#
+# Refuse a commit whose prose contradicts its own contracts.
+#
+# This exists because `jhon check` reported "up to date" while 18
+# references pointed at a file that did not exist, ten agents used a status
+# vocabulary their own contract forbids, and every LDD phase saved under the
+# wrong Engram type. Byte-level drift detection is blind to all of it.
+#
+# It runs `--validate`, not `--check`: drift between the repository and the
+# rendered runtimes is normal in the moment between an edit and the next
+# render, and blocking on it would block every commit.
+#
+# Install (once per clone):  git config core.hooksPath tools/git-hooks
+# Bypass deliberately:       git commit --no-verify
+
+set -uo pipefail
+
+repo="$(git rev-parse --show-toplevel)"
+
+[ -f "$repo/engine/cmd/jhon/main.go" ] || exit 0   # not the jhon repo; nothing to validate
+
+if ! command -v go >/dev/null 2>&1; then
+  echo "pre-commit: go not found; cannot validate." >&2
+  echo "Install go, or bypass once with: git commit --no-verify" >&2
+  exit 1
+fi
+
+# The validator is the binary this tree builds, so a commit is judged by the
+# rules it carries.
+if ! out="$(cd "$repo" && go build -o build/jhon ./engine/cmd/jhon 2>&1)"; then
+  printf '%s\n' "$out" >&2
+  echo "pre-commit: the binary does not build; commit refused (bypass with git commit --no-verify)" >&2
+  exit 1
+fi
+
+if ! out="$(JHON_ROOT="$repo" "$repo/build/jhon" render-engine --validate 2>&1)"; then
+  printf '%s\n' "$out" >&2
+  echo >&2
+  echo "pre-commit: commit refused. Fix the problems above, or bypass with:" >&2
+  echo "  git commit --no-verify" >&2
+  exit 1
+fi
+
+printf '%s\n' "$out"
+
+# The code's own rules (docket AY B3), on what this commit touches: gofmt on
+# the staged Go files, then go vet, staticcheck (pinned by go.mod's tool
+# directive, configured by staticcheck.conf) and the tests of the touched
+# packages only. Their importers are not vetted here (finding them costs a
+# `go list` over the module); the binary built above compiles every engine
+# package, and pre-push runs vet, staticcheck and the conformance suite
+# (go test ./test/...) on the whole module before main moves. Each refuses
+# the commit.
+refuse() {
+  printf '%s\n' "$2" >&2
+  echo "pre-commit: $1; commit refused (bypass with git commit --no-verify)" >&2
+  exit 1
+}
+cd "$repo" || exit 1
+# The tests run git in repositories of their own: git's variables for this
+# commit (GIT_DIR, GIT_INDEX_FILE, ...) would point them at this one. In a
+# linked worktree that once set core.bare and committed a test's fixture here.
+scrubbed() {
+  local unset=()
+  while IFS= read -r name; do unset+=(-u "$name"); done < <(compgen -e | grep '^GIT_')
+  env "${unset[@]}" "$@"
+}
+mapfile -t gofiles < <(git diff --cached --name-only --diff-filter=ACMR -- '*.go' ':!third_party/')
+if [ "${#gofiles[@]}" -gt 0 ]; then
+  unformatted="$(gofmt -l "${gofiles[@]}")"
+  [ -z "$unformatted" ] || refuse "these files are not gofmt-formatted (run gofmt -w)" "$unformatted"
+fi
+if git diff --cached --name-only --diff-filter=ACMR -- 'shell/*.ts' 'shell/**/*.ts' 'shell/tsconfig.json' | grep -q .; then
+  # Installed (npm ci) only when missing or stale against package-lock.json.
+  out="$(sh tools/shell-deps.sh "$repo/shell" 2>&1)" || refuse "jhon-shell's TypeScript changed but its devDependencies are not installed" "$out"
+  out="$(cd shell && npx --no-install tsc -p . 2>&1)" || refuse "jhon-shell does not type-check" "$out"
+fi
+# One package per directory holding a staged Go file (a test/<pkg> package
+# only when its own files are staged), skipping testdata, which is no package.
+touched="$(printf '%s\n' "${gofiles[@]}" | grep -v '/testdata/' | xargs -r -n1 dirname | sort -u | sed 's|^|./|')"
+if [ -n "$touched" ]; then
+  # shellcheck disable=SC2086 # one package path per word
+  out="$(go vet $touched 2>&1)" || refuse "go vet found problems" "$out"
+  # shellcheck disable=SC2086
+  out="$(go tool staticcheck $touched 2>&1)" || refuse "staticcheck found problems" "$out"
+  # shellcheck disable=SC2086
+  out="$(scrubbed go test -p 4 $touched 2>&1)" || refuse "the tests of the touched packages fail" "$out"
+fi
+# A module vendored under third_party/ is its own module: its tests run
+# inside it (the nearest directory holding a go.mod), once per module.
+mapfile -t modules < <(git diff --cached --name-only --diff-filter=ACMR -- 'third_party/*.go' | xargs -r -n1 dirname | sort -u |
+  while IFS= read -r dir; do
+    while [ "$dir" != third_party ] && [ "$dir" != . ] && [ ! -f "$dir/go.mod" ]; do dir="$(dirname "$dir")"; done
+    [ -f "$dir/go.mod" ] && printf '%s\n' "$dir"
+  done | sort -u)
+for mod in "${modules[@]}"; do
+  out="$(cd "$mod" && scrubbed go test ./... 2>&1)" || refuse "the tests of $mod (its own module) fail" "$out"
+done

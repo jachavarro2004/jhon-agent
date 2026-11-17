@@ -1,0 +1,3 @@
+# HyperFrames keeps its project state and history here; never commit it.
+.hyperframes/
+renders/

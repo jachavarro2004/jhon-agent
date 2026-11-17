@@ -1,0 +1,44 @@
+certify: candidate testdata/certify/real against baseline testdata/certify/real
+  note: skipped 18 clean and pi-clean runs (candidate 9, baseline 9): they are not certification cells, `bench value` compares them
+  note: plain now sets LDD up (L554-L559): a Jhon plain cell must end with ldd/ and its record, its quality is compared with the baseline's plain cell (which worked without LDD), and its cost is shown, not judged (L548)
+PASS  repeats                          12/12 cells
+PASS  final checks                     12/12 cells
+FAIL  per-message checks               4/12 cells
+        invoice-slices plain jhon: slices unknown in the candidate (a run from before T60)
+        invoice-slices plain pi-jhon: slices unknown in the candidate (a run from before T60)
+        invoice-slices ldd jhon: slices unknown in the candidate (a run from before T60)
+        invoice-slices ldd pi-jhon: slices unknown in the candidate (a run from before T60)
+        slow-suite plain jhon: slices unknown in the candidate (a run from before T60)
+        slow-suite plain pi-jhon: slices unknown in the candidate (a run from before T60)
+        slow-suite ldd jhon: slices unknown in the candidate (a run from before T60)
+        slow-suite ldd pi-jhon: slices unknown in the candidate (a run from before T60)
+PASS  regressions                      12/12 cells
+PASS  rework                           12/12 cells
+PASS  red before green                 12/12 cells; pooled 35/36 vs baseline 35/36, one-sided Fisher p=0.754 (FAIL below 0.05)
+PASS  tests run before end             12/12 cells; pooled 32/36 vs baseline 32/36, one-sided Fisher p=0.645 (FAIL below 0.05)
+PASS  out of scope                     12/12 cells; pooled 3/36 runs with files out of scope vs baseline 3/36, one-sided Fisher p=0.663 (FAIL below 0.05)
+FAIL  refusals and declined dialogs    0/12 cells
+        invoice-slices plain jhon: refusals unknown in the candidate (a run from before T60)
+        invoice-slices plain pi-jhon: refusals unknown in the candidate (a run from before T60)
+        invoice-slices ldd jhon: refusals unknown in the candidate (a run from before T60)
+        invoice-slices ldd pi-jhon: refusals unknown in the candidate (a run from before T60)
+        slow-suite plain jhon: refusals unknown in the candidate (a run from before T60)
+        slow-suite plain pi-jhon: refusals unknown in the candidate (a run from before T60)
+        slow-suite ldd jhon: refusals unknown in the candidate (a run from before T60)
+        slow-suite ldd pi-jhon: refusals unknown in the candidate (a run from before T60)
+        two-modules plain jhon: refusals unknown in the candidate (a run from before T60)
+        two-modules plain pi-jhon: refusals unknown in the candidate (a run from before T60)
+        two-modules ldd jhon: refusals unknown in the candidate (a run from before T60)
+        two-modules ldd pi-jhon: refusals unknown in the candidate (a run from before T60)
+FAIL  plain sets up ldd with a record  0/6 cells
+        invoice-slices plain jhon: —, need ldd:3 (record 3/3)
+        invoice-slices plain pi-jhon: —, need ldd:3 (record 3/3)
+        slow-suite plain jhon: —, need ldd:3 (record 3/3)
+        slow-suite plain pi-jhon: —, need ldd:3 (record 3/3)
+        two-modules plain jhon: —, need ldd:3 (record 3/3)
+        two-modules plain pi-jhon: —, need ldd:3 (record 3/3)
+PASS  quota-weighted tokens            12/12 cells; geometric mean 1 over 6 cells, limit 1.15 × (6 informational, 0 review)
+PASS  turns                            12/12 cells; geometric mean 1 over 6 cells, limit 1.15 × (6 informational, 0 review)
+PASS  active time                      12/12 cells; geometric mean 1 over 6 cells, limit 1.15 × (6 informational, 0 review)
+verdict: FAIL — 3 of 13 metrics failed
+certify.json: <out>/certify.json

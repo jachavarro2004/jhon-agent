@@ -1,0 +1,1302 @@
+{
+  "baseline": [
+    "testdata/certify/real"
+  ],
+  "candidate": [
+    "testdata/certify/real"
+  ],
+  "notes": [
+    "skipped 18 clean and pi-clean runs (candidate 9, baseline 9): they are not certification cells, `bench value` compares them",
+    "plain now sets LDD up (L554-L559): a Jhon plain cell must end with ldd/ and its record, its quality is compared with the baseline's plain cell (which worked without LDD), and its cost is shown, not judged (L548)"
+  ],
+  "metrics": [
+    {
+      "metric": "repeats",
+      "pass": true,
+      "failed": 0,
+      "of": 12
+    },
+    {
+      "metric": "final checks",
+      "pass": true,
+      "failed": 0,
+      "of": 12
+    },
+    {
+      "metric": "per-message checks",
+      "pass": false,
+      "failed": 8,
+      "of": 12
+    },
+    {
+      "metric": "regressions",
+      "pass": true,
+      "failed": 0,
+      "of": 12
+    },
+    {
+      "metric": "rework",
+      "pass": true,
+      "failed": 0,
+      "of": 12
+    },
+    {
+      "metric": "red before green",
+      "pass": true,
+      "failed": 0,
+      "of": 12,
+      "detail": "pooled 35/36 vs baseline 35/36, one-sided Fisher p=0.754 (FAIL below 0.05)"
+    },
+    {
+      "metric": "tests run before end",
+      "pass": true,
+      "failed": 0,
+      "of": 12,
+      "detail": "pooled 32/36 vs baseline 32/36, one-sided Fisher p=0.645 (FAIL below 0.05)"
+    },
+    {
+      "metric": "out of scope",
+      "pass": true,
+      "failed": 0,
+      "of": 12,
+      "detail": "pooled 3/36 runs with files out of scope vs baseline 3/36, one-sided Fisher p=0.663 (FAIL below 0.05)"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "pass": false,
+      "failed": 12,
+      "of": 12
+    },
+    {
+      "metric": "plain sets up ldd with a record",
+      "pass": false,
+      "failed": 6,
+      "of": 6
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "pass": true,
+      "failed": 0,
+      "of": 12,
+      "detail": "geometric mean 1 over 6 cells, limit 1.15 × (6 informational, 0 review)"
+    },
+    {
+      "metric": "turns",
+      "pass": true,
+      "failed": 0,
+      "of": 12,
+      "detail": "geometric mean 1 over 6 cells, limit 1.15 × (6 informational, 0 review)"
+    },
+    {
+      "metric": "active time",
+      "pass": true,
+      "failed": 0,
+      "of": 12,
+      "detail": "geometric mean 1 over 6 cells, limit 1.15 × (6 informational, 0 review)"
+    }
+  ],
+  "checks": [
+    {
+      "metric": "repeats",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 passed, final message checks 9/9 vs baseline 3/3, 9/9"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "slices unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "regressions",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 per run vs baseline 0"
+    },
+    {
+      "metric": "red before green",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "2/3 vs baseline 2/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "plain sets up ldd with a record",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "—, need ldd:3 (record 3/3)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "177133.2 vs baseline 177133.2 (1×) (weighed from the token medians); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "turns",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "24 vs baseline 24 (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "active time",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "114.27 s vs baseline 114.27 s (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "repeats",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 passed, final message checks 9/9 vs baseline 3/3, 9/9"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "slices unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "regressions",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0 per run vs baseline 0"
+    },
+    {
+      "metric": "red before green",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "2/3 vs baseline 2/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "plain sets up ldd with a record",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "—, need ldd:3 (record 3/3)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "170900.05 vs baseline 170900.05 (1×) (weighed from the token medians); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "turns",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "20 vs baseline 20 (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "active time",
+      "task": "invoice-slices",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "106.64 s vs baseline 106.64 s (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "repeats",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 passed, final message checks 9/9 vs baseline 3/3, 9/9"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "slices unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "regressions",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 per run vs baseline 0"
+    },
+    {
+      "metric": "red before green",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "229601.15 vs baseline 229601.15 (1×) (weighed from the token medians)"
+    },
+    {
+      "metric": "turns",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "31 vs baseline 31 (1×)"
+    },
+    {
+      "metric": "active time",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "150.04 s vs baseline 150.04 s (1×)"
+    },
+    {
+      "metric": "repeats",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 passed, final message checks 9/9 vs baseline 3/3, 9/9"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "slices unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "regressions",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0 per run vs baseline 0"
+    },
+    {
+      "metric": "red before green",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "178272.15 vs baseline 178272.15 (1×) (weighed from the token medians)"
+    },
+    {
+      "metric": "turns",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "20 vs baseline 20 (1×)"
+    },
+    {
+      "metric": "active time",
+      "task": "invoice-slices",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "109.14 s vs baseline 109.14 s (1×)"
+    },
+    {
+      "metric": "repeats",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 passed, final message checks 6/6 vs baseline 3/3, 6/6"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "slices unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "regressions",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 per run vs baseline 0"
+    },
+    {
+      "metric": "red before green",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "2/3 vs baseline 2/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "plain sets up ldd with a record",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "—, need ldd:3 (record 3/3)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "82158.8 vs baseline 82158.8 (1×) (weighed from the token medians); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "turns",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "14 vs baseline 14 (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "active time",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "221.6 s vs baseline 221.6 s (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "repeats",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 passed, final message checks 6/6 vs baseline 3/3, 6/6"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "slices unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "regressions",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0 per run vs baseline 0"
+    },
+    {
+      "metric": "red before green",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "plain sets up ldd with a record",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "—, need ldd:3 (record 3/3)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "112175.25 vs baseline 112175.25 (1×) (weighed from the token medians); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "turns",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "16 vs baseline 16 (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "active time",
+      "task": "slow-suite",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "53.29 s vs baseline 53.29 s (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "repeats",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 passed, final message checks 6/6 vs baseline 3/3, 6/6"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "slices unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "regressions",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 per run vs baseline 0"
+    },
+    {
+      "metric": "red before green",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "1/3 vs baseline 1/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "123521.75 vs baseline 123521.75 (1×) (weighed from the token medians)"
+    },
+    {
+      "metric": "turns",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "19 vs baseline 19 (1×)"
+    },
+    {
+      "metric": "active time",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "240.93 s vs baseline 240.93 s (1×)"
+    },
+    {
+      "metric": "repeats",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "2/3 passed, final message checks 5/5 vs baseline 2/3, 5/5"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "slices unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "regressions",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0 per run vs baseline 0"
+    },
+    {
+      "metric": "red before green",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "114972.3 vs baseline 114972.3 (1×) (weighed from the token medians)"
+    },
+    {
+      "metric": "turns",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "17 vs baseline 17 (1×)"
+    },
+    {
+      "metric": "active time",
+      "task": "slow-suite",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "58.06 s vs baseline 58.06 s (1×)"
+    },
+    {
+      "metric": "repeats",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 passed, final message checks — vs baseline 3/3, —"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "no per-message checks"
+    },
+    {
+      "metric": "regressions",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0.33 per run vs baseline 0.33"
+    },
+    {
+      "metric": "red before green",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "plain sets up ldd with a record",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "—, need ldd:3 (record 3/3)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "85423.25 vs baseline 85423.25 (1×) (weighed from the token medians); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "turns",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "13 vs baseline 13 (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "active time",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "69.24 s vs baseline 69.24 s (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "repeats",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 passed, final message checks — vs baseline 3/3, —"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "no per-message checks"
+    },
+    {
+      "metric": "regressions",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0.33 per run vs baseline 0.33"
+    },
+    {
+      "metric": "red before green",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "plain sets up ldd with a record",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "—, need ldd:3 (record 3/3)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "99549.6 vs baseline 99549.6 (1×) (weighed from the token medians); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "turns",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "9 vs baseline 9 (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "active time",
+      "task": "two-modules",
+      "variant": "plain",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "68.01 s vs baseline 68.01 s (1×); informational: plain now sets LDD up (L554-L559), which the baseline's plain never paid (L548)"
+    },
+    {
+      "metric": "repeats",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "2/3 passed, final message checks — vs baseline 2/3, —"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "no per-message checks"
+    },
+    {
+      "metric": "regressions",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 per run vs baseline 0"
+    },
+    {
+      "metric": "red before green",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "0 files in 0/3 runs vs baseline 0 files in 0/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "132653.15 vs baseline 132653.15 (1×) (weighed from the token medians)"
+    },
+    {
+      "metric": "turns",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "21 vs baseline 21 (1×)"
+    },
+    {
+      "metric": "active time",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "jhon",
+      "pass": true,
+      "detail": "93.7 s vs baseline 93.7 s (1×)"
+    },
+    {
+      "metric": "repeats",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "candidate 3, baseline 3"
+    },
+    {
+      "metric": "final checks",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 passed, final message checks — vs baseline 3/3, —"
+    },
+    {
+      "metric": "per-message checks",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "no per-message checks"
+    },
+    {
+      "metric": "regressions",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "regressions 0, need 0"
+    },
+    {
+      "metric": "rework",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "0.67 per run vs baseline 0.67"
+    },
+    {
+      "metric": "red before green",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "tests run before end",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3/3 vs baseline 3/3"
+    },
+    {
+      "metric": "out of scope",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "3 files in 3/3 runs vs baseline 3 files in 3/3 runs"
+    },
+    {
+      "metric": "refusals and declined dialogs",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": false,
+      "detail": "refusals unknown in the candidate (a run from before T60)"
+    },
+    {
+      "metric": "quota-weighted tokens",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "182398.65 vs baseline 182398.65 (1×) (weighed from the token medians)"
+    },
+    {
+      "metric": "turns",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "22 vs baseline 22 (1×)"
+    },
+    {
+      "metric": "active time",
+      "task": "two-modules",
+      "variant": "ldd",
+      "condition": "pi-jhon",
+      "pass": true,
+      "detail": "116.04 s vs baseline 116.04 s (1×)"
+    }
+  ],
+  "gates": [],
+  "verdict": "FAIL"
+}

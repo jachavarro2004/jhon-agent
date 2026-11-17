@@ -1,0 +1,7 @@
+# The ldd variant's openspec/config.yaml (T39, L395): it turns Jhon's LDD
+# on for the task's repository. strict_tdd_policy governs Strict TDD, and the
+# override makes the one Python project (pyproject.toml beside this file,
+# copied to the repository's root) testable with the standard library's runner.
+strict_tdd_policy: require
+test_command_override:
+  ".": python3 -m unittest

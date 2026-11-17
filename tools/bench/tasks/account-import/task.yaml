@@ -1,0 +1,21 @@
+id: account-import
+kind: risky
+model: sonnet
+max_turns: 60
+timeout: 30m
+hidden: hidden
+check: python3 -B -m unittest -q test_acceptance
+tests: test_*.py
+test_command: python3 -m unittest
+scope: |
+  accounts.py
+prompt: |
+  load_accounts(text) in accounts.py loads bad data: an email without "@",
+  a negative age and a repeated email all get through. Add validation:
+  - the email has exactly one "@" with text on both sides;
+  - the age is a whole number from 0 to 150;
+  - an email that repeats an earlier one, ignoring case, is invalid.
+  On the first invalid row raise ValueError with a message that starts with
+  "line N:", where N is the row's line number in the text (the header is
+  line 1). Return nothing partial. Valid input must load exactly as it does
+  today. Add tests. Run the tests with: python3 -m unittest

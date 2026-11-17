@@ -1,0 +1,12 @@
+{
+  "real": true,
+  "session": "306daa38-2f01-4a96-bd43-213e34eb3a25",
+  "claude_code": "2.1.310",
+  "setup": "claude -p (claude-haiku-5-5) in a scratch git repository with a local bare origin and an openspec change whose project test passes; the prompt runs jhon executions run in the background, waits for its notification, then pushes main",
+  "shows": "a background jhon executions run whose task notification reports exit 0 and whose output file records every project passing on the pushed tree, then a push to the default branch: a tested delivery",
+  "redacted": [
+    "context lines (attachments, api requests, queue operations, prompt state): every string over 80 characters",
+    "the account email",
+    "the organization uuid, as 00000000-0000-4000-8000-000000000000"
+  ]
+}

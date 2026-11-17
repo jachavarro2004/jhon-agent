@@ -1,0 +1,16 @@
+==> svc: sleep 2 && echo svc-broken && exit 1
+svc-broken
+<== svc: exit 1
+==> svc (lint): go vet ./...
+<== svc (lint): exit 0
+==> svc (format): ! gofmt -l . | grep .
+<== svc (format): exit 0
+
+record     openspec/changes/bg-fail/execution-record.json
+scope      full
+candidate  f6e9334e6cfea3cb64d0283b887ec69fb5978ae9  tree fd03495f9919b7d22c6f54ec99010643e5de17c7  clean true
+fail       svc
+pass       svc (lint)
+pass       svc (format)
+
+[exited with code 1]

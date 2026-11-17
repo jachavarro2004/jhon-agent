@@ -1,0 +1,16 @@
+{
+  "runtime": "claude-code",
+  "runtime_version": "2.1.280",
+  "guard": "payload-cwd",
+  "guard_version": "none: an observation spike of the PreToolUse payload's cwd, the authority docket AV2 proposed for the framework boundary; no guard was installed",
+  "date": "2026-10-04",
+  "call": "claude -p --model haiku --dangerously-skip-permissions in a scratch git repo <S>/project, with a settings-level PreToolUse hook (matcher *) logging every payload; <S>/fakeframework stood in for the framework root. Run 1 (no extra directories): the main session ran `cd <S>/fakeframework && pwd` then `pwd`; a general-purpose sub-agent ran `cd <S>/fakeframework && pwd`, `pwd`, `cd <S>/fakeframework`, `pwd`; a second sub-agent was launched with isolation worktree; a third with a prompt naming <S>/fakeframework as its working directory. Run 2: the same scratch repo started with `--add-dir <S>/fakeframework`; the main session ran `cd <S>/fakeframework` then `pwd`, then launched a general-purpose sub-agent that ran `cd <S>/fakeframework` and `pwd`.",
+  "payload": {
+    "run_1": "Every main-session and sub-agent Bash payload, before and after each cd, carried cwd <S>/project; the runtime printed `Shell cwd was reset` after the main session's cd. The worktree-isolated sub-agent's payloads carried cwd <S>/project/.claude/worktrees/agent-a6175fa35b47313bf. The prompt-named directory changed nothing: cwd <S>/project.",
+    "run_2": "After the main session's `cd <S>/fakeframework`, the next main-session payload (pwd) carried cwd <S>/fakeframework, the Agent payload carried cwd <S>/fakeframework, and the sub-agent's payloads carried cwd <S>/fakeframework."
+  },
+  "decision": "The payload cwd is NOT an unforgeable session origin. Without additional directories, neither cd (main session or sub-agent) nor an Agent launch option moved it outside the project (worktree isolation moves it to a worktree inside the project). When the framework root is an additional working directory (--add-dir, or additionalDirectories in settings), an ordinary `cd` in the main session moves it into the framework root, and every later call and sub-agent inherits it.",
+  "runtime_result": "Run 1: pwd printed <S>/project after every cd in a separate call. Run 2: pwd printed <S>/fakeframework in the main session and in the sub-agent.",
+  "no_effect_check": "Not applicable: nothing was refused; the spike observes the authority, not a refusal. The real framework root, ~/.claude settings, and ~/.local were not touched; the real settings declare no additionalDirectories.",
+  "control_case": "Run 1 is the control for run 2: the same commands, without --add-dir, left cwd at the session origin."
+}

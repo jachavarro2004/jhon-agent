@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="t d">
+<title id="t">Two runtimes over one engine</title>
+<desc id="d">Claude Code (jhon start) and pi (jhon start pi with the jhon-shell package) both run the same jhon binary for their guards and records. The binary renders prose/ into each runtime from an installed release, and the dashboard reads only what the binary serves.</desc>
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#e7bbc8"/></marker>
+<marker id="arf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#d2c3c6"/></marker>
+<marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#e6c384"/></marker>
+<marker id="aro" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#98bb6c"/></marker>
+</defs>
+<rect x="0" y="0" width="1280" height="720" fill="#161618"/>
+<rect x="36" y="32" width="48" height="48" fill="#000000"/>
+<rect x="32" y="28" width="48" height="48" fill="#53343f"/>
+<text x="56" y="64" font-family="&apos;Noto Sans CJK JP&apos;, sans-serif" font-size="29" font-weight="700" fill="#f2c5d2" text-anchor="middle">力</text>
+<text x="98" y="44" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="start" letter-spacing="1.68">ONE ENGINE · TWO RUNTIMES</text>
+<text x="98" y="76" font-family="Fraunces, Georgia, serif" font-size="30" font-weight="500" fill="#e9e0e1" text-anchor="start">Same rules, your choice of runtime</text>
+<text x="1248" y="76" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="15" font-weight="400" fill="#9b8d90" text-anchor="end">jhon start · jhon start pi</text>
+<line x1="32" y1="98" x2="1248" y2="98" stroke="#4f4447" stroke-width="1"/>
+<rect x="36" y="128" width="588" height="178" fill="#000000"/>
+<rect x="32" y="124" width="588" height="178" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="32" y="124" width="4" height="178" fill="#e7bbc8"/>
+<text x="48" y="152" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="start" letter-spacing="1.68">JHON START</text>
+<text x="48" y="182" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">Claude Code</text>
+<text x="48" y="210" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">the orchestrator agent + the release's plugin</text>
+<text x="48" y="232" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">/jhon-ldd · the read-only jhon MCP server</text>
+<text x="48" y="254" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">guards in hooks: jhon hook pre-tool</text>
+<text x="48" y="276" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">runs Claude</text>
+<rect x="664" y="128" width="588" height="178" fill="#000000"/>
+<rect x="660" y="124" width="588" height="178" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="660" y="124" width="4" height="178" fill="#e7bbc8"/>
+<text x="676" y="152" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="start" letter-spacing="1.68">JHON START PI</text>
+<text x="676" y="182" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">pi + jhon-shell</text>
+<text x="676" y="210" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">orchestrator prompt, sub-agents, guards on tool_call</text>
+<text x="676" y="232" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">rail, panels, /jhon:status, /jhon:agents, /jhon:customize</text>
+<text x="676" y="254" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">talks to Jhon only through the binary</text>
+<text x="676" y="276" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">runs Claude or another provider, per profile</text>
+<line x1="326" y1="310" x2="326" y2="346" stroke="#e7bbc8" stroke-width="2" marker-end="url(#ar)"/>
+<line x1="954" y1="310" x2="954" y2="346" stroke="#e7bbc8" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="36" y="356" width="1216" height="146" fill="#000000"/>
+<rect x="32" y="352" width="1216" height="146" fill="#53343f" stroke="#7b6772" stroke-width="1"/>
+<rect x="32" y="352" width="1216" height="4" fill="#e7bbc8"/>
+<text x="52" y="386" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="start" letter-spacing="1.68">THE ENGINE · ONE GO BINARY</text>
+<text x="52" y="422" font-family="Fraunces, Georgia, serif" font-size="28" font-weight="500" fill="#e9e0e1" text-anchor="start">jhon</text>
+<rect x="52" y="444" width="74" height="28" fill="#1f1f28" stroke="#f2c5d2" stroke-width="1"/>
+<text x="89" y="463" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#f2c5d2" text-anchor="middle">guards</text>
+<rect x="136" y="444" width="117" height="28" fill="#1f1f28" stroke="#f2c5d2" stroke-width="1"/>
+<text x="194.5" y="463" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#f2c5d2" text-anchor="middle">LDD records</text>
+<rect x="263" y="444" width="143" height="28" fill="#1f1f28" stroke="#f2c5d2" stroke-width="1"/>
+<text x="334.5" y="463" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#f2c5d2" text-anchor="middle">launch context</text>
+<rect x="416" y="444" width="74" height="28" fill="#1f1f28" stroke="#f2c5d2" stroke-width="1"/>
+<text x="453" y="463" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#f2c5d2" text-anchor="middle">render</text>
+<rect x="500" y="444" width="65" height="28" fill="#1f1f28" stroke="#f2c5d2" stroke-width="1"/>
+<text x="532.5" y="463" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#f2c5d2" text-anchor="middle">audit</text>
+<rect x="575" y="444" width="82" height="28" fill="#1f1f28" stroke="#f2c5d2" stroke-width="1"/>
+<text x="616" y="463" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#f2c5d2" text-anchor="middle">sandbox</text>
+<rect x="667" y="444" width="186" height="28" fill="#1f1f28" stroke="#f2c5d2" stroke-width="1"/>
+<text x="760" y="463" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#f2c5d2" text-anchor="middle">settings · profiles</text>
+<rect x="36" y="552" width="380" height="128" fill="#000000"/>
+<rect x="32" y="548" width="380" height="128" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="32" y="548" width="4" height="128" fill="#e6c384"/>
+<text x="48" y="576" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="start" letter-spacing="1.68">SOURCE OF THE RULES</text>
+<text x="48" y="606" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">prose/</text>
+<text x="48" y="634" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">agents.yaml · contracts · persona · skills</text>
+<text x="48" y="656" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">jhon sync / jhon update → a release</text>
+<rect x="454" y="552" width="380" height="128" fill="#000000"/>
+<rect x="450" y="548" width="380" height="128" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="450" y="548" width="4" height="128" fill="#b594a0"/>
+<text x="466" y="576" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#b594a0" text-anchor="start" letter-spacing="1.68">ALWAYS ON</text>
+<text x="466" y="606" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">Engram · CodeGraph</text>
+<text x="466" y="634" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">memory and decisions · the code map</text>
+<text x="466" y="656" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">shared by both runtimes</text>
+<rect x="872" y="552" width="380" height="128" fill="#000000"/>
+<rect x="868" y="548" width="380" height="128" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
+<rect x="868" y="548" width="4" height="128" fill="#d2c3c6"/>
+<text x="884" y="576" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#d2c3c6" text-anchor="start" letter-spacing="1.68">READS THE BINARY'S JSON</text>
+<text x="884" y="606" font-family="Fraunces, Georgia, serif" font-size="21" font-weight="500" fill="#e9e0e1" text-anchor="start">Dashboard</text>
+<text x="884" y="634" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">jhon dashboard · 127.0.0.1:7480</text>
+<text x="884" y="656" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">sessions, changes, usage, memory</text>
+<line x1="222" y1="544" x2="222" y2="504" stroke="#e6c384" stroke-width="1.6" marker-end="url(#arw)"/>
+<line x1="640" y1="504" x2="640" y2="544" stroke="#d2c3c6" stroke-width="1.6" marker-end="url(#arf)"/>
+<line x1="1058" y1="504" x2="1058" y2="544" stroke="#d2c3c6" stroke-width="1.6" marker-end="url(#arf)"/>
+</svg>

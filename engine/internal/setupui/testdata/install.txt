@@ -1,0 +1,24 @@
+ 力  jhon  setup                                                                              0.1.0 
+                      │                                                                             
+   ✓ Welcome          │  Installing   3 of 6                                                        
+   ✓ Runtimes         │                                                                             
+   ✓ Integrations     │  ✓ Download jhon 0.1.0 linux/amd64   18.4 MB                                
+   ✓ Checks           │  ✓ Verify signature                  cosign, keyless, jachavarro2004/jhon-a…
+▎  ◐ Install          │  ◐ Install the core                  ~/.local/share/jhon                    
+   ○ Done             │  ○ Render runtimes                   Claude Code, pi                        
+                      │  ○ Install pi                        npm, provider claude-bridge            
+                      │  ○ Set up integrations               Engram, CodeGraph                      
+                      │                                                                             
+                      │  █████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░  33%                              
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+ q cancel safely                                                                                    

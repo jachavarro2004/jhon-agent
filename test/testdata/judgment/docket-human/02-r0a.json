@@ -1,0 +1,22 @@
+{
+  "event": "R0.A",
+  "judge": "A",
+  "result": {
+    "findings": [
+      {
+        "location": "option:remove",
+        "severity": "CRITICAL",
+        "claim": "judges are read-only; letting one append breaks the inspect boundary",
+        "evidence_class": "deterministic",
+        "causal_disposition": "unknown",
+        "proof_refs": [
+          "agents.yaml: jd-judge-a caps [read, inspect, memory, codegraph]"
+        ]
+      }
+    ],
+    "evidence": [
+      "orchestrator.md",
+      "agents.yaml"
+    ]
+  }
+}

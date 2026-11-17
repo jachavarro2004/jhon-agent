@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info:
+  title: Orders
+  version: 1.5.0
+paths:
+  /orders/{id}:
+    get:
+      responses:
+        "200":
+          description: one order
+  /orders/summary:
+    get:
+      responses:
+        "200":
+          description: totals per status, in integer cents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total_cents, by_status]
+                properties:
+                  total_cents:
+                    type: integer
+                  by_status:
+                    type: object
+                    additionalProperties:
+                      type: integer

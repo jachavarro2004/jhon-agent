@@ -1,0 +1,16 @@
+# What only development reads never ships (T10f): an installed release
+# validates what it carries; the repository's own evidence (README refs,
+# audit fixtures, matrix evidence) is checked in the checkout. third_party/
+# ships: go.mod replaces bubbletea with it and the release builds from the archive.
+/test export-ignore
+/dist export-ignore
+/docs export-ignore
+/openspec export-ignore
+/tools export-ignore
+/.codegraph export-ignore
+/.github export-ignore
+/staticcheck.conf export-ignore
+/install.sh export-ignore
+/install.ps1 export-ignore
+/shell/test export-ignore
+/dashboard/test export-ignore

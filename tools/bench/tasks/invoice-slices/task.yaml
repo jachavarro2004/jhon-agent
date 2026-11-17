@@ -1,0 +1,37 @@
+id: invoice-slices
+kind: long
+model: sonnet
+max_turns: 90
+timeout: 45m
+hidden: hidden
+check: python3 -B -m unittest -q test_acceptance
+check_1: python3 -B -m unittest -q test_m1
+check_2: python3 -B -m unittest -q test_m2
+check_3: python3 -B -m unittest -q test_m3
+tests: test_*.py
+test_command: python3 -m unittest
+scope: |
+  invoices.py
+  export.py
+  cli.py
+  README.md
+prompt_1: |
+  Finance needs Acme's invoices as CSV. Add export_csv(invoices, path) in a new
+  export.py, and an export command to cli.py:
+    python3 cli.py export <invoices.json> <out.csv>
+  The CSV has a header row and the columns id, customer, issued, amount_cents,
+  in that order. Rows are sorted by issue date, then by id. amount_cents is the
+  invoice amount in whole cents, rounded half up (billing's amounts have up to
+  three decimals). Customer names may hold commas and quotes. Add tests.
+  Run the tests with: python3 -m unittest
+prompt_2: |
+  Finance changed the format. The export no longer has amount_cents: in its
+  place, in the same position, it has amount, the invoice amount with exactly
+  two decimals, rounded half up (10.005 is 10.01, 7 is 7.00). Everything else
+  in the export stays as it is. Update the tests.
+prompt_3: |
+  Add --since YYYY-MM-DD to the export command, after the two paths:
+    python3 cli.py export <invoices.json> <out.csv> --since 2026-02-01
+  Only invoices issued on or after that date are exported; without it, every
+  invoice is. A date that is not a valid YYYY-MM-DD makes the command exit with
+  status 2, print an error to stderr and write no file. Add tests.

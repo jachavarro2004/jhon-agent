@@ -1,0 +1,24 @@
+ 力  jhon  setup                                                          0.1.0 
+     │                                                                          
+ ✓ 1 │  Integrations   step 3 of 6                                              
+ ✓ 2 │  Required for now                                                        
+▎◐ 3 │  [●] Engram      memory across sessions    locked on                     
+ ○ 4 │  [●] CodeGraph   code map for impact       locked on                     
+ ○ 5 │      coupled to the core for now                                         
+ ○ 6 │                                                                          
+     │  Optional, off by default                                                
+     │▎ [●] Telemetry   usage events, local       on                            
+     │      Palette     ● Rose Ink  ○ Desktop                                   
+     │                                                                          
+     │                                                                          
+     │                                                                          
+     │                                                                          
+     │                                                                          
+     │                                                                          
+     │                                                                          
+     │                                                                          
+     │                                                                          
+     │                                                                          
+     │                                                                          
+     │                                                                          
+ ↑↓ move  space toggle  enter next  esc back  q quit                            

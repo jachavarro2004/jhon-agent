@@ -1,0 +1,17 @@
+id: search-accents
+kind: regression
+model: sonnet
+max_turns: 60
+timeout: 30m
+hidden: hidden
+check: python3 -B -m unittest -q test_acceptance
+tests: test_*.py
+test_command: python3 -m unittest
+scope: |
+  search.py
+  textutil.py
+prompt: |
+  Bug report: search(items, "cafe") in search.py does not find "Café Central".
+  Users type without accents, so search should ignore them: "cafe" must find
+  "Café Central" and "café" must find "Cafe Luna". Fix it and add a test.
+  Run the tests with: python3 -m unittest

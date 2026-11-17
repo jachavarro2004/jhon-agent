@@ -1,0 +1,21 @@
+id: shipping-rules
+kind: rules
+model: sonnet
+max_turns: 60
+timeout: 30m
+hidden: hidden
+check: python3 -B -m unittest -q test_acceptance
+tests: test_*.py
+test_command: python3 -m unittest
+scope: |
+  shipping.py
+prompt: |
+  Implement shipping_cost(weight_kg, zone, express) in shipping.py. It returns
+  the price in cents as an int. The rules:
+  1. The base price depends on the zone: "local" is 5.00 and "national" is
+     12.00. Any other zone raises ValueError.
+  2. The first 2 kg are included. Each started kg above 2 kg adds 1.50, so
+     2.1 kg and 3 kg add 1.50, and 3.5 kg adds 3.00. A weight of 0 or less
+     raises ValueError.
+  3. Express doubles the whole price.
+  Add tests for the rules. Run the tests with: python3 -m unittest

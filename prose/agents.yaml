@@ -1,0 +1,280 @@
+# Jhon agent manifest — the only place agent metadata is declared.
+# Prose bodies live in agents/. The renderer (internal/render) projects this to each runtime.
+# An agent with `template: <t>` has no hand-written body: the renderer expands
+# agents/templates/<t>.md with the agent's `vars:` block ({{name}} -> value)
+# and writes the result to agents/<name>.md, which git ignores. Keys this
+# reader does not know fail validation instead of being skipped.
+
+version: 1
+
+# Tier -> concrete model, per runtime. Resolves the model divergence.
+# A tier follows the judgment an agent exercises and the cost of its errors.
+# Model selection is the user's. No role defaults to frontier (docket AX1):
+# frontier is a per-review opt-in for a judgment. Every role sits at strong by
+# default (the owner's choice, 2026-10-28); cheap and mid stay for a profile.
+# Both Judgment Day judges, each a fresh agent blind to the other, sit at
+# strong too. A value is `model` or `model@effort` (docket AX2).
+# The claude-code row pins exact model IDs, not family aliases: an alias can
+# inherit the parent session's exact model, and a trial must be reproducible.
+# Its effort renders as each agent's `effort:` frontmatter, from the values
+# Claude Code documents (low, medium, high, xhigh, max). Equal effort names
+# are not equal compute across providers.
+# An agent's optional `effort:` overrides its Claude Code tier's effort, from
+# the same values; it is rejected on a tier whose model takes none.
+# The pi row holds pi model references (provider/model), its effort pi's
+# thinking level; pi reaches Claude through pi-claude-bridge.
+tiers:
+  claude-code: { cheap: claude-haiku-5-5@medium, mid: claude-sonnet-5-5@medium, strong: claude-opus-5-5@medium, frontier: claude-fable-5-1@medium }
+  pi: { cheap: claude-bridge/claude-haiku-5-5@medium, mid: claude-bridge/claude-sonnet-5-5@medium, strong: claude-bridge/claude-opus-5-5@medium, frontier: claude-bridge/claude-fable-5-1@medium }
+
+# Capability -> Claude Code tool allowlist. MCP tools are listed under both the
+# server and plugin prefixes because the active naming depends on how Engram is
+# mounted in the session.
+capabilities:
+  read:      [Read, Grep, Glob]
+  write:     [Edit, Write]
+  bash:      [Bash]
+  web:       [WebFetch, WebSearch]
+  memory:    [mcp__engram__mem_search, mcp__plugin_engram_engram__mem_search, mcp__engram__mem_get_observation, mcp__plugin_engram_engram__mem_get_observation, mcp__engram__mem_save, mcp__plugin_engram_engram__mem_save, mcp__engram__mem_update, mcp__plugin_engram_engram__mem_update, mcp__engram__mem_judge, mcp__plugin_engram_engram__mem_judge]
+  memory-read: [mcp__engram__mem_search, mcp__plugin_engram_engram__mem_search, mcp__engram__mem_get_observation, mcp__plugin_engram_engram__mem_get_observation]   # search and read only, for agents that must not write memory (docket AS1)
+  memory-session: [mcp__engram__mem_session_summary, mcp__plugin_engram_engram__mem_session_summary, mcp__engram__mem_context, mcp__plugin_engram_engram__mem_context, mcp__engram__mem_current_project, mcp__plugin_engram_engram__mem_current_project, mcp__engram__mem_review, mcp__plugin_engram_engram__mem_review]   # top-level agent only (contracts/vocabulary.yaml, top_level_tools)
+  codegraph: [mcp__codegraph__codegraph_explore]
+  context7:  [mcp__context7__resolve-library-id, mcp__context7__query-docs]   # library and framework documentation, context7's hosted MCP server: explore and worker only (L1000); integrations.context7 = false drops it; in Claude Code the tools exist where the owner's has a server named context7
+  jhon-mcp:  [mcp__plugin_jhon_jhon__audit, mcp__plugin_jhon_jhon__status]   # the read-only jhon MCP server of the release plugin, which jhon start loads
+  ms365:     [mcp__claude_ai_Microsoft_365]   # the owner's claude.ai Microsoft 365 connector; a server name grants every tool of it (verified on Claude Code 2.1.304)
+  web-search: [WebSearch]   # search only; fetching a page stays with `web`
+  inspect:   [Bash]   # Bash confined to inspect_allow by jhon hook inspect-guard: reviewers stay read-only
+  plan-tasks: [TaskCreate, TaskUpdate, TaskList]   # the slice's task list the owner follows live (prose/orchestrator.md, "Work a slice"); pi's is its `todo` tool
+  todo:      []   # pi's `todo` tool in a child: the agent's own next steps, private to it (T134, L1019). None in Claude Code, whose Task* list is the session's, shared with its sub-agents
+  orchestrate: [AskUserQuestion, ExitPlanMode, SendMessage]   # + Agent(<every non-primary agent>), derived by the renderer. Each tool needs its primitive (ask-user, plan-mode; Agent and SendMessage need named-subagents) in the claude-code row of runtime_primitives, and render.ts drops one that is absent
+# Every agent holding Bash carries jhon hook safety-guard (destructive
+# operations refused, outward-facing ones asked), every agent holding Edit or
+# Write carries jhon hook vcs-guard (the write guard), every agent carries
+# jhon hook framework-guard, and a bounded writer (`bounded: true`) carries
+# jhon hook scope-guard, which keeps it to its handoff's edit surfaces.
+
+# The only Bash commands an `inspect` agent may run, as exact leading words.
+# Claude Code enforces it with jhon hook inspect-guard, rendered from this list.
+inspect_allow: [git diff, git show, git log, git status, codegraph callers, codegraph impact, codegraph affected, jhon review freeze]
+
+# ── runtime capability model (docket AG) ─────────────────────────────────────
+# Which runtimes Jhon describes, what each one offers, and how strongly each
+# behavioural rule holds in each. internal/manifest reads these sections,
+# the renderer validates them (`runtime-matrix`, `runtime-guarantee`) and derives
+# its per-runtime declarations from them, and `jhon doctor --runtime <name>`
+# reports them.
+runtimes: [claude-code, pi]
+
+# The primitives a runtime may offer Jhon. A platform is not a primitive.
+primitives: [global-instructions, named-subagents, agent-tool-allowlist, blocking-hook-agent, skills, mcp, plan-mode, ask-user, readable-transcripts]
+platforms: [linux, macos, windows]
+
+# AG1. One value per runtime and primitive: `capability` true|false,
+# `verification` from `primitive_verification` (contracts/vocabulary.yaml),
+# `source`, and the runtime `version` it was read from. `verified` cites what
+# was executed and observed: a spike record (test/testdata/spikes/<name>/
+# record.json), or a real-session fixture for a primitive that needs no
+# refusal (contracts/vocabulary.yaml, "Runtime guarantees"). `documented` cites
+# runtime documentation or inspection; Jhon's unit tests are complementary
+# only. Without a runtime source a value is `unknown`.
+runtime_primitives:
+  claude-code:
+    global-instructions: { capability: true, verification: documented, version: "2.1.280", source: "Claude Code memory documentation: ~/.claude/CLAUDE.md with @ imports; Jhon leaves it to the user and inlines its always-on layer into each agent" }
+    named-subagents: { capability: true, verification: verified, version: "2.1.280", source: "test/testdata/audit/apply-tdd-evidence: a real session whose orchestrator launches worker by subagent_type, its transcript under subagents/" }
+    agent-tool-allowlist: { capability: true, verification: verified, version: "2.1.280", source: "test/testdata/spikes/claude-code-tool-allowlist/record.json (explore was not offered Bash or Write and created nothing; general, holding Bash, did)" }
+    blocking-hook-agent: { capability: true, verification: verified, version: "2.1.310", source: "test/testdata/spikes/claude-code-plugin-agent-hooks/record.json (2.1.310 runs no agent frontmatter hooks; the plugin runs the rendered hooks of each calling agent, and git push was refused under bypassPermissions in a session without --agent)" }
+    skills: { capability: true, verification: documented, version: "2.1.280", source: "Claude Code skills documentation: SKILL.md under a skills root" }
+    mcp: { capability: true, verification: verified, version: "2.1.280", source: "test/testdata/audit/apply-bypass-archive: a real session calling an mcp__plugin_engram_engram__ tool" }
+    plan-mode: { capability: true, verification: documented, version: "2.1.280", source: "Claude Code plan mode documentation: ExitPlanMode and its plan file under ~/.claude/plans (docket AE1)" }
+    ask-user: { capability: true, verification: documented, version: "2.1.280", source: "Claude Code tools reference: AskUserQuestion" }
+    readable-transcripts: { capability: true, verification: verified, version: "2.1.280", source: "per-session JSONL read by internal/audit; test/testdata/audit/apply-tdd-evidence and every fixture whose source.json says real" }
+  pi:
+    global-instructions: { capability: true, verification: documented, version: "1.4.0", source: "pi configuration: AGENTS.md and APPEND_SYSTEM.md in the agent directory; Jhon appends its prompt through shell/extensions/jhon.ts" }
+    named-subagents: { capability: true, verification: verified, version: "1.4.0", source: "test/testdata/spikes/pi-named-subagents/record.json (Jhon's subagent tool ran agents/<name>.md as a child pi process with its model and tools)" }
+    agent-tool-allowlist: { capability: true, verification: verified, version: "1.4.0", source: "test/testdata/spikes/pi-agent-tool-allowlist/record.json (a child is offered only its frontmatter tools, and its extension refuses any other)" }
+    blocking-hook-agent: { capability: true, verification: verified, version: "1.4.0", source: "test/testdata/spikes/pi-blocking-hook/record.json (shell/extensions/jhon.ts tool_call ran the guards in the main session and in a child; safety and scope refusals honoured)" }
+    skills: { capability: true, verification: documented, version: "1.4.0", source: "pi skills: settings skills paths and package skills" }
+    mcp: { capability: true, verification: documented, version: "1.4.0", source: "builtin:mcp with <agent-dir>/mcp.json, which the render writes (Engram, codegraph, jhon, context7)" }
+    plan-mode: { capability: false, verification: documented, version: "1.4.0", source: "pi has no plan mode; Jhon's own (/plan, plan-guard) was removed as unused under the owner's methodology (L436, T50d)" }
+    ask-user: { capability: true, verification: documented, version: "1.4.0", source: "Jhon's ask_user tool (shell/lib/ask.ts), through pi's extension UI" }
+    readable-transcripts: { capability: true, verification: verified, version: "1.4.0", source: "pi session JSONL, each child's under subagents/, read by internal/audit (pi.go); test/testdata/audit/pi-main-refusal and pi-worker-refusal are real sessions" }
+
+# How each runtime takes the always-on contracts. A runtime without imports
+# receives them concatenated, and that bundle must fit max_instruction_bytes
+# (`none`: no cap is documented; `unknown`: not established). The render and
+# `jhon doctor --runtime` refuse a bundle that does not fit.
+contract_delivery:
+  claude-code: { max_instruction_bytes: none, imports: true, source: "CLAUDE.md @ imports; no hard cap is documented. Jhon inlines its layer into each agent instead" }
+  pi: { max_instruction_bytes: none, imports: false, source: "pi 1.3.0: shell/extensions/jhon.ts appends the orchestrator's prompt file; each agent definition carries its layer inline" }
+
+# The route that observes a behavioural rule in each runtime: a transcript
+# reader Jhon has, or `none`. Without one, a rule that is not enforced there
+# is `unsupported`, never `behavioural` (docket AG, Q2).
+observation_route:
+  claude-code: jhon audit
+  pi: jhon audit
+
+# AG2. The guarantee level (`guarantee_levels`, contracts/vocabulary.yaml) of
+# every behavioural anchor the renderer enumerates (each has its audit_rules
+# entry), in every runtime. `by` names the primitive an `enforced` level rests
+# on. `<runtime>@<platform>` is an exception, declared only where a platform
+# changes the level. Adding a runtime means classifying every rule here first.
+guarantees:
+  runtime-boundaries/stop: { claude-code: unsupported, pi: unsupported }
+  runtime-boundaries/same-effect: { claude-code: behavioural, pi: behavioural }
+  runtime-boundaries/allowed-form: { claude-code: behavioural, pi: behavioural }
+  runtime-boundaries/delegation: { claude-code: behavioural, pi: behavioural }
+  runtime-boundaries/refusal-not-failure: { claude-code: unsupported, pi: unsupported }
+  runtime-boundaries/no-technique: { claude-code: unsupported, pi: unsupported }
+  runtime-boundaries/orchestrator-no-bypass: { claude-code: behavioural, pi: behavioural }
+  top-level-tools/executor-never-calls: { by: agent-tool-allowlist, claude-code: enforced, pi: enforced }
+  # pi has no runtime isolation; jhon audit reads a pi worker or verify
+  # child's write outside its own cwd (isolation-bypass, pending on pi).
+  isolation/no-other-tree: { claude-code: behavioural, pi: behavioural }
+  delivery/tested-revision: { claude-code: behavioural, pi: behavioural }
+  delivery/same-tree: { claude-code: behavioural, pi: behavioural }
+  delivery/high-risk-verified: { claude-code: behavioural, pi: behavioural }
+  # Docket AV2: enforced on the surface jhon hook framework-guard recognises
+  # (Edit, Write, the Bash writes its recogniser reads, and git on a protected
+  # path). A program that writes a protected file without naming it is outside
+  # that surface; absolute confinement needs runtime filesystem isolation.
+  framework-boundary/no-framework-write: { by: blocking-hook-agent, claude-code: enforced, pi: enforced }
+  # The safety layer: jhon hook safety-guard on Bash and jhon hook vcs-guard
+  # on Edit/Write/NotebookEdit, for every Jhon agent, as a sub-agent or as
+  # the main session (`--agent`); a session that runs no Jhon agent has none.
+  # Enforced on the surface they read (shell-read.mjs); a script a command
+  # runs, or a program acting on its own, is outside it.
+  safety/destructive-deny: { by: blocking-hook-agent, claude-code: enforced, pi: enforced }
+  safety/outward-ask: { by: blocking-hook-agent, claude-code: enforced, pi: enforced }
+  # jhon hook scope-guard reads a bounded writer's launch prompt from its own
+  # sub-agent transcript in Claude Code (test/testdata/spikes/claude-code-subagent-launch-prompt)
+  # and from the task pi's subagent tool hands the child (test/testdata/spikes/pi-blocking-hook);
+  efficiency/writer-scope: { by: blocking-hook-agent, claude-code: enforced, pi: enforced }
+  # A tasks.md with tasks in a later slice, or a proposal.md without
+  # acceptance criteria, is a note, never a refusal (contracts/ldd.md).
+  ldd/slices: { claude-code: unsupported, pi: unsupported }
+  # A change's first behaviour-changing edit comes after its RED and its
+  # record (contracts/ldd.md); jhon audit's edit-before-red reads it.
+  ldd/red-first: { claude-code: behavioural, pi: behavioural }
+  # A verify agent writes only its verify-report.md; jhon audit's
+  # verify-wrote reads any other write (T56).
+  ldd/independent-verify: { claude-code: behavioural, pi: behavioural }
+  # explore writes only its change's exploration.md or research.md: jhon hook
+  # vcs-guard refuses any other Edit/Write of explore's (Claude Code by
+  # `--agent explore`, pi by the child's JHON_PI_AGENT); explore holds no
+  # Bash. jhon audit's explore-wrote reads a write that ran anyway (T123).
+  ldd/explore-scope: { by: blocking-hook-agent, claude-code: enforced, pi: enforced }
+  # A failing test is made to pass by the code, never skipped or removed;
+  # jhon audit's test-weakened reads the edit between a RED and its pass (T56).
+  tdd/no-weaken: { claude-code: behavioural, pi: behavioural }
+
+agents:
+  # The lean roster: three executors (explore, worker, verify) carry every
+  # LDD step that leaves the orchestrator's thread. Propose, spec, design,
+  # tasks, init, and archive run inline in the orchestrator with their phase's
+  # reference in skills/ldd;
+  # their artifacts and `jhon status` are unchanged.
+  - name: explore
+    tier: strong
+    caps: [read, write, web, memory, codegraph, todo, context7]
+    description: "Investigate before a change: the codebase, prior decisions, approaches, and external evidence. Writes only the change's exploration.md or research.md, never code"
+  - name: worker
+    tier: strong
+    bounded: true
+    caps: [read, write, bash, memory, codegraph, todo, context7]
+    description: "Implement a scoped task: an LDD apply, or any bounded change the orchestrator hands off. Edits only the files named, runs the focused tests, never launches sub-agents"
+  - name: verify
+    tier: strong
+    caps: [read, write, bash, memory, codegraph, todo]
+    description: "Independent verifier: checks an implementation against its specs, design, and tasks, or a change against its stated outcome, from tests that actually ran. Writes only verify-report.md; fixes nothing"
+  - name: jd-judge-a
+    tier: strong
+    caps: [read, inspect, memory, codegraph]
+    template: jd-judge
+    vars:
+      judge: A
+    description: "Adversarial code reviewer \u2014 blind judge A for judgment-day parallel review protocol. Triggered by the orchestrator when judgment-day is invoked. Reviews code for correctness, edge cases, security, performance, and project standards"
+  - name: jd-judge-b
+    tier: strong
+    caps: [read, inspect, memory, codegraph]
+    template: jd-judge
+    vars:
+      judge: B
+    description: "Adversarial code reviewer \u2014 blind judge B for judgment-day parallel review protocol. Triggered by the orchestrator when judgment-day is invoked. Reviews code for correctness, edge cases, security, performance, and project standards"
+  - name: jd-fix-agent
+    tier: strong
+    bounded: true
+    caps: [read, write, bash, memory, codegraph]
+    description: "Surgical fix agent for judgment-day protocol. Applies only confirmed fixes from the verdict synthesis. Triggered by the orchestrator after judges agree on issues"
+  - name: review-risk
+    tier: strong
+    caps: [inspect, codegraph]
+    note: frozen-tree only
+    template: review-lens
+    vars:
+      code: R1
+      title: Risk
+      lens: risk
+      scope: "Inspect security, authorization, data exposure or loss, unsafe input handling, secrets, and dependency vulnerabilities. Require backend enforcement and concrete exploit or scanner evidence; do not report hypothetical risk without a reachable impact."
+    description: "Fallback R1 Risk lens when the native 4R cannot run \u2014 security, privilege boundaries, data exposure, dependency risks"
+  - name: review-resilience
+    tier: strong
+    caps: [inspect, codegraph]
+    note: frozen-tree only
+    template: review-lens
+    vars:
+      code: R4
+      title: Resilience
+      lens: resilience
+      scope: "Inspect failure handling, rollback or fix-forward behavior, retry safety, graceful degradation, observability, latency, and load. Require a concrete production failure mode or measured impact; do not report generic operational speculation."
+    description: "Fallback R4 Resilience lens when the native 4R cannot run \u2014 retry/backoff, degradation, observability, load, rollback"
+  - name: review-readability
+    tier: strong
+    caps: [inspect, codegraph]
+    note: frozen-tree only
+    template: review-lens
+    vars:
+      code: R2
+      title: Readability
+      lens: readability
+      scope: "Inspect maintainability defects that obscure behavior: misleading names, duplicated or dead logic, unexplained business constants, unsafe complexity, and missing change context. Report style only when it hides a concrete defect or makes the change unsafe to maintain. A reuse or simplification finding is admitted when it gives a concrete comparison confirmed against the frozen revision: where X and Y are, their equivalence, their differences, and the avoidable cost; with unproven impact it is a SUGGESTION."
+    description: "Fallback R2 Readability lens when the native 4R cannot run \u2014 naming, complexity, intention, maintainability"
+  - name: review-reliability
+    tier: strong
+    caps: [inspect, codegraph]
+    note: frozen-tree only
+    template: review-lens
+    vars:
+      code: R3
+      title: Reliability
+      lens: reliability
+      scope: "Inspect behavior, tests, boundaries, invalid inputs, failure paths, determinism, and regressions. Require externally observable assertions at the cheapest useful test level; report missing coverage only when it leaves candidate behavior unproved."
+    description: "Fallback R3 Reliability lens when the native 4R cannot run \u2014 behavior-first tests, edge cases, determinism, regressions"
+  - name: review-refuter
+    tier: strong
+    caps: [inspect, codegraph]
+    note: frozen-tree only
+    template: review-role
+    vars:
+      title: Refuter
+      role: refuter
+      task: "The prompt gives the lens agents' findings, each with its id (`<lens>-<n>`, from 1 in each lens's order). Try to refute each from the frozen tree: it is `refuted` when the content shows the claim false, unreachable, or outside this change; otherwise it `stands`. Give each a short reason citing path:line."
+      result: "{\"finding_id\":\"risk-1\",\"outcome\":\"refuted\",\"reason\":\"path:line shows ...\"}"
+    description: "Fallback 4R refuter when the native 4R cannot run \u2014 refutes each lens finding or lets it stand"
+  - name: review-validator
+    tier: strong
+    caps: [inspect, codegraph]
+    note: frozen-tree only
+    template: review-role
+    vars:
+      title: Validator
+      role: validator
+      task: "The prompt gives the findings that stand after the refuter, each with its id. Mark one `confirmed` only when the frozen tree proves it, with proof_refs (path:line) that show it; otherwise `unconfirmed`. Give each a short reason."
+      result: "{\"finding_id\":\"risk-1\",\"outcome\":\"confirmed\",\"reason\":\"...\",\"proof_refs\":[\"path:line\"]}"
+    description: "Fallback 4R validator when the native 4R cannot run \u2014 confirms each standing finding with proof or leaves it unconfirmed"
+  - name: jhon-orchestrator
+    tier: strong
+    mode: primary
+    body: orchestrator.md
+    caps: [read, write, bash, memory, memory-session, codegraph, jhon-mcp, ms365, web-search, plan-tasks, orchestrate]
+    description: "Jhon orchestrator — works directly, and delegates to sub-agents when that pays"

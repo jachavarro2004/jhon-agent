@@ -1,0 +1,25 @@
+{
+  "runtime": "claude-code",
+  "runtime_version": "2.1.280",
+  "guard": "hooks/git-state-guard.mjs",
+  "guard_version": "commit 062d3ca, blob df225d77c552",
+  "date": "2026-10-03",
+  "call": "claude -p --model haiku --dangerously-skip-permissions, in a scratch git repo with one commit; the main session launched sub-agent general to run `git status --short` then `git commit --allow-empty -m spike-general`, and sub-agent vcs-worker to run `git commit --allow-empty -m spike-vcs`. A settings-level PreToolUse hook logged every payload.",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "agent_id": "a2c2b1eefbdd634b0",
+    "agent_type": "general",
+    "permission_mode": "bypassPermissions",
+    "tool_input": {
+      "command": "git commit --allow-empty -m spike-general"
+    }
+  },
+  "decision": "exit 2: git-state-guard: `git commit` is a repository-state operation: only vcs-worker performs it, launched by the orchestrator with the user's consent (contracts/phase-common.md section I). Stop and report this refusal verbatim; never reach the same effect another way (contracts/runtime-boundaries.md).",
+  "runtime_result": "The tool result was `PreToolUse:Bash hook error: [... git-state-guard.mjs --agent general deny]: git-state-guard: ...`; the command did not run, even in bypassPermissions mode, and the agent reported the refusal and stopped.",
+  "no_effect_check": "`git log --oneline` after the run lists base and spike-vcs only; no spike-general commit exists.",
+  "control_case": {
+    "same_agent_permitted": "general ran `git status --short` (payload agent_type general, agent_id a2c2b1eefbdd634b0) and it executed",
+    "other_agent_scope": "vcs-worker (payload agent_type vcs-worker, agent_id a3c6f7a5c846a9570) ran `git commit --allow-empty -m spike-vcs`, which the same guard in vcs mode allowed: commit 66f87e7 was created"
+  }
+}

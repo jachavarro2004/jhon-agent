@@ -1,0 +1,24 @@
+ 力  jhon  update                                                                             0.1.0 
+                      │                                                                             
+   ✓ Check            │  ✓ Jhon 0.1.1 is up to date                                                 
+   ✓ Review           │  checked jachavarro2004/jhon-agent just now                                 
+   ✓ Update           │                                                                             
+   ✓ Done             │   Change setup    Roll back to 0.1.0    Quit                                
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+ ←→ choose  enter confirm  q quit                                                                   

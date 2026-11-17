@@ -1,0 +1,12 @@
+{
+  "event": "R1.B",
+  "judge": "B",
+  "positions": [
+    {
+      "point": "A1",
+      "position": "adopt",
+      "reason": "I agree",
+      "proof_refs": []
+    }
+  ]
+}

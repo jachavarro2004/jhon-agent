@@ -1,0 +1,24 @@
+ 力  jhon  update                                                                             0.1.0 
+                      │                                                                             
+   ✓ Check            │  ✓ Updated to 0.1.1                                                         
+   ✓ Review           │                                                                             
+   ✓ Update           │  previous  0.1.0   kept, ready to roll back                                 
+   ✓ Done             │  settings  unchanged                                                        
+                      │                                                                             
+                      │   Done    Roll back to 0.1.0                                                
+                      │  Roll back reinstalls 0.1.0 as it was; restart open sessions after either.  
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+ ←→ choose  enter confirm  q quit                                                                   

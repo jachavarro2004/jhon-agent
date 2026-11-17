@@ -1,0 +1,164 @@
+# Machine-read vocabulary. internal/contract reads it line by line (flow lists,
+# two-space maps, and lists of flat mappings), so keep to those shapes.
+# Lists whose order carries meaning are read by position.
+
+phases: [explore, research, propose, spec, design, tasks, apply, verify, archive]
+project_phases: [init]
+
+artifact_state: [missing, partial, done]
+envelope_verdict: [pass, fail]
+
+next_action: [propose, spec, design, tasks, apply, verify, archive, select-change, start-change]
+
+vcs_state: [none, no_head, ready]
+vcs_dirs: [.git, .hg, .svn]
+vcs_notes:
+  note: vcs {state} ({reason}); without a commit nothing records which revision was tested or delivered; initialise git with the user's consent
+
+phase_context_fields:
+  explore: [projects, strict_tdd]
+
+coverage_state: [yes, no, unknown]
+strict_tdd_source: [policy, derived, legacy, tdd.md]
+strict_tdd_evidence_state: [ok, invalid, n/a]
+strict_tdd_policy: [require, forbid]
+strict_tdd_config:
+  file: openspec/config.yaml
+  policy: strict_tdd_policy
+  mode: strict_tdd
+  mode_parent: testing
+  evidence: strict_tdd_evidence
+  override: test_command_override
+strict_tdd_notes:
+  legacy: "{file} sets the legacy {keys}, honoured with its old meaning; reconcile it to {policy} with /jhon-ldd init"
+  legacy_ignored: "{file} sets {policy}, which governs; the legacy {keys} is ignored and should be removed with /jhon-ldd init"
+  legacy_evidence: legacy {evidence}; reconcile into {override} with /jhon-ldd init
+  override_undiscovered: "{file} sets {override} for '{path}', which is not a discovered project; the entry is ignored"
+  override_exempt: "{file} sets {override} for '{path}', which is structurally_exempt; the entry is ignored"
+command_source: [discovered, override]
+code_check_kind: [lint, format]
+code_check_config:
+  lint: lint_command_override
+  format: format_command_override
+
+testability_state: [testable, structurally_exempt, unknown]
+testability_test_conventions:
+  Python: [test_*.py, "*_test.py", conftest.py, tests/]
+  Node: ["*.test.*", "*.spec.*", __tests__/]
+  Go: ["*_test.go"]
+  Rust: [tests/]
+testability_stack_sources:
+  Python: ["*.py"]
+  Node: ["*.js", "*.ts", "*.mjs", "*.cjs", "*.jsx", "*.tsx"]
+  Go: ["*.go"]
+  Rust: ["*.rs"]
+
+execution_record_schema: [jhon.execution-record/v2]
+execution_record:
+  file: execution-record.json
+candidate_unknown: [unknown]
+
+deliver_action: [merge, deploy, release]
+
+# How many tasks one slice of a change's tasks.md holds, nested ones
+# included (contracts/ldd.md, "Slices"): an advisory number. jhon status
+# notes a slice past it; nothing refuses one.
+slice_limits:
+  tasks: 12
+
+# The version of what jhon-shell (shell/) consumes from the binary
+# (shell/CONTRACT.md); `jhon contract` prints it, and shell/package.json
+# names the same one.
+shell_contract: [jhon.shell/v1]
+
+guarantee_levels: [enforced, behavioural, unsupported]
+primitive_verification: [verified, documented, unknown]
+spike_record_fields: [runtime, runtime_version, guard, guard_version, call, payload, decision, runtime_result, no_effect_check, control_case]
+
+top_level_tools: [mem_session_summary, mem_context, mem_current_project, mem_review]
+
+audit_validation_status: [verified, pending-real-fixture]
+
+audit_rules:
+  - anchor: runtime-boundaries/stop
+    check: none
+    reason: whether a refusal was reported verbatim as a blocker is a judgment over the return text; the observable breach, a later bypass, is runtime-boundaries/same-effect
+  - anchor: runtime-boundaries/same-effect
+    check: refusal-bypass
+    evidence_class: deterministic
+    validation_status: pending-real-fixture
+  - anchor: runtime-boundaries/allowed-form
+    check: refusal-bypass
+    evidence_class: deterministic
+    validation_status: pending-real-fixture
+  - anchor: runtime-boundaries/delegation
+    check: refusal-bypass
+    evidence_class: heuristic
+  - anchor: runtime-boundaries/refusal-not-failure
+    check: none
+    reason: it defines which errors are refusals; refusal-bypass applies the definition and does not test it
+  - anchor: runtime-boundaries/no-technique
+    check: none
+    reason: recognising a way around a refusal recorded in Engram or an artifact is a judgment about what prose means
+  - anchor: runtime-boundaries/orchestrator-no-bypass
+    check: refusal-bypass
+    evidence_class: heuristic
+  - anchor: top-level-tools/executor-never-calls
+    check: none
+    reason: the projected tool grants enforce it at runtime; an executor holds none of the top-level tools
+  - anchor: isolation/no-other-tree
+    check: isolation-bypass
+    evidence_class: deterministic
+    validation_status: verified
+    real_clean: [general-isolation-stop]
+    real_violation: [apply-worktree-bypass]
+    # pi has no runtime isolation: its form reads a pi worker or verify
+    # child's write outside its own cwd, with no real fixtures yet (T56).
+    pending_on: [pi]
+  - anchor: delivery/tested-revision
+    check: delivered-untested
+    evidence_class: deterministic
+    validation_status: verified
+    real_clean: [background-run-delivered]
+    real_violation: [background-run-failed-delivered]
+  - anchor: delivery/same-tree
+    check: delivered-untested
+    evidence_class: heuristic
+  - anchor: delivery/high-risk-verified
+    check: delivered-untested
+    evidence_class: heuristic
+  - anchor: ldd/red-first
+    # Two forms of one rule: the first code edit, and `jhon archive` (T56).
+    check: [edit-before-red, archive-without-red]
+    evidence_class: deterministic
+    validation_status: pending-real-fixture
+    real_clean: [ldd-red-first-clean]
+  - anchor: ldd/independent-verify
+    check: verify-wrote
+    evidence_class: deterministic
+    validation_status: pending-real-fixture
+  - anchor: ldd/explore-scope
+    check: explore-wrote
+    evidence_class: deterministic
+    validation_status: pending-real-fixture
+    real_violation: [explore-wrote-real]
+  - anchor: tdd/no-weaken
+    check: test-weakened
+    evidence_class: deterministic
+    validation_status: pending-real-fixture
+  - anchor: framework-boundary/no-framework-write
+    check: none
+    reason: jhon hook framework-guard refuses every Jhon agent's Edit, Write, recognised Bash write, and git invocation on a protected framework path at runtime in Claude Code; a program that writes a protected file without naming it leaves no command line to read, so a transcript check would see no more than the guard
+  - anchor: safety/destructive-deny
+    check: none
+    reason: jhon hook safety-guard refuses a destructive or irreversible Bash operation, and jhon hook vcs-guard a write into a VCS directory, the grants directory, or a Claude Code settings file, at runtime for every agent and the top-level session; a transcript shows no more than the refusal, and a later bypass of it is runtime-boundaries/same-effect
+  - anchor: safety/outward-ask
+    check: none
+    reason: jhon hook safety-guard and jhon hook vcs-guard ask the owner at the top level, and refuse elsewhere unless the owner's grant covers the class, at runtime; the owner's answer at the prompt and `! jhon grant` pass through no tool call a transcript check could read
+  - anchor: ldd/slices
+    check: none
+    reason: slices are outlined first and tasked as they go; nothing refuses a tasks.md; jhon status notes tasks in a later slice, a slice past slice_limits.tasks, and a slice without its Delivers line
+  - anchor: efficiency/writer-scope
+    check: none
+    reason: jhon hook scope-guard refuses a bounded writer's Edit, Write, or recognised Bash write of a file outside its launch prompt's `## Allowed edit surfaces` at runtime in Claude Code; `jhon audit` measures the writes of every writer (efficiency), so a transcript check would add nothing the guard and the measure do not
+

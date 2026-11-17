@@ -1,0 +1,24 @@
+ 力  jhon  setup                                                                              0.1.0 
+                      │                                                                             
+▎  ◐ Welcome          │  Welcome to Jhon                                                            
+   ○ Runtimes         │  An LDD agent framework: an engine, guards and prose,                       
+   ○ Integrations     │  worked from Claude Code or pi.                                             
+   ○ Checks           │                                                                             
+   ○ Install          │  This setup will                                                            
+   ○ Done             │  1  pick the runtimes you work from                                         
+                      │  2  choose integrations (Engram and CodeGraph come with the core)           
+                      │  3  check git, claude, engram and codegraph, and say how to fix each        
+                      │  4  install the core and write ~/.config/jhon/settings.toml                 
+                      │                                                                             
+                      │  Nothing is written until you confirm on the Install step.                  
+                      │                                                                             
+                      │   Start setup    enter                                                      
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+                      │                                                                             
+ enter start setup  q quit                                                                          

@@ -1,0 +1,19 @@
+id: contacts-migration
+kind: data
+model: sonnet
+max_turns: 60
+timeout: 30m
+hidden: hidden
+check: python3 -B -m unittest -q test_acceptance
+tests: test_*.py
+test_command: python3 -m unittest
+scope: |
+  migrate.py
+  store.py
+  data/*
+prompt: |
+  We need first and last names apart. Add migrate(path) in migrate.py: it moves
+  a contacts file such as data/contacts.json from schema 1 to schema 2, where
+  each contact's "name" becomes "first_name" (its first word) and "last_name"
+  (the rest, "" when there is none). Then make store.py read schema 2.
+  Add tests. Run the tests with: python3 -m unittest

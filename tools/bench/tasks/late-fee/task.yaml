@@ -1,0 +1,17 @@
+id: late-fee
+kind: ambiguous
+model: sonnet
+max_turns: 60
+timeout: 30m
+hidden: hidden
+check: python3 -B -m unittest -q test_acceptance
+tests: test_*.py
+test_command: python3 -m unittest
+scope: |
+  billing.py
+  money.py
+prompt: |
+  Finance wants a late fee. Add late_fee(invoice, paid_on) to billing.py: an
+  invoice paid more than 30 days late pays a 5% fee. It returns the fee in
+  cents, 0 when there is none. Add tests.
+  Run the tests with: python3 -m unittest

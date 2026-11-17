@@ -1,0 +1,7 @@
+{
+  "id": "slug-clean",
+  "title": "product slugs, no defect",
+  "change": "product-slugs",
+  "clean": true,
+  "defects": []
+}

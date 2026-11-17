@@ -1,0 +1,29 @@
+{
+  "id": "webhook-notify",
+  "title": "partner webhook sender",
+  "change": "send-order-events",
+  "defects": [
+    {
+      "id": "D1",
+      "file": "notify/token_sender.py",
+      "lines": [
+        17,
+        17
+      ],
+      "lens": "risk",
+      "severity": "CRITICAL",
+      "what": "the partner's API token is written to the log"
+    },
+    {
+      "id": "D2",
+      "file": "notify/token_sender.py",
+      "lines": [
+        24,
+        30
+      ],
+      "lens": "resilience",
+      "severity": "CRITICAL",
+      "what": "the delivery retries forever, every second, with no attempt cap or backoff (an HTTP 4xx is an OSError too)"
+    }
+  ]
+}

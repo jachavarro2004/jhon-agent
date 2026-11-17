@@ -1,0 +1,30 @@
+name: Bug report
+description: Something in Jhon does not work as its docs say.
+labels: [bug, triage]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Commands and the smallest project that shows it. Remove any private data.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Output of `jhon version`
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options: [Claude Code, pi, both]
+    validations:
+      required: true

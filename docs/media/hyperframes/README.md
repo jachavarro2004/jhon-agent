@@ -1,0 +1,206 @@
+# docs/media/hyperframes — the presentation video, made with HyperFrames
+
+Jhon's presentation video (`docs/assets/video/jhon-explainer.mp4`, and
+`jhon-explainer.es.mp4` with Spanish subtitles) is made by code with
+[HyperFrames](https://github.com/heygen-com/hyperframes): HTML rendered to
+video by a headless Chrome that seeks one paused timeline frame by frame.
+GSAP draws the motion; Three.js draws the one 3D shot, the 力 seal of the
+intro. It replaced the SVG-frame explainer (`odd/tasks/v0-1-release.md`,
+T63f, L1099–L1114) in the style the owner approved on pilot 3 (L1112).
+
+The pilots (pilot 1, `intro/`; pilots 2 and 3, `pilot2/`) are in git history
+only, from commit 445e6dec on `feat/t63a-media`; this README's history has
+their write-ups.
+
+## The style (pilot 3's, approved)
+
+- **Jhon leads.** The seal and Jhon's own words are the protagonists: one
+  idea per full-frame shot, big type (Fraunces, the accent's italic for the
+  key words), on a dark stage under a rose light pool that drifts with the
+  cuts. No web-page layout, no card grid, no caption paragraph under a screen.
+- **Claim → proof.** Each chapter says a claim in big type, then holds its
+  proof: one of Jhon's real screens (a feature capture from
+  `docs/assets/features/`, cropped to its terminal panel without its footer
+  caption) or one of the four diagrams (`docs/assets/diagrams/`). A proof
+  screen is the subject of its shot: close (up to 1700×790 px), square-on,
+  sharp, held its line plus 1.3 s (at least 4.8 s), rose-lit from behind,
+  the camera pushing in toward what is said (scale 0.93 → 1, so it **ends**
+  with the whole screen in frame), and a rose mark stamping onto each part
+  the line names, as it is said.
+- **Video grammar.** Cuts are cut-the-curve to the left (the film's one
+  current: exit `power4.in` over 230 px, the fade dying at the cut, entry
+  `power4.out` from 0.35 opacity); each chapter opens under identity's flat
+  rose band sweeping right to left. Words arrive as a waterfall (binary
+  opacity, gaps shrinking ×0.84); body lines are inked left to right as they
+  are spoken; marks and seals stamp (scale down to rest, their hard shadow
+  landing). Over everything a light vignette and a film grain (six seeded
+  noise frames, each held two video frames). Rose ink only from identity's
+  tokens (accent `#e7bbc8`, accent fill `#53343f`, accent ink `#f2c5d2`,
+  frame-soft `#7b6772`); no glow on text, no neon, none of the reference
+  video's chrome (no corner brackets, timecode or chapter counter, L1078).
+
+## How it is made
+
+```
+presentation/
+├── script.mjs        # THE SOURCE: every shot in order, its kind, what it shows, its line `en` and Spanish subtitle `es`
+├── narrate.mjs       # speaks each distinct line with local Kokoro (docs/media/kokoro.py), caches narration/<key>.{opus,json}
+├── compose.mjs       # writes index.html and captions.es.json from script.mjs and the cache's seconds
+├── style.css         # the styles      ┐
+├── timeline.js       # the GSAP timeline│ inlined into index.html by compose.mjs
+├── stage.js          # the 3D seal     ┘
+├── index.html        # GENERATED: the composition (every clip timed from the lines' real lengths)
+├── captions.es.json  # GENERATED: the Spanish subtitles, one variable per line (c_<shot id>)
+├── narration/        # the cache: 34 lines, mono Opus 32 kb/s, with their text and seconds
+├── vendor -> ../vendor
+└── assets/
+    ├── fonts/*.woff  # subsets (Latin, Latin-1, 力) of the OFL fonts identity.ts names
+    ├── narration -> ../narration
+    └── screens/{features,diagrams} -> docs/assets/{features,diagrams}
+vendor/                # pinned copies, no npm install: gsap-3.15.1 (GreenSock "no charge" licence, header kept), three-0.187.0 (MIT)
+.gitignore             # the CLI's .hyperframes/ state, renders/
+```
+
+To change what is said or shown, edit `script.mjs`, then:
+
+```sh
+node docs/media/hyperframes/presentation/narrate.mjs "$(mktemp -d)"   # only when a line changed (Kokoro, about a minute for all)
+node docs/media/hyperframes/presentation/compose.mjs                   # prints the shot list with its times
+node --experimental-strip-types --test docs/media/test/presentation.test.ts
+```
+
+The test checks that the narration cache holds every line (and nothing
+else) and the composition plays each, that each proof's marks land in order
+while its screen is held, and that every line has its Spanish subtitle
+(plain text, tú, at most two rows).
+
+A shot lasts its lead-in (0.35 s after a cut, 0.7 s after a band), its line
+and a tail (0.55 s for a claim; a proof is held as above). A mark or a body
+line lands where its phrase falls in the line, by its share of the line's
+characters (Kokoro's pace is even enough; checked on the stills, not
+measured per word). Every line is true to README.md (on `main`), the
+docs or a capture's own caption; product words stay as they are in the
+Spanish subtitles (neutral Spanish, tú, no voseo). The English video shows a
+caption only where the screen does not already say the line (`capEn`: one
+shot, the hard lines' "no grant covers").
+
+## Shot list (222.5 s)
+
+| time | chapter | kind | on screen | line |
+| --- | --- | --- | --- | --- |
+| 0.0–8.0 s | intro | 3D | the 力 seal stamps on a dark wall, rose ink spreads, «Jh*on*», the kicker and the tagline line by line; the camera pushes in | Jhon. Let the agent run. Deliver only what is proven. |
+| 8.0–14.4 s | Why Jhon | head | `WHY JHON`; README's first sentence, the second line in the accent | A coding agent left alone is either asked about everything, or trusted with everything. |
+| 14.4–20.6 s | | card | Without limits: It acts *outside its task.* | Trusted, it can act outside its task: a destructive command, a write beyond its files. |
+| 20.6–27.1 s | | proof | `guard-refusal.png`: the tool call → the refusal → the engine's whole reason | Jhon's guards judge every tool call: a write outside its files is refused. |
+| 27.1–32.3 s | | card | Without evidence: It calls a change *done* | It can call a change done, with no test that failed first and passed after. |
+| 32.3–38.6 s | | proof | `executions-red-green.png`: the failing test → (the camera pans down) the passing run → its record | With Jhon, the test fails first, then passes, and both runs are on record. |
+| 38.6–42.0 s | | card | Without memory: What was decided is *gone* | And what was decided is gone with the session. |
+| 42.0–48.8 s | | proof | `ldd-status.png`: the change → its slices → the next step → tests passed | With Jhon, the change stays in view: its slices, the next step, and the last test run. |
+| 48.8–56.4 s | Two ways in | list | `jhon start` → Claude Code; `jhon start pi` → pi, with Jhon's shell | There are two ways in: jhon start opens Claude Code, and jhon start pi opens pi, with Jhon's shell. |
+| 56.4–64.2 s | | proof | `runtimes-engine.svg`: the two runtimes → the engine → the dashboard | Both runtimes call one engine: the jhon binary. The dashboard only reads what the binary serves. |
+| 64.2–71.3 s | | proof | `shell-bar.png`: project → branch → model → context → cost → jobs | In pi, the shell's bars show the project, branch, model, context, cost and jobs. |
+| 71.3–76.5 s | A repo with no LDD yet | card | Read-only work *just happens.* | In a repo with no LDD yet, read-only work just happens. |
+| 76.5–82.4 s | | proof | `ldd-question.png`: the question → the recommended choice | At the first code change, the session asks you once how to deliver and test. |
+| 82.4–88.2 s | Seven guards | card | Every tool call, *judged.* | Seven guards judge every tool call, in order, the same in both runtimes. |
+| 88.2–94.8 s | | proof | `guards-tool-call.svg`: the seven guards → refuse → ask → allow | The first refusal answers. If none, the first ask. Otherwise, the call passes. |
+| 94.8–101.1 s | LDD | card | Value reaches the default branch *in integrable, proven slices.* | With LDD, value reaches the default branch in integrable, proven slices. |
+| 101.1–108.0 s | | proof | `ldd-flow.svg`: the slice → the recorded run → RED → GREEN | Each slice: a failing test, recorded as RED. Then the code. Then the tests, green. |
+| 108.0–113.5 s | | card | Delivery: No record, *no pull request.* | The pull request opens only with RED before GREEN and a passing verify. |
+| 113.5–120.3 s | | proof | `route-refusal.png`: the refusal → `gh pr create` → the unchecked task | Under delivery: change, route-guard refuses the pull request while a task is unchecked. |
+| 120.3–125.8 s | Agents | card | One orchestrator *plans.* | One orchestrator talks with you and plans. Focused agents do the work. |
+| 125.8–131.0 s | | proof | `agents-launch-context.svg`: the launch message → decisions on record → code map | Each launch carries the decisions on record and a code map. |
+| 131.0–136.8 s | | proof | `agents-jobs.png`: the agents → the jobs → tokens and time | Sub-agents and background jobs show live, with their tokens and time. |
+| 136.8–140.7 s | In the terminal | card | `alt+k` *opens the palette.* | In pi, alt+k opens the command palette. |
+| 140.7–145.9 s | | proof | `command-palette.png`: the groups → `Browse changes · alt+c` | The shell's commands, in groups, with their shortcuts. |
+| 145.9–152.6 s | | proof | `changes.png`: the file list → the diff | Changes shows every file the session touched, and its diff, without leaving the terminal. |
+| 152.6–158.3 s | You decide | card | A mode and a grant are *yours alone.* | A mode and a grant are yours alone. An agent may read the mode, never set it. |
+| 158.3–164.2 s | | proof | `mode-grant.png`: `jhon mode` → `jhon grant push --for 30m` → the live grant | A timed grant widens one class: jhon grant push --for 30m. |
+| 164.2–170.1 s | | card | The hard lines: These *stay refused.* | Credentials, .git/, the grants and modes, and Jhon's own files stay refused. |
+| 170.1–175.3 s | | proof | `guards-tool-call.svg`: the vcs, framework and secrets rows → the safety row (English caption) | So do the destructive operations no grant covers. |
+| 175.3–181.2 s | | card | A folder that is no repo: No repo, *no mode.* | A folder that is no repo has no mode: its calls are judged as in normal mode. |
+| 181.2–191.0 s | Measured | card | `jhon audit` *reads a session.* | jhon audit reads a session afterwards, for what went wrong. It flags bypassed refusals, untested delivery and edits before RED. |
+| 191.0–196.2 s | | proof | `audit.png`: the finding → `git push origin HEAD:main` → no test run | Here, a push to main with no test run on record. |
+| 196.2–206.4 s | | numbers | *9 of 9* and *3.4×* (README's bench) | On seeded defects, the native 4R review found the same 9 of 9 as the lens agents, for about 3.4 times fewer weighted tokens. |
+| 206.4–216.1 s | Get started | list | Install → the one-line script; Set up → `jhon setup`; Check → `jhon doctor`; Start → `jhon start` | Install with the one-line script, then run jhon setup. jhon doctor runs the health checks. Then jhon start, inside your project. |
+| 216.1–222.5 s | close | | the band; the seal stamps; «Let the agent run. / Deliver only what is *proven.*»; github.com/jachavarro2004/jhon-agent | Jhon. Let the agent run. Deliver only what is proven. (the intro's audio again) |
+
+Every feature capture appears once (eleven) and every diagram at least once
+(`guards-tool-call` twice). `jhon doctor` is a list row, not a screen (it
+cannot pass truthfully in a sandbox: see Known limits).
+
+## Render
+
+Needs Node 22+ and ffmpeg. The CLI is pinned to **hyperframes 0.9.58** and run
+with `npx` from the home folder, so the repository gets no `package.json` or
+`node_modules`; its headless Chrome (chrome-headless-shell 152) lives in
+`~/.cache/hyperframes/chrome`. Telemetry and update checks are off.
+
+```sh
+P="$PWD/docs/media/hyperframes/presentation"
+O="$PWD/docs/assets/video"
+export HYPERFRAMES_NO_TELEMETRY=1 HYPERFRAMES_NO_UPDATE_CHECK=1 HYPERFRAMES_SKIP_SKILLS=1
+cd ~
+HYPERFRAMES_PLUGIN_CWD="$P" npx --yes hyperframes@0.9.58 browser ensure     # once
+# English (a long render: detached, so it survives the shell that started it)
+HYPERFRAMES_PLUGIN_CWD="$P" HYPERFRAMES_RENDER_DETACHED=1 nice -n 19 npx --yes hyperframes@0.9.58 render \
+  --quality looks --crf 32 --no-browser-gpu -o "$O/jhon-explainer.mp4"
+# Spanish subtitles
+HYPERFRAMES_PLUGIN_CWD="$P" HYPERFRAMES_RENDER_DETACHED=1 nice -n 19 npx --yes hyperframes@0.9.58 render \
+  --quality looks --crf 32 --no-browser-gpu --variables-file "$P/captions.es.json" --strict-variables -o "$O/jhon-explainer.es.mp4"
+# Stills
+mkdir -p "$O/stills"
+for s in intro:4.6 problem:13.8 refusal:26.0 status:47.5 verdicts:93.5 close:221.5; do
+  ffmpeg -v error -y -ss "${s#*:}" -i "$O/jhon-explainer.mp4" -frames:v 1 "$O/stills/${s%%:*}.png"
+done
+```
+
+The render prints `rendered in …` when it is done. To look before
+rendering: `… snapshot --at 4.6,26,47.5` (PNGs under
+`presentation/.hyperframes/`), `check --json` (lint, runtime, layout,
+contrast; it passes with structural warnings only: one file where the CLI
+prefers one sub-composition per scene) or `preview` (the Studio).
+
+**`--no-browser-gpu` makes it reproducible**: Chrome draws WebGL in software
+(SwiftShader). Pilot 1's two software renders were byte-identical, its GPU
+renders were not.
+
+**`--crf 32` keeps each file under 20 MB**: the grain and the rose light
+pools cost bitrate. Measured on a 30 s span (20–50 s): crf 28 with grain
+every frame was 0.87 Mb/s of video; crf 30 with the grain held two frames
+0.66 Mb/s; the AAC narration track is 0.145 Mb/s (stereo, 48 kHz), about
+4 MB of each file.
+
+Measured on this machine (16 threads, Intel Iris Xe, 23 GB), software path,
+6,677 frames (222.57 s; the first 8.3 s with the 3D seal, the rest DOM), 6 capture
+workers: the English video renders in about **8m 36s–9m 15s** (14,837,979
+bytes, 14.2 MB; video 0.38 Mb/s), the Spanish one in **9m 33s** (15,350,636
+bytes, 14.6 MB). Both carry the same narration (the decoded audio's MD5 is
+the same). **Two renders of the English video are byte-identical**
+(sha256 `4faee44d…6b4074`; the Spanish one was rendered once). Both files: H.264 High,
+yuv420p, 1920×1080, 30 fps; AAC LC 48 kHz stereo.
+
+## Known limits
+
+- The marks' timing follows each phrase's share of its line's characters,
+  not measured word times; a mark can land a few tenths of a second before
+  or after its word.
+- The proof screens are as large as the frame allows above the subtitle
+  band (1700×790 at most), so the widest captures (112 columns: the shell
+  bar, the two refusals, `changes`, `audit`) are set at about 23 px a text
+  cell row, and `command-palette` (22 rows) at about 23 px too: legible at
+  1080p, small on a phone.
+- `executions-red-green` is too tall for the frame: the shot shows its
+  first run and pans down to the second, rather than showing all of it at once.
+- The seam checks of `motion-doctrine` (`ledger.json`, `seam-gate.mjs`)
+  were not run; the cuts follow its parameters by hand and were checked on
+  snapshots only.
+- The ink stain's edge in the intro is value noise: up close it is soft and
+  blotchy rather than a real ink bleed (pilot 3's, unchanged).
+
+The captures' own limits (from phase A):
+
+- The engine's words in `guard-refusal`, `route-refusal`, `executions-red-green`, `mode-grant` and `audit` were printed by the real `jhon` binary in a sandbox (an invented project, ~/src/lumen) and are kept as text in `captures.ts`, its scratch path written as /home/dev and the grant's times set to the media clock; they do not change by themselves when the engine's wording does (record them again as its comment says). `executions-red-green` leaves out the lint and format checks, the candidate line and the notes (marked `…`); long lines wrap at the panel's width, as a terminal does.
+- The shell's tool card shows a refusal's reason in one row cut to the width, so the two refusal screens add the same call fed to the hook (`jhon hook … < call.json`) with its whole answer.
+- `jhon doctor` is not captured: in a sandbox it reports rendered-artifact drift and no agents rendered for Claude Code until `jhon sync` runs, and `jhon sync` builds and activates a release (it may push to a mirror), which is not run for the media; with claude, engram and codegraph absent its versions section would not read as a pass either.
+- `ldd-question`'s wording is the agent's in a real session; its choices are init.md's.
+- No capture of a Claude Code session exists (the shell has no render function for it, and the real `claude` is not run for the media): the "two ways in" proof is the runtimes diagram.

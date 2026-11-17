@@ -1,0 +1,6 @@
+{
+  "event": "CLOSE",
+  "verdict": "CLOSED",
+  "option": "keep",
+  "summary": "docket verdict on a defect record"
+}

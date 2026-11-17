@@ -1,0 +1,9 @@
+{
+  "real": true,
+  "session": "2026-11-14T04-22-50-936Z_01a1d84b-3938-77cf-875c-f1a9e0401681",
+  "runtime": "pi",
+  "pi": "1.4.0",
+  "session_format": 3,
+  "recorded": "an owner's real pi session (deepseek-v4-flash@high explore child, 2026-11-15T00:25-00:43Z), trimmed and neutralized for T123: kept the session headers, the main session's subagent launch of explore and its result, the child's meta.json, its first (launch) message, and every edit/write call of the child with its result, with their ids, timestamps, models and the explore agent identity; every prompt, file content, edit text and result text is replaced by neutral placeholder text, the project directory is /home/u/project and the change and spec paths are renamed (example-change, specs/example/area/spec.md); one user message in the main session is a placeholder added so the launch has a turn",
+  "shows": "an explore child writes its change's exploration.md, then tasks.md and a spec delta (specs/example/area/spec.md) of the same change, which its contract forbids; nothing refused it"
+}

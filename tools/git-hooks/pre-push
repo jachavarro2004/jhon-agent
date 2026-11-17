@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+#
+# Refuse a push that moves main while the whole module fails its checks.
+#
+# pre-commit checks only what a commit touches. The conformance suite
+# (go test ./test/...) runs the binary, so it depends on every engine,
+# contract, and fixture file: it runs here, once, when a push updates main,
+# with go vet and staticcheck on the whole module. Pushes of other branches
+# run nothing. A sha that already passed these checks on this machine is
+# not checked again (T112): origin and the mirror get the same sha, and a
+# re-push of it would pay the whole suite once more. The record of passed
+# shas lives in the git common dir (.git/jhon/pre-push-passed, outside the
+# work tree, shared by linked worktrees), one line per pass: <sha> <hash of
+# this hook>, so a change to the checks invalidates it. A failed run records
+# nothing. go test's cache stays on (no -count=1).
+#
+# Install (once per clone):  git config core.hooksPath tools/git-hooks
+# Bypass deliberately:       git push --no-verify
+
+set -uo pipefail
+
+repo="$(git rev-parse --show-toplevel)"
+
+[ -f "$repo/engine/cmd/jhon/main.go" ] || exit 0   # not the jhon repo; nothing to check
+
+# git gives one line per ref: <local ref> <local sha> <remote ref> <remote sha>.
+# Deleting main (a local sha of zeros) runs nothing.
+main=
+while read -r _ local_sha remote_ref _; do
+  [ "$remote_ref" = refs/heads/main ] || continue
+  case "$local_sha" in *[!0]*) main="$local_sha" ;; esac
+done
+[ -n "$main" ] || exit 0
+
+# With no common dir or no hash of this hook, nothing is skipped or recorded.
+common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+record="$common/jhon/pre-push-passed"
+checks=
+[ -n "$common" ] && checks="$(git hash-object "${BASH_SOURCE[0]}" 2>/dev/null)"
+if [ -n "$checks" ] && grep -qxF "$main $checks" "$record" 2>/dev/null; then
+  echo "pre-push: $main already passed; skipping" >&2
+  exit 0
+fi
+
+refuse() {
+  printf '%s\n' "$2" >&2
+  echo "pre-push: $1; push refused (bypass with git push --no-verify)" >&2
+  exit 1
+}
+command -v go >/dev/null 2>&1 || refuse "go not found; cannot check main" "Install go."
+cd "$repo" || exit 1
+# The tests run git in repositories of their own: git's variables for this
+# push would point them at this one.
+scrubbed() {
+  local unset=()
+  while IFS= read -r name; do unset+=(-u "$name"); done < <(compgen -e | grep '^GIT_')
+  env "${unset[@]}" "$@"
+}
+echo "pre-push: main moves; running go vet, staticcheck and the conformance suite" >&2
+out="$(go vet ./... 2>&1)" || refuse "go vet found problems" "$out"
+out="$(go tool staticcheck ./... 2>&1)" || refuse "staticcheck found problems" "$out"
+out="$(scrubbed go test -p 4 ./test/... 2>&1)" || refuse "the conformance suite (go test -p 4 ./test/...) fails" "$out"
+# Every check passed: record it. A record that cannot be written costs only a rerun.
+[ -n "$checks" ] && mkdir -p "${record%/*}" 2>/dev/null && printf '%s %s\n' "$main" "$checks" >>"$record" 2>/dev/null
+exit 0

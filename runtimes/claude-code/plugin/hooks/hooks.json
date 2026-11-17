@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook agent-hooks jhon-orchestrator --part 1"}]},
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook agent-hooks jhon-orchestrator --part 2"}]},
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook agent-hooks jhon-orchestrator --part 3"}]},
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook agent-hooks jhon-orchestrator --part 4"}]}
+    ],
+    "PreToolUse": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook agent-hooks jhon-orchestrator"}]}
+    ],
+    "PostToolUse": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook agent-hooks jhon-orchestrator"}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook agent-hooks jhon-orchestrator"}]},
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook announce-stop"}]}
+    ],
+    "SubagentStop": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook return-shape worker jd-fix-agent"}]}
+    ]
+  }
+}
