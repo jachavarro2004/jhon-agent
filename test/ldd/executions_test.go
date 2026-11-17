@@ -177,7 +177,10 @@ func TestExecutionsUnknownChange(t *testing.T) {
 		equal(t, jhonGit(t, root, "executions", "run", change).Code, 2, change)
 		equal(t, exists(filepath.Join(root, "a", "ran-a")), false, change)
 	}
-	equal(t, jhonGit(t, root, "executions", "run").Code, 2, "a change is required")
+	// T146 (L1211): with none named, the change status selects runs, named first.
+	r := jhonGit(t, root, "executions", "run")
+	equal(t, r.Code, 0, "the selected change runs", r.Out())
+	match(t, r.Stdout, `^jhon executions: change c1\b`)
 }
 
 // ── the tested revision ─────────────────────────────────────────────────────

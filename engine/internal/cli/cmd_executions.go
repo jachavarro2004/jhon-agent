@@ -28,8 +28,9 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 )
 
-// `jhon executions run <change> [--affected [<base>]] [--timeout <minutes>]
-// [--dry-run] [--json] [--root <project>]`: run every
+// `jhon executions run [<change>] [--affected [<base>]] [--timeout <minutes>]
+// [--dry-run] [--json] [--root <project>]`: with no change named, the one
+// `jhon status` selects (its first line says which); run every
 // selected project in R (the resolved projects whose testability is
 // `testable`) through `sh -c` in its directory, projects in parallel up to
 // --jobs, and record each exit code (internal/execution).
@@ -60,7 +61,7 @@ import (
 // says so in a note.
 func init() { register("executions", runExecutions) }
 
-const executionsUsage = "usage: jhon executions run <change> [--affected [<base-ref>]] [--timeout <minutes>] [--jobs <n>] [--force] [--dry-run] [--json] [--root <project>]"
+const executionsUsage = "usage: jhon executions run [<change>] [--affected [<base-ref>]] [--timeout <minutes>] [--jobs <n>] [--force] [--dry-run] [--json] [--root <project>]"
 
 var changeSep = lazyre.New(`[\\/]`)
 
@@ -72,6 +73,34 @@ func activeChange(root, change string) bool {
 	}
 	st, err := os.Stat(filepath.Join(root, execution.ChangesOf(root), change))
 	return err == nil && st.IsDir() || ldd.FolderlessChange(root) == change
+}
+
+// branchsChange is the change `jhon status` selects in root with none
+// named, and the line that says which (ok), or the refusal that says none
+// is selected and how to name one.
+func branchsChange(root string) (change, line string, ok bool) {
+	branch := ""
+	if out, err := project.ReadGitCmd(root, "branch", "--show-current").Output(); err == nil {
+		branch = strings.TrimSpace(string(out))
+	}
+	s, err := ldd.StatusOf(root, nil)
+	if err == nil && s.Change != nil {
+		where := ""
+		if branch != "" {
+			where = " (branch " + branch + ")"
+		}
+		return *s.Change, "jhon executions: change " + *s.Change + where, true
+	}
+	why := ""
+	if err != nil {
+		why = err.Error()
+	} else if len(s.Notes) > 0 {
+		why = layout.Words(root, s.Notes[0])
+	}
+	if why != "" {
+		why = " (" + why + ")"
+	}
+	return "", "jhon executions: no change named, and jhon status selects none on this branch" + why + ": name it: jhon executions run <change>", false
 }
 
 type planned struct {
@@ -213,7 +242,10 @@ func runExecutions(argv []string) (int, error) {
 			rest = append(rest, a)
 		}
 	}
-	if len(rest) != 2 || rest[0] != "run" || strings.HasPrefix(rest[1], "-") {
+	// With no change named, the run takes the change `jhon status` selects
+	// on the branch (T146, L1211), a folderless one included.
+	named := len(rest) == 2
+	if len(rest) < 1 || len(rest) > 2 || rest[0] != "run" || named && strings.HasPrefix(rest[1], "-") {
 		fmt.Fprintln(os.Stderr, executionsUsage)
 		return 2, nil
 	}
@@ -246,7 +278,24 @@ func runExecutions(argv []string) (int, error) {
 		}
 		jobs = n
 	}
-	change := rest[1]
+	var change string
+	if named {
+		change = rest[1]
+	} else {
+		selected, line, ok := branchsChange(root)
+		if !ok {
+			fmt.Fprintln(os.Stderr, line)
+			return 2, nil
+		}
+		// The first line says which change runs; with --json, stdout stays
+		// one JSON document and the line goes to stderr.
+		if json {
+			fmt.Fprintln(os.Stderr, line)
+		} else {
+			fmt.Println(line)
+		}
+		change = selected
+	}
 	// A folderless change is named by its branch (ldd.FolderlessChange), so
 	// that branch's name, slash and all, is taken as the change's name; a
 	// name the branch's change ends with is refused with the name to use.

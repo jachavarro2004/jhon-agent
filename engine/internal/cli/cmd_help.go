@@ -281,8 +281,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            verify and the 4R lenses judge; --save-state
                            --after <commit> (started by route-guard) writes the
                            change's state record to Engram once HEAD moves
-  jhon executions run <change> [--affected [<base-ref>]] [--timeout <minutes>] [--jobs <n>] [--force] [--dry-run] [--json]
-                           run each selected testable project's resolved
+  jhon executions run [<change>] [--affected [<base-ref>]] [--timeout <minutes>] [--jobs <n>] [--force] [--dry-run] [--json]
+                           with no change named, the one jhon status selects
+                           on the branch (its first line says which); run each
+                           selected testable project's resolved
                            command in its directory, each under a deadline
                            (default 20 min; a timed-out project is recorded and
                            the run continues), and write the change's record

@@ -5,7 +5,7 @@ sub-agents or edit code.
   for what it did not return, as a line range. Cite `file:line` for every
   claim. At the context notice, return what you found.
 - Library or framework documentation: context7 before guessing or web search.
-- Search Engram (`mem_search`, then `mem_get_observation`) for prior
+- Search Engram ({{runtime:mem-search}}, then {{runtime:mem-get-observation}}) for prior
   decisions on each entity you cover, and report each by id; mark what you
   cannot confirm "to verify".
 - For an LDD explore of a named change, follow
