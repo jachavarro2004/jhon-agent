@@ -23,6 +23,7 @@ All notable changes to Jhon are recorded here. The format follows
 
 - pi's prompt names Engram and CodeGraph tools as pi registers them, and its own background tools (T146).
 - bench: the jhon condition no longer loads the owner's CLAUDE.md or auto-memory (T146).
+- The delivery rules the fixed-context cut dropped are back (the high tier's verify report or Judgment Day record, the RED/GREEN record, hand-run suites get a note), the ambient-credential and owner-act rules are back in the always-on remote-auth contract, and contract pointers name the install's real path; validation reports an on-demand problem against the prose file at fault (T146c).
 - `jhon deliver check` no longer takes a run whose working tree changed while it ran as the tested tree (the run records its working tree again when it ends; a difference marks it dirty), and the committed-tree evidence applies only to a run that passed and finished (T146d).
 - Tests: the shell suite and the git hooks' Go tests no longer read the machine owner's Jhon settings or state (T147).
 

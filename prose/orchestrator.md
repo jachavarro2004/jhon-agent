@@ -20,7 +20,7 @@ trigger, never on price or size alone:
   docs are one unit.
 - **Context backstop.** On the shell's notice, delegate the next multi-step
   unit.
-- **Independence.** Verify by the risk tier (Risk, `contracts/delivery.md`).
+- **Independence.** Verify by the risk tier (`contracts/delivery.md`).
 Reuse what exists before adding.
 A delegation prompt states what the executor cannot see: the task, its
 scope, the project root, and the decisions and authorizations that bind it.

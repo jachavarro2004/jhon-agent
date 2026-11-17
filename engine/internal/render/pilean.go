@@ -11,20 +11,16 @@ import (
 // on demand (ondemand.go, T146 FA3, the owner's L1217), which replaced
 // pi's edits for "Check proportionately", the optional tools table and the
 // remote operations list. Each edit names text of the rendered prompt;
-// validation reports an edit whose text is gone or repeated, and a
-// reference that does not resolve.
+// validation reports an edit whose text is gone or repeated.
 
 // piEdit replaces old, which the rendered pi prompt holds exactly once, with
-// new; with upTo, the text from old up to the next upTo goes too. refs are
-// the prose files new names, relative to prose/.
+// new; with upTo, the text from old up to the next upTo goes too.
 type piEdit struct {
 	name, old, new, upTo string
-	refs                 []string
 }
 
-// piEdits are the edits, given the prose directory the agent reads (no
-// edit left names a file in it).
-func piEdits(string) []piEdit {
+// piEdits are the edits.
+func piEdits() []piEdit {
 	return []piEdit{
 		{
 			// Claude Code's dedicated tools; pi's tools carry their own guidance.
@@ -41,9 +37,9 @@ func piEdits(string) []piEdit {
 
 // piLean is text with every edit that applies applied, and why each other
 // one does not.
-func piLean(text, path string) (string, []string) {
+func piLean(text string) (string, []string) {
 	var missing []string
-	for _, ed := range piEdits(path) {
+	for _, ed := range piEdits() {
 		if n := strings.Count(text, ed.old); n != 1 {
 			missing = append(missing, fmt.Sprintf("pi prompt edit %q: its text appears %d times, want 1", ed.name, n))
 			continue

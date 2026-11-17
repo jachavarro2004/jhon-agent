@@ -5,10 +5,9 @@
 - No wrapper, interpreter, library, or delegate widens the authorized scope.
 - The safety guard asks before remote access; where it cannot ask, the owner
   authorizes a class for a while with `jhon grant remote` (or `push`,
-  `gh-write`, `publish`, `deploy`), given as the always-on "Runtime boundaries"
-  rule says; the
-  owner's `jhon mode yolo` lets them pass without asking until the owner
-  turns it off.
+  `gh-write`, `publish`, `deploy`), given as the always-on "Runtime
+  boundaries" rule says; the owner's `jhon mode yolo` lets them pass without
+  asking until the owner turns it off.
 - In a normal session only what truly matters asks (S33). A push to a
   branch that is not the remote's default (its HEAD, else `main` or
   `master`; the current branch when the push names none) passes, and so do
@@ -34,10 +33,8 @@
   with `by: "owner"`, and `jhon audit` reads it.
 - **Deletions the owner asks for.** A deletion that loses work or data (a
   forced branch delete or worktree removal, `reset --hard`, `clean -f`, a
-  dropped stash, a destructive Docker command, a path in the home directory
-  outside the project) runs once the owner approves it (class `destroy`).
-  A destructive Docker command
-  (`docker compose down -v`, `docker volume rm`, `prune`, `docker rm -f`), a
-  forced branch delete, a worktree removed with its changes: name each one,
-  say which keep data and which delete it, and run it once the owner
-  approves (the guard's question, or their `jhon grant destroy`).
+  dropped stash, a destructive Docker command: `docker compose down -v`,
+  `docker volume rm`, `prune`, `docker rm -f`; a path in the home directory
+  outside the project): name each one, say which keep data and which delete
+  it, and run it once the owner approves (class `destroy`: the guard's
+  question, or their `jhon grant destroy`).
