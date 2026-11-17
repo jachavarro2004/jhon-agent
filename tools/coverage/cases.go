@@ -70,7 +70,7 @@ var cases = []defectCase{
 	// top-level-tools — session memory is the top-level agent's alone, judged on the
 	// projected tool sets, whichever capability grants a tool
 	defect("top-level-tools", "agents.yaml", "agents.yaml", "mcp__engram__mem_session_summary, mcp__plugin_engram_engram__mem_session_summary, ", ""),
-	defect("top-level-tools", "agents.yaml", "agents.yaml", "caps: [read, write, bash, memory, codegraph]\n    description: \"Implement a scoped task", "caps: [read, write, bash, memory, memory-session, codegraph]\n    description: \"Implement a scoped task"),
+	defect("top-level-tools", "agents.yaml", "agents.yaml", "caps: [read, write, bash, memory, codegraph, todo, context7]\n    description: \"Implement a scoped task", "caps: [read, write, bash, memory, memory-session, codegraph, todo, context7]\n    description: \"Implement a scoped task"),
 	defect("top-level-tools", "agents.yaml", "agents.yaml", "mcp__plugin_engram_engram__mem_judge]", "mcp__plugin_engram_engram__mem_judge, mcp__plugin_engram_engram__mem_context]"),
 	defect("vocabulary", "contracts", "contracts/vocabulary.yaml", "top_level_tools: [mem_session_summary, mem_context, mem_current_project, mem_review]", "top_level_tools: []"),
 
