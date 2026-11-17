@@ -9,6 +9,7 @@
  *
  *   cd shell && node --experimental-strip-types --test test/ui-rail-cards.test.ts
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { ScrollView, visibleWidth, type TUI } from "@earendil-works/pi-tui";

@@ -6,6 +6,7 @@
  *
  *   cd shell && node --experimental-strip-types --test test/ui-primitives-rows.test.ts
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";

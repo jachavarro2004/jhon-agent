@@ -6,6 +6,7 @@
  * and text read from the theme's own file, applied with pi's setTheme (pi
  * saves it). Adding a theme is one JSON file in shell/themes/.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

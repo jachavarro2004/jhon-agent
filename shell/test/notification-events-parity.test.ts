@@ -7,6 +7,7 @@
  *
  *   node --experimental-strip-types --test test/notification-events-parity.test.ts
  */
+import "./isolated-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";

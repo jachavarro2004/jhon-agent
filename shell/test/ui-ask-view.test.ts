@@ -6,6 +6,7 @@
  * `↑↓ move · enter select · esc cancel`. A UI without ui.custom gets pi's own
  * select dialog.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";

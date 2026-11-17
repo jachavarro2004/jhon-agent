@@ -5,6 +5,7 @@
  * what the child commits there is among the session's changes. A child in the
  * session's own folder adds no root.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";

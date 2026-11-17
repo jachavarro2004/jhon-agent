@@ -7,6 +7,7 @@
  *   jhon test
  */
 
+import "./isolated-env.ts";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, chmodSync } from "node:fs";

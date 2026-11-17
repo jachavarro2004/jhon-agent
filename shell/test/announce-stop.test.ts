@@ -6,6 +6,7 @@
  * never in a child, after an abort, with the setting off, or when the check
  * fails. Every text is synthetic.
  */
+import "./isolated-env.ts";
 import { test, after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";

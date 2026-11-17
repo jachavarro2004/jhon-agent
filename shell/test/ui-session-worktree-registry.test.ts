@@ -1,3 +1,4 @@
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import childProcess, { execFileSync } from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";

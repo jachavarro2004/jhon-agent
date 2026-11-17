@@ -1,3 +1,4 @@
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SESSION_SECTION, appendSessionOnce, appendSystemPromptOnce } from "../lib/ui/append-system-prompt.ts";

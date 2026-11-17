@@ -6,9 +6,24 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-11-17
+
+### Added
+
+- `jhon executions run` with no change name runs the change the branch selects and names it first; `jhon status` prints the exact next command (T146).
+- bench: `value` gates each cell by task size (small <= 1.1x, large <= 1.25x with strictly better quality); Jhon plain runs start on a repo already set up for LDD, with the one-time set-up measured apart; tokens weighted per provider (Claude, GLM) plus cost_usd, quota apart; median (min-max); default repeats 5 small, 3 large (T146).
+
 ### Changed
 
 - The RED-before-GREEN hints (jhon status, the route guard's PR refusal, a light verify's refusal) and the LDD prose follow the inner loop: the slice base for the RED record and the slice's close, a unit's run (--affected) between (T145b).
+- A small change (no folder, one component, under the advisory size, not high risk) keeps no tasks.md, memory, session summary or todo list; `jhon deliver check` accepts the GREEN run whose recorded working tree is the commit, with no re-run (T146).
+- The fixed context drops ~31% on both runtimes (Claude Code 32879 -> 22864, pi 32661 -> 22709 bytes): delivery, delegation, remote/destructive-operation and TDD-witness rules move to contracts read on demand behind precise pointers, each pinned by validation (T146).
+
+### Fixed
+
+- pi's prompt names Engram and CodeGraph tools as pi registers them, and its own background tools (T146).
+- bench: the jhon condition no longer loads the owner's CLAUDE.md or auto-memory (T146).
+- Tests: the shell suite and the git hooks' Go tests no longer read the machine owner's Jhon settings or state (T147).
 
 ## [0.3.5] - 2026-11-17
 

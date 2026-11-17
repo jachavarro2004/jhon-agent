@@ -5,6 +5,7 @@
  *   jhon test
  */
 
+import "./isolated-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ago, estadoLines, lddFromStatus } from "../lib/ui/ldd-status.ts";

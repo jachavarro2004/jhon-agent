@@ -19,6 +19,7 @@
  * Every notice rides the tool result (the T115e/T117e channel), so the
  * system prompt stays byte-stable (L708). The main session is unaffected.
  */
+import "./isolated-env.ts";
 import { test, after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";

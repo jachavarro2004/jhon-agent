@@ -5,6 +5,7 @@
  * task_stop take any task, a standalone sleep is refused while one runs, and
  * a sub-agent gets none of it.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

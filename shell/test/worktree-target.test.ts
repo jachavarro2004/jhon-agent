@@ -5,6 +5,7 @@
  * level; another repository's folder or a plain folder is refused. Without it
  * both run in the session's folder, as before.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";

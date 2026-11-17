@@ -8,6 +8,7 @@
  *
  *   cd shell && node --experimental-strip-types --test test/ui-ascii-chrome.test.ts
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";

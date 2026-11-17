@@ -4,6 +4,7 @@
  * line and their result as `↳ ✓ <summary>`. JHON_SHELL_ASCII=1 trades the
  * icons for plain letters.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";

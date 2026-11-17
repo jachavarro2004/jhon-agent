@@ -1,3 +1,4 @@
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NotificationScheduler, type PlaybackPermit } from "../lib/ui/notification-scheduler.ts";

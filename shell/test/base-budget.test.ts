@@ -3,6 +3,7 @@
  * sections and the tool definitions the shell controls, under pinned byte
  * budgets so it cannot creep back. The orchestrator's prose is the engine's.
  */
+import "./isolated-env.ts";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";

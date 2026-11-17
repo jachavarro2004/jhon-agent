@@ -6,6 +6,7 @@
  *   node --experimental-strip-types --test shell/test/*.test.ts
  */
 
+import "./isolated-env.ts";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";

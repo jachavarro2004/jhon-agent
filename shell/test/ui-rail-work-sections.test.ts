@@ -6,6 +6,7 @@
  * for Jhon's `/jhon:agents`) for the same jobs, at 46 columns, with every role
  * painted in its own colour so a wrong role fails as surely as a wrong cell.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { agentsWorkSummary, renderShellAgentsSection, renderShellJobsSection, type RunningJobDisplay } from "../lib/ui/shell-bar.ts";

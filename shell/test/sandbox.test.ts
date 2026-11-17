@@ -4,6 +4,7 @@
  * call with its argv and folder, and runs what `sandbox run` is given; one
  * test runs the tree's own binary under real bubblewrap.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
