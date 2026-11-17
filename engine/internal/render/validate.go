@@ -559,9 +559,13 @@ func (e *engine) validate() []problem {
 				}
 			}
 		}
-		if orch := filepath.Join(e.prose, "orchestrator.md"); !strings.Contains(textOf(orch), "**Check proportionately.**") {
-			add(orch, 0, "pi-prompt", "pi's prompt sends the agent to \"Check proportionately\", which is gone")
-		}
+	}
+
+	// 31d. The contracts read on demand (ondemand.go, T146 FA3): each moved
+	// rule stays in its contract, out of the fixed context, and the
+	// orchestrator of each runtime points to it.
+	for _, m := range e.onDemandProblems() {
+		add(filepath.Join(e.root, "engine/internal/render/ondemand.go"), 0, "on-demand", m)
 	}
 
 	// 31c. Writer mode (T117b): the shell splices the writer rules over the

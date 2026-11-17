@@ -13,12 +13,21 @@ import (
 // permission prompt in headless runs, so `.claude/worktrees/agent-*` stayed).
 func TestScopeAndWorktreeCleanupProse(t *testing.T) {
 	s := flat(support.Read(t, treePath(repoRoot, "orchestrator.md")))
-	for _, w := range []string{
-		"Never migrate committed data or edit repo config the request did not name; report them.",
-		"remove each worktree (`git worktree remove <path>`), then its branch (`git branch -d <branch>`), one command each, never `&&`.",
+	// T146 FA3 (L1217): the cleanup rule is read on demand, on return.
+	d := flat(support.Read(t, treePath(repoRoot, "contracts/delegation.md")))
+	for file, ws := range map[string][]string{
+		"orchestrator.md": {"Never migrate committed data or edit repo config the request did not name; report them.",
+			"On return, read `contracts/delegation.md` before merging."},
+		"contracts/delegation.md": {"remove each worktree (`git worktree remove <path>`), then its branch (`git branch -d <branch>`), one command each, never `&&`."},
 	} {
-		if !strings.Contains(s, w) {
-			t.Errorf("orchestrator.md lacks %q", w)
+		text := s
+		if file != "orchestrator.md" {
+			text = d
+		}
+		for _, w := range ws {
+			if !strings.Contains(text, w) {
+				t.Errorf("%s lacks %q", file, w)
+			}
 		}
 	}
 }

@@ -27,7 +27,7 @@ code lives here: the engine (`engine/`) reads these files, validates them
 | `agents/<name>.md` | that sub-agent | Its body. |
 | `agents/templates/` | the engine | Bodies shared by several agents (the review lenses, the judgment-day judges), expanded per agent. |
 | `persona/jhon.md` | every main agent | How Jhon speaks to the owner. Sub-agents get a short identity line instead. |
-| `contracts/` | agents, and the engine for `vocabulary.yaml` | The rules. The always-on ones are inlined into every agent: `language`, `shell-tools`, `remote-auth`, `runtime-boundaries`, `codegraph`, `engram`, `tdd`, `archify-activation`, `routing`. The others are read when a task needs them: `ldd`, `phase-common`, `spec-delta`, `efficiency`, `judgment`, `review-4r`, `archify`. |
+| `contracts/` | agents, and the engine for `vocabulary.yaml` | The rules. Always on, inlined in every agent: `language`, `shell-tools`, `remote-auth`, `runtime-boundaries`, `codegraph`, `engram`, `tdd`, `archify-activation`, `routing`. Read on demand: `ldd`, `delivery`, `delegation`, `asked-operations`, `witness`, `spec-delta`, `efficiency`, `judgment`, `review-4r`, `archify`. |
 | `contracts/vocabulary.yaml` | the engine | The values the code reads (states, phases, record fields, audit rules), so prose and code cannot drift apart. |
 | `templates/claude-md-block.md` | the engine | The fixed text around the always-on layer; each `{{group}}` is replaced by that group's files. |
 | `skills/<name>/` | agents, through the runtime's skill loader | Skills Jhon owns: `ldd` (Leapfrog-Driven Development, with one reference per step) and `judgment-day` (two blind judges and the owner). |
