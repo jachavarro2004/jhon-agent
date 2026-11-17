@@ -10,6 +10,10 @@ All notable changes to Jhon are recorded here. The format follows
 
 - `jhon review run [--base <ref>]` runs the native 4R for Claude Code in one Bash call: each lens prompt `jhon review start` gives goes through `claude -p` (no tools, one turn, no session, no settings, the profile's Claude Code model and effort for its routing key) all at once, then the refuter and the validator, then the same `review-4r.md` record as pi's `jhon_review`; a failed call records nothing and names the `review-*` lens agents, which stay the fallback (T118d).
 
+### Changed
+
+- Each integration (Engram, CodeGraph, Context7, the Microsoft 365 connector) is described by a manifest, `integrations/<name>/manifest.yaml` (schema `jhon.integration/v1`): its MCP servers per runtime, the capabilities it grants, its setting, doctor pin and setup text. The engine reads them through `engine/internal/integrations` instead of naming them, and `jhon validate` refuses a malformed manifest naming the file and the field. Rendered output, setup and dashboard are unchanged (T58a).
+
 ### Fixed
 
 - The `validate` workflow's failures on GitHub's runners are fixed: text files check out with LF on every platform (`.gitattributes`; the CRLF fixtures stay CRLF), the Windows-portable packages' tests expect Windows paths where Windows shows them, the sandbox pass-through test uses a program of its own instead of the system `printf --help`, the cross-run executions test proves the overlap with a barrier instead of a timed race, and the Linux job is pinned to `ubuntu-24.04` (L1142).
