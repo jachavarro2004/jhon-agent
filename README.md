@@ -9,11 +9,18 @@
   An agent framework for Claude Code and pi.
 </p>
 
-<p align="center">
-  <a href="docs/assets/video/jhon-explainer.mp4">▶ Watch the presentation (3:43)</a>
-  &nbsp;·&nbsp;
-  <a href="docs/assets/video/jhon-explainer.es.mp4">Spanish subtitles</a>
-</p>
+### ▶ The presentation (3:43)
+
+https://github.com/user-attachments/assets/16898e03-5aae-4702-9ebb-6b16a648962f
+
+<details>
+<summary>With Spanish subtitles</summary>
+
+https://github.com/user-attachments/assets/cf117fce-99d9-456c-a42e-f91101aea2b7
+
+</details>
+
+Full resolution: [English](docs/assets/video/jhon-explainer.mp4) · [Spanish subtitles](docs/assets/video/jhon-explainer.es.mp4)
 
 ---
 
