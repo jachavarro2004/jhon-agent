@@ -9,6 +9,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -317,6 +318,17 @@ func OwnTestsCommand(command string, files []string, cov bool) string {
 	return out
 }
 
+// TestmonModulesCommand is a pytest-testmon command (Precise) narrowed to
+// files, test modules relative to its project: pytest collects only those,
+// and pytest-testmon keeps only their tests its record marks affected.
+func TestmonModulesCommand(precise string, files []string) string {
+	out := precise
+	for _, f := range files {
+		out += " " + shq(f)
+	}
+	return out
+}
+
 // PytestCov is whether the Python project at dir declares pytest-cov in its
 // pyproject.toml.
 func PytestCov(dir string) bool {
@@ -508,28 +520,76 @@ func testModules(root, projectPath string, fn func(rel, src string)) {
 	})
 }
 
-// sourcePaths is the fragments by which a test module of another project
-// names the changed source file f (relative to the root) of the project
-// owner: f itself, its directory relative to the root ("backend/app/routers")
-// when that has at least two segments, and its directory relative to owner
-// with a trailing slash ("app/routers/") when that has at least two. A bare
-// file name (routers.py, index.ts) or a one-segment directory (src/, app/)
-// names nothing: too many projects share them.
-func sourcePaths(f, owner string) []string {
-	out := []string{f}
-	dir := filepath.ToSlash(filepath.Dir(f))
-	if strings.Contains(dir, "/") {
-		out = append(out, dir)
+// sourceRef is a whole reference to a changed source file in a test
+// module's source (T145, L1174 E3): its path relative to the root, or, for a
+// Python module, its import path.
+type sourceRef struct {
+	s      string
+	dotted bool
+}
+
+// sourcePaths is the whole references by which a test module of another
+// project names the changed source file f (relative to the root) of the
+// project owner: f itself, and for a Python module its import path relative
+// to owner, a `src/` layout's `src.` dropped (app/routers/items.py is
+// app.routers.items), when that has at least two segments. A fragment of
+// either (a directory such as `tests/unit/` or `app/routers/`, a bare file
+// name, a package) names nothing: a comment in many projects carries one.
+func sourcePaths(f, owner string) []sourceRef {
+	f = filepath.ToSlash(f)
+	out := []sourceRef{{s: f}}
+	mod, ok := strings.CutSuffix(f, ".py")
+	if !ok || path.Base(mod) == "__init__" {
+		return out
 	}
-	if d, ok := strings.CutPrefix(dir, owner+"/"); ok && strings.Contains(d, "/") {
-		out = append(out, d+"/")
+	if owner != "" {
+		mod, ok = strings.CutPrefix(mod, owner+"/")
+		if !ok {
+			return out
+		}
+	}
+	mod = strings.TrimPrefix(mod, "src/")
+	if strings.Contains(mod, "/") && pyModule.MatchString(mod) {
+		out = append(out, sourceRef{s: strings.ReplaceAll(mod, "/", "."), dotted: true})
 	}
 	return out
 }
 
+// pyModule is a module path whose segments are Python identifiers.
+var pyModule = lazyre.New(`^[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)+$`)
+
+// in is whether src names r whole: not inside a longer name. A path may
+// follow a `/` (`../lib/app/x.py`) or a quote and is not followed by more of
+// a name (`x.pyc`); an import path is not inside a longer dotted name, but
+// for a name under it (`app.routers.items.ITEMS`).
+func (r sourceRef) in(src string) bool {
+	before := func(c byte) bool { return isNameByte(c) || c == '.' || c == '-' }
+	after := func(c byte) bool { return isNameByte(c) || c == '/' || c == '-' }
+	if r.dotted {
+		before = func(c byte) bool { return isNameByte(c) || c == '.' || c == '/' }
+		after = isNameByte
+	}
+	for i := 0; ; {
+		j := strings.Index(src[i:], r.s)
+		if j < 0 {
+			return false
+		}
+		start, end := i+j, i+j+len(r.s)
+		if (start == 0 || !before(src[start-1])) && (end == len(src) || !after(src[end])) {
+			return true
+		}
+		i = start + 1
+	}
+}
+
+// isNameByte is a letter, digit, or underscore.
+func isNameByte(c byte) bool {
+	return c == '_' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+}
+
 // SourceReaders is, for each candidate, the changed source files (keys of
 // owners, relative to the root, each mapped to its owning project) that one
-// of the candidate's test modules names by path (sourcePaths): a test that
+// of the candidate's test modules names whole (sourcePaths): a test that
 // reads another project's files (an infrastructure check over a backend's
 // routers), which no manifest dependency declares. A project's own files are
 // never counted for it. Each candidate's test modules are read once.
@@ -542,7 +602,7 @@ func SourceReaders(root string, candidates []string, owners map[string]string) m
 		files = append(files, f)
 	}
 	slices.Sort(files)
-	frags := map[string][]string{}
+	frags := map[string][]sourceRef{}
 	for _, f := range files {
 		frags[f] = sourcePaths(f, owners[f])
 	}
@@ -560,7 +620,7 @@ func SourceReaders(root string, candidates []string, owners map[string]string) m
 		read := map[string]bool{}
 		testModules(root, c, func(_, src string) {
 			for _, f := range foreign {
-				if !read[f] && slices.ContainsFunc(frags[f], func(n string) bool { return strings.Contains(src, n) }) {
+				if !read[f] && slices.ContainsFunc(frags[f], func(r sourceRef) bool { return r.in(src) }) {
 					read[f] = true
 				}
 			}
