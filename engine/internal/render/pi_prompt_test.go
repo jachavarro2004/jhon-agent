@@ -36,9 +36,13 @@ func section(t *testing.T, text, name string) string {
 	return rest[:end]
 }
 
-// T42c: pi's appended orchestrator text keeps the rules word for word, puts
-// rarely needed detail behind a reference that resolves, and states a
-// duplicated rule once; Claude Code's definition is untouched.
+// T42c: pi's appended orchestrator text keeps the rules word for word and
+// states a duplicated rule once. Rarely needed detail sits behind a
+// reference that resolves on both runtimes now: the owner's L1217 (T146
+// FA3) superseded T42c's "Claude Code keeps everything" for the text moved
+// to the contracts read on demand (ondemand.go), which
+// TestOnDemandContractsHoldTheMovedRules pins in its contract, out of both
+// runtimes' fixed context, and behind a pointer in both.
 func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 	e := engineAt(t, repo, "--validate")
 	p := pi{e}
@@ -59,25 +63,35 @@ func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 		}
 	}
 
-	// Behind references: Claude Code's tool lines, the remote list, the 4R
-	// and Judgment Day table, the --affected and CI-watch detail.
+	// Out of pi's prompt: Claude Code's tool lines; behind a pointer on both
+	// runtimes: the remote list, the 4R and Judgment Day table, the CI-watch
+	// and estimate detail.
 	for _, gone := range []string{"(Read, Grep, Glob, Edit)", "- Ambient SSH agents", "| Tool | Pays when | Where |",
 		"`gh run watch <run-id> --exit-status`", "`--dry-run` estimate"} {
 		if strings.Contains(got, gone) {
 			t.Errorf("pi's prompt still carries %q", gone)
 		}
 	}
-	prose := filepath.Join(p.current(), ProseDir)
-	for _, ref := range []string{"orchestrator.md", "contracts/remote-auth.md", "contracts/review-4r.md", "contracts/judgment.md", "contracts/ldd.md"} {
-		if !strings.Contains(got, "`"+filepath.Join(prose, ref)+"`") {
-			t.Errorf("pi's prompt does not name %s", ref)
-		}
+	for ref, pointer := range map[string]string{
+		"contracts/asked-operations.md": contractsRoot + "asked-operations.md",
+		"contracts/delivery.md":         "read `contracts/delivery.md`",
+		"contracts/review-4r.md":        "(`contracts/review-4r.md`",
+		"contracts/judgment.md":         "Judgment Day (`contracts/judgment.md`)",
+		"contracts/ldd.md":              "`contracts/ldd.md`",
+	} {
 		if !exists(filepath.Join(e.prose, ref)) {
 			t.Errorf("%s does not resolve", ref)
 		}
+		holder := got
+		if ref == "contracts/review-4r.md" || ref == "contracts/judgment.md" {
+			holder = mustReadText(filepath.Join(e.prose, "contracts/delivery.md"))
+		}
+		if !strings.Contains(flatText(holder), pointer) {
+			t.Errorf("%s is not named where it is read: want %q", ref, pointer)
+		}
 	}
-	if !strings.Contains(mustReadText(filepath.Join(e.prose, "orchestrator.md")), "**Check proportionately.**") {
-		t.Error("orchestrator.md has no \"Check proportionately\" to read")
+	if !strings.Contains(got, "**Check proportionately.**") {
+		t.Error("pi's prompt has no \"Check proportionately\"")
 	}
 
 	// Once: LDD's RED and GREEN. The LDD lead and Routing's todo lines stay
@@ -90,19 +104,26 @@ func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 			t.Errorf("%q appears %d times, want %d", phrase, n, want)
 		}
 	}
-	if len(got) >= len(full) {
-		t.Errorf("pi's prompt is %d chars, the full text %d", len(got), len(full))
+	// pi's file appends its runtime guarantees to the edited text.
+	if g := "\n\n## Runtime guarantees\n\n" + p.runtimeGuarantees("pi"); len(got) >= len(full)+len(g) {
+		t.Errorf("pi's prompt is %d chars, the full text and its guarantees %d", len(got), len(full)+len(g))
 	}
 
-	// Claude Code keeps everything.
+	// Claude Code keeps its own tool lines and the LDD lead; the text moved
+	// on demand (L1217) is in neither runtime's prompt, only its pointer.
 	for _, r := range e.renderers() {
 		if r.Runtime() != "claude-code" {
 			continue
 		}
-		cc := promptOf(t, r, filepath.Join(e.claudeAgents(), "jhon-orchestrator.md"))
-		for _, kept := range []string{"(Read, Grep, Glob, Edit)", "- Ambient SSH agents", "| Tool | Pays when | Where |", "`gh run watch <run-id> --exit-status`", "these bind.**"} {
+		cc := flatText(promptOf(t, r, filepath.Join(e.claudeAgents(), "jhon-orchestrator.md")))
+		for _, kept := range []string{"(Read, Grep, Glob, Edit)", "these bind.**", contractsRoot + "asked-operations.md", "read `contracts/delivery.md`"} {
 			if !strings.Contains(cc, kept) {
 				t.Errorf("Claude Code's orchestrator lost %q", kept)
+			}
+		}
+		for _, moved := range []string{"- Ambient SSH agents", "| Tool | Pays when | Where |", "`gh run watch <run-id> --exit-status`"} {
+			if strings.Contains(cc, moved) {
+				t.Errorf("Claude Code's orchestrator still carries %q, moved on demand", moved)
 			}
 		}
 	}
@@ -145,8 +166,8 @@ func TestOrchestratorResearchesDecisionsFirst(t *testing.T) {
 		}
 		t.Logf("%s orchestrator prompt: %d bytes", rt, len(got))
 		for _, w := range wants {
-			if w = inRuntime(rt, w); !strings.Contains(got, w) {
-				t.Errorf("%s's orchestrator does not say %q", rt, w)
+			if w = inRuntime(rt, w); !e.saysOrPointsTo(got, w) {
+				t.Errorf("%s's orchestrator does not say %q, nor point to the contract that does", rt, w)
 			}
 		}
 	}
@@ -187,11 +208,36 @@ func TestOrchestratorKeepsWorkingAndPlansLifecycle(t *testing.T) {
 		}
 		t.Logf("%s orchestrator prompt: %d bytes", rt, len(got))
 		for _, w := range wants {
-			if !strings.Contains(got, w) {
-				t.Errorf("%s's orchestrator does not say %q", rt, w)
+			if !e.saysOrPointsTo(got, w) {
+				t.Errorf("%s's orchestrator does not say %q, nor point to the contract that does", rt, w)
 			}
 		}
 	}
+}
+
+// saysOrPointsTo is whether prompt, flattened, states w, or w is a rule
+// moved on demand (T146 FA3, L1217) that its contract states and prompt
+// points to.
+func (e *engine) saysOrPointsTo(prompt, w string) bool {
+	if strings.Contains(prompt, w) {
+		return true
+	}
+	for _, c := range onDemandContracts {
+		listed := false
+		for _, r := range c.rules {
+			listed = listed || strings.Contains(r, w) || strings.Contains(w, r)
+		}
+		if !listed || !strings.Contains(flatText(mustReadText(filepath.Join(e.prose, c.file))), w) {
+			continue
+		}
+		for _, p := range c.pointers {
+			if !strings.Contains(prompt, p) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // T90 (L648, L649): every sub-agent runs in the background on both

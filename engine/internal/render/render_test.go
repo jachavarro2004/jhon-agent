@@ -260,7 +260,9 @@ func TestAnAlwaysOnRuntimeTermWithoutWordsIsAProblem(t *testing.T) {
 	delete(runtimeTerms["grant-how"], "pi")
 	defer func() { runtimeTerms["grant-how"]["pi"] = words }()
 	e := engineAt(t, repo, "--validate")
-	want := problem{"contracts/remote-auth.md", 0, "agent-template", "runtime term {{runtime:grant-how}} has no words for pi"}
+	// T146 FA3: remote-auth.md's grant line moved to a contract read on
+	// demand; runtime-boundaries.md keeps the always-on grant-how term.
+	want := problem{"contracts/runtime-boundaries.md", 0, "agent-template", "runtime term {{runtime:grant-how}} has no words for pi"}
 	if p := e.validate(); !slices.Contains(p, want) {
 		t.Errorf("want %+v among %+v", want, p)
 	}

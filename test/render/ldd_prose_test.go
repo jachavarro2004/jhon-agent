@@ -50,11 +50,15 @@ func TestLDDProseIsProportionalAndBinding(t *testing.T) {
 			"before the first behaviour-changing edit",
 			"`jhon executions run <change> --affected <base>` while it fails (RED)",
 			"Iterate with a unit's run, `jhon executions run <change> --affected`",
-			"Create tasks.md yourself when you see several rules or cases to cover or a design decision on the way.",
+			// T146 FA3 (L1217): the delivery rules are read on demand.
+			"read `contracts/delivery.md`",
 			// T64: the session says whether LDD is active; a record LDD cannot keep never stops the work.
 			"**Where the session says LDD is active, these bind.**",
-			"built in slices outlined first, each tasked after the last is delivered",
 			"When LDD's tools cannot record a run, still do the task test-first (RED, then GREEN) with the project's own test command and say the record is missing; never stop with the work undone.",
+		},
+		"contracts/delivery.md": {
+			"Create tasks.md yourself when you see several rules or cases to cover or a design decision on the way.",
+			"built in slices outlined first, each tasked after the last is delivered",
 		},
 		"skills/ldd/references/init.md": {
 			"Use the project's layout: `openspec/` when it exists, else `ldd/`.",
