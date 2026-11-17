@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -66,4 +67,28 @@ func TestRenderValidateIntegrationManifests(t *testing.T) {
 			t.Errorf("a problem in the tree's manifests:\n%s", r.Out())
 		}
 	})
+}
+
+// T58c J5 (L1193): integrations/README.md quotes, as its own line, the
+// refusal `jhon validate` prints for a manifest of another major version,
+// its pointer to the README included.
+func TestIntegrationsReadmeQuotesTheSchemaRefusal(t *testing.T) {
+	t.Parallel()
+	repo := support.CopyRepo(t)
+	editFile(t, filepath.Join(repo, "integrations", "engram", "manifest.yaml"), "schema: jhon.integration/v1", "schema: jhon.integration/v2")
+	r := validate(t, repo)
+	wantCode(t, r, 1)
+	var refusal string
+	for _, l := range strings.Split(r.Out(), "\n") {
+		if strings.Contains(l, "is another major version") {
+			refusal = strings.TrimSpace(l)
+		}
+	}
+	if refusal == "" {
+		t.Fatalf("no refusal:\n%s", r.Out())
+	}
+	readme := support.Read(t, support.Path("integrations", "README.md"))
+	if !slices.ContainsFunc(strings.Split(readme, "\n"), func(l string) bool { return strings.TrimSpace(l) == refusal }) {
+		t.Errorf("integrations/README.md does not quote, as its own line, the refusal\n%s", refusal)
+	}
 }

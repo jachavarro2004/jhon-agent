@@ -3,6 +3,7 @@ package dashboard
 import (
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
@@ -79,8 +80,11 @@ func found(bin string) bool {
 	return err == nil
 }
 
-// engramReason is engramFailure's text on one line.
+// failureText is engramFailure; a variable for the tests.
+var failureText = engramFailure
+
+// engramReason is engramFailure's text on one line: its final newline
+// dropped, a text with none kept whole (T58c, L1193).
 func engramReason(err error) string {
-	r := engramFailure(err)
-	return r[:len(r)-1]
+	return strings.TrimSuffix(failureText(err), "\n")
 }

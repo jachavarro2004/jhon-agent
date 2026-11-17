@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { integrationLine, integrationsCard } from "../app.js";
+import { integrationLine, integrationsCard, integrationsRead } from "../app.js";
 
 const row = (name, display, state, reason, numbers = null, required = false) => ({ name, display, required, state, reason, numbers });
 
@@ -43,4 +43,19 @@ test("the block never breaks: not loaded yet, or the route failing, is a line, n
   assert.match(integrationsCard([]), /No integration/);
   // A reason is text, never markup.
   assert.match(integrationsCard([row("x", "<b>X</b>", "off", "<i>why</i>")]), /&#60;i&#62;why&#60;\/i&#62;/);
+});
+
+test("a later read that fails says so, never the rows of an earlier one", () => {
+  const rows = [row("context7", "Context7", "on", "")];
+  const read = integrationsRead({ data: rows });
+  assert.deepEqual(read, { integrations: rows, integrationsError: "" });
+  const failed = integrationsRead({ error: "502: boom" });
+  assert.deepEqual(failed, { integrations: undefined, integrationsError: "502: boom" });
+  const html = integrationsCard(failed.integrations, failed.integrationsError);
+  assert.match(html, /could not read them: 502: boom/);
+  assert.doesNotMatch(html, /Context7/);
+  // Even handed the earlier rows with the error, the card says the error.
+  const stale = integrationsCard(rows, "502: boom");
+  assert.match(stale, /could not read them: 502: boom/);
+  assert.doesNotMatch(stale, /Context7/);
 });

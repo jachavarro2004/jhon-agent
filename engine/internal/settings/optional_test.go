@@ -39,3 +39,29 @@ func TestEveryManifestSettingIsAKey(t *testing.T) {
 		t.Errorf("claude_code.connfixture = %+v", v)
 	}
 }
+
+// T58c J1 (L1193): claude_code.connectors is a key, off by default, in its
+// place, whether or not a manifest names it (jhon start keeps the claude.ai
+// connectors out unless it is on).
+func TestConnectorsStayAKeyWithoutTheirManifest(t *testing.T) {
+	restore := integrations.Use(slices.DeleteFunc(slices.Clone(integrations.All()), func(m integrations.Manifest) bool { return m.Setting == Connectors }))
+	defer restore()
+	keys := Keys()
+	if i, j := slices.Index(keys, Connectors), slices.Index(keys, "integrations.theme.palette"); i != j+1 {
+		t.Errorf("%s at %d, want right after integrations.theme.palette (%d)", Connectors, i, j)
+	}
+	vals, err := Load(write(t, "schema = 1\n"), noEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := valueOf(t, vals, Connectors); v.Value != false || v.Default != false || v.Kind != "bool" {
+		t.Errorf("default %s = %+v", Connectors, v)
+	}
+	vals, err = Load(write(t, "schema = 1\n\n[claude_code]\nconnectors = true\n"), noEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := valueOf(t, vals, Connectors); v.Value != true || v.Source != SourceFile {
+		t.Errorf("%s set true = %+v", Connectors, v)
+	}
+}

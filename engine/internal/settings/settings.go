@@ -188,8 +188,13 @@ func schema() []spec {
 	// The integrations' settings in a runtime's namespace, by their
 	// manifests' order: m365's claude_code.connectors (T42a, L403), the
 	// claude.ai account connectors in a Claude Code Jhon session, off by
-	// default (jhon start keeps them out).
-	s = append(s, manifestKeys(func(m integrations.Manifest) bool { return m.Setting != "integrations."+m.Name })...)
+	// default (jhon start keeps them out). It stays a key, first and off by
+	// default, in a set where no manifest names it (T58c, L1193).
+	runtimeKeys := manifestKeys(func(m integrations.Manifest) bool { return m.Setting != "integrations."+m.Name })
+	if !slices.ContainsFunc(runtimeKeys, func(k spec) bool { return k.key == Connectors }) {
+		runtimeKeys = append([]spec{{key: Connectors, kind: kBool, def: false}}, runtimeKeys...)
+	}
+	s = append(s, runtimeKeys...)
 	s = append(s, []spec{
 		// T135 (L1055): in both runtimes, a main session's turn that ends with a
 		// reply announcing an action of its own, undone, is sent back once to
@@ -248,6 +253,12 @@ func schema() []spec {
 	}
 	return s
 }
+
+// Connectors is the switch of the claude.ai account connectors in a Claude
+// Code Jhon session (T42a, L403): m365's manifest setting, and a key
+// whether or not a manifest names it, since jhon start keeps the
+// connectors out unless it is on (T58c, L1193).
+const Connectors = "claude_code.connectors"
 
 // manifestKeys are the boolean keys of the manifests which, by Order, a
 // required one taking only true.
