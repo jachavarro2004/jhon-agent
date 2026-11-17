@@ -20,6 +20,8 @@ All notable changes to Jhon are recorded here. The format follows
 ### Fixed
 
 - jhon executions run: a wide run of a project with a usable pytest-testmon record runs the touched test modules narrowed by testmon (a module the record does not hold still runs whole, and the reason says which); another project is selected only when its tests name a changed file's whole path or import path, never a loose fragment; help, docs/ldd.md and the apply prose say intermediate passes are a unit's run (bare --affected), the slice base only for the RED record and the slice's close (T145).
+- jhon executions run: a wide run's whole-module part and its pytest-testmon part both run even when the first fails, and the step exits with the worse status; a touched executions_always module is never narrowed by testmon; a JS/TS test importing another project's file by its path without the extension selects that project again; an unreadable testmon record is reported as such (T145c).
+- jhon start keeps the claude.ai connectors out unless claude_code.connectors is on, even with no launch-off integration manifest; doctor's context7 row names its agents when the judged tree's agents.yaml cannot be read; /api/integrations never panics on a failure text, and Home says "could not read them: <why>" instead of keeping rows from an earlier read; integrations/README.md quotes the schema refusal exactly (T58c).
 
 ## [0.3.4] - 2026-11-17
 

@@ -51,3 +51,22 @@ func TestAnExtraLaunchOffIntegrationTurnsOffByItsManifest(t *testing.T) {
 		t.Errorf("every launch-off integration on: %q", got)
 	}
 }
+
+// T58c J1 (L1193): connectorsEnv fails closed. A set with no when_off:
+// launch manifest still keeps the claude.ai connectors out unless
+// claude_code.connectors is on, and claude_code.connectors stays a key.
+func TestConnectorsStayOutWithNoLaunchOffManifest(t *testing.T) {
+	t.Cleanup(integrations.Use(slices.DeleteFunc(slices.Clone(integrations.All()), func(m integrations.Manifest) bool { return m.WhenOff == "launch" })))
+	if n := len(integrations.OffAt("launch")); n != 0 {
+		t.Fatalf("the set still has %d launch-off manifest(s)", n)
+	}
+	if got := connectorsSwitch(t, "schema = 1\n"); got != "ENABLE_CLAUDEAI_MCP_SERVERS=false" {
+		t.Errorf("default: %q", got)
+	}
+	if got := connectorsSwitch(t, "schema = 1\n\n[claude_code]\nconnectors = false\n"); got != "ENABLE_CLAUDEAI_MCP_SERVERS=false" {
+		t.Errorf("connectors off: %q", got)
+	}
+	if got := connectorsSwitch(t, "schema = 1\n\n[claude_code]\nconnectors = true\n"); got != "" {
+		t.Errorf("connectors on: %q", got)
+	}
+}

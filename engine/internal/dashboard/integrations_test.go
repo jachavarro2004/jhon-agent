@@ -100,3 +100,34 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+// T58c J3 (L1193): Engram's reason is its failure text on one line, whatever
+// that text is: an empty one or one with no newline neither panics nor
+// fails the route.
+func TestIntegrationsEngramReasonOfAnyFailureText(t *testing.T) {
+	engramStats(t, 500)
+	saved := failureText
+	t.Cleanup(func() { failureText = saved })
+	for text, reason := range map[string]string{"": "", "boom": "boom", "boom\n": "boom"} {
+		failureText = func(error) string { return text }
+		r, _ := integrationsAt(t, "schema = 1\n", map[string]bool{"engram": true, "codegraph": true}, nil, "/api/integrations")
+		want := `{"name":"engram","display":"Engram","required":true,"state":"unavailable","reason":"` + reason + `","numbers":null}`
+		if r.status != 200 || !contains(r.body, want) {
+			t.Errorf("failure text %q: %d %s\nwant %s", text, r.status, r.body, want)
+		}
+	}
+}
+
+// T58c J5 (L1193): settings that cannot be read leave every optional
+// integration off, saying so, and the required ones as they are.
+func TestIntegrationsUnreadableSettingsTurnTheOptionalOnesOff(t *testing.T) {
+	engramStats(t, 200)
+	r, asked := integrationsAt(t, "schema = 1\n\n[integrations\n", map[string]bool{"engram": true, "codegraph": true}, nil, "/api/integrations?probe=1")
+	want := `[{"name":"engram","display":"Engram","required":true,"state":"on","reason":"","numbers":{"observations":12}},` +
+		`{"name":"codegraph","display":"CodeGraph","required":true,"state":"on","reason":"","numbers":null},` +
+		`{"name":"context7","display":"Context7","required":false,"state":"off","reason":"the settings cannot be read, so it is off","numbers":null},` +
+		`{"name":"m365","display":"Microsoft 365","required":false,"state":"off","reason":"the settings cannot be read, so it is off","numbers":null}]`
+	if r.status != 200 || r.body != want || asked != 0 {
+		t.Errorf("asked %d, %d\n got %s\nwant %s", asked, r.status, r.body, want)
+	}
+}

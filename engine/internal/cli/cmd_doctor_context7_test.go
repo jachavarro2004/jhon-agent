@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -127,5 +128,39 @@ func TestDoctorRemoteRowsFollowTheManifests(t *testing.T) {
 	doctor{o: o, src: repoRoot(t)}.remoteProbed(true)
 	if want := "  context7 is off (integrations.context7 = false)\n  ok    docsfixture answers at https://docs.example.invalid/mcp\n"; b.String() != want || asked != 1 {
 		t.Errorf("asked %d\n got %q\nwant %q", asked, b.String(), want)
+	}
+}
+
+// T58c J2 (L1193): the plain row names the agents holding context7's
+// capability, exactly as before T58b, whatever tree doctor judges: a
+// checkout, an installed release (its archived tree), none (an empty src),
+// or one whose prose/agents.yaml cannot be read.
+func TestDoctorContext7NamesItsAgentsWhateverTheTree(t *testing.T) {
+	installed := t.TempDir()
+	must(t, os.MkdirAll(filepath.Join(installed, "prose"), 0o755))
+	agents, err := os.ReadFile(filepath.Join(repoRoot(t), "prose", "agents.yaml"))
+	must(t, err)
+	must(t, os.WriteFile(filepath.Join(installed, "prose", "agents.yaml"), agents, 0o644))
+	path := filepath.Join(t.TempDir(), "settings.toml")
+	t.Setenv("JHON_SETTINGS", path)
+	want := "  context7 is the hosted https://mcp.context7.com/mcp, for explore and worker: nothing installed or pinned; run 'jhon doctor --remote' to ask whether it answers\n"
+	for name, src := range map[string]string{"a checkout": repoRoot(t), "an installed release": installed, "no source": "", "unreadable agents": t.TempDir()} {
+		var b strings.Builder
+		o := &release.Out{W: &b, E: &b}
+		doctor{o: o, src: src}.remoteProbed(false)
+		if b.String() != want || o.Failed != 0 {
+			t.Errorf("%s: %d failed\n got %q\nwant %q", name, o.Failed, b.String(), want)
+		}
+	}
+}
+
+// T58c J2 (L1193): the shipped holders doctor falls back to are the
+// checkout's own, capability by capability.
+func TestDoctorShippedHoldersAreTheCheckouts(t *testing.T) {
+	for c, want := range shippedHolders {
+		got, ok := holders(repoRoot(t), []string{c})
+		if !ok || !slices.Equal(got, want) {
+			t.Errorf("%s: the checkout's agents.yaml has %v (read %v); shippedHolders has %v", c, got, ok, want)
+		}
 	}
 }

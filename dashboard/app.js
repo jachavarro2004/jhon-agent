@@ -299,10 +299,16 @@ export function integrationLine(r) {
   return { name: String((r && (r.display || r.name)) ?? "-"), state: String((r && r.state) || "off"), reason: String((r && r.reason) || ""), numbers };
 }
 
-/** Home's Integrations block (T58b): each integration's state, reason and numbers. Not loaded yet, or the route failing, is a line in the card, never an error panel. */
+/** What one read of /api/integrations leaves for Home: its rows, or, when it failed, why and no rows, so a failed read never shows an earlier one's (T58c). */
+export function integrationsRead(got) {
+  return got && got.error ? { integrations: undefined, integrationsError: String(got.error) } : { integrations: got && got.data, integrationsError: "" };
+}
+
+/** Home's Integrations block (T58b): each integration's state, reason and numbers. Not loaded yet, or the route failing, is a line in the card, never an error panel; a failed read says so even beside rows an earlier read gave (T58c). */
 export function integrationsCard(list, error = "") {
   let body;
-  if (!Array.isArray(list)) body = `<p class="muted">${error ? `could not read them: ${esc(error)}` : "Reading the integrations…"}</p>`;
+  if (error) body = `<p class="muted">could not read them: ${esc(error)}</p>`;
+  else if (!Array.isArray(list)) body = '<p class="muted">Reading the integrations…</p>';
   else if (!list.length) body = '<p class="muted">No integration.</p>';
   else body = `<ul class="clist">${list.map((r) => { const l = integrationLine(r); return `<li data-state="${esc(l.state)}"><b>${esc(l.name)} · ${esc(l.state)}</b><span>${l.reason ? esc(l.reason) + " · " : ""}${esc(l.numbers)}</span></li>`; }).join("")}</ul>`;
   return `<section class="card" aria-labelledby="i-h"><div class="ch"><h2 id="i-h">Integrations</h2></div><div class="cb">${body}</div></section>`;
@@ -1243,9 +1249,7 @@ async function loadTelemetry() {
 async function loadIntegrations() {
   if (state.integrationsAt && Date.now() - state.integrationsAt < 60000) return;
   state.integrationsAt = Date.now();
-  const got = await loadJSON("/api/integrations");
-  if (got.error) state.integrationsError = got.error;
-  else { state.integrations = got.data; state.integrationsError = ""; }
+  Object.assign(state, integrationsRead(await loadJSON("/api/integrations")));
   if (!location.hash || location.hash === "#" || location.hash === "#/") renderHome();
 }
 
