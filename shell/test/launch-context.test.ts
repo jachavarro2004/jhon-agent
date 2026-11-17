@@ -9,6 +9,7 @@
  * Fakes only: a fake `jhon` (JHON_BIN), a fake `codegraph` first on PATH, a
  * fake pi (JHON_PI_BIN) that records what it was given.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";

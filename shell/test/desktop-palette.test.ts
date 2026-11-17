@@ -10,6 +10,7 @@
  *   jhon test
  */
 
+import "./isolated-env.ts";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

@@ -5,6 +5,7 @@
  *
  *   jhon test
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { JhonPanel, jhonPanelKey, modelText, type ProfilesData } from "../lib/ui/jhon-panel.ts";

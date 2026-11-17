@@ -5,6 +5,7 @@
  * alone (no card, no rail, nothing in the parent's list) and a child's
  * bounded task gets no start rule and no nudge.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";

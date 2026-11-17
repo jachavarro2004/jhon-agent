@@ -1,3 +1,4 @@
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { stallContinueText, stallNotice, stallThreshold } from "../lib/ui/stall-recovery.ts";

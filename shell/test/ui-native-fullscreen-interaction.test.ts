@@ -1,3 +1,4 @@
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 import { Container, MouseRegion, type TuiMouseEvent, SelectList, Text } from "@earendil-works/pi-tui";

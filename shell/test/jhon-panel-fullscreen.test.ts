@@ -7,6 +7,7 @@
  * G's dim key hints joined by two spaces and two feedback rows, blank rows
  * filling the rest. /jhon:grants stays the small card, as Customize.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";

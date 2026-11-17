@@ -50,11 +50,18 @@ refuse() {
 command -v go >/dev/null 2>&1 || refuse "go not found; cannot check main" "Install go."
 cd "$repo" || exit 1
 # The tests run git in repositories of their own: git's variables for this
-# push would point them at this one.
+# push would point them at this one. Nor do they read the owner's Jhon
+# settings or state (T147): JHON_SETTINGS names an empty file and
+# XDG_STATE_HOME (grants, modes) a directory, both scratch, and no variable
+# that overrides a setting or pins a sandbox is kept. XDG_CACHE_HOME stays:
+# it holds go's build cache.
+isolated="$(mktemp -d "${TMPDIR:-/tmp}/jhon-hook-env.XXXXXX")" || refuse "no scratch directory for the tests" "mktemp -d failed"
+trap 'rm -rf "$isolated"' EXIT
+{ : >"$isolated/settings.toml" && mkdir "$isolated/state"; } || refuse "no scratch settings for the tests" "$isolated"
 scrubbed() {
   local unset=()
-  while IFS= read -r name; do unset+=(-u "$name"); done < <(compgen -e | grep '^GIT_')
-  env "${unset[@]}" "$@"
+  while IFS= read -r name; do unset+=(-u "$name"); done < <(compgen -e | grep -E '^(GIT_|JHON_SHELL_)|^(JHON_TELEMETRY|JHON_SANDBOX_PROJECT)$')
+  env "${unset[@]}" JHON_SETTINGS="$isolated/settings.toml" XDG_STATE_HOME="$isolated/state" "$@"
 }
 echo "pre-push: main moves; running go vet, staticcheck and the conformance suite" >&2
 out="$(go vet ./... 2>&1)" || refuse "go vet found problems" "$out"

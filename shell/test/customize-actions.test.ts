@@ -5,6 +5,7 @@
  * and nothing else; Keys ends with Reload now, which reloads pi so changed
  * keys apply without a restart. An action row is never edited in place.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SETTINGS_DEFAULTS } from "../lib/settings.ts";

@@ -5,6 +5,7 @@
 // callers of the wrappers that prepend part of the argv. A call is named by
 // its leading literal words; a row by the words before its first
 // placeholder (`<…>`, `[…]`).
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";

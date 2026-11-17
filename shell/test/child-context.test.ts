@@ -8,6 +8,7 @@
  *   node --experimental-strip-types --test shell/test/child-context.test.ts
  */
 
+import "./isolated-env.ts";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";

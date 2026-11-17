@@ -4,6 +4,7 @@
  * (completed or failed), reported through onSettled; a stop cancels it and
  * reports nothing, as it does for a command.
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTaskRegistry, type AgentRun, type TaskRecord } from "../lib/background-tasks.ts";

@@ -8,6 +8,7 @@
  *   jhon test
  */
 
+import "./isolated-env.ts";
 import { test, after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -789,7 +790,7 @@ test("the owner's yes is always on record: once, in the session; for 30 minutes,
   const dir = agentDir();
   const bin = join(dir, "jhon-fake");
   const log = join(dir, "grant.log");
-  writeFileSync(bin, `#!/bin/sh\nif [ "$1" = grant ]; then echo "$*" >> '${log}'; echo granted; exit 0; fi\nexec jhon "$@"\n`);
+  writeFileSync(bin, `#!/bin/sh\nif [ "$1" = grant ]; then echo "$*" >> '${log}'; echo granted; exit 0; fi\nexec '${HOOK_BIN}' "$@"\n`);
   chmodSync(bin, 0o755);
   const entries: [string, any][] = [];
   const call = loadedWith(dir, { PI_CODING_AGENT_DIR: dir, JHON_BIN: bin }, { appendEntry: (type: string, data: unknown) => entries.push([type, data]) }).handlers.get("tool_call")!;

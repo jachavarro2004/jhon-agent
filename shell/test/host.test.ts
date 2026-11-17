@@ -1,3 +1,4 @@
+import "./isolated-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { HOST_EVENT, HOST_QUERY_EVENT, askHosts, forgetHosts, hostAlerts, hostShowsPath, listenForHosts } from "../lib/host.ts";

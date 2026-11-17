@@ -3,6 +3,7 @@
  * the window (shell.behaviour.fresh_session_at) or an absolute token budget
  * (shell.behaviour.fresh_session_tokens, 150000 by default; 0 turns it off).
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { installShellSettings, SETTINGS_DEFAULTS, shellSettings } from "../lib/settings.ts";

@@ -1,3 +1,4 @@
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MainNotificationRun, isNotificationSourceEvent, subagentNotificationEvent, NOTIFICATION_SOURCE_EVENT } from "../lib/ui/notification-events.ts";

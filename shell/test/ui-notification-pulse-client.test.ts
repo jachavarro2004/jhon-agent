@@ -1,3 +1,4 @@
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import { lstat, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";

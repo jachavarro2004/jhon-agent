@@ -5,6 +5,7 @@
  * plain sections with one dim line of keys under them. It is the only style
  * (L76: float and neon are gone).
  */
+import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";

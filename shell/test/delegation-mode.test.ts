@@ -7,6 +7,7 @@
  * `jhon profile use`; test/session-profile.test.ts covers the rest of `u`).
  */
 
+import "./isolated-env.ts";
 import { test, after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
