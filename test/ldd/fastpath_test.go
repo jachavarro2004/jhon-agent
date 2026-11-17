@@ -244,3 +244,37 @@ func TestSmallChangeRefusesFailedPartialAndOldRuns(t *testing.T) {
 	old := edited("old", func(r map[string]any) { delete(r, "working_tree") })
 	refused(t, old, `^the last test run started on a working tree that was not clean`, "old")
 }
+
+// T146e (L1228-L1229): a record an earlier binary wrote (0.3.1-0.3.5) keeps
+// working_tree but not after_working_tree, so it cannot show its working tree
+// unchanged to its end: never the committed tree's evidence. The refusal
+// names the run that writes a record which can.
+func TestSmallChangeRefusesARecordWithNoAfterWorkingTree(t *testing.T) {
+	t.Parallel()
+	root := smallRepo(t)
+	equal(t, jhonGit(t, root, "executions", "run", smallChange, "--affected", "main").Code, 0, "GREEN")
+	commit(t, root, "small fix")
+	rec := object(t, support.Read(t, filepath.Join(root, smallRecord)))
+	equal(t, rec["after_working_tree"], rec["working_tree"], "the record names both")
+	delete(rec, "after_working_tree")
+	b, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.Write(t, root, map[string]string{smallRecord: string(b)})
+	refused(t, root, `^the last test run recorded no working tree at its end.*run the tests again, `+
+		regexp.QuoteMeta("`jhon executions run "+smallChange+" --affected <base>`"))
+}
+
+// A unit's run (`--affected` with no base) on the uncommitted tree, then
+// committed: refused as a unit's, and with no evidence note.
+func TestSmallChangeUnitRunGivesNoEvidenceNote(t *testing.T) {
+	t.Parallel()
+	root := smallRepo(t)
+	equal(t, jhonGit(t, root, "executions", "run", smallChange, "--affected", "main").Code, 0, "GREEN")
+	support.Write(t, root, map[string]string{"extra.txt": "x\n"})
+	equal(t, jhonGit(t, root, "executions", "run", smallChange, "--affected").Code, 0, "unit")
+	equal(t, object(t, support.Read(t, filepath.Join(root, smallRecord)))["unit"], true, "a unit's record")
+	commit(t, root, "small fix")
+	refused(t, root, `^the last test run was a unit's`)
+}

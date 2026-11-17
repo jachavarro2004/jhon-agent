@@ -149,6 +149,7 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 	if run == nil {
 		reasons = append(reasons, fmt.Sprintf("no recorded test run: run jhon executions run %s (%s)", change, execution.RecordShown(root, change)))
 	} else {
+		before := len(reasons)
 		if !run.Complete {
 			reasons = append(reasons, "the last test run did not finish: its record is partial")
 		} else if !run.Passed {
@@ -181,13 +182,18 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 		// that tree is committed, HEAD is the tested revision, and the run
 		// that recorded GREEN is the delivery evidence, with no re-run (T146).
 		// Only a run that passed, finished, and saw its working tree unchanged
-		// to its end (not Dirty) is that evidence (T146d).
+		// to its end (not Dirty, and after_working_tree equal to
+		// working_tree) is that evidence (T146d, T146e): a record an earlier
+		// binary wrote has no after_working_tree and is refused.
 		committed := false
-		if run.Passed && run.Complete && !run.Clean && !run.Dirty && now.Clean == true && isSha(run.WorkingTree) && isSha(now.Tree) {
+		evidence := run.Passed && run.Complete && !run.Clean && !run.Dirty && isSha(run.WorkingTree)
+		if evidence && !isSha(run.AfterWorkingTree) {
+			reasons = append(reasons, fmt.Sprintf("the last test run recorded no working tree at its end (an earlier jhon wrote its record), so it cannot show the tree it tested unchanged: run the tests again, `jhon executions run %s --affected <base>`, then `jhon deliver check`", change))
+		}
+		if evidence && run.AfterWorkingTree == run.WorkingTree && now.Clean == true && isSha(now.Tree) {
 			if outside, ok := outsideRecord(run.WorkingTree, now.Tree); ok && len(outside) == 0 {
 				committed = true
 				run.Tree = run.WorkingTree
-				notes = append(notes, "the last test run tested this tree before its commit: its run is the delivery evidence, with no re-run")
 			}
 		}
 		if !run.Clean && !committed {
@@ -208,6 +214,10 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 		// change. One of nothing has the full run named above, not this.
 		if run.Unit && !run.Empty() {
 			reasons = append(reasons, fmt.Sprintf("the last test run was a unit's (`--affected` with no base), which runs only what changed since the change's last passing run: run `jhon executions run %s --affected <base>` for the whole change, then `jhon deliver check`", change))
+		}
+		// The note is for a run delivery accepts: none refused it (T146e).
+		if committed && len(reasons) == before {
+			notes = append(notes, "the last test run tested this tree before its commit: its run is the delivery evidence, with no re-run")
 		}
 		if run.Scope != execution.Full {
 			notes = append(notes, fmt.Sprintf("the last test run had scope %s: only the affected projects ran", run.Scope))
