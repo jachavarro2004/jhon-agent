@@ -103,7 +103,9 @@ func TestLoadRefusesMalformed(t *testing.T) {
 		{"a missing field", map[string]string{"alpha/manifest.yaml": strings.Replace(good, "display: Alpha\n", "", 1)},
 			"integrations/alpha/manifest.yaml: display: missing"},
 		{"an unknown schema", map[string]string{"alpha/manifest.yaml": strings.Replace(good, "jhon.integration/v1", "jhon.integration/v9", 1)},
-			"integrations/alpha/manifest.yaml: schema: jhon.integration/v9 is not jhon.integration/v1"},
+			"integrations/alpha/manifest.yaml: schema: jhon.integration/v9 is another major version; this binary reads jhon.integration/v1 (integrations/README.md)"},
+		{"a schema not of the form", map[string]string{"alpha/manifest.yaml": strings.Replace(good, "jhon.integration/v1", "jhon.integration/1.1", 1)},
+			"integrations/alpha/manifest.yaml: schema: jhon.integration/1.1 is not jhon.integration/v<N>; this binary reads jhon.integration/v1"},
 		{"a missing schema", map[string]string{"alpha/manifest.yaml": strings.Replace(good, "schema: jhon.integration/v1\n", "", 1)},
 			"integrations/alpha/manifest.yaml: schema: missing"},
 		{"a duplicate name", map[string]string{"alpha/manifest.yaml": good, "beta/manifest.yaml": strings.Replace(other, "name: beta", "name: alpha", 1)},
@@ -149,5 +151,45 @@ func TestLoadRefusesMalformed(t *testing.T) {
 func TestLoadRefusesNoManifests(t *testing.T) {
 	if _, probs := Load(fstest.MapFS{}); len(probs) != 1 || probs[0].String() != "integrations: no integrations/<name>/manifest.yaml" {
 		t.Fatalf("%v", probs)
+	}
+}
+
+// T58b O1 (L1167): an optional integration is one its setting can turn
+// off, whatever its when_off; OffAt splits them by the stage that acts, and
+// RemoteProbed are those doctor asks over the network. A test's set (Use)
+// is read by every lookup until restored.
+func TestOptionalByTheirManifests(t *testing.T) {
+	names := func(ms []Manifest) []string {
+		var out []string
+		for _, m := range ms {
+			out = append(out, m.Name)
+		}
+		return out
+	}
+	for _, c := range []struct {
+		what string
+		got  []Manifest
+		want []string
+	}{
+		{"Optional", Optional(), []string{"context7", "m365"}},
+		{"OffAt(render)", OffAt("render"), []string{"context7"}},
+		{"OffAt(launch)", OffAt("launch"), []string{"m365"}},
+		{"RemoteProbed", RemoteProbed(), []string{"context7"}},
+	} {
+		if !slices.Equal(names(c.got), c.want) {
+			t.Errorf("%s = %v, want %v", c.what, names(c.got), c.want)
+		}
+	}
+	extra := Manifest{Name: "zeta", Order: 9, Setting: "integrations.zeta", WhenOff: "render", Capabilities: []string{"zeta"}}
+	restore := Use(append(All(), extra))
+	if got := names(OffAt("render")); !slices.Equal(got, []string{"context7", "zeta"}) {
+		t.Errorf("with a fixture set, OffAt(render) = %v", got)
+	}
+	if m, ok := ByCapability("zeta"); !ok || m.Name != "zeta" {
+		t.Errorf("with a fixture set, ByCapability(zeta) = %+v %v", m, ok)
+	}
+	restore()
+	if _, ok := Get("zeta"); ok {
+		t.Error("restore left the fixture set")
 	}
 }

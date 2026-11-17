@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
@@ -92,8 +93,12 @@ func testsToJudge(agent, cwd string, within time.Duration) string {
 // launchHandoff is the handoff packet the decisions come from; a test may replace it.
 var launchHandoff = ldd.LaunchHandoff
 
-// codegraphProgram is the CodeGraph the code map runs, found on PATH.
-var codegraphProgram = "codegraph"
+// codegraphProgram is the CodeGraph the code map runs, found on PATH: its
+// manifest's doctor.binary.
+var codegraphProgram = func() string {
+	m, _ := integrations.Get(integrations.CodeGraph)
+	return m.Doctor.Binary
+}()
 
 // oneLine is s on one line, whitespace collapsed, cut to max characters with an ellipsis.
 func oneLine(s string, max int) string {

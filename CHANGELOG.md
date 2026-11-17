@@ -6,6 +6,17 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-11-17
+
+### Added
+
+- Dashboard: `/api/integrations` and Home's Integrations block show each integration on, off or unavailable with its reason; an off or unreachable one never breaks the page (T58b).
+
+### Changed
+
+- Optional integrations turn on and off from their manifests alone: render, settings, setup, doctor, launch and the dashboard read `required`, `when_off` and the setting; Engram and CodeGraph stay required (T58b).
+- `jhon validate` refuses a manifest of another major schema version, naming the file, `schema` and the version it reads; integrations/README.md states the schema version policy (T58b).
+
 ### Fixed
 
 - jhon executions run: a wide run of a project with a usable pytest-testmon record runs the touched test modules narrowed by testmon (a module the record does not hold still runs whole, and the reason says which); another project is selected only when its tests name a changed file's whole path or import path, never a loose fragment; help, docs/ldd.md and the apply prose say intermediate passes are a unit's run (bare --affected), the slice base only for the RED record and the slice's close (T145).

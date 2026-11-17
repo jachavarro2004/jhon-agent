@@ -140,7 +140,7 @@ func render(vals []Mapped) string {
 	for _, m := range vals {
 		byKey[m.Key] = m.Value
 	}
-	for _, s := range schema {
+	for _, s := range schema() {
 		if v, ok := byKey[s.key]; ok {
 			emit(s.key, v)
 		}

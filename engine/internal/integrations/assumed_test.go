@@ -55,7 +55,7 @@ func TestEmbeddedHasNoProblems(t *testing.T) {
 }
 
 // F4 (L1159): what the engine still assumes of the set, by name (setup's
-// locked rows and pins, doctor's remote probe), is checked: a set that
+// locked rows and pins), is checked: a set that
 // breaks it is refused naming the file and the field, never a panic.
 func TestAssumedRefusesAReshapedSet(t *testing.T) {
 	const cg, c7, en, cn = "codegraph/manifest.yaml", "context7/manifest.yaml", "engram/manifest.yaml", "m365/manifest.yaml"
@@ -72,10 +72,6 @@ func TestAssumedRefusesAReshapedSet(t *testing.T) {
 			"integrations/codegraph/manifest.yaml: doctor.version: missing; setup installs codegraph's binary at it"},
 		{"a third required integration", [][3]string{{cn, "required: false\nwhen_off: launch", "required: true\nwhen_off: refused"}},
 			"integrations/m365/manifest.yaml: required: setup shows a locked row only for engram and codegraph"},
-		{"the remote integration gone", [][3]string{{c7, "", ""}},
-			"integrations/context7/manifest.yaml: name: no manifest is named context7; doctor and the render read its url and setting by name"},
-		{"the remote integration probed locally", [][3]string{{c7, "  probe: remote", "  probe: --version"}},
-			"integrations/context7/manifest.yaml: doctor.probe: --version is not remote; doctor probes context7 at doctor.url"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			var got []string
@@ -98,5 +94,17 @@ func TestAssumedRefusesAReshapedSet(t *testing.T) {
 	ms, probs := Load(embeddedEdited(t))
 	if a := Assumed(ms); len(probs) > 0 || len(a) > 0 {
 		t.Errorf("the compiled-in set: %v %v", probs, a)
+	}
+	// T58b O1 (L1167): nothing reads an optional integration by name, so a
+	// set without one, or with it probed locally, is no problem of shape.
+	for name, edits := range map[string][][3]string{
+		"context7 gone":           {{c7, "", ""}},
+		"m365 gone":               {{cn, "", ""}},
+		"context7 probed locally": {{c7, "  probe: remote", "  probe: --version"}},
+	} {
+		ms, _ := Load(embeddedEdited(t, edits...))
+		if a := Assumed(ms); len(a) > 0 {
+			t.Errorf("%s: %v", name, a)
+		}
 	}
 }

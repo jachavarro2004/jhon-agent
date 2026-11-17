@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 )
 
@@ -196,9 +197,9 @@ func BytesSource(u ToolUse) string {
 	}
 	if server, ok := mcpServer(u.Name); ok {
 		switch {
-		case strings.Contains(server, "codegraph"):
+		case strings.Contains(server, integrations.CodeGraph):
 			return "codegraph_bytes"
-		case strings.Contains(server, "engram"):
+		case strings.Contains(server, integrations.Engram):
 			return "engram_bytes"
 		}
 		return "other_bytes"
@@ -206,7 +207,7 @@ func BytesSource(u ToolUse) string {
 	if c, ok := strProp(u.Input, "command"); ok && u.Name == "Bash" {
 		invs := plain(c)
 		switch {
-		case slices.ContainsFunc(invs, func(i Invocation) bool { return i.Program == "codegraph" }):
+		case slices.ContainsFunc(invs, func(i Invocation) bool { return i.Program == codegraphBinary() }):
 			return "codegraph_bytes"
 		case slices.ContainsFunc(invs, func(i Invocation) bool { return len(ShellReads(i.Program, i.Args)) > 0 }):
 			return "shell_read_bytes"

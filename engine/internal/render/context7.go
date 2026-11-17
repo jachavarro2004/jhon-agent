@@ -8,8 +8,8 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
 )
 
-// An optional integration is one its setting turns off at render (its
-// manifest's when_off: render). Off, no agent holds its capabilities, no
+// An integration its setting turns off at render is an optional one whose
+// manifest says when_off: render (integrations.OffAt). Off, no agent holds its capabilities, no
 // server is mounted for it, and a body's lines that name it are not
 // rendered (withoutLinesNaming).
 //
@@ -22,7 +22,7 @@ import (
 // installed, the versions table holds no pin for it, and the render writes
 // a URL and never reaches the network. What leaves the machine is what a
 // call carries: the library's name or id and the question asked (and the
-// language, when given), to Context7URL; pi also connects to it when a
+// language, when given), to its manifest's url; pi also connects to it when a
 // session or a sub-agent starts, naming itself (pi and its version) and no
 // project content. pi's MCP client would answer a server's `roots/list` with
 // the session folder's path; context7's published server asks for none.
@@ -34,29 +34,19 @@ import (
 // of a server called context7, which the two agents get where the owner's
 // Claude Code has one; Jhon registers none there.
 //
-// Context7Setting = false turns it off: no agent holds the capability, no
-// server is mounted, and the sentence of a body that names it is not
-// rendered, so the render is what it was without it. Settings that cannot be
-// read leave it off, as every optional integration. Its URL and setting
-// are its manifest's, integrations/context7/manifest.yaml, read by name: ""
-// when the set lacks it, a set jhon validate refuses (integrations.Assumed).
-var (
-	Context7URL     = remote().Doctor.URL
-	Context7Setting = remote().Setting
-)
+// Its setting, integrations.context7, false turns it off: no agent holds
+// the capability, no server is mounted, and the sentence of a body that
+// names it is not rendered, so the render is what it was without it.
+// Settings that cannot be read leave it off, as every optional integration.
+// Nothing here names it: its manifest's when_off (render) puts it among
+// integrations.OffAt("render"), and its setting and url are its manifest's
+// (T58b, L1167).
 
-// remote is the integration doctor probes over the network; a zero
-// Manifest when the set has none.
-func remote() integrations.Manifest {
-	m, _ := integrations.Get(integrations.Context7)
-	return m
-}
-
-// withoutOff is agents without the capabilities of each optional
-// integration that is off, and which of them are on.
+// withoutOff is agents without the capabilities of each integration its
+// setting turns off at render that is off, and which of them are on.
 func withoutOff(agents []manifest.Agent, on func(setting string) bool) ([]manifest.Agent, map[string]bool) {
 	state := map[string]bool{}
-	for _, m := range integrations.Optional() {
+	for _, m := range integrations.OffAt("render") {
 		if state[m.Name] = on(m.Setting); !state[m.Name] {
 			for _, c := range m.Capabilities {
 				agents = withoutCap(agents, c)
@@ -66,10 +56,10 @@ func withoutOff(agents []manifest.Agent, on func(setting string) bool) ([]manife
 	return agents, state
 }
 
-// withoutUnheld is body without the lines naming each optional integration
-// whose capabilities the agent does not hold.
+// withoutUnheld is body without the lines naming each integration its
+// setting turns off at render whose capabilities the agent does not hold.
 func withoutUnheld(body string, caps []string) string {
-	for _, m := range integrations.Optional() {
+	for _, m := range integrations.OffAt("render") {
 		if !slices.ContainsFunc(m.Capabilities, func(c string) bool { return slices.Contains(caps, c) }) {
 			body = withoutLinesNaming(body, m.Name)
 		}

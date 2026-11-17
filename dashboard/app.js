@@ -2,7 +2,8 @@
 // English. It reads only what `jhon dashboard` serves
 // (CONTRACT.md): /api/sessions, /api/session/<id> for one session's view,
 // /api/changes for the changes page, /api/usage for the usage history,
-// /api/memory/* for a project's memory, and /api/telemetry.
+// /api/memory/* for a project's memory, /api/integrations for Home's
+// Integrations block, and /api/telemetry.
 // A page `jhon audit --html` wrote carries one session in a
 // <script id="session"> element instead, and shows it alone. It writes
 // nothing but the findings the owner marks as reviewed, in this browser.
@@ -289,6 +290,22 @@ export async function loadJSON(url, get = globalThis.fetch) {
   } catch (e) {
     return { error: e && e.message ? e.message : String(e) };
   }
+}
+
+/** One row of /api/integrations as Home shows it: its name, state and reason, and its numbers in words, "—" when it has none (off, unavailable, or nothing counted). */
+export function integrationLine(r) {
+  const n = r && r.numbers;
+  const numbers = n && typeof n.observations === "number" ? `${n.observations} observations` : "—";
+  return { name: String((r && (r.display || r.name)) ?? "-"), state: String((r && r.state) || "off"), reason: String((r && r.reason) || ""), numbers };
+}
+
+/** Home's Integrations block (T58b): each integration's state, reason and numbers. Not loaded yet, or the route failing, is a line in the card, never an error panel. */
+export function integrationsCard(list, error = "") {
+  let body;
+  if (!Array.isArray(list)) body = `<p class="muted">${error ? `could not read them: ${esc(error)}` : "Reading the integrations…"}</p>`;
+  else if (!list.length) body = '<p class="muted">No integration.</p>';
+  else body = `<ul class="clist">${list.map((r) => { const l = integrationLine(r); return `<li data-state="${esc(l.state)}"><b>${esc(l.name)} · ${esc(l.state)}</b><span>${l.reason ? esc(l.reason) + " · " : ""}${esc(l.numbers)}</span></li>`; }).join("")}</ul>`;
+  return `<section class="card" aria-labelledby="i-h"><div class="ch"><h2 id="i-h">Integrations</h2></div><div class="cb">${body}</div></section>`;
 }
 
 /** A loading placeholder of n rows, announced as busy. */
@@ -998,6 +1015,7 @@ function renderHome() {
       <div><small>Tokens <span aria-hidden="true">量</span></small><b>${tok(h.processed)}</b><em>${h.processed ? pct(h.outside / h.processed) : "0%"} outside changes</em></div>
       <div><small>Broken rules <span aria-hidden="true">破</span></small><b style="color:${h.broken ? "var(--broken)" : "inherit"}">${h.broken}</b><em>${h.brokenChecks.length ? esc(h.brokenChecks.map((c) => c.title.toLowerCase()).join(", ")) : "none"}</em></div>
     </section>
+    ${integrationsCard(state.integrations, state.integrationsError)}
     <section class="card" aria-labelledby="h-h"><div class="ch"><h2 id="h-h">Activity${jp("活動")}</h2><span class="ab">sessions per 2h slot</span></div><div class="cb"><div class="heat" role="img" aria-label="Sessions by day and time slot">${heat}</div><div class="hl">less <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> more</div></div></section>
   </div>`;
   for (const b of $("detail").querySelectorAll("[data-range]")) b.addEventListener("click", () => { state.range = b.dataset.range; pref.set("range", state.range); renderHome(); });
@@ -1208,6 +1226,7 @@ function route() {
   if (mem) return renderMemory(mem);
   renderHome();
   loadTelemetry();
+  loadIntegrations();
 }
 
 /** Today's telemetry for Home's tile, fetched once a minute at most; Home says when it could not be read. */
@@ -1217,6 +1236,16 @@ async function loadTelemetry() {
   const got = await loadJSON("/api/telemetry?days=1");
   if (got.error) state.telemetryError = got.error;
   else { state.telemetry = got.data; state.telemetryError = ""; }
+  if (!location.hash || location.hash === "#" || location.hash === "#/") renderHome();
+}
+
+/** The integrations for Home's block (/api/integrations), read once a minute at most; Home says when they could not be read. */
+async function loadIntegrations() {
+  if (state.integrationsAt && Date.now() - state.integrationsAt < 60000) return;
+  state.integrationsAt = Date.now();
+  const got = await loadJSON("/api/integrations");
+  if (got.error) state.integrationsError = got.error;
+  else { state.integrations = got.data; state.integrationsError = ""; }
   if (!location.hash || location.hash === "#" || location.hash === "#/") renderHome();
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/audit"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/dashboard"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/guard"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/isodate"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
@@ -455,7 +456,7 @@ func integrationLines(all, jhon audit.FleetIntegrations) []string {
 	lines := []string{fmt.Sprintf("agent integrations by role, as statistics, over %d session(s), %d Jhon's (launches: the main thread as the orchestrator, each sub-agent by its type; "+
 		"memory read, memory write: the launches that called one at least once; plain reads: the read, grep, find and ls tools and the shell commands whose first program, "+
 		"after an optional `cd <dir> &&`, is cat, sed -n, head, tail, grep, rg, ls or find; share: CodeGraph's of its calls and the plain reads)", all.Sessions, jhon.Sessions),
-		fmt.Sprintf("  %-6s  %-20s  %8s  %11s  %12s  %9s  %11s  %6s  %4s", "", "role", "launches", "memory read", "memory write", "codegraph", "plain reads", "share", "todo")}
+		fmt.Sprintf("  %-6s  %-20s  %8s  %11s  %12s  %9s  %11s  %6s  %4s", "", "role", "launches", "memory read", "memory write", integrations.CodeGraph, "plain reads", "share", "todo")}
 	for _, row := range []struct {
 		name string
 		f    audit.FleetIntegrations

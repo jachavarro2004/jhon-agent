@@ -246,11 +246,11 @@ var SetupKeys = func() []string {
 }()
 
 // Elsewhere are the settings neither setup nor the shell shows, and where
-// each is set; an optional integration's own setting among them.
+// each is set; every optional integration's setting among them, whatever
+// its when_off (its manifest's, T58b).
 var Elsewhere = func() map[string]string {
 	e := map[string]string{
 		"pi.profile":             "jhon profile use, or /jhon:profile in the shell",
-		"claude_code.connectors": "jhon settings set claude_code.connectors true|false",
 		"agents.act_on_announce": "jhon settings set agents.act_on_announce true|false",
 		"sandbox.mode":           "jhon settings set sandbox.mode on|off",
 		"sandbox.allow_write":    "jhon settings set sandbox.allow_write <folder>,<folder>",

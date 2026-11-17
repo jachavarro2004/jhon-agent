@@ -28,7 +28,8 @@ import (
 // health check of the install in one command, in
 // sections; exit 1 when a check fails. It makes no network call unless
 // --remote, which asks origin and mirror through ls-remote and context7's
-// endpoint whether it answers (cmd_doctor_context7.go). Its sandbox
+// endpoint whether it answers (cmd_doctor_context7.go: every optional
+// integration its manifest probes remotely). Its sandbox
 // section says whether the OS sandbox is on and can run here (cmd_sandbox.go),
 // a warning where it cannot. --runtime
 // replaces the install checks with one runtime's guarantees (docket AG3).
@@ -73,7 +74,7 @@ func runDoctor(argv []string) (int, error) {
 	d.sessions()
 	d.sandbox()
 	d.versions()
-	d.context7(remote)
+	d.remoteProbed(remote)
 	fmt.Fprint(o.W, "\n")
 	if o.Failed > 0 {
 		fmt.Fprintf(o.W, "%s%d problem(s)%s\n", o.R, o.Failed, o.Z)

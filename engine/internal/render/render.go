@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/isodate"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
@@ -123,8 +124,10 @@ var alwaysOnGroups = []struct {
 		"contracts/shell-tools.md",
 		"contracts/remote-auth.md",
 		"contracts/runtime-boundaries.md",
-		"contracts/codegraph.md",
-		"contracts/engram.md",
+		// The core integrations' contracts, named as their manifests are
+		// (integrations.Core): CodeGraph's, then Engram's.
+		"contracts/" + integrations.CodeGraph + ".md",
+		"contracts/" + integrations.Engram + ".md",
 		"contracts/tdd.md",
 		"contracts/archify-activation.md",
 	}},

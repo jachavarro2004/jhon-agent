@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
 )
@@ -20,7 +21,7 @@ import (
 func startStateWrites(top string) {
 	// A Go test binary runs route-guard in process: it is not jhon, and
 	// cannot run `jhon context`.
-	if testing.Testing() || !settings.On("integrations.engram") || ldd.EngramBin() == "" {
+	if testing.Testing() || !settings.On(engramSetting()) || ldd.EngramBin() == "" {
 		return
 	}
 	exe, err := os.Executable()
@@ -36,4 +37,10 @@ func startStateWrites(top string) {
 			_ = cmd.Process.Release()
 		}
 	}
+}
+
+// engramSetting is the setting that turns Engram off, its manifest's.
+func engramSetting() string {
+	m, _ := integrations.Get(integrations.Engram)
+	return m.Setting
 }
