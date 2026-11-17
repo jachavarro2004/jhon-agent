@@ -138,8 +138,8 @@ PR text that says what was asked; tasks.md when Jhon asks for it. Create
 tasks.md yourself when you see several rules or cases to cover or a design
 decision on the way. The rest, and what each guard checks, is in
 `contracts/ldd.md` ("The record", "Slices", "Delivery").
-A 4R is one call to the native review, the lens agents only when it
-cannot run; its correction is one bounded `worker`, then `verify` confirms
+A 4R is one call to the native review (`jhon_review` in pi, `jhon review
+run` in Claude Code), the lens agents only when it cannot run; its correction is one bounded `worker`, then `verify` confirms
 (`contracts/review-4r.md`). Ask the owner only before a 4R or
 a Judgment Day that is not due and the owner did not ask for; when the
 owner asked, run it: the guard's own confirmation is the single ask. The

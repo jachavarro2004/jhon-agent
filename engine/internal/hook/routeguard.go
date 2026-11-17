@@ -421,7 +421,7 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		case ldd.ReviewVerify:
 			return "verify is due before delivery (" + why + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/" + change + "/ before the PR; a Judgment Day closed APPROVED counts too (contracts/ldd.md, \"Delivery\")."
 		case ldd.ReviewFourR:
-			return "4R is due before delivery (" + why + "): run the pertinent lenses (" + strings.Join(r.Lenses, ", ") + "), only those its diff calls for (contracts/review-4r.md, \"Lenses\"), and record openspec/changes/" + change + "/review-4r.md with the lenses it ran (`lenses: " + strings.Join(r.Lenses, ", ") + "`) and `verdict: pass` before the PR; a Judgment Day closed APPROVED counts too."
+			return "4R is due before delivery (" + why + "): run the pertinent lenses (" + strings.Join(r.Lenses, ", ") + ") with the native review (`jhon_review` in pi, `jhon review run` in Claude Code; the lens agents when it cannot run), only those its diff calls for (contracts/review-4r.md, \"Lenses\"), and record openspec/changes/" + change + "/review-4r.md with the lenses it ran (`lenses: " + strings.Join(r.Lenses, ", ") + "`) and `verdict: pass` before the PR; a Judgment Day closed APPROVED counts too."
 		case ldd.ReviewJD:
 			return "a Judgment Day is due before delivery (" + why + "): openspec/config.yaml requires it; run it (contracts/judgment.md) and close it APPROVED under openspec/changes/" + change + "/judgments/ before the PR."
 		}
