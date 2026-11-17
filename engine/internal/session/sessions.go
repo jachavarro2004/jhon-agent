@@ -52,8 +52,9 @@ type Sources struct {
 
 // hasCheckout is whether the source checkout is here, as release.Locate
 // finds it: the runtime root (JHON_ROOT, else the parent of the binary's
-// directory) holding .git, or the source (JHON_SOURCE, else ~/dev/jhon or
-// ~/.agents/jhon) holding the binary's source. A user has only the release.
+// directory) holding .git, or the source (JHON_SOURCE, else the checkout
+// `jhon sync` recorded, else the legacy ~/dev/jhon or ~/.agents/jhon)
+// holding the binary's source. A user has only the release.
 func hasCheckout() bool {
 	root := os.Getenv("JHON_ROOT")
 	if root == "" {
@@ -67,7 +68,8 @@ func hasCheckout() bool {
 		return true
 	}
 	home := project.Home()
-	for _, src := range []string{os.Getenv("JHON_SOURCE"), filepath.Join(home, "dev", "jhon"), filepath.Join(home, ".agents", "jhon")} {
+	rec, _ := ReadInstall(home)
+	for _, src := range []string{os.Getenv("JHON_SOURCE"), rec.Source, filepath.Join(home, "dev", "jhon"), filepath.Join(home, ".agents", "jhon")} {
 		if src != "" && project.Exists(filepath.Join(src, "engine", "cmd", "jhon", "main.go")) {
 			return true
 		}

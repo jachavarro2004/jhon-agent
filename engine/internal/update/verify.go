@@ -18,10 +18,9 @@ import (
 )
 
 // The expected signer of a release (S8, S9), in this one place: the GitHub
-// Actions OIDC issuer, and a release workflow running for a tag vX.Y.Z or a
-// release candidate vX.Y.Z-rc.N (S11), each identity anchored at both ends.
-// Exactly two workflows are trusted (T18): the public repository's and,
-// for the move to it, the old public repository's.
+// Actions OIDC issuer, and the release workflow running for a tag vX.Y.Z or
+// a release candidate vX.Y.Z-rc.N (S11), the identity anchored at both ends.
+// Exactly one workflow is trusted: this repository's.
 const (
 	Issuer = "https://token.actions.githubusercontent.com"
 
@@ -29,37 +28,9 @@ const (
 	// jachavarro2004/jhon-agent, at the repository root (S10): every
 	// release from v0.3.1 on is signed there.
 	IdentityPattern = `^https://github\.com/jachavarro2004/jhon-agent/\.github/workflows/release\.yml@refs/tags/v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-rc\.(0|[1-9]\d*))?$`
-
-	// BridgeIdentityPattern is the release workflow of the old public
-	// repository, sdsoftwaresas/jhon (dist/public/.github/workflows/release.yml),
-	// which signed every release up to v0.3.0. It stays because v0.3.0, the
-	// bridge, is signed there: the copies installed before the move trust
-	// only it, and v0.3.0 is the release that teaches them the new
-	// repository. It may go once v0.3.1 is published from
-	// jachavarro2004/jhon-agent and sdsoftwaresas/jhon is deleted.
-	BridgeIdentityPattern = `^https://github\.com/sdsoftwaresas/jhon/\.github/workflows/release\.yml@refs/tags/v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-rc\.(0|[1-9]\d*))?$`
 )
 
-// identityPatterns is every signer identity a release may have.
-var identityPatterns = []string{IdentityPattern, BridgeIdentityPattern}
-
-var identities = func() []*regexp.Regexp {
-	rs := make([]*regexp.Regexp, len(identityPatterns))
-	for i, p := range identityPatterns {
-		rs[i] = regexp.MustCompile(p)
-	}
-	return rs
-}()
-
-// trustedSigner is whether san is one of the trusted release workflows.
-func trustedSigner(san string) bool {
-	for _, r := range identities {
-		if r.MatchString(san) {
-			return true
-		}
-	}
-	return false
-}
+var identity = regexp.MustCompile(IdentityPattern)
 
 // Trust is what a signature is checked against: the trusted material (the
 // certificate authorities, transparency logs and timestamp authorities)
@@ -146,23 +117,17 @@ func Verify(artifact, bundlePath string, t Trust) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// The certificate must match one identity: sigstore-go accepts the
-	// first of the policy's identities that matches.
-	ids := make([]verify.PolicyOption, 0, len(identityPatterns))
-	for _, p := range identityPatterns {
-		id, err := verify.NewShortCertificateIdentity(Issuer, "", "", p)
-		if err != nil {
-			return "", err
-		}
-		ids = append(ids, verify.WithCertificateIdentity(id))
+	id, err := verify.NewShortCertificateIdentity(Issuer, "", "", IdentityPattern)
+	if err != nil {
+		return "", err
 	}
 	f, err := os.Open(artifact)
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
-	if _, err := v.Verify(b, verify.NewPolicy(verify.WithArtifact(f), ids...)); err != nil {
-		if san, iss, ok := signer(b); ok && (iss != Issuer || !trustedSigner(san)) {
+	if _, err := v.Verify(b, verify.NewPolicy(verify.WithArtifact(f), verify.WithCertificateIdentity(id))); err != nil {
+		if san, iss, ok := signer(b); ok && (iss != Issuer || !identity.MatchString(san)) {
 			return "", fmt.Errorf("%s is signed by %s (issuer %s), not by the release workflow", name, san, iss)
 		}
 		return "", fmt.Errorf("the signature of %s does not verify: %v", name, err)

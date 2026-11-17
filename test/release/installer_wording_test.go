@@ -15,8 +15,8 @@ import (
 // install examples (T30).
 func TestPublicInstallersPromiseNothingStale(t *testing.T) {
 	stale := regexp.MustCompile(`(?i)comes in|\bv0\.[0-9]`)
-	// The repository root's installers and the v0.3.0 bridge's copies (T18).
-	for _, name := range []string{"install.sh", "install.ps1", "dist/public/install.sh", "dist/public/install.ps1", "dist/public/README.md"} {
+	// The repository root's installers and its README, the user manual.
+	for _, name := range []string{"install.sh", "install.ps1", "README.md"} {
 		b, err := os.ReadFile(filepath.Join(support.Root(), filepath.FromSlash(name)))
 		if err != nil {
 			t.Fatal(err)

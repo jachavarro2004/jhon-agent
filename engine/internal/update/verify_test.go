@@ -31,28 +31,22 @@ func TestVerify(t *testing.T) {
 	type signerCase struct{ name, identity, issuer, artifact, want string }
 	cases := []signerCase{
 		{"the release workflow's signature verifies", workflow, Issuer, "the release", ""},
-		{"the bridge workflow's signature verifies (installed copies' old signer)", bridgeWorkflow, Issuer, "the release", ""},
 		{"another identity is refused, named", "https://github.com/someone/else/.github/workflows/release.yml@refs/tags/v0.2.0", Issuer,
 			"the release", `^jhon-0\.2\.0-linux-amd64\.tar\.gz is signed by https://github\.com/someone/else/\.github/workflows/release\.yml@refs/tags/v0\.2\.0 \(issuer https://token\.actions\.githubusercontent\.com\), not by the release workflow$`},
 		{"a third repository's release workflow is refused", "https://github.com/someone/jhon-agent/.github/workflows/release.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
-		{"the old private source repository is refused", "https://github.com/sdsoftwaresas/jhon-agents/.github/workflows/release.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
 		{"the new owner's old repository name is refused", "https://github.com/jachavarro2004/jhon/.github/workflows/release.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
-		{"the old owner with the new repository name is refused", "https://github.com/sdsoftwaresas/jhon-agent/.github/workflows/release.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
-		{"the bridge's dist path in the new repository is refused", "https://github.com/jachavarro2004/jhon-agent/dist/public/.github/workflows/release.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
-		{"both identities joined are refused", "https://github.com/sdsoftwaresas/jhon/.github/workflows/release.yml@refs/tags/v0.2.0https://github.com/jachavarro2004/jhon-agent/.github/workflows/release.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
+		{"a workflow under a subdirectory of the repository is refused", "https://github.com/jachavarro2004/jhon-agent/sub/.github/workflows/release.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
+		{"the identity repeated is refused", workflow + workflow, Issuer, "the release", notWorkflow},
 		{"another issuer is refused, named", workflow, "https://accounts.example.com",
 			"the release", `^jhon-0\.2\.0-linux-amd64\.tar\.gz is signed by .* \(issuer https://accounts\.example\.com\), not by the release workflow$`},
 		{"the identity as a suffix is refused", "https://evil.example.com/" + workflow, Issuer, "the release", notWorkflow},
-		{"the bridge identity as a suffix is refused", "https://evil.example.com/" + bridgeWorkflow, Issuer, "the release", notWorkflow},
 		{"a look-alike issuer is refused", workflow, Issuer + ".evil", "the release", notWorkflow},
 		{"a signature over other bytes does not verify", workflow, Issuer, "another tarball", `^the signature of jhon-0\.2\.0-linux-amd64\.tar\.gz does not verify: `},
 	}
-	// Each trusted repository takes the same tags, and only tags (S11).
-	for _, repo := range []struct{ name, base string }{
-		{"new", "https://github.com/jachavarro2004/jhon-agent"},
-		{"bridge", "https://github.com/sdsoftwaresas/jhon"},
-	} {
-		tag := repo.base + "/.github/workflows/release.yml@refs/tags/"
+	// The repository's release workflow takes these tags, and only tags (S11).
+	{
+		base := "https://github.com/jachavarro2004/jhon-agent"
+		tag := base + "/.github/workflows/release.yml@refs/tags/"
 		for _, c := range []signerCase{
 			{"a release candidate's tag verifies", tag + "v0.2.0-rc.1", Issuer, "the release", ""},
 			{"an rc tag without its dot is refused", tag + "v1.2.3-rc1", Issuer, "the release", notWorkflow},
@@ -69,17 +63,16 @@ func TestVerify(t *testing.T) {
 			{"an rc with build metadata is refused", tag + "v0.2.0-rc.1+meta", Issuer, "the release", notWorkflow},
 			{"an upper-case RC is refused", tag + "v0.2.0-RC.1", Issuer, "the release", notWorkflow},
 			{"an rc followed by a newline is refused", tag + "v0.2.0-rc.1\n", Issuer, "the release", "(?s)" + notWorkflow},
-			{"an rc branch is refused", repo.base + "/.github/workflows/release.yml@refs/heads/v0.2.0-rc.1", Issuer, "the release", notWorkflow},
+			{"an rc branch is refused", base + "/.github/workflows/release.yml@refs/heads/v0.2.0-rc.1", Issuer, "the release", notWorkflow},
 			{"a version without leading zeros verifies", tag + "v10.20.30-rc.123", Issuer, "the release", ""},
 			{"v0.0.0 verifies", tag + "v0.0.0", Issuer, "the release", ""},
-			{"a fork's rc is refused", repo.base + "-evil/.github/workflows/release.yml@refs/tags/v0.2.0-rc.1", Issuer, "the release", notWorkflow},
-			{"a fork is refused", repo.base + "-evil/.github/workflows/release.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
-			{"another workflow is refused", repo.base + "/.github/workflows/other.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
-			{"a longer workflow name is refused", repo.base + "/.github/workflows/release.ymlX@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
-			{"a branch is refused", repo.base + "/.github/workflows/release.yml@refs/heads/main", Issuer, "the release", notWorkflow},
-			{"a pull request ref is refused", repo.base + "/.github/workflows/release.yml@refs/pull/1/merge", Issuer, "the release", notWorkflow},
+			{"a fork's rc is refused", base + "-evil/.github/workflows/release.yml@refs/tags/v0.2.0-rc.1", Issuer, "the release", notWorkflow},
+			{"a fork is refused", base + "-evil/.github/workflows/release.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
+			{"another workflow is refused", base + "/.github/workflows/other.yml@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
+			{"a longer workflow name is refused", base + "/.github/workflows/release.ymlX@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
+			{"a branch is refused", base + "/.github/workflows/release.yml@refs/heads/main", Issuer, "the release", notWorkflow},
+			{"a pull request ref is refused", base + "/.github/workflows/release.yml@refs/pull/1/merge", Issuer, "the release", notWorkflow},
 		} {
-			c.name = repo.name + ": " + c.name
 			cases = append(cases, c)
 		}
 	}
