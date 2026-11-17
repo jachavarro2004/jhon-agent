@@ -249,7 +249,19 @@ func (piClean) env(r *Run) []string { return []string{"PI_CODING_AGENT_DIR=" + p
 // comes from the environment, --pi-env); on claude-bridge with only
 // claude-bridge.json, after checking the bench HOME has the bridge and its
 // wrapper.
-func (piClean) prepare(r *Run, o *Options) error {
+//
+// With --pi-models it also holds that file, models.json (T146 F5-b).
+func (pc piClean) prepare(r *Run, o *Options) error {
+	if err := pc.prepareDir(r, o); err != nil {
+		return err
+	}
+	if o.piModels == nil {
+		return nil
+	}
+	return writePrivate(filepath.Join(piAgentDir(r), "models.json"), o.piModels)
+}
+
+func (piClean) prepareDir(r *Run, o *Options) error {
 	if !onBridge(r) {
 		return os.MkdirAll(piAgentDir(r), 0o755)
 	}
