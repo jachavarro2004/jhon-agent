@@ -140,7 +140,8 @@ main worktree>.json`); `jhon workspace leave` removes it and `jhon workspace
 list [--json]` shows every pointer. Joining and leaving are the owner's acts:
 the safety guard refuses them from an agent, as it refuses `jhon grant` and
 `jhon mode`, and keeps the pointers' folder from every agent, as it keeps
-the grants'. A sibling is a member only while its pointer names a primary
+the grants': that folder itself, through any link into it; a project whose
+own path has a `jhon/workspace` folder is edited as any other. A sibling is a member only while its pointer names a primary
 whose config lists a path that is the sibling's top; a path is followed only
 to a git repository's top, never up from it.
 

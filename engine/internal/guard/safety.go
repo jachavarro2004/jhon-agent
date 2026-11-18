@@ -306,7 +306,7 @@ var (
 	escalate    = set("sudo", "doas")
 	deviceOK    = set("/dev/null", "/dev/stdout", "/dev/stderr")
 	codeDelete  = lazyre.New(`unlink|\brm(?:Sync|dir|dirSync)?\s*\(|rmtree|os\.remove|\bremove\s*\(|FileUtils\.rm|File\.delete`)
-	grantText   = lazyre.New(`\bjhon\s+(?:grant|mode|ldd|workspace)\b|\bgrant\.ts\b|jhon[\\/]+(?:grants|modes|ldd-switch|workspace)\b`)
+	grantText   = lazyre.New(`\bjhon\s+(?:grant|mode|ldd)\b|\bjhon[ \t]+workspace\b[^\n;&|]*?\b(?:join|leave)\b|\bgrant\.ts\b|jhon[\\/]+(?:grants|modes|ldd-switch)\b`)
 	grantScript = lazyre.New(`(?:^|/)src/grant\.ts$`)
 	tsRunners   = set("node", "nodejs", "bun", "deno", "tsx", "ts-node")
 	xargsDanger = set("rm", "rmdir", "unlink", "shred", "srm", "rimraf", "mv", "cp", "tee", "ln", "install", "truncate", "dd", "chmod", "chown", "touch", "mkdir")
