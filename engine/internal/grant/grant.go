@@ -43,9 +43,11 @@ func Dir() string {
 
 // WorkspaceDir is where the owner's workspace pointers live (`jhon
 // workspace join`, T57 W2), beside the grants and as much the owner's.
+// Only this folder is (InGrants, resolved): a jhon/workspace segment
+// elsewhere is a common project path, never matched by name (L1307).
 func WorkspaceDir() string { return filepath.Join(filepath.Dir(Dir()), "workspace") }
 
-var grantsPath = lazyre.New(`[\\/]jhon[\\/](?:grants|modes|ldd-switch|session-grants|workspace)(?:[\\/]|$)|[\\/]\.local[\\/]state[\\/]jhon[\\/]?$`)
+var grantsPath = lazyre.New(`[\\/]jhon[\\/](?:grants|modes|ldd-switch|session-grants)(?:[\\/]|$)|[\\/]\.local[\\/]state[\\/]jhon[\\/]?$`)
 
 // InGrants is whether abs is in the grants directory or the modes or
 // workspace pointers beside it (the owner's alone), as configured or under any jhon/grants or
@@ -95,7 +97,7 @@ func globNamesState(p string) bool {
 		if ok, _ := filepath.Match(ps[i], "jhon"); !ok || !literal(ps[i]) || !literal(ps[i+1]) {
 			continue
 		}
-		for _, d := range []string{"grants", "modes", "ldd-switch", "session-grants", "workspace"} {
+		for _, d := range []string{"grants", "modes", "ldd-switch", "session-grants"} {
 			if ok, _ := filepath.Match(ps[i+1], d); ok {
 				return true
 			}

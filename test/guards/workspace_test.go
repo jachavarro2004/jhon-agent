@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jachavarro2004/jhon-agent/test/support"
 )
 
 const workspaceAct = "a workspace pointer is the owner's act; no agent joins or leaves a workspace"
@@ -45,13 +47,67 @@ func TestWorkspaceJoinAndLeaveAreTheOwners(t *testing.T) {
 					noDecision(t, r.Stdout, mode+"/"+caller+": "+c)
 				}
 			}
-			// The pointers' folder is the owner's, wherever a jhon state is.
-			other := filepath.Join(realTemp(t), "jhon", "workspace")
-			for _, base := range []string{"$XDG_STATE_HOME/jhon/workspace", state + "/jhon/workspace", other, "$XDG_STATE_HOME/jhon/work*"} {
+			// The pointers' folder is the owner's, by any spelling of the real
+			// one: a link into it too (a jhon/workspace elsewhere is no state of
+			// jhon's, L1307: TestWorkspaceFolderNamedLikeStateIsAProject).
+			link := filepath.Join(realTemp(t), "ptr")
+			symlink(t, mkdir(t, filepath.Join(state, "jhon", "workspace")), link)
+			for _, base := range []string{"$XDG_STATE_HOME/jhon/workspace", state + "/jhon/workspace", link, "$XDG_STATE_HOME/jhon/work*"} {
 				for _, c := range []string{"cp x " + base + "/k.json", "echo '{}' > " + base + "/k.json", "rm -f " + base + "/k.json"} {
 					code(t, ownerCall(t, env, repo, "subagent", c), 2, mode+": "+c)
 				}
 			}
 		})
+	}
+}
+
+// A project whose own path has a jhon/workspace segment is a project like
+// any other (L1307): only the real pointer folder, under jhon's state, is
+// the owner's; writes there, a symlink's included, stay refused.
+func TestWorkspaceFolderNamedLikeStateIsAProject(t *testing.T) {
+	t.Parallel()
+	scratch := realTemp(t)
+	state := filepath.Join(scratch, "state")
+	env := support.Env("HOME="+sgHome, "XDG_STATE_HOME="+state, "TMPDIR="+mkdir(t, filepath.Join(scratch, "tmp")), "JHON_ROOT="+support.Root())
+	proj := mkdir(t, filepath.Join(scratch, "u", "jhon", "workspace", "proj"))
+	support.Write(t, proj, map[string]string{"src/a.txt": "a\n", "README": "r\n"})
+	support.GitRepo(t, proj)
+	pointers := mkdir(t, filepath.Join(state, "jhon", "workspace"))
+	symlink(t, pointers, filepath.Join(proj, "ptr"))
+	call := func(caller, tool string, input map[string]any) support.Result {
+		t.Helper()
+		payload := map[string]any{"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": input, "cwd": proj, "session_id": "s", "permission_mode": "default"}
+		if caller == "subagent" {
+			payload["permission_mode"] = "bypassPermissions"
+			payload["agent_id"], payload["agent_type"] = "a1", "worker"
+		}
+		return hook(t, env, "pre-tool", []string{"--agent", "*", "safety-guard", "vcs-guard", ".git"}, payload)
+	}
+	write := func(p string) map[string]any { return map[string]any{"file_path": p, "content": "b\n"} }
+	for _, caller := range []string{"top-default", "subagent"} {
+		for _, c := range []string{
+			"echo b > src/a.txt", "mkdir -p src/b", "sed -i s/a/b/ src/a.txt", "rm src/a.txt",
+			"bash -c 'cd " + proj + " && ls'",
+			`python3 -c "print(open('` + proj + `/README').read())"`,
+		} {
+			r := call(caller, "Bash", cmd(c))
+			code(t, r, 0, caller+": "+c)
+			noDecision(t, r.Stdout, caller+": "+c)
+		}
+		r := call(caller, "Write", write(filepath.Join(proj, "src", "c.txt")))
+		code(t, r, 0, caller+": Write src/c.txt")
+		noDecision(t, r.Stdout, caller+": Write src/c.txt")
+		// The real pointer folder stays the owner's, by any spelling.
+		for _, c := range []string{
+			"echo '{}' > " + pointers + "/k.json", "echo '{}' > $XDG_STATE_HOME/jhon/workspace/k.json",
+			"echo '{}' > ptr/k.json", "cp src/a.txt ptr/", "rm -f ptr/k.json",
+			"bash -c 'jhon workspace join ../x'", "bash -c 'jhon workspace leave'",
+		} {
+			code(t, call(caller, "Bash", cmd(c)), 2, caller+": "+c)
+		}
+		r = call(caller, "Write", write(filepath.Join(proj, "ptr", "k.json")))
+		if d, _, _ := decision(t, r.Stdout); r.Code != 2 && d != "deny" {
+			t.Errorf("%s: Write through the symlink into the pointer folder was not refused: %d %s%s", caller, r.Code, r.Stdout, r.Stderr)
+		}
 	}
 }
