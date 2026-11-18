@@ -244,6 +244,12 @@ var runtimeTerms = map[string]map[string]string{
 		"claude-code": "`AskUserQuestion`",
 		"pi":          "`ask_user`",
 	},
+	// T146h: the runtime's own name, as its full file is named
+	// (prose/full-<runtime>.md, lean.go).
+	"runtime": {
+		"claude-code": "claude-code",
+		"pi":          "pi",
+	},
 	// pi has no plan mode (T50d): the sentence is Claude Code's alone.
 	"plan-mode": {
 		"claude-code": "In plan mode, write the plan to the file the runtime names under\n~/.claude/plans/ and end with `ExitPlanMode`.",
@@ -364,7 +370,7 @@ func (e *engine) frameworkProtected() []string {
 	for _, n := range names {
 		out = append(out, filepath.Join(e.claudeAgents(), n+".md"))
 	}
-	return append(out, e.piSettings(), e.piConfig(), e.piMcpFile(), e.piPromptFile(), e.piWriterFile(), e.piAgents(), e.piPrompts())
+	return append(out, e.piSettings(), e.piConfig(), e.piMcpFile(), e.piPromptFile(), e.piWriterFile(), e.piLeanFile(), e.piAgents(), e.piPrompts())
 }
 
 // ── commands, skills, and the CLI ──

@@ -211,7 +211,7 @@ func TestFolderlessLayoutOnlyBranchSaysWhy(t *testing.T) {
 		r := jhonGit(t, wt, "executions", "run", name)
 		equal(t, r.Code, 2)
 		equal(t, r.Stderr, "jhon executions: ldd/changes/"+name+"/ does not exist or is not an active change under "+wt+"\n"+
-			"jhon executions: branch feat/shipping-cost names change feat-shipping-cost, which has no changes yet: no file outside ldd/ differs from the base or is new; write the failing test first (a new untracked file counts), then run `jhon executions run feat-shipping-cost`\n")
+			"jhon executions: branch feat/shipping-cost names change feat-shipping-cost, which has no changes yet: no file outside ldd/ differs from the base or is new; write the failing test first (a new untracked file counts), then run `jhon executions run`\n") // T146h L4: the bare run
 	}
 }
 

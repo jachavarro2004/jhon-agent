@@ -11,13 +11,9 @@ import (
 // renderedOrchestrators is the orchestrator each runtime renders, flattened.
 func renderedOrchestrators(t *testing.T, e *engine) map[string]string {
 	t.Helper()
-	rendered := map[string]string{"pi": flatText(promptOf(t, pi{e}, pi{e}.piPromptFile()))}
-	for _, r := range e.renderers() {
-		if r.Runtime() == "claude-code" {
-			rendered["claude-code"] = flatText(promptOf(t, r, filepath.Join(e.claudeAgents(), "jhon-orchestrator.md")))
-		}
-	}
-	return rendered
+	// T146h: the orchestrator of a change that is not small is each
+	// runtime's full file; pi's main prompt is still that text.
+	return map[string]string{"pi": flatText(promptOf(t, pi{e}, pi{e}.piPromptFile())), "claude-code": flatText(e.fullText("claude-code"))}
 }
 
 // T146 FA3b (L1217, L1218): every rule moved out of the fixed context is in

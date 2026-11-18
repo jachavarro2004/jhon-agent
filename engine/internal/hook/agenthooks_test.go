@@ -148,7 +148,7 @@ func TestSessionBrief(t *testing.T) {
 		return code, out.String(), errs.String()
 	}
 	t.Setenv("JHON_ROOT", fakeRoot(t, true))
-	inactive := marshal(map[string]string{"inactive": ldd.InactiveLineFor(os.Getenv("JHON_ROOT"))})
+	inactive := marshal(map[string]string{"inactive": ldd.InactiveLineFor(os.Getenv("JHON_ROOT")), "context": ContextLean})
 	plain := t.TempDir()
 	if code, out, errs := brief(plain); code != 0 || out != inactive || errs != "" {
 		t.Errorf("outside an LDD project: code %d, out %q, err %q", code, out, errs)
@@ -316,7 +316,7 @@ func TestSessionStartSaysLddState(t *testing.T) {
 			if strings.Count(got, line) != 1 || strings.Contains(got, "This project's rules") {
 				t.Errorf("plain: the session start does not say once that LDD is not set up: %q", got)
 			}
-			if want := marshal(map[string]string{"inactive": line}); sessionBrief(t, plain) != want {
+			if want := marshal(map[string]string{"inactive": line, "context": ContextLean}); sessionBrief(t, plain) != want {
 				t.Errorf("plain: session-brief = %q, want %q", sessionBrief(t, plain), want)
 			}
 			got = sessionContext(t, active)
@@ -486,7 +486,7 @@ func TestOldSwitchOffToldOnce(t *testing.T) {
 	}
 	// A project with no layout is told it after the set-up line, once.
 	plain := off(t, false)
-	want := marshal(map[string]string{"inactive": ldd.InactiveLineFor(os.Getenv("JHON_ROOT")) + " " + notice})
+	want := marshal(map[string]string{"inactive": ldd.InactiveLineFor(os.Getenv("JHON_ROOT")) + " " + notice, "context": ContextLean})
 	if got := sessionBrief(t, plain); got != want {
 		t.Errorf("session-brief, no layout = %q, want %q", got, want)
 	}

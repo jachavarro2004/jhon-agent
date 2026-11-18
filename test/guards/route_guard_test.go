@@ -911,7 +911,8 @@ func TestRouteGuardPRNeedsRedBeforeGreen(t *testing.T) {
 	support.Write(t, small.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"})
 	res = small.call(t, "Bash", pr, true)
 	code(t, res, 2, "a folderless change with no RED")
-	matches(t, res.Stderr, "run `jhon executions run fix-small --affected <base>` while its new test fails", "the branch names it")
+	// T146h L4: a small change's refusal names the bare run, twice, nothing between.
+	matches(t, res.Stderr, "run `jhon executions run` while its new test fails \\(RED\\), then `jhon executions run` again once it passes \\(GREEN\\): two runs, nothing between, before the PR", "a small change is told the bare run")
 	redGreen(t, small.p, ".git/jhon/changes/fix-small/execution-record.json")
 	code(t, small.call(t, "Bash", pr, true), 0, "a folderless change with its RED before GREEN")
 

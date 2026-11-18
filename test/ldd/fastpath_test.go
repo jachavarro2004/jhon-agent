@@ -68,9 +68,10 @@ func TestStatusPrintsTheNextCommand(t *testing.T) {
 	root := smallRepo(t)
 	h := jhonGit(t, root, "status")
 	equal(t, h.Code, 0, h.Stderr)
-	match(t, h.Stdout, `(?m)^next        apply  \(suggestion\)\ncommand     jhon executions run feat-small-fix --affected main$`)
+	// T146h L4: a small change's run is the bare one.
+	match(t, h.Stdout, `(?m)^next        apply  \(suggestion\)\ncommand     jhon executions run$`)
 	b := jhonGit(t, root, "status", "--brief")
-	match(t, b.Stdout, `(?m)^command     jhon executions run feat-small-fix --affected main$`)
+	match(t, b.Stdout, `(?m)^command     jhon executions run$`)
 
 	redThenGreen(t, root)
 	h = jhonGit(t, root, "status")

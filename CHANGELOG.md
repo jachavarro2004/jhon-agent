@@ -6,7 +6,16 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A lean session context: with no active change, or a small one, a session starts with `prose/lean.md` alone (identity, the limits, the small change's two runs, what to read when; about 2.3 KB on each runtime). The full context, today's orchestrator and always-on layer, is installed as `~/.local/share/jhon/current/prose/full-<runtime>.md`. It loads when `jhon status` prints `not small: read <full file> before the next edit`, when a session starts on a change that is not small (Claude Code SessionStart, pi's session-brief `context`), with one persisted `jhon-full` message on pi's not-small status or first `subagent` call, and with a PostToolUse pointer in Claude Code. Sub-agents keep the full layer (T146h).
+- On a lean pi session, Jhon's own tools (`jhon_review`, `subagent*`, `m365_read`, background tasks, Engram) and the skills list wait behind `tools_more` until the full context loads; `todo`, `ask_user`, `inspect` and codegraph stay (T146h).
+
 ### Changed
+
+- A small change names the bare `jhon executions run` everywhere: status's next command and RED/GREEN note (two runs, nothing between), the pending-branch note, and pi's LDD reminder. `jhon executions --help` and `jhon executions run --help` open with the two-line common case (T146h).
+- A lean pi session (no change, or a small one) gets no todo start rule or start nudge, and the todo tool's guideline says a small change keeps no list (T146h).
+- Claude Code's `jhon-orchestrator` agent definition is the lean text; its full context is the install's `full-claude-code.md` (T146h).
 
 - `jhon status` and a bare `jhon executions run` on the default branch with no change name the commands a small change starts with, `git switch -c <name>` then `jhon executions run`, instead of `start-change` (no command); one that is not small keeps "start one (tasks.md)" (T146g).
 - `jhon deliver check` before the commit, when the last passing run tested the working tree as it is, says "commit it, then `jhon deliver check <change>`, with no re-run"; every delivery order reads: a passing run, commit the tree it tested, then `jhon deliver check` (T146g).

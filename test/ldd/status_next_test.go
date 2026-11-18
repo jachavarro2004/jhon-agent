@@ -64,7 +64,7 @@ func TestAppliedDocsOnlyChangeIsArchived(t *testing.T) {
 func TestStatusSaysFolderlessPending(t *testing.T) {
 	t.Parallel()
 	_, wt := shippingWorktree(t)
-	note := "branch feat/shipping-cost names change feat-shipping-cost, which has no changes yet: no file outside ldd/ differs from the base or is new; write the failing test first (a new untracked file counts), then run `jhon executions run feat-shipping-cost`"
+	note := "branch feat/shipping-cost names change feat-shipping-cost, which has no changes yet: no file outside ldd/ differs from the base or is new; write the failing test first (a new untracked file counts), then run `jhon executions run`" // T146h L4: the bare run
 	r := jhonGit(t, wt, "status", "--json")
 	equal(t, r.Code, 0, r.Stderr)
 	s := object(t, r.Stdout)

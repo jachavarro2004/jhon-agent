@@ -122,11 +122,85 @@ func SessionBrief(args []string, io IO) int {
 	brief := ldd.ProjectBrief(p.Cwd())
 	notice := oldSwitchNotice(p.Cwd())
 	if brief == "" {
-		fmt.Fprint(io.Out, marshal(map[string]string{"inactive": ldd.InactiveFor(p.Cwd()) + notice(" ")}))
+		fmt.Fprint(io.Out, marshal(map[string]string{"inactive": ldd.InactiveFor(p.Cwd()) + notice(" "), "context": ContextLean}))
 		return 0
 	}
-	fmt.Fprint(io.Out, marshal(map[string]string{"lead": fmt.Sprintf(bindingLead, strings.TrimSpace(args[0])), "brief": brief + notice("\n\n")}))
+	fmt.Fprint(io.Out, marshal(map[string]string{"lead": fmt.Sprintf(bindingLead, strings.TrimSpace(args[0])), "brief": brief + notice("\n\n"), "context": startContext(p.Cwd())}))
 	return 0
+}
+
+// The context a main session starts with (T146h T2): lean, the lean text
+// alone, when no change is active or the active one is small; full, today's
+// orchestrator and always-on layer, when the active change is not small.
+const (
+	ContextLean = "lean"
+	ContextFull = "full"
+)
+
+// startContext is the context a session working in dir starts with.
+func startContext(dir string) string {
+	if ldd.NotSmall(dir) {
+		return ContextFull
+	}
+	return ContextLean
+}
+
+// fullMark is the file that records a session was given, or pointed to,
+// the full context (T146h T4): one pointer per session at most.
+func fullMark(session string) string {
+	sess := regexp.MustCompile(`[^\w.-]`).ReplaceAllString(session, "")
+	if sess == "" {
+		return ""
+	}
+	cache := os.Getenv("XDG_CACHE_HOME")
+	if cache == "" || !filepath.IsAbs(cache) {
+		cache = filepath.Join(project.Home(), ".cache")
+	}
+	return filepath.Join(cache, "jhon", "full-context", sess)
+}
+
+// markFull records that session has the full context; whether it had it
+// already.
+func markFull(session string) bool {
+	mark := fullMark(session)
+	if mark == "" {
+		return false
+	}
+	if _, err := os.Stat(mark); err == nil {
+		return true
+	}
+	if os.MkdirAll(filepath.Dir(mark), 0o700) == nil {
+		_ = os.WriteFile(mark, nil, 0o600)
+	}
+	return false
+}
+
+// fullPointer is PostToolUse's pointer to the full context (T146h T4), for
+// the main agent's call that shows the work is not small: `jhon status`
+// printing its not-small line, or a sub-agent launch. Once per session; ""
+// for any other call, or a session that has the full context already. The
+// full text exceeds the 10,000 characters a hook's context shows, so the
+// pointer names the file.
+func fullPointer(p Payload, home string) string {
+	tool := p.Str("tool_name")
+	trigger := ""
+	switch tool {
+	case "Agent", "Task":
+		trigger = "before a sub-agent"
+	case "Bash":
+		cmd, _ := p.Obj("tool_input")["command"].(string)
+		resp, _ := json.Marshal(p["tool_response"])
+		if !strings.Contains(cmd, "jhon status") || !strings.Contains(string(resp), "not small: read ") {
+			return ""
+		}
+		trigger = "this change is not small"
+	default:
+		return ""
+	}
+	if markFull(p.Str("session_id")) {
+		return ""
+	}
+	return "Jhon: " + trigger + ": read the full context, " + ldd.FullContextFile(home, "claude-code") + ", before the next edit; it binds as the lean text does."
 }
 
 // oldSwitchNotice is, for a session in dir still to be told the retired
@@ -233,7 +307,16 @@ func AgentHooks(args []string, io IO) int {
 	// project's rules, in part 1.
 	if event == "SessionStart" {
 		body, err := agentBody(filepath.Join(home, ".claude", "agents", agent+".md"))
-		if !lost && p.Str("source") == "startup" && os.Getenv(AgentLoadedEnv) == agent {
+		// T146h T2: the definition is the lean text; a change that is not
+		// small starts with the install's full context instead.
+		full := false
+		if err == nil && agent == strings.TrimSpace(args[0]) && ldd.NotSmall(p.Cwd()) {
+			if b, ferr := os.ReadFile(ldd.FullContextFile(home, "claude-code")); ferr == nil && len(bytes.TrimSpace(b)) > 0 {
+				body, full = string(b), true
+				markFull(p.Str("session_id"))
+			}
+		}
+		if !lost && !full && p.Str("source") == "startup" && os.Getenv(AgentLoadedEnv) == agent {
 			var parts []string
 			if note := OwnerShellNote(os.Getenv("SHELL")); note != "" {
 				parts = append(parts, note)
@@ -289,6 +372,11 @@ func AgentHooks(args []string, io IO) int {
 	// Each SessionStart part is its own entry; the other events take none.
 	if part != 0 {
 		return 0
+	}
+	if event == "PostToolUse" && agent == strings.TrimSpace(args[0]) {
+		if pointer := fullPointer(p, home); pointer != "" {
+			fmt.Fprint(io.Out, marshal(map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": "PostToolUse", "additionalContext": pointer}}))
+		}
 	}
 	tool := p.Str("tool_name")
 	for _, h := range hooks {

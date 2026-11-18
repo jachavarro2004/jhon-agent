@@ -14,19 +14,25 @@ export interface SessionBrief {
 	lead: string;
 	/** The project's rules, read when the session first asks. */
 	brief: string;
+	/** T146h: whether the session starts lean (no change, or a small one) or full. */
+	context?: "lean" | "full";
 }
 
 /** Where LDD is not set up yet: the engine's line that says so. */
 export interface LddInactive {
 	inactive: string;
+	context?: "lean" | "full";
 }
+
+/** The engine's context, when it is one the shell knows. */
+const contextOf = (v: any): { context?: "lean" | "full" } => (v?.context === "lean" || v?.context === "full" ? { context: v.context } : {});
 
 /** The brief or the inactive line in the engine's output, or undefined when it printed neither. */
 export function parseSessionBrief(stdout: string): SessionBrief | LddInactive | undefined {
 	try {
 		const v = JSON.parse(stdout);
-		if (typeof v?.inactive === "string" && v.inactive) return { inactive: v.inactive };
-		return typeof v?.lead === "string" && typeof v?.brief === "string" && v.lead && v.brief ? { lead: v.lead, brief: v.brief } : undefined;
+		if (typeof v?.inactive === "string" && v.inactive) return { inactive: v.inactive, ...contextOf(v) };
+		return typeof v?.lead === "string" && typeof v?.brief === "string" && v.lead && v.brief ? { lead: v.lead, brief: v.brief, ...contextOf(v) } : undefined;
 	} catch {
 		return undefined;
 	}

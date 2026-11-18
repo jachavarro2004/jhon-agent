@@ -26,6 +26,9 @@ export type JhonPiConfig = {
   jhon: string;
   /** The file holding the main session's appended prompt. */
   orchestrator: string;
+  /** T146h: the lean prompt a small task starts with, and the install's full context file. */
+  lean?: string;
+  full?: string;
   vcsDirs: string[];
   /** The framework paths framework-guard protects (internal/render, frameworkProtected). */
   protected: string[];

@@ -58,15 +58,24 @@ var userTitle = [2]string{
 // commandPurpose is the one sentence a user command's own help opens with
 // (T10i); its usage rows are the general usage's.
 var commandPurpose = map[string]string{
-	"setup":    "choose the runtimes and integrations, check what they need, and install them.",
-	"start":    "start a Jhon session in Claude Code or pi.",
-	"update":   "install the latest Jhon release, verified, or go back to the previous one.",
-	"doctor":   "check that the installed Jhon is healthy.",
-	"status":   "show where a change stands under LDD.",
-	"version":  "print the version of this jhon.",
-	"settings": "read and write the owner's settings.",
-	"profile":  "list, show and choose the owner's model profiles.",
-	"sandbox":  "run a program in the OS sandbox, or say whether the sandbox can run here.",
+	"setup":      "choose the runtimes and integrations, check what they need, and install them.",
+	"start":      "start a Jhon session in Claude Code or pi.",
+	"update":     "install the latest Jhon release, verified, or go back to the previous one.",
+	"doctor":     "check that the installed Jhon is healthy.",
+	"status":     "show where a change stands under LDD.",
+	"version":    "print the version of this jhon.",
+	"settings":   "read and write the owner's settings.",
+	"profile":    "list, show and choose the owner's model profiles.",
+	"sandbox":    "run a program in the OS sandbox, or say whether the sandbox can run here.",
+	"executions": "record a change's test runs, the evidence its delivery is checked against.",
+}
+
+// commonCase is the two lines a command's own help opens with, before its
+// name, where one case covers most calls (T146h L4: an agent read
+// `jhon executions --help` to learn the two runs of a small change).
+var commonCase = map[string]string{
+	"executions": "common case: `jhon executions run` while the new test fails (RED),\n" +
+		"then `jhon executions run` again once it passes (GREEN); commit, then `jhon deliver check`.\n\n",
 }
 
 // commandHelp is `jhon <cmd> --help` for a user command: its name and
@@ -91,7 +100,7 @@ func commandHelp(w io.Writer, o *release.Out, cmd string) bool {
 			rows = append(rows, l)
 		}
 	}
-	fmt.Fprintf(w, "%sjhon %s%s — %s\n\n%susage%s\n%s\n", o.B, cmd, o.Z, purpose, o.B, o.Z, strings.Join(rows, "\n"))
+	fmt.Fprintf(w, "%s%sjhon %s%s — %s\n\n%susage%s\n%s\n", commonCase[cmd], o.B, cmd, o.Z, purpose, o.B, o.Z, strings.Join(rows, "\n"))
 	return true
 }
 
@@ -100,8 +109,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
 
 {B}usage{Z}
   jhon <command> --help    the command's own help for setup, start, update,
-                           doctor, status, version, settings, profile and
-                           sandbox, this usage for the others; -h or --help
+                           doctor, status, version, settings, profile,
+                           sandbox and executions (which opens with its
+                           common case), this usage for the others; -h or --help
                            after any command runs nothing (after jhon sandbox
                            run --, it is the program's)
   jhon setup               the setup wizard, on a terminal: pick the runtimes and

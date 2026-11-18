@@ -18,6 +18,7 @@
  */
 
 import { CODEGRAPH_TOOL } from "./codegraph.ts";
+import { leanDeferred } from "./lean-context.ts";
 
 /** The Engram tools the orchestrator keeps declared (L707: the ones it calls; mem_session_summary for its handoff). */
 export const KEPT_ENGRAM = new Set(["mem_search", "mem_save", "mem_get_observation", "mem_context", "mem_judge", "mem_judge_many", "mem_session_summary"].map((t) => `mcp__engram__${t}`));
@@ -46,6 +47,7 @@ export function deferrable(name: string): boolean {
 export class ToolPolicy {
 	private enabled = new Set<string>();
 	private codegraph = new Map<string, boolean>();
+	private lean = false;
 
 	private readonly main: boolean;
 	private readonly indexed: (cwd: string) => boolean;
@@ -65,11 +67,21 @@ export class ToolPolicy {
 		return on;
 	}
 
+	/** T146h L3: a lean session defers Jhon's own tools too, until the full context loads. */
+	setLean(on: boolean): void {
+		this.lean = on;
+	}
+
+	/** Whether the main session defers name now: always deferred, or deferred while lean. */
+	deferred(name: string): boolean {
+		return deferrable(name) || (this.lean && leanDeferred(name));
+	}
+
 	/** Whether the tool stays out of the requests. */
 	held(name: string, cwd: string): boolean {
 		if (name === CODEGRAPH_TOOL) return !this.codegraphOn(cwd);
 		if (name.startsWith(CONTEXT7_PREFIX)) return this.main;
-		return this.main && deferrable(name) && !this.enabled.has(name);
+		return this.main && this.deferred(name) && !this.enabled.has(name);
 	}
 
 	/** names without the held ones; undefined when none is held, so nothing is set. */
@@ -86,6 +98,7 @@ export class ToolPolicy {
 	reset(enabled: readonly string[] = []): void {
 		this.enabled = new Set(enabled);
 		this.codegraph.clear();
+		this.lean = false;
 	}
 }
 
@@ -114,11 +127,11 @@ export function toolsMoreTool(pi: ToolsHost, policy: ToolPolicy) {
 	return {
 		name: TOOLS_MORE,
 		label: "More tools",
-		description: "Lists the deferred tools (Engram's other memory tools such as mem_update, mem_timeline, mem_review; web search and fetch), or, given names, enables them for the rest of the session. Call with no names to list.",
+		description: "Lists the deferred tools (memory tools such as mem_update, mem_review; web search and fetch; on a small task, subagent and the rest), or, given names, enables them for the session. Call with no names to list.",
 		parameters: { type: "object", additionalProperties: false, properties: { names: { type: "array", items: { type: "string" }, description: "Tools to enable, from the list." } } },
 		async execute(_id: string, params: { names?: unknown }, _signal?: unknown, _onUpdate?: unknown, ctx?: { cwd?: string }) {
 			const cwd = ctx?.cwd ?? process.cwd();
-			const deferred = (pi.getAllTools?.() ?? []).filter((t) => deferrable(t.name) && policy.held(t.name, cwd));
+			const deferred = (pi.getAllTools?.() ?? []).filter((t) => policy.deferred(t.name) && policy.held(t.name, cwd));
 			const names = Array.isArray(params?.names) ? params.names.filter((n): n is string => typeof n === "string") : [];
 			if (!names.length) {
 				return text(deferred.length ? `Deferred tools (enable with names):\n${deferred.map((t) => `- ${t.name}: ${(t.description ?? "").trim().split(/\r?\n/)[0]}`).join("\n")}` : "No deferred tools.");

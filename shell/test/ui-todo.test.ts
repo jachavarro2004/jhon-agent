@@ -1,4 +1,5 @@
 import "./isolated-env.ts";
+import { setContextLevel } from "../lib/lean-context.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -867,4 +868,25 @@ test("TODOS with no tasks shows its idle row in the rail, as AGENTS does; the ca
 	const again = widgets.get("jhon-todo")!(tui, plainTheme);
 	assert.deepEqual(again.render(100), []);
 	assert.match(stripAnsi(sidebarState(tui as never).parts.get("todo")!.render(48)[0]!), /idle$/, "cleared, idle again");
+});
+
+// T146h L4 (L1277): a lean session (no change, or a small one) gets no start
+// rule and no start nudge; an open list keeps its block. The tool's guideline
+// says a small change keeps no list.
+test("a lean session gets no start rule and no start nudge", async (t) => {
+	setContextLevel("lean");
+	t.after(() => setContextLevel(undefined));
+	const { pi, tools, fire } = fakePi();
+	jhonTodo(pi, {});
+	const { ctx } = fakeContext([], false);
+	await fire("session_start", ctx);
+	assert.equal(await fire("before_agent_start", ctx, promptEvent()), undefined, "no start rule");
+	await fire("turn_end", ctx, toolTurn("edit", { path: "a.ts" }));
+	await workTurns(fire, ctx, 4);
+	assert.equal(await contextReminder(fire, ctx), undefined, "no start nudge");
+	await tools.get("todo")!.execute("c1", { action: "write", tasks: [{ title: "Fix the bug" }] }, undefined, undefined, ctx);
+	const open = promptEvent();
+	await fire("before_agent_start", ctx, open);
+	assert.match(session(open), /1\. \[pending\] Fix the bug/, "a list the agent keeps is still shown");
+	assert.ok(tools.get("todo")!.promptGuidelines.some((g: string) => g.includes("A small change keeps no list.")), tools.get("todo")!.promptGuidelines);
 });

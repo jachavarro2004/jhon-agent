@@ -219,7 +219,7 @@ func claudeModel(value, roleEffort string) []string {
 // frontmatter that carries the enforcement.
 func (c claude) Files() []File {
 	guarantees := "\n\n## Runtime guarantees\n\n" + c.runtimeGuarantees("claude-code")
-	primary, sub := "\n\n"+c.alwaysOnSection("claude-code", true), "\n\n"+c.alwaysOnSection("claude-code", false)
+	sub := "\n\n" + c.alwaysOnSection("claude-code", false)
 	var out []File
 	for _, a := range c.m.Agents {
 		tools := c.claudeTools(a)
@@ -249,14 +249,16 @@ func (c claude) Files() []File {
 		fm = append(fm, toolsField...)
 		fm = append(fm, c.hooksBlock(a)...)
 		fm = append(fm, "---", "")
-		layer := sub
+		body, layer := c.bodyFor("claude-code", a), sub
 		switch {
 		case a.OmitClaudeMd != "":
 			layer = ""
 		case a.Mode == "primary":
-			layer = primary
+			// T146h: the main agent is defined by the lean text; its full
+			// context is the install's full-claude-code.md (lean.go).
+			body, layer = c.leanText("claude-code"), ""
 		}
-		out = append(out, File{filepath.Join(c.claudeAgents(), a.Name+".md"), strings.Join(fm, "\n") + c.bodyFor("claude-code", a) + layer + guarantees + "\n"})
+		out = append(out, File{filepath.Join(c.claudeAgents(), a.Name+".md"), strings.Join(fm, "\n") + body + layer + guarantees + "\n"})
 	}
 	return out
 }
@@ -271,6 +273,7 @@ func (c claude) Install(s *run) bool {
 		mkdirAll(c.claudeAgents())
 	}
 	s.writeFiles(c.Files())
+	s.writeFull("claude-code")
 	removed, recordChanged := c.pruneAgents()
 	for _, name := range removed {
 		s.println(fmt.Sprintf("  %s  %s (no longer in agents.yaml)", s.verb("prune"), s.tilde(filepath.Join(c.claudeAgents(), name+".md"))))

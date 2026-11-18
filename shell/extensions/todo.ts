@@ -7,6 +7,7 @@ import { panelHeaderRow } from "../lib/ui/shell-card.ts";
 import { renderPanelRow } from "../lib/ui/shell-panel.ts";
 import { asciiText } from "../lib/ui/primitives/glyphs.ts";
 import { onSelection } from "../lib/ui/ldd-status.ts";
+import { contextLevel } from "../lib/lean-context.ts";
 import {
 	applyTodo,
 	emptyTodo,
@@ -334,7 +335,7 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		description: "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
 		promptSnippet: "Track multi-step work",
 		promptGuidelines: [
-			"Use todo for three or more steps or a list the user hands you; skip trivial requests.",
+			"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
 			"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
 			"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
 			"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds.",
@@ -429,7 +430,8 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		current.startNudged = false;
 		current.clearedByOwnerTurn = false;
 		// A child gets its open list back on a continued run, never the start rule.
-		const block = todoPromptBlock(current.state, staleTurns(current.state, current.turn)) ?? (child ? undefined : todoStartBlock(current.state));
+		// T146h L4: a lean session (no change, or a small one) gets no start rule.
+		const block = todoPromptBlock(current.state, staleTurns(current.state, current.turn)) ?? (child || contextLevel() === "lean" ? undefined : todoStartBlock(current.state));
 		// T115d: a persisted message, sent when the block changed; the system prompt never carries it.
 		if (!block || block === current.lastBlock) return undefined;
 		current.lastBlock = block;
@@ -453,7 +455,7 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		if (calls.length === 0 || child) return;
 		const remind = (customType: string, content: string) => pi.sendMessage({ customType, content, display: false }, { deliverAs: "steer" });
 		if (current.state.tasks.length === 0) {
-			if (current.startNudged || current.clearedByOwnerTurn || !current.ownerChanged || current.ownerToolTurns < START_AFTER_TOOL_TURNS) return;
+			if (contextLevel() === "lean" || current.startNudged || current.clearedByOwnerTurn || !current.ownerChanged || current.ownerToolTurns < START_AFTER_TOOL_TURNS) return;
 			current.startNudged = true;
 			remind(TODO_START_MESSAGE, START_NUDGE);
 			return;

@@ -36,6 +36,29 @@ func section(t *testing.T, text, name string) string {
 	return rest[:end]
 }
 
+// T146h: pi's prompt on a small task is the lean file, in pi's words: its
+// ask tool and grant place, the bare run, and the pointer to pi's own full
+// file; none of Claude Code's tool names, and none of the full context.
+func TestPiLeanPromptCarriesWhatPiUses(t *testing.T) {
+	e := engineAt(t, repo, "--validate")
+	p := pi{e}
+	got := flatText(promptOf(t, p, p.piLeanFile()))
+	for _, w := range []string{"`ask_user`", "from `/jhon:grants` in the shell", "`jhon executions run`", "`" + e.fullFile("pi") + "`"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("pi's lean prompt lacks %q", w)
+		}
+	}
+	gones := []string{"full-claude-code.md", "## The limits", "**Check proportionately.**"}
+	for _, tool := range claudeCodeTools {
+		gones = append(gones, "`"+tool+"`")
+	}
+	for _, gone := range gones {
+		if strings.Contains(got, gone) {
+			t.Errorf("pi's lean prompt carries %q", gone)
+		}
+	}
+}
+
 // T42c: pi's appended orchestrator text keeps the rules word for word and
 // states a duplicated rule once. Rarely needed detail sits behind a
 // reference that resolves on both runtimes now: the owner's L1217 (T146
@@ -109,13 +132,11 @@ func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 		t.Errorf("pi's prompt is %d chars, the full text and its guarantees %d", len(got), len(full)+len(g))
 	}
 
-	// Claude Code keeps its own tool lines and the LDD lead; the text moved
-	// on demand (L1217) is in neither runtime's prompt, only its pointer.
-	for _, r := range e.renderers() {
-		if r.Runtime() != "claude-code" {
-			continue
-		}
-		cc := flatText(promptOf(t, r, filepath.Join(e.claudeAgents(), "jhon-orchestrator.md")))
+	// Claude Code's full file keeps its own tool lines and the LDD lead; the
+	// text moved on demand (L1217) is in neither runtime's prompt, only its
+	// pointer.
+	{
+		cc := flatText(e.fullText("claude-code"))
 		for _, kept := range []string{"(Read, Grep, Glob, Edit)", "these bind.**", e.atInstall(contractsRoot + "asked-operations.md"), "read `contracts/delivery.md`"} {
 			if !strings.Contains(cc, kept) {
 				t.Errorf("Claude Code's orchestrator lost %q", kept)
@@ -154,11 +175,8 @@ func TestOrchestratorResearchesDecisionsFirst(t *testing.T) {
 	}
 	p := pi{e}
 	prompts := map[string]string{"pi": p.promptFlat(t)}
-	for _, r := range e.renderers() {
-		if r.Runtime() == "claude-code" {
-			prompts["claude-code"] = flatText(promptOf(t, r, filepath.Join(e.claudeAgents(), "jhon-orchestrator.md")))
-		}
-	}
+	// T146h: Claude Code's main agent carries these in its full file.
+	prompts["claude-code"] = flatText(e.fullText("claude-code"))
 	for _, rt := range []string{"pi", "claude-code"} {
 		got, ok := prompts[rt]
 		if !ok {
@@ -196,11 +214,8 @@ func TestOrchestratorKeepsWorkingAndPlansLifecycle(t *testing.T) {
 	}
 	p := pi{e}
 	prompts := map[string]string{"pi": p.promptFlat(t)}
-	for _, r := range e.renderers() {
-		if r.Runtime() == "claude-code" {
-			prompts["claude-code"] = flatText(promptOf(t, r, filepath.Join(e.claudeAgents(), "jhon-orchestrator.md")))
-		}
-	}
+	// T146h: Claude Code's main agent carries these in its full file.
+	prompts["claude-code"] = flatText(e.fullText("claude-code"))
 	for _, rt := range []string{"pi", "claude-code"} {
 		got, ok := prompts[rt]
 		if !ok {
@@ -258,11 +273,8 @@ func TestOrchestratorRunsSubAgentsInTheBackground(t *testing.T) {
 	}
 	p := pi{e}
 	prompts := map[string]string{"pi": p.promptFlat(t)}
-	for _, r := range e.renderers() {
-		if r.Runtime() == "claude-code" {
-			prompts["claude-code"] = flatText(promptOf(t, r, filepath.Join(e.claudeAgents(), "jhon-orchestrator.md")))
-		}
-	}
+	// T146h: Claude Code's main agent carries these in its full file.
+	prompts["claude-code"] = flatText(e.fullText("claude-code"))
 	for rt, ws := range wants {
 		got, ok := prompts[rt]
 		if !ok {
