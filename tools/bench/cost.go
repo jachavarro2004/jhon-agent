@@ -33,12 +33,16 @@ type TokenWeights struct {
 //   - glm-nan (a GLM model on NaN): NaN's credits for glm5.3 per million
 //     tokens, input 49, cached input 1.05, output 154 (nan.builders
 //     model guide, November 2026; cloud.nan.builders/tokens is current).
-//     Neither charges a cache write apart from input, so a cache write
+//   - deepseek-nan (a DeepSeek model on NaN): NaN's credits for
+//     deepseek-v4-flash per million tokens, input 10.5, cached input 0.21,
+//     output 42 (same guide).
+//     None charges a cache write apart from input, so a cache write
 //     weighs as an input token.
 var providerTokenWeights = []TokenWeights{
 	{Provider: "claude", Input: 1, CacheWrite: 1.25, CacheRead: 0.1, Output: 5},
 	{Provider: "glm", Input: 1, CacheWrite: 1, CacheRead: 0.26 / 1.40, Output: 4.40 / 1.40},
 	{Provider: "glm-nan", Input: 1, CacheWrite: 1, CacheRead: 1.05 / 49, Output: 154.0 / 49},
+	{Provider: "deepseek-nan", Input: 1, CacheWrite: 1, CacheRead: 0.21 / 10.5, Output: 42 / 10.5},
 }
 
 // tokenWeightsFor are the weights of model's provider and whether the table
@@ -61,6 +65,8 @@ func tokenWeightsFor(model string) (TokenWeights, bool) {
 	switch {
 	case strings.HasPrefix(id, "glm") && provider == "nan":
 		return byName("glm-nan"), true
+	case strings.HasPrefix(id, "deepseek") && provider == "nan":
+		return byName("deepseek-nan"), true
 	case strings.HasPrefix(id, "glm") || provider == "zai":
 		return byName("glm"), true
 	case provider == "" || provider == BridgeProvider || provider == "anthropic" || strings.HasPrefix(id, "claude"):
