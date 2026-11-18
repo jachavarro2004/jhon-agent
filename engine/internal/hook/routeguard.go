@@ -387,7 +387,12 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		}
 		switch {
 		case (documented || !n.Tasks && !n.Spec) && !redGreen:
-			return "this change alters behaviour, and its RED before GREEN is not on record (LDD, contracts/ldd.md, TDD always): " + ldd.RedGreenHint(named) + ", before the PR. Route: " + r.String() + "."
+			hint := ldd.RedGreenHint(named)
+			if folderless != "" && !n.Tasks {
+				// T146h L4: a small change's two runs are the bare one.
+				hint = ldd.SmallRedGreen
+			}
+			return "this change alters behaviour, and its RED before GREEN is not on record (LDD, contracts/ldd.md, TDD always): " + hint + ", before the PR. Route: " + r.String() + "."
 		case documented:
 		case ldd.OneLineRecord(r.Tier):
 			return "this change alters behaviour, and the branch carries no change with its record (LDD, contracts/ldd.md): write its tasks.md under openspec/changes/<change>/ before the PR: at risk " + string(r.Tier) + " an `## Intent` line and a `Delivers:` line are enough, with a spec delta only when a main spec changes or is added. Route: " + r.String() + "."

@@ -115,6 +115,7 @@ import { sessionBriefs } from "../lib/session-brief.ts";
 import { codegraphIndexed, withoutCodegraph } from "../lib/codegraph.ts";
 import { ROUTE_MESSAGE, SessionPrompt, compactSkills, memoryIndexPrompt, splitRoute } from "../lib/session-prompt.ts";
 import { ToolPolicy, enabledOnBranch, toolsMoreTool } from "../lib/tools-deferred.ts";
+import { FULL_MESSAGE, fullOnBranch, fullTrigger, setContextLevel } from "../lib/lean-context.ts";
 import { AnnounceSendBack, engineStopRunner } from "../lib/announce-stop.ts";
 
 export { CONFIG_FILE, claudeCall, inspect, judge, loadConfig } from "../lib/guards.ts";
@@ -469,6 +470,11 @@ export default function jhon(pi: any): void {
   // T115c/T115d: the prompt and the tool list, decided once per session (lib/session-prompt.ts, lib/tools-deferred.ts).
   const sessionPrompt = new SessionPrompt();
   const toolPolicy = new ToolPolicy(!child, (cwd) => codegraphIndexed(cwd));
+  // T146h: whether this session started lean, and whether its full context has loaded since;
+  // decided at its first run, from session-brief's context. fullBefore: a resumed branch holds it.
+  let lean: { on: boolean; loaded: boolean } | undefined;
+  let fullBefore = false;
+  let leanSkills = "";
   // T115f follow-up (L709): the skills this session resolved, by name; a child gets only the ones its definition names.
   const resolvedSkills = new Map<string, string>();
   // T130 (L920 B1): the session never calls a model nobody chose (lib/model-choice.ts). A child
@@ -598,6 +604,10 @@ export default function jhon(pi: any): void {
     let branch: unknown[] | undefined;
     try { branch = ctx?.sessionManager?.getBranch?.(); } catch { branch = undefined; }
     toolPolicy.reset(child ? [] : enabledOnBranch(branch));
+    lean = undefined;
+    fullBefore = fullOnBranch(branch);
+    leanSkills = "";
+    if (!child) setContextLevel(undefined);
     // T120 (L980 A6): the session's profile is its branch's: a resumed session comes back with it, a
     // new one has none; one that no longer exists is said here (A9).
     headerFacts = undefined;
@@ -914,16 +924,29 @@ export default function jhon(pi: any): void {
     const brief = await briefs?.(session, cwd);
     const rules = brief && "lead" in brief ? brief : undefined;
     const split = rules ? splitRoute(rules.brief) : undefined;
+    // T146h T2: no change, or a small one, starts with the lean prompt; Jhon's own tools and the
+    // skills list wait for the full context (L3). A failed brief, or no lean file, starts full.
+    if (lean === undefined) {
+      const on = brief?.context === "lean" && typeof config.lean === "string" && existsSync(config.lean);
+      lean = { on, loaded: on && fullBefore };
+      toolPolicy.setLean(on && !lean.loaded);
+      setContextLevel(on && !lean.loaded ? "lean" : "full");
+    }
+    if (lean.on && !lean.loaded) {
+      if (Array.isArray(options?.selectedTools)) {
+        const kept = toolPolicy.filter(options.selectedTools, cwd);
+        if (kept) options.selectedTools.splice(0, options.selectedTools.length, ...kept);
+      }
+      if (Array.isArray(options?.skills) && options.skills.length) {
+        leanSkills = options.skills.filter((k: any) => typeof k?.name === "string").map((k: any) => `- ${k.name}: ${k.description ?? ""} (${k.filePath ?? ""})`).join("\n");
+        options.skills.splice(0, options.skills.length);
+      }
+    }
     // T115d (L707): the appended prompt is the one of the session's first run
     // here: a rewritten orchestrator file or a re-read brief waits for the
     // next session, so the cached prefix holds on every turn.
     const [head, ...rest] = sessionPrompt.parts(cwd, () => {
-      const organic = readFileSync(config.orchestrator, "utf8");
-      // Writer mode: the writer rules over the marked region, or the organic rules whole, said once.
-      const spliced = delegationPrompt(organic, mode, writerFile(config.orchestrator));
-      if (spliced.note) ctx?.ui?.notify?.(spliced.note, "warning");
-      const full = spliced.text;
-      const orchestrator = toolPolicy.codegraphOn(cwd) ? full : withoutCodegraph(full);
+      const orchestrator = lean?.on ? readFileSync(config.lean!, "utf8").trim() : fullPrompt(cwd, mode, ctx);
       return [
         rules ? `${rules.lead}\n\n${orchestrator}` : orchestrator,
         // Where the engine says LDD is not set up yet (no layout), its one line
@@ -942,6 +965,35 @@ export default function jhon(pi: any): void {
     // The route follows the diff: a persisted message, sent when it changes.
     const route = sessionPrompt.routeChange(split?.route);
     return route ? { message: { customType: ROUTE_MESSAGE, content: route, display: false } } : undefined;
+  });
+
+  // The orchestrator's full prompt: writer mode's rules over the marked region, or the organic
+  // rules whole, said once; codegraph's contract only where it indexed the repository.
+  const fullPrompt = (cwd: string, mode: "inline" | "writer", ctx: any): string => {
+    const organic = readFileSync(config!.orchestrator, "utf8");
+    const spliced = delegationPrompt(organic, mode, writerFile(config!.orchestrator));
+    if (spliced.note) ctx?.ui?.notify?.(spliced.note, "warning");
+    return toolPolicy.codegraphOn(cwd) ? spliced.text : withoutCodegraph(spliced.text);
+  };
+
+  // T146h T3: a lean session's full context loads once, when `jhon status` says the change is not
+  // small or a sub-agent is launched: one persisted message, never a system-prompt swap (T115d),
+  // and Jhon's deferred tools come back.
+  if (!child && config) pi.on("tool_result", async (event: any, ctx: any) => {
+    if (!lean?.on || lean.loaded) return undefined;
+    const output = (event.content ?? []).map((c: any) => (c?.type === "text" && typeof c.text === "string" ? c.text : "")).join("\n");
+    if (!fullTrigger(event.toolName, event.input, output)) return undefined;
+    lean.loaded = true;
+    toolPolicy.setLean(false);
+    setContextLevel("full");
+    const cwd = ctx?.cwd ?? process.cwd();
+    let text = "";
+    try { text = fullPrompt(cwd, sessionPrompt.frozenDelegation() ?? "inline", ctx); } catch { text = ""; }
+    if (leanSkills) text += `\n\n## Skills\n\nRead a skill's file when its task applies:\n${leanSkills}`;
+    const all = (pi.getAllTools?.() ?? []).map((t: any) => t.name).filter((n: unknown): n is string => typeof n === "string");
+    if (all.length) pi.setActiveTools?.(toolPolicy.filter(all, cwd) ?? all);
+    if (text) pi.sendMessage?.({ customType: FULL_MESSAGE, content: `Jhon: this work needs the full context; it binds from now on.\n\n${text}`, display: false }, { deliverAs: "steer" });
+    return undefined;
   });
 
   // T45b: pi connects its MCP servers after before_agent_start, so their tools

@@ -172,7 +172,9 @@ func (e *engine) onDemandProblems() []problem {
 	parts := map[string][][2]string{}
 	fixed := map[string]string{}
 	for _, rt := range []string{"claude-code", "pi"} {
-		parts[rt], fixed[rt] = e.fixedParts(rt), flattened(e.fixedText(rt))
+		// T146h: the fixed context of a change that is not small is the
+		// runtime's full file (lean.go).
+		parts[rt], fixed[rt] = e.fixedParts(rt), flattened(e.fullText(rt))
 	}
 	for _, c := range onDemandContracts {
 		path := filepath.Join(e.prose, c.file)
@@ -216,5 +218,5 @@ func (e *engine) onDemandProblems() []problem {
 			}
 		}
 	}
-	return out
+	return append(out, e.leanProblems()...)
 }

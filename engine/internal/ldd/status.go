@@ -1235,8 +1235,15 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	if next == archive && behaviour && !redGreen {
 		next = apply
 	}
+	// A small change (T146 FA2): no folder, and its record needs no tasks.md
+	// (one component, under the advisory size, not high risk).
+	small := branch != "" && needs != nil && !needs.Tasks
 	if next == apply && behaviour && !redGreen && (tddOnly || st("tasks.md") == v.done && tasks.Finished()) {
-		notes = append(notes, "no RED before GREEN on record for "+change+": "+RedGreenHint(change))
+		hint := RedGreenHint(change)
+		if small {
+			hint = SmallRedGreen
+		}
+		notes = append(notes, "no RED before GREEN on record for "+change+": "+hint)
 	}
 	if next == apply && appliedNothing {
 		notes = append(notes, "nothing applied yet for "+change+": no file outside "+layout.For(root).Dir()+"/ differs from the base or is new; apply the change (one that alters behaviour starts with its failing test)")
@@ -1245,7 +1252,6 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	// behaviour, short of verified, whose RED before GREEN run is newer than
 	// its last light verify. A note; next stays as computed.
 	// A small change keeps none (T146g G3).
-	small := branch != "" && needs != nil && !needs.Tasks
 	lightRoute := route != nil && route.Behaviour && route.Level != RouteVerified && !small
 	if lightRoute && execution.LightVerifyDue(tests) {
 		notes = append(notes, "light verify due for "+change+": its GREEN run is newer than its last light verify; launch the `verify` agent in light mode (read the diff and the tests, run the focused tests), which records `jhon executions verify "+change+" --verdict pass|fail`")
@@ -1274,6 +1280,9 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	// records RED and GREEN, or the delivery check.
 	command := ""
 	switch {
+	case next == apply && behaviour && !redGreen && small:
+		// T146h L4: the small path's run is the bare one, twice.
+		command = "jhon executions run"
 	case next == apply && behaviour && !redGreen && (tddOnly || st("tasks.md") == v.done && tasks.Finished()):
 		command = "jhon executions run " + change
 		if base := g.baseName(root); base != "" {
@@ -1285,10 +1294,11 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 			command += "  (once the tested tree is committed)"
 		}
 	}
-	// A small change (T146 FA2): no folder, and its record needs no tasks.md
-	// (one component, under the advisory size, not high risk).
 	if small {
 		notes = append(notes, SmallChangeNote(change))
+	} else {
+		// T146h T1: a change that is not small reads the full context first.
+		notes = append([]string{NotSmallNote()}, notes...)
 	}
 
 	return Status{
@@ -1315,6 +1325,59 @@ func (g gitReads) baseName(root string) string {
 		}
 	}
 	return commit
+}
+
+// SmallRedGreen is how a small change records its RED and GREEN (T146h
+// L4): the bare run twice, no unit's run between.
+const SmallRedGreen = "run `jhon executions run` while its new test fails (RED), then `jhon executions run` again once it passes (GREEN): two runs, nothing between"
+
+// Small is whether the status is a small change's (T146 FA2): no folder,
+// and a record that needs no tasks.md.
+func (s Status) Small() bool { return s.Branch != "" && s.Needs != nil && !s.Needs.Tasks }
+
+// NotSmall is whether the repository holding dir has a change selected
+// that is not small: a session there starts with the full context
+// (T146h T2). No LDD config, no change, or a small one is false.
+func NotSmall(dir string) bool {
+	top, _ := riskGit(dir, "rev-parse", "--show-toplevel")
+	top = js.Trim(top)
+	if top == "" || !project.UsesLdd(top) {
+		return false
+	}
+	s, err := StatusOf(top, nil)
+	return err == nil && s.Change != nil && !s.Small()
+}
+
+// FullContextFile is the install's full context for runtime (T146h L2):
+// <home>/.local/share/jhon/current/prose/full-<runtime>.md, the file the
+// renderer writes and the lean text points to.
+func FullContextFile(home, runtime string) string {
+	return filepath.Join(home, ".local", "share", "jhon", "current", "prose", "full-"+runtime+".md")
+}
+
+// sessionRuntime is the runtime the calling session runs in, from its
+// environment: pi's agent directory (jhon start pi), else Claude Code's
+// marker; "" for neither.
+func sessionRuntime() string {
+	switch {
+	case os.Getenv("PI_CODING_AGENT_DIR") != "":
+		return "pi"
+	case os.Getenv("CLAUDECODE") != "":
+		return "claude-code"
+	}
+	return ""
+}
+
+// NotSmallNote is what status tells a change that is not small (T146h T1):
+// read the full context of the session's runtime before the next edit;
+// outside both runtimes it names Claude Code's file and pi's beside it.
+func NotSmallNote() string {
+	home := project.Home()
+	rt := sessionRuntime()
+	if rt == "" {
+		return "not small: read " + FullContextFile(home, "claude-code") + " (pi: full-pi.md) before the next edit"
+	}
+	return "not small: read " + FullContextFile(home, rt) + " before the next edit"
 }
 
 // SmallChangeNote is what status tells a small change: no bookkeeping, and

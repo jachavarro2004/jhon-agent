@@ -8,7 +8,7 @@
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { findUp } from "./ui/ldd-status.ts";
 
-export const LDD_REMINDER = "jhon (LDD): this project uses LDD and this session has no change selected. Start with `jhon status`, then write the RED test first and run it through `jhon executions run <change>` while it fails, before the behaviour change. A reminder, not a refusal.";
+export const LDD_REMINDER = "jhon (LDD): this project uses LDD and this session has no change selected. Start with `jhon status`, then write the RED test first and run it through `jhon executions run` while it fails, before the behaviour change. A reminder, not a refusal.";
 
 /** Files that are no code: documents and images. The LDD record (openspec/) is none either. */
 const NOT_CODE = new Set([".md", ".mdx", ".markdown", ".txt", ".rst", ".adoc", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".pdf"]);

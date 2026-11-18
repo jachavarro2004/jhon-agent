@@ -375,6 +375,8 @@ func (p pi) Files() []File {
 	config := js.Obj(
 		"jhon", p.bin(),
 		"orchestrator", p.piPromptFile(),
+		"lean", p.piLeanFile(),
+		"full", p.fullFile("pi"),
 		"vcsDirs", strs(p.vcsDirs()),
 		"protected", strs(p.frameworkProtected()),
 		"inspectAllow", strs(p.m.InspectAllow),
@@ -383,7 +385,8 @@ func (p pi) Files() []File {
 		{p.piSettings(), js.StringifyValue(settings) + "\n"},
 		{p.piConfig(), js.StringifyValue(config) + "\n"},
 		{p.piMcpFile(), js.StringifyValue(p.piMcp()) + "\n"},
-		{p.piPromptFile(), p.promptText() + guarantees + "\n"},
+		{p.piPromptFile(), p.fullText("pi") + "\n"},
+		{p.piLeanFile(), p.leanText("pi") + "\n"},
 		{p.piWriterFile(), js.Trim(inRuntime("pi", mustReadText(filepath.Join(p.prose, writerProse)))) + "\n"},
 	}
 	if Theme != nil {
@@ -487,6 +490,7 @@ func (p pi) Install(s *run) bool {
 		}
 	}
 	s.writeFiles(p.Files())
+	s.writeFull("pi")
 	// The provider wrapper is run as a program; the node one a release
 	// before wrote goes (pi runs on Bun and could not launch it).
 	if !s.args.check {

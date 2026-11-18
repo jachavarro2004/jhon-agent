@@ -52,7 +52,7 @@ func FolderlessPendingNote(root string) string {
 	if name == "" {
 		return ""
 	}
-	return "branch " + branch + " names change " + name + ", which has no changes yet: no file outside " + layout.For(root).Dir() + "/ differs from the base or is new; write the failing test first (a new untracked file counts), then run `jhon executions run " + name + "`"
+	return "branch " + branch + " names change " + name + ", which has no changes yet: no file outside " + layout.For(root).Dir() + "/ differs from the base or is new; write the failing test first (a new untracked file counts), then run `jhon executions run`"
 }
 
 // changedOutsideRecord is whether a file outside the layout differs from

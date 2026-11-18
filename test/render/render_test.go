@@ -46,8 +46,22 @@ func install(t testing.TB, home, repo string, args ...string) support.Result {
 	t.Helper()
 	share := filepath.Join(home, ".local", "share", "jhon")
 	release := filepath.Join(share, "releases", releaseName(repo))
+	// T146h: the install writes each runtime's full context into the
+	// release's prose/; sync keeps a release it built, so a fresh copy keeps
+	// what the last install wrote there.
+	kept := map[string][]byte{}
+	for _, rt := range []string{"claude-code", "pi"} {
+		if b, err := os.ReadFile(filepath.Join(release, "prose", "full-"+rt+".md")); err == nil {
+			kept[rt] = b
+		}
+	}
 	os.RemoveAll(release)
 	copyTree(t, repo, release)
+	for rt, b := range kept {
+		if err := os.WriteFile(filepath.Join(release, "prose", "full-"+rt+".md"), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	os.Remove(filepath.Join(share, "current"))
 	if err := os.Symlink(release, filepath.Join(share, "current")); err != nil {
 		t.Fatal(err)
@@ -141,6 +155,14 @@ func renderedHome(t *testing.T) string {
 func claudeAgent(t testing.TB, home, name string) string {
 	t.Helper()
 	return support.Read(t, filepath.Join(home, ".claude", "agents", name+".md"))
+}
+
+// claudeFull is Claude Code's full context as the install wrote it (T146h):
+// the orchestrator's body and the always-on layer, which its agent
+// definition, the lean text, points to.
+func claudeFull(t testing.TB, home string) string {
+	t.Helper()
+	return support.Read(t, filepath.Join(home, ".local", "share", "jhon", "current", "prose", "full-claude-code.md"))
 }
 
 // frontmatter is the frontmatter of a rendered agent file, without its delimiters.
@@ -849,7 +871,7 @@ func TestRenderAgentTools(t *testing.T) {
 				t.Error(name)
 			}
 		}
-		match(t, flat(claudeAgent(t, home, "jhon-orchestrator")), "continue it with `SendMessage`", "the orchestrator's body states the resume rule")
+		match(t, flat(claudeFull(t, home)), "continue it with `SendMessage`", "the orchestrator's body states the resume rule")
 	})
 
 	t.Run("the orchestrator may ask, write, and invoke every delegable agent but itself", func(t *testing.T) {
@@ -1859,7 +1881,7 @@ func TestRenderClaudeMd(t *testing.T) {
 	t.Run("an agent that loads CLAUDE.md files carries the persona and every always-on contract inline", func(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
-		orch := claudeAgent(t, home, "jhon-orchestrator")
+		orch := claudeFull(t, home) // T146h: the full context carries the layer
 		var order []int
 		for _, f := range []string{"persona/jhon.md", "contracts/language.md", "contracts/runtime-boundaries.md", "contracts/tdd.md", "contracts/routing.md"} {
 			first := strings.Split(strings.TrimSpace(support.Read(t, treePath(repoRoot, f))), "\n")[0]
@@ -1976,7 +1998,7 @@ func TestRenderGuards(t *testing.T) {
 		for _, a := range sorted(agents) {
 			expected = append(expected, filepath.Join(home, ".claude", "agents", a+".md"))
 		}
-		for _, f := range []string{"settings.json", "jhon.json", "mcp.json", "jhon-orchestrator.md", "jhon-orchestrator-writer.md", "agents", "prompts"} {
+		for _, f := range []string{"settings.json", "jhon.json", "mcp.json", "jhon-orchestrator.md", "jhon-orchestrator-writer.md", "jhon-lean.md", "agents", "prompts"} {
 			expected = append(expected, filepath.Join(home, ".pi", "jhon", f))
 		}
 		for _, name := range agents {
@@ -2292,7 +2314,7 @@ func TestRenderOrchestratorBody(t *testing.T) {
 	// Item 6: risk tier, question triggers, the record and the route, handoffs.
 	t.Run("the orchestrator acts on jhon risk, keeps the record always and the rigor by route, and hands off the request verbatim", func(t *testing.T) {
 		t.Parallel()
-		b := flat(claudeAgent(t, renderedHome(t), "jhon-orchestrator"))
+		b := flat(claudeFull(t, renderedHome(t)))
 		// T146 FA3 (L1217): the delivery and delegation rules are read on
 		// demand; the orchestrator carries the pointer, the contract the rule.
 		match(t, b, "run `jhon risk` in its tree and read `contracts/delivery\\.md`", "the risk tier drives verification, read before delivery")
@@ -2324,7 +2346,7 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
 		for _, name := range []string{"jhon-orchestrator"} {
-			match(t, flat(claudeAgent(t, home, name)), "Before writing a delegation prompt, read `contracts/delegation\\.md`", name)
+			match(t, flat(claudeFull(t, home)), "Before writing a delegation prompt, read `contracts/delegation\\.md`", name)
 		}
 		// T146 FA3 (L1217): the handoff rule is read on demand.
 		match(t, flat(support.Read(t, treePath(repoRoot, "contracts/delegation.md"))), `jhon context <change> --phase none --handoff`, "contracts/delegation.md")
@@ -2349,7 +2371,7 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
 		for _, name := range []string{"jhon-orchestrator"} {
-			match(t, claudeAgent(t, home, name), `## Response Length Contract`, name)
+			match(t, claudeFull(t, home), `## Response Length Contract`, name)
 		}
 		for _, name := range []string{"verify", "review-risk", "jd-judge-a", "explore"} {
 			md := claudeAgent(t, home, name)
@@ -2364,7 +2386,7 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		t.Parallel()
 		_, pi := sharedPiHome(t)
 		for _, c := range []struct{ runtime, prompt, tool, foreign string }{
-			{"claude-code", claudeAgent(t, renderedHome(t), "jhon-orchestrator"), "AskUserQuestion", "ask_user"},
+			{"claude-code", claudeFull(t, renderedHome(t)), "AskUserQuestion", "ask_user"},
 			{"pi", support.Read(t, filepath.Join(pi, "jhon-orchestrator.md")), "ask_user", "AskUserQuestion"},
 		} {
 			b := flat(c.prompt)

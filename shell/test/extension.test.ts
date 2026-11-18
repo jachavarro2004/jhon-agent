@@ -2006,7 +2006,7 @@ test("a code edit with no LDD change selected gets one reminder, never a block, 
   mkdirSync(join(ldd, "openspec", "specs"), { recursive: true });
   const other = project();
   const edit = (path: string, toolName = "edit", isError = false) => ({ toolName, input: { path }, content: [{ type: "text", text: "Edited" }], isError });
-  const reminder = "jhon (LDD): this project uses LDD and this session has no change selected. Start with `jhon status`, then write the RED test first and run it through `jhon executions run <change>` while it fails, before the behaviour change. A reminder, not a refusal.";
+  const reminder = "jhon (LDD): this project uses LDD and this session has no change selected. Start with `jhon status`, then write the RED test first and run it through `jhon executions run` while it fails, before the behaviour change. A reminder, not a refusal.";
   let result = loaded(dir).handlers.get("tool_result")!;
   assert.equal(await result(edit("src/a.ts"), { cwd: other }), undefined, "a project with no openspec/ is not an LDD one");
   // "Uses LDD" is the engine's ldd.active (this fake: an openspec/config.yaml in the cwd), not any openspec/.

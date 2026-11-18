@@ -116,6 +116,12 @@ var cases = []defectCase{
 	defect("runtime-boundaries", "orchestr", "orchestrator.md", "Never perform,\n  propose, or instruct a bypass", "You may\n  propose a bypass"),
 	codeDefect("runtime-boundaries", "render", "engine/internal/render/render.go", "\t\t\"contracts/runtime-boundaries.md\",\n", ""),
 
+	// on-demand — the lean text a small task starts with (T146h) keeps every
+	// read-more pointer and restates no rule moved to a contract read on demand
+	defect("on-demand", "lean.md", "lean.md", "contracts/witness.md`", "contracts/nowhere.md`"),
+	defect("on-demand", "lean.md", "lean.md", "/prose/full-{{runtime:runtime}}.md`", "/prose/full.md`"),
+	defect("on-demand", "lean.md", "lean.md", "Never weaken a failing test.", "Never weaken a failing test. A whole suite run by hand gets a note, never a refusal."),
+
 	// runtime-matrix — agents.yaml declares every primitive for every runtime,
 	// well formed, with repository evidence behind `verified`, and a contract
 	// delivery and observation route per runtime (docket AG1)
