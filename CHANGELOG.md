@@ -13,6 +13,7 @@ All notable changes to Jhon are recorded here. The format follows
 
 ### Changed
 
+- bench: `value` gates a small task's cost on turns, Jhon's median at most the clean median + 6 (the LDD minimum: branch, test-first, RED run, GREEN run, commit, deliver check); its weighted tokens, cost usd and active time are shown as INFO, never failed. Large tasks and the quality gates are unchanged (T146i, L1285).
 - A small change names the bare `jhon executions run` everywhere: status's next command and RED/GREEN note (two runs, nothing between), the pending-branch note, and pi's LDD reminder. `jhon executions --help` and `jhon executions run --help` open with the two-line common case (T146h).
 - A lean pi session (no change, or a small one) gets no todo start rule or start nudge, and the todo tool's guideline says a small change keeps no list (T146h).
 - Claude Code's `jhon-orchestrator` agent definition is the lean text; its full context is the install's `full-claude-code.md` (T146h).

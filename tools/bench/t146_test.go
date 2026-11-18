@@ -84,30 +84,58 @@ func TestATaskSizeIsSmallOrLarge(t *testing.T) {
 	}
 }
 
-// The thresholds live in one place, with the owner's decision (L1205).
+// The thresholds live in one place, with the owner's decisions (L1205,
+// L1285).
 func TestTheSizeGatesAreTheOwners(t *testing.T) {
-	want := map[string]SizeGate{"small": {Cost: 1.1, Time: 1.1}, "large": {Cost: 1.25, Time: 1.25, BetterQuality: true}}
+	want := map[string]SizeGate{"small": {Turns: 6}, "large": {Cost: 1.25, Time: 1.25, BetterQuality: true}}
 	if len(valueGates) != 2 || valueGates["small"] != want["small"] || valueGates["large"] != want["large"] {
 		t.Errorf("valueGates %+v", valueGates)
 	}
 }
 
-func TestValueGatesASmallTaskAtOnePointOne(t *testing.T) {
+// A small task's cost gate is turns, at most clean's median + 6, the LDD
+// minimum; its tokens, cost and time are shown, never failed (L1285).
+func TestValueGatesASmallTaskOnTurnsAtCleanPlusSix(t *testing.T) {
+	// turns is the Jhon runs' turns by repeat; tokens, cost and time are 2.4×.
+	sized := func(t *testing.T, turns [3]int, edit func(m *Metrics)) string {
+		dir := sizedRuns(t, "pagination-bug", "small", 2.4, func(m *Metrics) {
+			m.Turns, m.CostUSD = turns[m.Repeat-1], 0.24
+			if edit != nil {
+				edit(m)
+			}
+		}, func(m *Metrics) { m.CostUSD = 0.1 })
+		// The one-time set-up, apart from every cell.
+		for _, cond := range []string{"jhon", "pi-jhon"} {
+			m := cellRun("plain", cond, 1, 3)
+			m.Task, m.TaskSize = SetupTaskID, "small"
+			putRuns(t, dir, m)
+		}
+		return dir
+	}
 	for _, c := range []struct {
 		name             string
-		cost             float64
+		turns            [3]int
 		edit             func(m *Metrics)
 		code             int
+		turnsPass        bool
 		want, wantAbsent []string
 	}{
-		{"at the limit", 1.1, nil, 0, []string{"PASS  pagination-bug plain jhon vs clean plain (small)", "PASS  weighted tokens", "(1.1×, limit 1.1× for a small task, L1205)",
-			"PASS  active time", "110 s (110-110) vs clean 100 s (100-100) (1.1×, limit 1.1× for a small task, L1205)", "verdict: PASS"}, []string{"better quality"}},
-		{"over in cost", 1.15, nil, 1, []string{"FAIL  pagination-bug plain jhon vs clean plain (small)", "FAIL  weighted tokens", "(1.15×, limit 1.1× for a small task", "FAIL  active time", "verdict: FAIL"}, nil},
-		{"over in time only", 1, func(m *Metrics) { m.ActiveMs = 120000 }, 1, []string{"PASS  weighted tokens", "FAIL  active time", "120 s (120-120) vs clean 100 s (100-100) (1.2×, limit 1.1×"}, nil},
-		{"under while discipline is still judged", 0.9, func(m *Metrics) { m.TestsRunBeforeEnd = bp(false) }, 1, []string{"PASS  weighted tokens", "PASS  active time", "FAIL  tests run before end"}, nil},
+		{"at clean + 6 with tokens at 2.4x", [3]int{24, 26, 26}, nil, 0, true, []string{"PASS  pagination-bug plain jhon vs clean plain (small)",
+			"PASS  turns                  26 (24-26) vs clean 20 (20-20) (+6, limit clean + 6 for a small task, L1285)",
+			"INFO  weighted tokens", "(2.4×)", "INFO  cost usd               0.24 $ (0.24-0.24) vs clean 0.1 $ (0.1-0.1) (2.4×)",
+			"INFO  active time            240 s (240-240) vs clean 100 s (100-100) (2.4×)",
+			"one-time set-up jhon  (apart from every cell)", "runtime claude-code (jhon vs clean): PASS — 1/1 cells", "verdict: PASS"},
+			[]string{"FAIL", "better quality", "limit 1.1×", "INFO  turns", "ldd-setup plain jhon vs"}},
+		{"under clean", [3]int{18, 18, 18}, nil, 0, true, []string{"PASS  turns                  18 (18-18) vs clean 20 (20-20) (-2, limit clean + 6 for a small task, L1285)", "verdict: PASS"}, nil},
+		{"at clean + 7", [3]int{27, 27, 27}, nil, 1, false, []string{"FAIL  pagination-bug plain jhon vs clean plain (small)",
+			"FAIL  turns                  27 (27-27) vs clean 20 (20-20) (+7, limit clean + 6 for a small task, L1285)",
+			"INFO  weighted tokens", "INFO  active time", "runtime claude-code (jhon vs clean): FAIL — 0/1 cells", "verdict: FAIL"},
+			[]string{"FAIL  weighted tokens", "FAIL  active time", "FAIL  cost usd", "ldd-setup plain jhon vs"}},
+		{"discipline still judged", [3]int{20, 20, 20}, func(m *Metrics) { m.TestsRunBeforeEnd = bp(false) }, 1, true,
+			[]string{"PASS  turns", "FAIL  tests run before end", "verdict: FAIL"}, nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			dir := sizedRuns(t, "pagination-bug", "small", c.cost, c.edit, nil)
+			dir := sized(t, c.turns, c.edit)
 			code, out, errOut := value(t, dir)
 			if code != c.code {
 				t.Errorf("exit %d, want %d: %s", code, c.code, errOut)
@@ -120,6 +148,29 @@ func TestValueGatesASmallTaskAtOnePointOne(t *testing.T) {
 			for _, s := range c.wantAbsent {
 				if strings.Contains(out, s) {
 					t.Errorf("output has %q:\n%s", s, out)
+				}
+			}
+			// value.json carries the same verdicts.
+			var v Value
+			b, err := os.ReadFile(filepath.Join(dir, "value.json"))
+			if err != nil || json.Unmarshal(b, &v) != nil || len(v.Cells) != 2 || len(v.Setup) != 2 {
+				t.Fatalf("value.json %v: %s", err, b)
+			}
+			if v.Verdict != map[bool]string{true: "PASS", false: "FAIL"}[c.code == 0] {
+				t.Errorf("value.json verdict %s", v.Verdict)
+			}
+			for _, cell := range v.Cells {
+				for _, ch := range cell.Checks {
+					switch ch.Metric {
+					case "turns":
+						if ch.Pass != c.turnsPass || ch.Informational {
+							t.Errorf("%s turns %+v", cell.Condition, ch)
+						}
+					case "weighted tokens", "cost usd", "active time":
+						if !ch.Pass || !ch.Informational {
+							t.Errorf("%s %s %+v", cell.Condition, ch.Metric, ch)
+						}
+					}
 				}
 			}
 		})
