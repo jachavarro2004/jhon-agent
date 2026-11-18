@@ -306,7 +306,7 @@ var (
 	escalate    = set("sudo", "doas")
 	deviceOK    = set("/dev/null", "/dev/stdout", "/dev/stderr")
 	codeDelete  = lazyre.New(`unlink|\brm(?:Sync|dir|dirSync)?\s*\(|rmtree|os\.remove|\bremove\s*\(|FileUtils\.rm|File\.delete`)
-	grantText   = lazyre.New(`\bjhon\s+(?:grant|mode|ldd)\b|\bgrant\.ts\b|jhon[\\/]+(?:grants|modes|ldd-switch)\b`)
+	grantText   = lazyre.New(`\bjhon\s+(?:grant|mode|ldd|workspace)\b|\bgrant\.ts\b|jhon[\\/]+(?:grants|modes|ldd-switch|workspace)\b`)
 	grantScript = lazyre.New(`(?:^|/)src/grant\.ts$`)
 	tsRunners   = set("node", "nodejs", "bun", "deno", "tsx", "ts-node")
 	xargsDanger = set("rm", "rmdir", "unlink", "shred", "srm", "rimraf", "mv", "cp", "tee", "ln", "install", "truncate", "dd", "chmod", "chown", "touch", "mkdir")
@@ -323,7 +323,7 @@ var (
 )
 
 func mentionsGrant(text *string) bool {
-	return text != nil && (grantText.MatchString(*text) || strings.Contains(*text, grant.Dir()) || strings.Contains(*text, grant.ModesDir()) || strings.Contains(*text, lddswitch.Dir()))
+	return text != nil && (grantText.MatchString(*text) || strings.Contains(*text, grant.Dir()) || strings.Contains(*text, grant.ModesDir()) || strings.Contains(*text, lddswitch.Dir()) || strings.Contains(*text, grant.WorkspaceDir()))
 }
 
 // The owner's acts, refused from an agent whatever the program is called.
@@ -331,10 +331,13 @@ const (
 	grantAct = "a grant is the owner's act; no agent creates or revokes one"
 	modeAct  = "a mode is the owner's act; no agent sets one"
 	lddAct   = "the LDD switch is the owner's act; no agent turns LDD on or off"
+	// T57 W2 (L1299): a sibling's pointer to its workspace's primary.
+	workspaceAct = "a workspace pointer is the owner's act; no agent joins or leaves a workspace"
 )
 
 // ownerAct is "mode" when words hold the token `mode` followed by a mode,
-// "grant" when they hold `grant` followed by a class or --revoke, and ""
+// "grant" when they hold `grant` followed by a class or --revoke,
+// "workspace" when `workspace` is followed by join or leave, and ""
 // otherwise; jhon's own options (--root <p>, --for <d>, --json, --list) may
 // stand between. It reads arguments, not the program's name: `go run
 // ./engine/cmd/jhon mode yolo`, a copied, built or linked binary, and a
@@ -344,7 +347,7 @@ const (
 // change as the owner's (by "owner"), which jhon audit reads.
 func ownerAct(words []string) string {
 	for i, w := range words {
-		if w != "mode" && w != "grant" && w != "ldd" {
+		if w != "mode" && w != "grant" && w != "ldd" && w != "workspace" {
 			continue
 		}
 	next:
@@ -358,6 +361,8 @@ func ownerAct(words []string) string {
 				return "mode"
 			case w == "ldd" && (v == lddswitch.On || v == lddswitch.Off):
 				return "ldd"
+			case w == "workspace" && (v == "join" || v == "leave"):
+				return "workspace"
 			case w == "grant" && (slices.Contains(grant.Classes, v) || v == "--revoke"):
 				return "grant"
 			default:
@@ -377,6 +382,8 @@ func ownerActFinding(name string, words []string) []Finding {
 		return []Finding{deny(name+" grant", grantAct)}
 	case "ldd":
 		return []Finding{deny(name+" ldd", lddAct)}
+	case "workspace":
+		return []Finding{deny(name+" workspace", workspaceAct)}
 	}
 	return nil
 }
@@ -405,6 +412,15 @@ func modeRead(args []string) bool {
 		}
 	}
 	return true
+}
+
+// workspaceRead is whether `jhon workspace <args>` only reads: `list`
+// (--json), or the help; anything else may join or leave.
+func workspaceRead(args []string) bool {
+	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
+		return true
+	}
+	return len(args) > 0 && args[0] == "list" && (len(args) == 1 || (len(args) == 2 && args[1] == "--json"))
 }
 
 // runsGrant is whether a program runs grant.ts: as the program itself, or as a runner's file.
@@ -537,6 +553,10 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	// So with the LDD switch: reading it changes nothing.
 	if jsub == "ldd" && !modeRead(jhonArgs[1:]) {
 		out = append(out, deny("jhon ldd", lddAct))
+	}
+	// So with a workspace pointer: listing the pointers changes none.
+	if jsub == "workspace" && !workspaceRead(jhonArgs[1:]) {
+		out = append(out, deny("jhon workspace", workspaceAct))
 	}
 	if jsub == "publish" {
 		out = append(out, ask("publish", "jhon publish"))

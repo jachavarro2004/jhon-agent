@@ -121,6 +121,37 @@ status` shows `worktree    per change` (and `"worktree_per_change": true`
 with `--json`) only when it is true; any value other than `true` or
 `false` is off, with a note naming it.
 
+## A workspace of several repositories
+
+A change may span an app and its sibling repositories (T57). The primary
+repository names them in its LDD config, each a name (`[a-z0-9-]+`) and a
+path relative to its top (its main worktree):
+
+```yaml
+workspace:
+  lib: ../lib
+  web: ../web
+```
+
+The siblings' files never change: in each, the owner runs `jhon workspace
+join <primary>`, which records a pointer under Jhon's state
+(`${XDG_STATE_HOME:-~/.local/state}/jhon/workspace/<sha256 of the sibling's
+main worktree>.json`); `jhon workspace leave` removes it and `jhon workspace
+list [--json]` shows every pointer. Joining and leaving are the owner's acts:
+the safety guard refuses them from an agent, as it refuses `jhon grant` and
+`jhon mode`, and keeps the pointers' folder from every agent, as it keeps
+the grants'. A sibling is a member only while its pointer names a primary
+whose config lists a path that is the sibling's top; a path is followed only
+to a git repository's top, never up from it.
+
+`jhon status` shows `workspace   primary  (lib joined, web not joined)` in
+the primary, `workspace   member lib  (primary <path>)` in a member, and
+`workspace` with `--json` (docs/status-json.md); nothing outside a workspace.
+Its notes name a listed sibling that has not joined, a path that is no git
+repository's top, an ignored name or absolute path, and, in a sibling, a
+pointer whose primary does not list it. The workspace is reported only: the
+guards, the sessions' roots, executions and delivery do not read it yet.
+
 ## The change's state in Engram
 
 The change's record is its state. The engine keeps one copy of it in

@@ -23,6 +23,8 @@ All notable changes to Jhon are recorded here. The format follows
 ### Fixed
 
 - Sandbox docs: `--die-with-parent` ends bubblewrap and its command, not a child the command detached (`setsid`, `nohup`): with no PID namespace that child outlives the sandbox, an accepted residual risk (T128g, L1262).
+### Added
+- A multi-repository workspace, reported: the primary's LDD config lists its sibling repositories (`workspace:`, name: path relative to its top); the owner's `jhon workspace join <primary>`, run in a sibling, records its pointer under Jhon's state (`leave` removes it, `list` shows them); `jhon status` reports the role, the primary and the members (`workspace` in `--json`) and notes a sibling that has not joined or a pointer the primary does not list. The safety guard refuses `jhon workspace join|leave` to agents and keeps the pointers' folder as it keeps the grants (T57).
 
 ## [0.3.7] - 2026-11-18
 

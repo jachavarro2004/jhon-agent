@@ -41,17 +41,21 @@ func Dir() string {
 	return filepath.Join(state, "jhon", "grants")
 }
 
-var grantsPath = lazyre.New(`[\\/]jhon[\\/](?:grants|modes|ldd-switch|session-grants)(?:[\\/]|$)|[\\/]\.local[\\/]state[\\/]jhon[\\/]?$`)
+// WorkspaceDir is where the owner's workspace pointers live (`jhon
+// workspace join`, T57 W2), beside the grants and as much the owner's.
+func WorkspaceDir() string { return filepath.Join(filepath.Dir(Dir()), "workspace") }
 
-// InGrants is whether abs is in the grants directory or the modes beside
-// it (the owner's alone), as configured or under any jhon/grants or
+var grantsPath = lazyre.New(`[\\/]jhon[\\/](?:grants|modes|ldd-switch|session-grants|workspace)(?:[\\/]|$)|[\\/]\.local[\\/]state[\\/]jhon[\\/]?$`)
+
+// InGrants is whether abs is in the grants directory or the modes or
+// workspace pointers beside it (the owner's alone), as configured or under any jhon/grants or
 // jhon/modes, read through the links of its existing prefix. A path with a
 // glob is in them when its segments can match theirs (`jhon/mo*/k.json`).
 func InGrants(abs string) bool {
 	// The state/jhon directory that holds both is the owner's too: replacing
 	// it, or copying a tree into it, plants a mode or a grant history.jsonl
 	// never records, and yolo passes outside writes (re-verify of T38b).
-	for _, dir := range []string{filepath.Dir(Dir()), Dir(), ModesDir()} {
+	for _, dir := range []string{filepath.Dir(Dir()), Dir(), ModesDir(), WorkspaceDir()} {
 		for _, p := range []string{abs, project.Realish(abs)} {
 			if project.Within(p, dir) || project.Within(p, project.Realish(dir)) || grantsPath.MatchString(p) {
 				return true
@@ -91,7 +95,7 @@ func globNamesState(p string) bool {
 		if ok, _ := filepath.Match(ps[i], "jhon"); !ok || !literal(ps[i]) || !literal(ps[i+1]) {
 			continue
 		}
-		for _, d := range []string{"grants", "modes", "ldd-switch", "session-grants"} {
+		for _, d := range []string{"grants", "modes", "ldd-switch", "session-grants", "workspace"} {
 			if ok, _ := filepath.Match(ps[i+1], d); ok {
 				return true
 			}
