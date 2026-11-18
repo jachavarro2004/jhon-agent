@@ -48,6 +48,7 @@ internal/cli -> internal/telemetry
 internal/cli -> internal/update
 internal/cli -> internal/vcs
 internal/cli -> internal/version
+internal/cli -> internal/workspace
 internal/compose -> internal/js
 internal/compose -> internal/lazyre
 internal/compose -> internal/requirements
@@ -114,6 +115,7 @@ internal/ldd -> internal/ldd/layout
 internal/ldd -> internal/project
 internal/ldd -> internal/requirements
 internal/ldd -> internal/vcs
+internal/ldd -> internal/workspace
 internal/ldd/layout -> internal/lazyre
 internal/manifest -> internal/contract
 internal/manifest -> internal/js
@@ -168,3 +170,8 @@ internal/vcs -> internal/contract
 internal/vcs -> internal/js
 internal/vcs -> internal/lazyre
 internal/vcs -> internal/project
+internal/workspace -> internal/discover
+internal/workspace -> internal/grant
+internal/workspace -> internal/isodate
+internal/workspace -> internal/lazyre
+internal/workspace -> internal/project

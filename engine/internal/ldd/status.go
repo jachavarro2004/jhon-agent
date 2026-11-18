@@ -23,6 +23,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/requirements"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // This file is `jhon status [change] [--json | --brief]`.
@@ -656,6 +657,9 @@ type Status struct {
 	// Cleanup is what archived changes leave behind (ArchivedCleanup);
 	// reported only when not empty.
 	Cleanup []Cleanup
+	// Workspace is the project's multi-repository workspace (T57 W2), which
+	// `jhon status` sets; nil, outside one, leaves it out.
+	Workspace *workspace.Info
 }
 
 // LddState is LDD's state for the project: always on, from the default
@@ -685,6 +689,9 @@ func (s Status) object() object {
 	}
 	if len(s.Cleanup) > 0 {
 		o = append(o, member{"cleanup", s.Cleanup})
+	}
+	if s.Workspace != nil {
+		o = append(o, member{"workspace", s.Workspace})
 	}
 	return o
 }
@@ -1492,6 +1499,9 @@ func Human(s Status) string {
 	if s.WorktreePerChange {
 		vcsLine += "\nworktree    per change  (worktree_per_change: true)"
 	}
+	if w := workspaceLine(s.Workspace); w != "" {
+		vcsLine += "\n" + w
+	}
 	if s.Change == nil {
 		out = append(out, "change      none selected", vcsLine, tdd)
 		out = append(out, projects...)
@@ -1540,6 +1550,25 @@ func Human(s Status) string {
 		out = append(append(out, "", "notes"), list(s.Notes)...)
 	}
 	return strings.Join(out, "\n")
+}
+
+// workspaceLine is the human line of a workspace: a primary's members and
+// whether each joined, or the member's name and its primary; "" outside one.
+func workspaceLine(w *workspace.Info) string {
+	switch {
+	case w == nil:
+		return ""
+	case w.Role == workspace.Member:
+		return "workspace   member " + w.Name + "  (primary " + w.Primary + ")"
+	}
+	parts := make([]string, len(w.Members))
+	for i, m := range w.Members {
+		parts[i] = m.Name + " not joined"
+		if m.Joined {
+			parts[i] = m.Name + " joined"
+		}
+	}
+	return "workspace   primary  (" + strings.Join(parts, ", ") + ")"
 }
 
 // nextLines is the suggestion and its command; with no change selected, a

@@ -13,6 +13,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lddswitch"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // `jhon status [change] [--json | --brief] [--root <project>]`:
@@ -68,6 +69,16 @@ func runStatus(argv []string) (int, error) {
 	}
 	// LDD is always on (T72): the line and its JSON keep their shape.
 	s.Ldd = &ldd.LddState{State: lddswitch.On, Source: lddswitch.SourceDefault, Active: project.UsesLdd(root)}
+	// The multi-repository workspace (T57 W2): reported, and its notes
+	// added, only for a primary or a member; a pointer to a primary that
+	// does not list this repository is a note.
+	if root != "" {
+		ws := workspace.Of(root)
+		s.Notes = append(s.Notes, ws.Notes...)
+		if ws.Role != workspace.None {
+			s.Workspace = &ws
+		}
+	}
 	switch {
 	case json:
 		out, err := js.Stringify(s)

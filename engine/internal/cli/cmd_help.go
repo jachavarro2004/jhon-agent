@@ -408,6 +408,15 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            A folder that is no git repository takes no mode:
                            it is refused there, and calls there are judged
                            as in normal mode
+  jhon workspace join <primary> | leave | list [--json]
+                           a multi-repository workspace: the primary's LDD
+                           config lists its sibling repositories (workspace:,
+                           name: path relative to its top); join, run in a
+                           sibling, records its pointer to the primary under
+                           Jhon's state, leave removes it, list shows every
+                           pointer. A sibling is a member only while the
+                           primary lists it; jhon status reports the workspace.
+                           Joining and leaving are yours alone, as a mode is
   jhon sandbox run [--profile work|delivery] [--project <folder>] -- <program> [args...]
                            run the program under bubblewrap (Linux), in its
                            place: stdin, stdout, stderr, the exit code and
