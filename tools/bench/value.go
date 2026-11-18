@@ -18,10 +18,11 @@ import (
 // and better discipline. A cell PASSes when its hidden test passes at least
 // as often as the clean one's, RED before GREEN and tests before the end
 // happen more often (or in every run of both), its out-of-scope median is
-// no higher, and it meets its task size's gates (valueGates, T146): cost and
-// active time within the size's limit of the clean cell's, and for a large
-// task strictly better quality. Turns and quota points are shown, never
-// failed. Fewer than 3 runs on either side, or a metric unknown on either,
+// no higher, and it meets its task size's gates (valueGates, T146): for a
+// large task cost and active time within the size's limit of the clean
+// cell's and strictly better quality; for a small task its turns within the
+// clean cell's plus the LDD minimum (T146i, L1285), with cost and time shown.
+// Quota points, and a large task's turns, are shown, never failed. Fewer than 3 runs on either side, or a metric unknown on either,
 // is FAIL (L483). The one-time set-up run (SetupTaskID) is no cell: it is
 // reported on its own line (T146 FB2).
 
@@ -35,16 +36,27 @@ type SizeGate struct {
 	// pass rate, or, where both pass every run, fewer regressions and rework
 	// per run.
 	BetterQuality bool
+	// Turns, when set, is the size's cost gate in place of Cost and Time:
+	// the Jhon cell's median turns at most the clean cell's plus Turns;
+	// weighted tokens, cost usd and active time are then shown, never failed.
+	Turns int
 }
 
 // valueGates are the size gates, the one place they live. The owner's
-// decision (L1205, T146): D1 small "≤ 1,1×" (a small task costs and takes
-// no more with Jhon, 10 % for noise); D2 large "≤ 1,25×" with strictly
-// better quality.
+// decision (L1205, T146): D2 large "≤ 1,25×" with strictly better quality.
+// A small task's D1 "≤ 1,1×" gave way to the owner's choice (L1285, T146i):
+// "Tope de turnos: ≤ clean + 6 (recomendada)": a small task passes cost
+// when Jhon median turns <= clean median turns + 6, the LDD minimum
+// (branch, test-first, RED run, GREEN run, commit, deliver check); weighted
+// tokens, cost and active time become INFO for small tasks.
 var valueGates = map[string]SizeGate{
-	SizeSmall: {Cost: 1.1, Time: 1.1},
+	SizeSmall: {Turns: lddMinimumTurns},
 	SizeLarge: {Cost: 1.25, Time: 1.25, BetterQuality: true},
 }
+
+// lddMinimumTurns are the turns LDD adds to a small task at the least:
+// branch, test-first, RED run, GREEN run, commit, deliver check (L1285).
+const lddMinimumTurns = 6
 
 // ValueCheck is one metric of one cell; Informational ones never fail.
 type ValueCheck struct {
@@ -151,7 +163,8 @@ func valueCell(j, c Row, size string) []ValueCheck {
 		}
 		ratio := jv / cv
 		detail := fmt.Sprintf("%s vs clean %s (%s×", side(j, measure, scale, unit), side(c, measure, scale, unit), num2(ratio))
-		if !sized {
+		if !sized || gate.Turns > 0 {
+			// No size, or a small task: shown, never failed (L1285).
 			out = append(out, ValueCheck{Metric: metric, Pass: true, Informational: true, Detail: detail + ")" + note})
 			return
 		}
@@ -189,7 +202,22 @@ func valueCell(j, c Row, size string) []ValueCheck {
 		out = append(out, ValueCheck{Metric: metric, Pass: true, Informational: true,
 			Detail: fmt.Sprintf("%s vs clean %s (%s×)", side(j, measure, scale, unit), side(c, measure, scale, unit), num2(j.Medians[measure]/math.Max(c.Medians[measure], 1e-9)))})
 	}
-	info("turns", "turns", 1, "")
+	if jv, jok := j.Medians["turns"]; gate.Turns > 0 {
+		// A small task's cost gate: turns at most clean's + the LDD minimum.
+		cv, cok := c.Medians["turns"]
+		if !jok || !cok {
+			add("turns", false, "unknown: %s vs clean %s", side(j, "turns", 1, ""), side(c, "turns", 1, ""))
+		} else {
+			diff := num2(jv - cv)
+			if jv >= cv {
+				diff = "+" + diff
+			}
+			add("turns", jv <= cv+float64(gate.Turns)+1e-9, "%s vs clean %s (%s, limit clean + %d for a %s task, L1285)",
+				side(j, "turns", 1, ""), side(c, "turns", 1, ""), diff, gate.Turns, size)
+		}
+	} else {
+		info("turns", "turns", 1, "")
+	}
 	if _, ok := j.Medians["quota_points"]; ok {
 		// The subscription's quota, apart from the token cost (T146 FB3).
 		out = append(out, ValueCheck{Metric: "quota points", Pass: true, Informational: true,

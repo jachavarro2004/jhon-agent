@@ -450,7 +450,7 @@ One line per metric: PASS or FAIL and how many cells hold it, and for the cost a
 
 ## Value (T70, T146)
 
-`bench value` answers what Jhon adds over not using it, with the owner's criterion (L552): "Igual o mejor calidad, mejor disciplina", and, since T146, the owner's cost and time targets per task size (L1205).
+`bench value` answers what Jhon adds over not using it, with the owner's criterion (L552): "Igual o mejor calidad, mejor disciplina", and, since T146, the owner's cost and time targets per task size (L1205; a small task's since T146i, L1285).
 
 ```sh
 go run ./tools/bench value [--json] [--out DIR] [--tasks-dir DIR] <results dirs>
@@ -466,13 +466,14 @@ The results dirs (comma-separated or several arguments) are read as certify read
 | tests run before end | more often than the clean one, or in every run of both |
 | out of scope | median files no higher than the clean one's |
 | size | the task has one (`small` or `large`); none is FAIL |
-| weighted tokens | the median tokens weighted by the provider's prices (`cost_weighted`) at most the size's limit × the clean median: small 1.1×, large 1.25× |
-| cost usd | the same limit, when both cells have `cost_usd` (the stream gave one); absent otherwise |
-| active time | the same limit on the median active time |
+| weighted tokens | large: the median tokens weighted by the provider's prices (`cost_weighted`) at most 1.25× the clean median; small: shown with its ratio (`INFO`), never failed |
+| cost usd | the same, when both cells have `cost_usd` (the stream gave one); absent otherwise |
+| active time | the same on the median active time |
+| turns | small: the median turns at most the clean median + 6, the LDD minimum (branch, test-first, RED run, GREEN run, commit, deliver check), e.g. `PASS  turns  11 (9-11) vs clean 5 (5-5) (+6, limit clean + 6 for a small task, L1285)`; large: shown (`INFO`), never failed |
 | better quality | large only: a higher hidden-test pass rate than clean, or, where both pass every run, fewer regressions and rework per run |
-| turns, quota points | shown (`INFO`), never failed; quota points are the subscription's weekly quota, never mixed into the cost |
+| quota points | shown (`INFO`), never failed: the subscription's weekly quota, never mixed into the cost |
 
-The limits live in one place, `valueGates` in `value.go`, with the owner's decision (L1205: D1 small "≤ 1,1×", D2 large "≤ 1,25×" with strictly better quality). Every measure is shown as `median (min-max)` on each side. The token weights per provider are one table, `providerTokenWeights` in `cost.go`, with its sources: Claude's (input 1, cache write 1.25, cache read 0.1, output 5) for Claude Code and claude-bridge, GLM's (Z.ai's GLM-4.6 prices: cache read 0.11/0.60, output 2.20/0.60, cache write as input) for a GLM model on any provider; another provider takes Claude's with a note. A `report.json` from before T146 has no `cost_weighted`: it is weighed from the token medians, with a note.
+The limits live in one place, `valueGates` in `value.go`, with the owner's decisions (L1205: D2 large "≤ 1,25×" with strictly better quality; L1285: a small task's cost gate is "Tope de turnos: ≤ clean + 6", in place of D1's "≤ 1,1×", with its tokens, cost and time shown). The quality gates (repeats, hidden tests, red before green, tests run before end, out of scope) are the same for both sizes. Every measure is shown as `median (min-max)` on each side. The token weights per provider are one table, `providerTokenWeights` in `cost.go`, with its sources: Claude's (input 1, cache write 1.25, cache read 0.1, output 5) for Claude Code and claude-bridge, GLM's (Z.ai's GLM-4.6 prices: cache read 0.11/0.60, output 2.20/0.60, cache write as input) for a GLM model on any provider; another provider takes Claude's with a note. A `report.json` from before T146 has no `cost_weighted`: it is weighed from the token medians, with a note.
 
 A metric unknown on either side is FAIL, and so is a Jhon cell with no counterpart (`no pi-clean run of <task> plain: run --conditions pi-clean`). Then one line per runtime (`runtime claude-code (jhon vs clean)`, `runtime pi (pi-jhon vs pi-clean)`): PASS when every cell of it passed, with the count. The verdict is PASS when every runtime is. `value.json` (`results`, `notes`, `cells` with their `size` and `checks`, `setup`, `runtimes`, `verdict`) goes to the first results dir (`--out` to change it); `--json` prints it in place of the lines. The exit code is 0 on PASS, 1 on FAIL, 2 on a usage or read error.
 
