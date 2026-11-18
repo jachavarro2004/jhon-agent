@@ -328,6 +328,7 @@ func TestTokensAreWeightedPerProvider(t *testing.T) {
 		{"opus", "claude", true}, {"claude-bridge/opus", "claude", true}, {"anthropic/claude-sonnet-5-5", "claude", true},
 		{"zai/glm-5.3", "glm", true}, {"zai/glm-5.3@high", "glm", true}, {"GLM-4.6", "glm", true},
 		{"nan/glm5.3", "glm-nan", true}, {"nan/glm-5.1", "glm-nan", true},
+		{"nan/deepseek-v4-flash@high", "deepseek-nan", true}, {"nan/deepseek-v4-flash", "deepseek-nan", true},
 		{"openai/gpt-5", "claude", false},
 	} {
 		if w, known := tokenWeightsFor(c.model); w.Provider != c.provider || known != c.known {
@@ -343,6 +344,11 @@ func TestTokensAreWeightedPerProvider(t *testing.T) {
 	m.Model = "nan/glm5.3"
 	if got, want := costWeighted(m), 600+100+6000*1.05/49+60*154.0/49; math.Abs(got-want) > 1e-6 {
 		t.Errorf("nan glm weighted %v, want %v", got, want)
+	}
+	// NaN's deepseek-v4-flash in credits per million: 10.5 input, 0.21 cached input, 42 output.
+	m.Model = "nan/deepseek-v4-flash@high"
+	if got, want := costWeighted(m), 600+100+6000*0.21/10.5+60*42/10.5; math.Abs(got-want) > 1e-6 {
+		t.Errorf("nan deepseek weighted %v, want %v", got, want)
 	}
 	m.Model = "zai/glm-5.3"
 	m.Model = "opus"
