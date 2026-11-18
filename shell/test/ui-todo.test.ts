@@ -490,7 +490,7 @@ const session = (event: ReturnType<typeof promptEvent>): string => {
 // the rule to start one, and working turns that change something without a
 // list bring one request-local nudge per owner message.
 // T134 (L1019): the list is the agent's own next steps, inside an LDD change too.
-const START_RULE = "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, or any change to code, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list.";
+const START_RULE = "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.";
 // T134 H7b (L1019): the list is the agent's own next steps; the change's tasks stay in `jhon status`.
 const START_NUDGE = HARNESS_FRAME + "This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in `jhon status`.";
 

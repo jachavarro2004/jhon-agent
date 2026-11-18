@@ -16,6 +16,9 @@ JSON (`ok: false`, `change: null`, `activeChanges`, `rankedChanges`); readers
 use the JSON, not the exit code. A repository whose only active changes are
 umbrellas (T37) has nothing to choose between: it exits 0 with `ok: true`,
 `change: null`, `next: start-change` and the umbrellas listed.
+With no change and no umbrella on the default branch, `next` is still
+`start-change`, and the first note names the commands a small change starts
+with: `git switch -c <name>`, then `jhon executions run` (T146g).
 
 | Field | Type | Meaning |
 |---|---|---|

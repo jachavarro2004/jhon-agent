@@ -195,7 +195,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            change is the one its branch names; an umbrella
                            (only an exploration.md, or kind: umbrella in its
                            .openspec.yaml) is selected only when named, listed
-                           apart, its next start-change (split it); several
+                           apart, its next step to split it; several
                            left undecided are ranked by pending work, none
                            selected
   jhon version [--json]    the version stamped into this binary, its commit and

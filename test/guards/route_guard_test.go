@@ -914,6 +914,11 @@ func TestRouteGuardPRNeedsRedBeforeGreen(t *testing.T) {
 	matches(t, res.Stderr, "run `jhon executions run fix-small --affected <base>` while its new test fails", "the branch names it")
 	redGreen(t, small.p, ".git/jhon/changes/fix-small/execution-record.json")
 	code(t, small.call(t, "Bash", pr, true), 0, "a folderless change with its RED before GREEN")
+
+	// T146g G3 (L1274): a small change keeps no light verify: its RED
+	// before GREEN with none is enough.
+	support.Write(t, small.p, map[string]string{".git/jhon/changes/fix-small/execution-record.json": redGreenUnverified("")})
+	code(t, small.call(t, "Bash", pr, true), 0, "a small change with no light verify")
 }
 
 // A light verify at slice close (T31.5, L311 (1)): on the standard route a

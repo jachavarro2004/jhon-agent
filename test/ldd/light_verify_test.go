@@ -3,6 +3,7 @@ package ldd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jachavarro2004/jhon-agent/test/support"
@@ -109,7 +110,10 @@ const lightVerifyDue = `^light verify due for feat-small-fix: its GREEN run is n
 // behaviour; next is never moved by it.
 func TestStatusAsksForTheLightVerify(t *testing.T) {
 	t.Parallel()
+	// Over the advisory size, so not small: a small change keeps no light
+	// verify (T146g G3).
 	root := smallRepo(t)
+	support.Write(t, root, map[string]string{"a/big.go": "package a\n\n" + strings.Repeat("var _ = 1\n", 450)})
 	redGreenRuns(t, root, smallChange)
 	s := statusJSON(t, root, smallChange)
 	equal(t, anyMatch(s["notes"], lightVerifyDue), true, s["notes"])

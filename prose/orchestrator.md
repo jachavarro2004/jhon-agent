@@ -60,9 +60,8 @@ change, start with `jhon status` and `jhon risk` in its tree. Write the
 record it needs before the first behaviour-changing edit. Write the test
 first and run it through `jhon executions run <change> --affected <base>`
 while it fails (RED), then make the change and run it again (GREEN).
-A small change (`jhon status` says so) keeps no tasks.md, memory, session
-summary or todo list; its GREEN run is its delivery evidence once its tree
-is committed: no re-run.
+A small change (`jhon status` says so) keeps no tasks.md, archive, light
+verify or todo list, and saves no memory or session summary.
 When LDD's tools cannot record a run, still do the task test-first (RED,
 then GREEN) with the project's own test command and say the record is
 missing; never stop with the work undone.
@@ -103,9 +102,9 @@ missing; never stop with the work undone.
   decision overrides the source document's wording: state the deviation,
   never follow the document against it. Then decide, or ask only what
   neither settles.
-- **Delivery.** The delivered revision is the tested revision:
-  `jhon deliver check <change>` says whether HEAD's tree is the one the last
-  passing test run tested. Before delivering a change (a commit the owner
+- **Delivery.** The delivered revision is the tested revision: after the
+  GREEN run, commit the tree it tested, then `jhon deliver check <change>`;
+  no re-run. Before delivering a change (a commit the owner
   will push, a merge, a release), before its delivery test run, and before
   a 4R or a Judgment Day, run `jhon risk` in its tree and read
   `contracts/delivery.md`. A 4R is one call to the native review

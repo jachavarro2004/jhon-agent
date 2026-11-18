@@ -21,8 +21,8 @@ with rebase after the last. The rest and what each guard checks:
 `contracts/ldd.md` ("The record", "Slices", "Delivery").
 
 Name `jhon deliver check`'s result when asking to deliver; an untested
-revision is called untested. Order: commit, then a recorded run
-(`jhon executions run`) on the clean tree at HEAD, then `jhon deliver check`.
+revision is called untested. Order: after the GREEN run, commit
+the tree it tested, then `jhon deliver check`.
 A run whose tested tree is the commit's needs no re-run.
 A slice's commit holds exactly the tree of its last recorded passing run:
 RED, GREEN, recorded run, commit.

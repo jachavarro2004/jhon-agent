@@ -350,7 +350,7 @@ func ProjectBrief(dir string) string {
 	if r, err := RouteOf(top); err == nil {
 		record := "its record, its RED and GREEN runs in `jhon executions`, tasks per slice, and a spec delta only when a main spec changes or is added,"
 		if OneLineRecord(r.Tier) {
-			record = "its record (its RED and GREEN runs in `jhon executions`; tasks.md only when the work cannot be resumed from the diff, below high risk a one-line `## Intent` and `Delivers:`; a spec delta only when a main spec changes or is added),"
+			record = "its record (its RED and GREEN runs in `jhon executions`; a small change (`jhon status` says so) " + SmallKeepsNo + "; else tasks.md only when the work cannot be resumed from the diff, below high risk a one-line `## Intent` and `Delivers:`; a spec delta only when a main spec changes or is added),"
 		}
 		lines = append(lines, "- Route, from the change's diff now: "+r.String()+". The method is LDD (contracts/ldd.md): every change that alters behaviour carries "+record+" and a PR without it is refused; the route sets only the rigor, which rises with the diff's risk (size alone is a note); a proposal or design is written when the change needs one or the owner asks, verify may always run, and a 4R or Judgment Day the route does not ask for is asked of the owner.")
 	}

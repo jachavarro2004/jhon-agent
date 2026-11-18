@@ -57,7 +57,8 @@ func TestExecutionsRunWithNoNameAndNoChange(t *testing.T) {
 	r := jhonGit(t, root, "executions", "run")
 	equal(t, r.Code, 2, r.Out())
 	equal(t, r.Stdout, "")
-	match(t, r.Stderr, `^jhon executions: no change named, and jhon status selects none on this branch \(no active change under openspec/changes/;[^\n]*\): name it: jhon executions run <change>\n`)
+	// On the default branch, the commands a small change starts with (T146g G1).
+	match(t, r.Stderr, "^jhon executions: no change named, and jhon status selects none on this branch: no active change under openspec/changes/: a small change [^\n]*`git switch -c <name>`, then `jhon executions run`[^\n]*\n$")
 	equal(t, exists(filepath.Join(root, ".git/jhon")), false)
 }
 
@@ -80,7 +81,7 @@ func TestStatusPrintsTheNextCommand(t *testing.T) {
 }
 
 // smallNote is what status tells a small change.
-const smallNote = "small change (no folder, one component, under the advisory size, not high risk): write no tasks.md, save no memory or session summary, keep no todo list; the run that records its GREEN is its delivery evidence: commit the tree it tested and run `jhon deliver check feat-small-fix`, with no re-run"
+const smallNote = "small change (no folder, one component, under the advisory size, not high risk): it keeps no tasks.md, archive, light verify or todo list, and saves no memory or session summary; the run that records its GREEN is its delivery evidence: commit the tree it tested, then `jhon deliver check feat-small-fix`, with no re-run"
 
 // A small change is told the fast path; a change over it is not.
 func TestStatusTellsASmallChangeTheFastPath(t *testing.T) {

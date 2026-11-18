@@ -30,7 +30,8 @@ import (
 //     carries its RED before GREEN in `jhon executions`, and its record when
 //     the change needs one (ldd.Recorded, ldd.NeedsOf), and on the standard
 //     route a passing light verify of the tree its last run tested
-//     (execution.LightVerified, T31.5): tasks.md and a spec
+//     (execution.LightVerified, T31.5), but for a small change (T146g):
+//     tasks.md and a spec
 //     delta only when needed; at risk passive or medium a tasks.md with an
 //     `## Intent` and a `Delivers:` line is enough. A change with no folder,
 //     the one its branch names, counts too.
@@ -395,7 +396,10 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		}
 		// On the standard route the light verify at slice close stands in
 		// for the verified route's verify-report (T31.5).
-		if r.Level == ldd.RouteStandard && !slices.ContainsFunc(changes, func(c string) bool { return execution.LightVerified(top, c) }) {
+		// A small change (no folder, its record needs no tasks.md) keeps no
+		// light verify (T146g G3).
+		small := folderless != "" && !n.Tasks
+		if r.Level == ldd.RouteStandard && !small && !slices.ContainsFunc(changes, func(c string) bool { return execution.LightVerified(top, c) }) {
 			return "this change alters behaviour, and no passing light verify of the tree its last run tested is on record (LDD, contracts/ldd.md, \"Light verify\"): launch the `verify` agent in light mode when the slice closes; it records `jhon executions verify " + named + " --verdict pass`, before the PR. Route: " + r.String() + "."
 		}
 	}

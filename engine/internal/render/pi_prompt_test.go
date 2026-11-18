@@ -192,7 +192,7 @@ func TestOrchestratorKeepsWorkingAndPlansLifecycle(t *testing.T) {
 		"A slice's commit holds exactly the tree of its last recorded passing run: RED, GREEN, recorded run, commit.",
 		// T131 (L905, L908): no turn cap; a slice is sized to the context budget.
 		"**Size each worker slice to fit its context budget; the worker checkpoints its progress and partial state at its context notice and returns what is done and what remains: hand the remainder to a fresh worker.**",
-		"Order: commit, then a recorded run (`jhon executions run`) on the clean tree at HEAD, then `jhon deliver check`.",
+		"Order: after the GREEN run, commit the tree it tested, then `jhon deliver check`.",
 	}
 	p := pi{e}
 	prompts := map[string]string{"pi": p.promptFlat(t)}
