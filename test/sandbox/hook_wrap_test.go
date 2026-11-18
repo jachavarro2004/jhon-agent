@@ -137,15 +137,15 @@ func TestTheGuardsDecisionGoesWithTheWrappedCommand(t *testing.T) {
 	b, env := wired(t, bash)
 	off := append(append([]string{}, env...), "JHON_SETTINGS="+filepath.Join(b.base, "no-settings.toml"))
 
-	was, asked := preTool(t, b, off, bashGuards, "Bash", `{"command":"git push origin main","timeout":5}`, true)
+	was, asked := preTool(t, b, off, bashGuards, "Bash", `{"command":"git push origin main && echo pushed","timeout":5}`, true)
 	if was.Code != 0 || asked.Out.Decision != "ask" || asked.Out.Updated != nil {
 		t.Fatalf("with the mode off: exit %d, %q; want the guard's ask alone", was.Code, was.Stdout)
 	}
-	r, a := preTool(t, b, env, bashGuards, "Bash", `{"command":"git push origin main","timeout":5}`, true)
+	r, a := preTool(t, b, env, bashGuards, "Bash", `{"command":"git push origin main && echo pushed","timeout":5}`, true)
 	if r.Code != 0 || r.Stderr != "" || a.Out.Decision != "ask" || a.Out.Reason != asked.Out.Reason {
 		t.Errorf("an ask: exit %d, stderr %q, decision %q (%q); want the ask, with the reason %q", r.Code, r.Stderr, a.Out.Decision, a.Out.Reason, asked.Out.Reason)
 	}
-	if want := expected(t, "Bash", a.command(t), b.proj, bash, "git push origin main"); a.command(t) != want || string(a.Out.Updated["timeout"]) != "5" {
+	if want := expected(t, "Bash", a.command(t), b.proj, bash, "git push origin main && echo pushed"); a.command(t) != want || string(a.Out.Updated["timeout"]) != "5" {
 		t.Errorf("an ask's input is %v, want the command %s and the timeout kept", a.Out.Updated, want)
 	}
 
@@ -321,7 +321,7 @@ func TestAnAllowsNoteStaysWithTheWrappedCommand(t *testing.T) {
 	}
 	off := append(append([]string{}, env...), "JHON_SETTINGS="+filepath.Join(b.base, "no-settings.toml"))
 	for _, c := range []struct{ tool, input string }{
-		{"Bash", `{"command":"git push origin main","timeout":5}`},
+		{"Bash", `{"command":"git push origin main && echo pushed","timeout":5}`},
 	} {
 		was, noted := preTool(t, b, off, bashGuards, c.tool, c.input, true)
 		if was.Code != 0 || !strings.Contains(noted.Out.Context, "allowed by the owner's yolo mode: push: ") || noted.Out.Decision != "" {
@@ -332,7 +332,7 @@ func TestAnAllowsNoteStaysWithTheWrappedCommand(t *testing.T) {
 		if r.Code != 0 || r.Stderr != "" || a.Out.Decision != "allow" || a.Out.Context != noted.Out.Context {
 			t.Errorf("%s: exit %d, stderr %q, decision %q, note %q; want allow with the note %q", c.tool, r.Code, r.Stderr, a.Out.Decision, a.Out.Context, noted.Out.Context)
 		}
-		if want := expected(t, c.tool, a.command(t), b.proj, bash, "git push origin main"); a.command(t) != want {
+		if want := expected(t, c.tool, a.command(t), b.proj, bash, "git push origin main && echo pushed"); a.command(t) != want {
 			t.Errorf("%s: the command is %s, want %s", c.tool, a.command(t), want)
 		}
 	}

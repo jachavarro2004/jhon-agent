@@ -40,7 +40,17 @@ const sandboxAllowReason = "Jhon's guards allow the command; it runs in Jhon's s
 //
 // where <jhon> is this binary, the folder is the one `jhon start` pinned
 // (sandbox.ProjectEnv) and the command is single-quoted, every other field
-// kept byte for byte. It is nil for a call the wrap does not take: the mode
+// kept byte for byte. A line of git network commands or gh whose git works
+// inside the project (sandbox.ProfileAt, T128g, L1303 G1, L1306) is handed
+// back as
+//
+//	<jhon> sandbox run --project '<folder>' --profile unsandboxed -- <shell> -c '<command>'
+//
+// which runs it with no sandbox (git over SSH and gh cannot run in one,
+// L1220, L1302) after `jhon sandbox run` checks the line again; it has no
+// directory to follow, since such a line holds no cd. Either way `jhon
+// sandbox run` ends a read-only failure with the stop note on stderr and
+// records a jhon.sandbox event (G3, G4). It is nil for a call the wrap does not take: the mode
 // off, a tool that starts no command, and pi's calls, which come scoped to
 // every agent (`--agent *`) and are wrapped on pi's own side (T128b). A
 // command is wrapped whatever it starts with: one that already runs `jhon
@@ -79,7 +89,8 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 			"), so the command would run in no pinned project; the call is refused; fix: start the session with `jhon start` from inside the project (a git repository)"
 	}
 	cwd := p.Cwd()
-	if problem := sandbox.Probe(sandbox.ThisHost(), SandboxInput(cwd, folder)); problem != nil {
+	in := SandboxInput(cwd, folder)
+	if problem := sandbox.Probe(sandbox.ThisHost(), in); problem != nil {
 		return nil, "sandbox: sandbox.mode is on and the sandbox cannot run here: " + problem.Reason + "; the call is refused; fix: " + problem.Fix
 	}
 	jhon, err := os.Executable()
@@ -87,13 +98,14 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 		return nil, "sandbox: sandbox.mode is on and jhon cannot name its own program; the call is refused; fix: run `jhon doctor`"
 	}
 	shell := shellWord(sandboxShell())
-	run := shellWord(jhon) + " sandbox run --project " + shellQuote(folder) + " --profile " + sandbox.Work + " -- " + shell + " -c "
+	profile := sandbox.ProfileAt(command, cwd, in.Roots, in.Stat)
+	run := shellWord(jhon) + " sandbox run --project " + shellQuote(folder) + " --profile " + profile + " -- " + shell + " -c "
 	line := run + shellQuote(command)
 	// A command that opens with - or + would be read as the shell's options.
 	if strings.HasPrefix(command, "-") || strings.HasPrefix(command, "+") {
 		line = run + "-- " + shellQuote(command)
 	}
-	if file := lastDirFile(); file != "" && tool == "Bash" && foreground(input["run_in_background"]) {
+	if file := lastDirFile(); file != "" && profile == sandbox.Work && tool == "Bash" && foreground(input["run_in_background"]) {
 		line = run + shellQuote(fmt.Sprintf(reportLastDir, file)) + " " + shell + " " + shellQuote(command) + fmt.Sprintf(followLastDir, file)
 	}
 	updated = map[string]json.RawMessage{}

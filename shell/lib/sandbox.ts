@@ -8,9 +8,18 @@
  * and the project (the folder that holds `.git`). With the mode on, `bash`,
  * `bash_background` and `monitor` run their command as
  *
- *   jhon sandbox run --project <pinned> --profile work -- <shell> -c <command>
+ *   jhon sandbox run --project <pinned> --profile <profile> -- <shell> -c <command>
  *
- * and `inspect`, which starts the program the model names with no shell, as
+ * where the profile is what `jhon sandbox profile -- <command>` names for the
+ * command (T128g, L1303 G1): `unsandboxed` for a line whose programs are all
+ * git with a network subcommand or gh with a listed subcommand, which `jhon
+ * sandbox run` then runs with no sandbox (git over SSH and gh cannot run in
+ * one, L1220, L1302); `work` for any other line, and whenever the engine
+ * gives no other answer. Claude Code's wrap takes the same answer from the
+ * same engine function (sandbox.ProfileFor). Either way `jhon sandbox run`
+ * ends a failure on a read-only path with the stop note on stderr, which is
+ * the tool result's end, and records a jhon.sandbox event (G3, G4).
+ * `inspect`, which starts the program the model names with no shell, runs
  *
  *   jhon sandbox run --project <pinned> --profile work -- <program> <args...>
  *
@@ -89,6 +98,17 @@ export function sandboxVerdict(pin: SandboxPin): SandboxVerdict {
 	return { run: "sandbox", project: pin.project };
 }
 
+/**
+ * How a command line runs in `cwd`, as the engine names it (`jhon sandbox
+ * profile [--project <pinned>] -- <command>`; a git line must work inside the
+ * pinned project): `unsandboxed` only when it answers exactly that, `work` for
+ * any other answer, an error, or no answer in time (fail closed).
+ */
+export async function sandboxProfile(config: { jhon: string }, command: string, cwd: string, timeoutMs = HOOK_TIMEOUT_MS, project?: string): Promise<"work" | "unsandboxed"> {
+	const r = await runAsync(config.jhon, ["sandbox", "profile", ...(project ? ["--project", project] : []), "--", command], { cwd, timeoutMs });
+	return !r.timedOut && r.status === 0 && r.stdout === "unsandboxed\n" ? "unsandboxed" : "work";
+}
+
 /** pi's shell environment for a command that names none: the process's, with pi's bin folder on PATH. */
 function shellEnv(): NodeJS.ProcessEnv {
 	const bin = join(getAgentDir(), "bin");
@@ -112,9 +132,9 @@ const EXIT_STDIO_GRACE_MS = 100;
  * pi's bash operations with the command run in the sandbox: the same shell pi
  * would start (`shellPath`, else pi's own choice) and the same contract as
  * pi's local operations (the exit code, 128 + signal, `aborted`,
- * `timeout:<seconds>`), started as `jhon sandbox run ... -- <shell> -c
- * <command>` in a process group of its own, which an abort or the timeout
- * kills whole. The project is always pinned (`--project`): without it a
+ * `timeout:<seconds>`), started as `jhon sandbox run ... --profile <profile>
+ * -- <shell> -c <command>` (sandboxProfile) in a process group of its own,
+ * which an abort or the timeout kills whole. The project is always pinned (`--project`): without it a
  * command that removed `.git` would make an enclosing repository the project.
  */
 export function sandboxOperations(o: { jhon: string; project: string; shellPath?: string }): BashOperations {
@@ -131,7 +151,9 @@ export function sandboxOperations(o: { jhon: string; project: string; shellPath?
 			// Only a Windows launcher reads its command from stdin, and the sandbox is Linux's.
 			if (shell.commandTransport === "stdin") throw new Error(`jhon: ${shell.shell} reads its command from stdin, which the sandbox does not run`);
 			try { accessSync(cwd); } catch { throw new Error(`Working directory does not exist: ${cwd}\nCannot execute bash commands.`); }
-			const child = spawn(o.jhon, ["sandbox", "run", "--project", o.project, "--profile", "work", "--", shell.shell, ...shell.args, command], {
+			const profile = await sandboxProfile({ jhon: o.jhon }, command, cwd, HOOK_TIMEOUT_MS, o.project);
+			if (signal?.aborted) throw new Error("aborted");
+			const child = spawn(o.jhon, ["sandbox", "run", "--project", o.project, "--profile", profile, "--", shell.shell, ...shell.args, command], {
 				cwd, detached: true, env: env ?? shellEnv(), stdio: ["ignore", "pipe", "pipe"],
 			});
 			let timedOut = false;

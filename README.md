@@ -148,7 +148,19 @@ A file an agent writes is then formatted by its project's own formatter
 (`jhon hook format-edit`). With `sandbox.mode = "on"`, an allowed command
 runs inside `jhon sandbox run` (bubblewrap, Linux only): the project, the
 temporary folders, the caches and `sandbox.allow_write` are writable,
-everything else is read-only, and the home's credentials are not there. See
+everything else is read-only, and the home's credentials are not there. A
+line of git network commands (fetch, pull, push, ls-remote, clone, remote
+update) working inside the project, or gh, runs outside the sandbox, still
+judged by the guards: git over SSH and gh cannot run inside it. That git
+runs with the repository's hooks, ssh command, fsmonitor and credential
+helpers overridden; `url.*.insteadOf` and `include.*` in the repository's
+configuration are not, an accepted residual risk. uv's tools go to a
+sandbox-only folder under the cache, and `~/.local/share/uv` stays
+read-only. A command that fails on a read-only
+path ends with a note telling the agent to stop and name the path
+(`jhon settings sandbox.allow_write`), and each run records a `jhon.sandbox`
+telemetry event. There is no PID namespace: a child a command detaches
+(`setsid`, `nohup`) outlives the sandbox's bubblewrap. See
 `jhon sandbox --help`.
 
 ### What each runtime guarantees
@@ -372,7 +384,7 @@ own help.
 | `jhon audit` | audit one session, or every recent one with `--all` |
 | `jhon dashboard` | the read-only dashboard |
 | `jhon mode`, `jhon grant` | your permission mode and timed grants |
-| `jhon sandbox run`, `jhon sandbox status` | the OS sandbox, and whether it can run here |
+| `jhon sandbox run`, `jhon sandbox status`, `jhon sandbox profile` | the OS sandbox, whether it can run here, and how a command line runs in it |
 | `jhon settings`, `jhon profile` | your settings and model profiles |
 | `jhon doctor` | every health check; `--runtime <name>` for one runtime's guarantees |
 | `jhon update`, `jhon version` | update or roll back; the binary's version |

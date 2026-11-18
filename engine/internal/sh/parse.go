@@ -85,6 +85,24 @@ func Parse(src string) ([]*Command, error) {
 	return r.cmds, nil
 }
 
+// DefinesFunction is whether src defines a shell function anywhere, which
+// then runs in place of the program it is named after; a line the parser
+// cannot read counts as one that does.
+func DefinesFunction(src string) bool {
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(src), "")
+	if err != nil {
+		return true
+	}
+	found := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if _, ok := n.(*syntax.FuncDecl); ok {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
 func (r *reader) text(n syntax.Node) string {
 	return r.src[n.Pos().Offset():n.End().Offset()]
 }
