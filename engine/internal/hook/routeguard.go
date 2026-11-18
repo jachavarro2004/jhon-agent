@@ -402,8 +402,9 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		// On the standard route the light verify at slice close stands in
 		// for the verified route's verify-report (T31.5).
 		// A small change (no folder, its record needs no tasks.md) keeps no
-		// light verify (T146g G3).
-		small := folderless != "" && !n.Tasks
+		// light verify (T146g G3); a branch that also carries a change with a
+		// folder, under any name, is not one (L1289).
+		small := folderless != "" && len(active) == 0 && len(archived) == 0 && !n.Tasks
 		if r.Level == ldd.RouteStandard && !small && !slices.ContainsFunc(changes, func(c string) bool { return execution.LightVerified(top, c) }) {
 			return "this change alters behaviour, and no passing light verify of the tree its last run tested is on record (LDD, contracts/ldd.md, \"Light verify\"): launch the `verify` agent in light mode when the slice closes; it records `jhon executions verify " + named + " --verdict pass`, before the PR. Route: " + r.String() + "."
 		}

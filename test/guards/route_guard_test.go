@@ -1217,3 +1217,19 @@ func TestRouteGuardAcceptsASmallChangesFastPath(t *testing.T) {
 		t.Error("no folder is asked for")
 	}
 }
+
+// T146g G3 (L1274): only a change with no folder keeps no light verify; a
+// branch carrying a change with a folder under another name still needs one
+// (the verify of 2f4bd3e, L1289).
+func TestRouteGuardFolderChangeOnOtherBranchNameNeedsALightVerify(t *testing.T) {
+	t.Parallel()
+	pr := cmd("gh pr create --title x --body y")
+	r := newRG(t, "")
+	support.Git(t, r.p, "checkout", "-q", "-b", "fix/small")
+	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n",
+		"openspec/changes/login-x/tasks.md":              "## Intent\nDelivers: X is 2\n",
+		"openspec/changes/login-x/execution-record.json": redGreenUnverified("")})
+	res := r.call(t, "Bash", pr, true)
+	code(t, res, 2, "a change with a folder keeps its light verify")
+	matches(t, res.Stderr, "no passing light verify of the tree its last run tested is on record", "the light-verify refusal")
+}
