@@ -918,11 +918,16 @@ func selectStatus(root string, name *string) (Status, error) {
 		if len(umbrellas) > 0 {
 			return idle(true, v.startChange, "no change in progress; umbrella: "+strings.Join(umbrellas, ", ")+" ("+v.startChange+": "+umbrellaHow+")", set, tdd, resolved, state), nil
 		}
-		s := idle(true, v.startChange, "no active change under "+changesOf(root)+"/; before you finish, start one (tasks.md) and record a run (`jhon executions run`)", set, tdd, resolved, state)
 		// The branch would name a change with no file of its own yet (T84).
 		if note := FolderlessPendingNote(root); note != "" {
+			s := idle(true, v.startChange, "no active change under "+changesOf(root)+"/; before you finish, start one (tasks.md) and record a run (`jhon executions run`)", set, tdd, resolved, state)
 			s.Notes = append(s.Notes, note)
+			return s, nil
 		}
+		// On the default branch, the exact commands a small change starts
+		// with; start-change is no command (T146g G1).
+		s := idle(true, v.startChange, StartNote(changesOf(root)), set, tdd, resolved, state)
+		s.Command = SmallStart
 		return s, nil
 	}
 	return derive(*name, "")
@@ -1239,7 +1244,9 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	// A light verify at slice close (T31.5): asked on a route that alters
 	// behaviour, short of verified, whose RED before GREEN run is newer than
 	// its last light verify. A note; next stays as computed.
-	lightRoute := route != nil && route.Behaviour && route.Level != RouteVerified
+	// A small change keeps none (T146g G3).
+	small := branch != "" && needs != nil && !needs.Tasks
+	lightRoute := route != nil && route.Behaviour && route.Level != RouteVerified && !small
 	if lightRoute && execution.LightVerifyDue(tests) {
 		notes = append(notes, "light verify due for "+change+": its GREEN run is newer than its last light verify; launch the `verify` agent in light mode (read the diff and the tests, run the focused tests), which records `jhon executions verify "+change+" --verdict pass|fail`")
 	}
@@ -1280,7 +1287,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	}
 	// A small change (T146 FA2): no folder, and its record needs no tasks.md
 	// (one component, under the advisory size, not high risk).
-	if branch != "" && needs != nil && !needs.Tasks {
+	if small {
 		notes = append(notes, SmallChangeNote(change))
 	}
 
@@ -1313,7 +1320,22 @@ func (g gitReads) baseName(root string) string {
 // SmallChangeNote is what status tells a small change: no bookkeeping, and
 // its GREEN run is its delivery evidence once the tree it tested is committed.
 func SmallChangeNote(change string) string {
-	return "small change (no folder, one component, under the advisory size, not high risk): write no tasks.md, save no memory or session summary, keep no todo list; the run that records its GREEN is its delivery evidence: commit the tree it tested and run `jhon deliver check " + change + "`, with no re-run"
+	return "small change (no folder, one component, under the advisory size, not high risk): it " + SmallKeepsNo + ", and saves no memory or session summary; the run that records its GREEN is its delivery evidence: commit the tree it tested, then `jhon deliver check " + change + "`, with no re-run"
+}
+
+// SmallKeepsNo is what a small change keeps none of, in the words the
+// prose, the route text and pi's todo text share (T146g G3).
+const SmallKeepsNo = "keeps no tasks.md, archive, light verify or todo list"
+
+// SmallStart is the commands a small change starts with on the default
+// branch (T146g G1): its own branch, then its run.
+const SmallStart = "git switch -c <name>, then jhon executions run"
+
+// StartNote is what status says with no change in progress under changes/
+// on the default branch: how a small change starts, and today's words for
+// one that is not small.
+func StartNote(changes string) string {
+	return "no active change under " + changes + "/: a small change (one component, under the advisory size, not high risk) starts on a branch of its own: `git switch -c <name>`, then `jhon executions run` while its new test fails (RED) and again once it passes (GREEN); a change that is not small (several components, over the advisory size, or high risk): before you finish, start one (tasks.md) and record a run (`jhon executions run`)"
 }
 
 // ── views ───────────────────────────────────────────────────────────────────
@@ -1416,7 +1438,7 @@ func Human(s Status) string {
 			out = append(append(out, "active"), list(active)...)
 		}
 		out = append(out, umbrellaLines(s.Umbrellas)...)
-		out = append(out, "next        "+s.Next+"  (suggestion)")
+		out = append(out, nextLines(s)...)
 		if len(s.Notes) > 0 {
 			out = append(append(out, "", "notes"), list(s.Notes)...)
 		}
@@ -1457,6 +1479,19 @@ func Human(s Status) string {
 	return strings.Join(out, "\n")
 }
 
+// nextLines is the suggestion and its command; with no change selected, a
+// command stands alone: start-change is no command (T146g G1).
+func nextLines(s Status) []string {
+	if s.Change == nil && s.Command != "" {
+		return []string{"command     " + s.Command}
+	}
+	out := []string{"next        " + s.Next + "  (suggestion)"}
+	if s.Command != "" {
+		out = append(out, "command     "+s.Command)
+	}
+	return out
+}
+
 // Brief is the short view: the change, the suggestion, tasks, the last test
 // run, strict_tdd, and the tested tree.
 func Brief(s Status) string {
@@ -1464,13 +1499,7 @@ func Brief(s Status) string {
 	if s.Change != nil {
 		change = *s.Change
 	}
-	out := []string{
-		"change      " + change,
-		"next        " + s.Next + "  (suggestion)",
-	}
-	if s.Command != "" {
-		out = append(out, "command     "+s.Command)
-	}
+	out := append([]string{"change      " + change}, nextLines(s)...)
 	out = append(out, fmt.Sprintf("tasks       %d/%d checked", s.Tasks.Completed, s.Tasks.Total))
 	if sl := slicesLine(s.Tasks); sl != "" {
 		out = append(out, sl)

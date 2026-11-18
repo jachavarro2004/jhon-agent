@@ -148,7 +148,7 @@ func TestCheckDeliveryNotReady(t *testing.T) {
 	}
 	deliverTested(t, root, "pass", `"complete": false, "dirty": true, "working_tree_clean": false, "scope": "affected", `)
 	c := deliverRun(t, root)
-	for _, want := range []string{"did not finish: its record is partial", "changed during the last test run", "started on a working tree that was not clean; order: commit, then `jhon executions run` on the clean tree, then `jhon deliver check`"} {
+	for _, want := range []string{"did not finish: its record is partial", "changed during the last test run", "started on a working tree that was not clean; order: a passing run (`jhon executions run`), commit the tree it tested, then `jhon deliver check`"} {
 		if !deliverReason(c, regexp.QuoteMeta(want)) {
 			t.Errorf("%q missing: %+v", want, c.Reasons)
 		}
@@ -159,11 +159,11 @@ func TestCheckDeliveryNotReady(t *testing.T) {
 
 	deliverTested(t, root, "pass", "")
 	write(t, filepath.Join(root, "a", "a.go"), "package a\n\nvar X = 1\n")
-	if c := deliverRun(t, root); !deliverReason(c, `^the working tree is not clean.*; order: commit, then `+"`jhon executions run`"+` on the clean tree, then `+"`jhon deliver check`"+`$`) {
+	if c := deliverRun(t, root); !deliverReason(c, `^the working tree is not clean.*; order: a passing run \(`+"`jhon executions run`"+`\), commit the tree it tested, then `+"`jhon deliver check`"+`$`) {
 		t.Errorf("uncommitted: %+v", c.Reasons)
 	}
 	deliverCommit(t, root)
-	if c := deliverRun(t, root); !deliverReason(c, `^HEAD's tree is not the tested tree: 1 path\(s\) differ \(a/a\.go\); test this revision; order: commit, then `+"`jhon executions run`"+` on the clean tree, then `+"`jhon deliver check`"+`$`) {
+	if c := deliverRun(t, root); !deliverReason(c, `^HEAD's tree is not the tested tree: 1 path\(s\) differ \(a/a\.go\); test this revision; order: a passing run \(`+"`jhon executions run`"+`\), commit the tree it tested, then `+"`jhon deliver check`"+`$`) {
 		t.Errorf("later commit: %+v", c.Reasons)
 	}
 

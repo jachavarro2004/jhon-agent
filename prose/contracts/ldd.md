@@ -105,10 +105,9 @@ tasks.md; never archive it. With only umbrellas active, nothing is selected
 and status says "no change in progress; umbrella: <name> (start-change:
 split it into changes, or write its proposal or tasks.md if it is one change)".
 
-A small change has no folder: the branch names it (`fix/tenant-caches`
-names `fix-tenant-caches`), its record is its RED and GREEN runs in
-`jhon executions` plus the commit or PR text that says what was asked, and
-it has nothing to archive.
+A small change has no folder: the branch names it (a slash names a dash);
+its record is its RED and GREEN runs in `jhon executions` plus the commit
+or PR text that says what was asked.
 
 ## The record
 
@@ -300,10 +299,11 @@ counts it (`ByHand`).
 When a slice of a change that alters behaviour closes on the standard
 route, the `verify` agent verifies it lightly: it reads the slice's diff
 and its tests, runs the focused tests, and records its verdict with
-`jhon executions verify <change> --verdict pass|fail [--note <text>]`,
-beside the change's runs, folder or not. `jhon status` notes when one is
-due; route-guard opens the PR only once the newest one passed on the tree
-the last run tested. The verified route keeps its full `verify-report.md`.
+`jhon executions verify <change> --verdict pass|fail [--note <text>]`.
+`jhon status` notes when one is due; route-guard opens the PR only once
+the newest one passed on the tree the last run tested. A small change
+(`jhon status` says so) keeps no tasks.md, archive, light verify or todo
+list. The verified route keeps its full `verify-report.md`.
 
 ## Delivery
 

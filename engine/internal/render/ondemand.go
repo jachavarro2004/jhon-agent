@@ -32,10 +32,13 @@ type pointer struct{ in, text string }
 // (atInstall, T146c K3).
 const contractsRoot = runtimeRef + "/prose/contracts/"
 
-// atInstall is text with each contractsRoot written as the contracts
-// directory of the install this render projects, `current`.
+// atInstall is text with each runtimeRef (contractsRoot included) written
+// as the install this render projects, `current`, by its real path: a model
+// told `~/...` expands the `~` from the user name in its working directory,
+// not from HOME, and a bench run read the owner's install (T146g G4).
 func (e *engine) atInstall(text string) string {
-	return strings.ReplaceAll(text, contractsRoot, filepath.Join(e.current(), ProseDir, "contracts")+"/")
+	text = strings.ReplaceAll(text, contractsRoot, filepath.Join(e.current(), ProseDir, "contracts")+"/")
+	return strings.ReplaceAll(text, runtimeRef, e.current())
 }
 
 var onDemandContracts = []onDemandContract{
@@ -57,7 +60,7 @@ var onDemandContracts = []onDemandContract{
 			"**The record is always; the rigor is the change's, not yours.**",
 			"Create tasks.md yourself when you see several rules or cases to cover or a design decision on the way.",
 			"Name `jhon deliver check`'s result when asking to deliver; an untested revision is called untested.",
-			"Order: commit, then a recorded run (`jhon executions run`) on the clean tree at HEAD, then `jhon deliver check`.",
+			"Order: after the GREEN run, commit the tree it tested, then `jhon deliver check`.",
 			"A run whose tested tree is the commit's needs no re-run.",
 			"A slice's commit holds exactly the tree of its last recorded passing run: RED, GREEN, recorded run, commit.",
 			"**About 400 changed lines per delivery is a note**, never a cap, a forced split, or a reason for `verify`.",

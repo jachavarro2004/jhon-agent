@@ -82,11 +82,14 @@ func TestStatusIdle(t *testing.T) {
 	h := jhonGit(t, none, "status")
 	equal(t, h.Code, 0, h.Stderr)
 	match(t, h.Stdout, `(?m)^change\s+none selected`)
-	match(t, h.Stdout, `(?m)^next\s+start-change`)
+	// On the default branch, the commands a small change starts with; start-change is no command (T146g G1).
+	match(t, h.Stdout, `(?m)^command\s+git switch -c <name>, then jhon executions run$`)
+	noMatch(t, h.Stdout, `start-change`)
 	noMatch(t, h.Stdout, `(?m)^blockers`)
 	match(t, h.Stdout, `no active change`)
 	// After set-up, the next step names the record and a recorded run (T104, L682).
-	match(t, h.Stdout, `(?m)^  - no active change under openspec/changes/; before you finish, start one \(tasks\.md\) and record a run \(`+"`jhon executions run`"+`\)$`)
+	// One that is not small keeps today's words (T146g G1).
+	match(t, h.Stdout, `(?m)^  - no active change under openspec/changes/: a small change .*; a change that is not small \(several components, over the advisory size, or high risk\): before you finish, start one \(tasks\.md\) and record a run \(`+"`jhon executions run`"+`\)$`)
 }
 
 func TestStatusBrief(t *testing.T) {

@@ -46,7 +46,7 @@ func TestProjectBriefNamesTheRecordByRisk(t *testing.T) {
 		return before
 	}
 	medium := configuredRepo(t, "delivery: change\n", "src/app.py", "tests/test_app.py")
-	if got, want := method(ProjectBrief(medium)), "every change that alters behaviour carries its record (its RED and GREEN runs in `jhon executions`; tasks.md only when the work cannot be resumed from the diff, below high risk a one-line `## Intent` and `Delivers:`; a spec delta only when a main spec changes or is added), and a PR without it is refused"; got != want {
+	if got, want := method(ProjectBrief(medium)), "every change that alters behaviour carries its record (its RED and GREEN runs in `jhon executions`; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list; else tasks.md only when the work cannot be resumed from the diff, below high risk a one-line `## Intent` and `Delivers:`; a spec delta only when a main spec changes or is added), and a PR without it is refused"; got != want {
 		t.Errorf("medium:\n got %q\nwant %q", got, want)
 	}
 	high := configuredRepo(t, "delivery: change\n", "src/auth/login.py", "tests/test_login.py")

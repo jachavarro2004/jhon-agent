@@ -91,6 +91,11 @@ func branchsChange(root string) (change, line string, ok bool) {
 		}
 		return *s.Change, "jhon executions: change " + *s.Change + where, true
 	}
+	// On the default branch, the commands a small change starts with
+	// (T146g G1), not a name that branch cannot give.
+	if err == nil && s.Command != "" && len(s.Notes) > 0 {
+		return "", "jhon executions: no change named, and jhon status selects none on this branch: " + layout.Words(root, s.Notes[0]), false
+	}
 	why := ""
 	if err != nil {
 		why = err.Error()

@@ -567,7 +567,8 @@ func TestRenderSkills(t *testing.T) {
 	t.Run("every agent and command names its skill by its path in the active release", func(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
-		match(t, flat(claudeAgent(t, home, "worker")), `~/\.local/share/jhon/current/prose/skills/ldd/references/apply\.md`)
+		// T146g G4: a rendered agent names it at the install's real path.
+		match(t, flat(claudeAgent(t, home, "worker")), regexp.QuoteMeta(filepath.Join(home, ".local/share/jhon/current/prose/skills/ldd/references/apply.md")))
 		match(t, flat(support.Read(t, filepath.Join(repoRoot, "runtimes", "claude-code", "plugin", "skills", "jhon-ldd", "SKILL.md"))), `~/\.local/share/jhon/current/prose/skills/ldd/references/verify\.md`)
 		for _, dir := range []string{filepath.Join(home, ".claude", "agents"), filepath.Join(repoRoot, "runtimes", "claude-code", "plugin"), filepath.Join(repoRoot, "prose", "skills")} {
 			for _, f := range walkFiles(t, dir) {
@@ -2904,4 +2905,45 @@ func TestRenderFourRNativeFirst(t *testing.T) {
 	match(t, c, "Independence stays with `verify`", "independence stays with verify")
 	o := flat(support.Read(t, filepath.Join(repoRoot, "prose", "orchestrator.md")))
 	match(t, o, "A 4R is one call to the native review \\(\\{\\{runtime:native-review\\}\\}\\), the lens agents only when it cannot run", "the orchestrator calls the native review first, in each runtime's own words")
+}
+
+// T146g G4 (L1273, L1274): a model told the install is at `~/...` expands
+// the `~` from the user name it sees in its working directory, not from
+// HOME: two bench runs, whose HOME was a directory under the owner's, read
+// the owner's own install. Every prompt and agent a render writes names the
+// install by the real path under the HOME it renders into, never by `~`.
+func TestRenderNamesTheInstallByItsRealPath(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		runtime string
+		home    func(t *testing.T) string
+		dirs    []string
+	}{
+		{"claude-code", renderedHome, []string{".claude/CLAUDE.md", ".claude/agents"}},
+		{"pi", func(t *testing.T) string { h, _ := sharedPiHome(t); return h }, []string{".pi/jhon"}},
+	} {
+		t.Run(c.runtime, func(t *testing.T) {
+			t.Parallel()
+			home := c.home(t)
+			named := 0
+			for _, d := range c.dirs {
+				filepath.WalkDir(filepath.Join(home, d), func(p string, de os.DirEntry, err error) error {
+					if err != nil || de.IsDir() || !strings.HasSuffix(p, ".md") {
+						return nil
+					}
+					text := support.Read(t, p)
+					if strings.Contains(text, "~/.local/share/jhon") {
+						t.Errorf("%s names the install as ~/.local/share/jhon, which a model expands from the user name, not HOME", strings.TrimPrefix(p, home+"/"))
+					}
+					if strings.Contains(text, filepath.Join(home, ".local/share/jhon/current")) {
+						named++
+					}
+					return nil
+				})
+			}
+			if named == 0 {
+				t.Errorf("no rendered prompt under %v names the install at %s", c.dirs, filepath.Join(home, ".local/share/jhon/current"))
+			}
+		})
+	}
 }

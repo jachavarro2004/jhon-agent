@@ -126,8 +126,10 @@ func orNull(s string) *string {
 	return &s
 }
 
-// deliverOrder names the steps a delivery takes, for the reasons a step was skipped.
-const deliverOrder = "; order: commit, then `jhon executions run` on the clean tree, then `jhon deliver check`"
+// deliverOrder names the steps a delivery takes, for the reasons a step was
+// skipped: a passing run, the commit of the tree it tested, the check, with
+// no run after the commit (T146g G2).
+const deliverOrder = "; order: a passing run (`jhon executions run`), commit the tree it tested, then `jhon deliver check`"
 
 // CheckDelivery is whether the revision at HEAD in root is the change's last
 // tested revision, and why not. artifact is nil when none is named. The
@@ -141,8 +143,14 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 		return DeliverCheck{}, err
 	}
 	reasons, notes := []string{}, []string{}
+	// The last run passed on the working tree as it is now, uncommitted: its
+	// commit is what is left, with no re-run (T146g G2).
+	testedHere := run != nil && now.Clean != true && run.Passed && run.Complete && !run.Clean && !run.Dirty && !run.Unit &&
+		isSha(run.WorkingTree) && run.AfterWorkingTree == run.WorkingTree && vcs.WorkingTree(root, exempt) == run.WorkingTree
 	if now.Tree == vcs.CandidateUnknown() {
 		reasons = append(reasons, "HEAD's tree cannot be read: delivery needs a git repository with a commit")
+	} else if testedHere {
+		reasons = append(reasons, fmt.Sprintf("the working tree is not clean, and the last test run passed on it as it is: commit it, then `jhon deliver check %s`, with no re-run", change))
 	} else if now.Clean != true {
 		reasons = append(reasons, "the working tree is not clean (commit or remove the uncommitted changes)"+deliverOrder)
 	}
@@ -196,10 +204,10 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 				run.Tree = run.WorkingTree
 			}
 		}
-		if !run.Clean && !committed {
+		if !run.Clean && !committed && !testedHere {
 			reasons = append(reasons, "the last test run started on a working tree that was not clean"+deliverOrder)
 		}
-		if committed {
+		if committed || testedHere {
 		} else if isSha(run.Tree) && isSha(now.Tree) && run.Tree != now.Tree {
 			outside, ok := outsideRecord(run.Tree, now.Tree)
 			if !ok {

@@ -6,6 +6,16 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `jhon status` and a bare `jhon executions run` on the default branch with no change name the commands a small change starts with, `git switch -c <name>` then `jhon executions run`, instead of `start-change` (no command); one that is not small keeps "start one (tasks.md)" (T146g).
+- `jhon deliver check` before the commit, when the last passing run tested the working tree as it is, says "commit it, then `jhon deliver check <change>`, with no re-run"; every delivery order reads: a passing run, commit the tree it tested, then `jhon deliver check` (T146g).
+- A small change keeps no tasks.md, archive, light verify or todo list: status asks no light verify of it, the route guard opens its PR without one, and the orchestrator, the light-verify rule, the session's route text and pi's todo text say so in the same words (T146g).
+
+### Fixed
+
+- Rendered prompts and agents name the install by its real path under the rendered HOME, never `~/.local/share/jhon/current`: a model expanded the `~` from the user name in its working directory, and two bench runs read the owner's own install (T146g).
+
 ## [0.3.6] - 2026-11-17
 
 ### Added
