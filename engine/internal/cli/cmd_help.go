@@ -453,7 +453,41 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            and the agent socket, read-only, and keeps those
                            variables. No network or process isolation:
                            abstract unix sockets stay reachable (closing
-                           them takes a network namespace). bubblewrap is
+                           them takes a network namespace), and with no PID
+                           namespace a child the program detaches (setsid,
+                           nohup, a daemon) outlives bubblewrap: the
+                           runtime's kill and --die-with-parent end
+                           bubblewrap and the program, not that child.
+                           When its output is not a terminal (a runtime's
+                           call), jhon stays the program's parent: a
+                           failure whose output says a path is read-only
+                           (Read-only file system) ends with one line on
+                           stderr, the sandbox refused a write to <path>;
+                           that is a stop: tell the owner the path (jhon
+                           settings sandbox.allow_write), never write it
+                           elsewhere; and with telemetry on each run
+                           records a jhon.sandbox event (its profile, work
+                           or unsandboxed, and the exit code). The
+                           runtimes' --profile unsandboxed runs <shell> -c
+                           <line> with no sandbox when jhon sandbox profile
+                           names the line unsandboxed and the shell, git,
+                           gh and ssh are not files a sandboxed command may
+                           write; anything else runs with the work
+                           profile. Its git runs with the repository's
+                           hooks, ssh command, fsmonitor and credential
+                           helpers overridden (GIT_CONFIG_COUNT entries
+                           after the owner's own: core.hooksPath=/dev/null,
+                           core.sshCommand=ssh, core.fsmonitor=false,
+                           credential.helper reset then the owner's global
+                           and system helpers, the ext, fd and file
+                           transports off, no submodule recursion), and
+                           GIT_CONFIG_PARAMETERS unset. url.*.insteadOf and
+                           include.* in the repository's configuration are
+                           not overridden: an accepted residual risk. In the
+                           work profile uv's tools go to
+                           $XDG_CACHE_HOME/jhon/sandbox/uv-tools (UV_TOOL_DIR
+                           and UV_TOOL_BIN_DIR, unless already set);
+                           ~/.local/share/uv stays read-only. bubblewrap is
                            taken only from a PATH folder outside the
                            project and every folder the sandbox opens for
                            writing. It always sandboxes, whatever
@@ -461,6 +495,23 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            no user namespaces are there, or on macOS and
                            Windows, it runs nothing, says why and the fix
                            on one line, and exits 126; 2 on a usage error
+  jhon sandbox profile [--project <folder>] -- <command>
+                           how the runtimes run a command line with
+                           sandbox.mode on: unsandboxed when every program
+                           on it is git with a network subcommand (fetch,
+                           pull, push, ls-remote, clone, remote update) and
+                           only listed options, working inside the project
+                           (the working directory, its -C folders and a
+                           clone's new folder), or gh with a listed
+                           subcommand (not auth, extension, alias, config
+                           or a name gh does not know) that runs no git,
+                           reads no local file and downloads nothing, and
+                           the line redirects to no file; work for any
+                           other line, and for one it cannot read. git over
+                           SSH and gh cannot run inside the sandbox; the
+                           guards judge these lines as any other.
+                           --project as for run. exit 0, 2 on a usage
+                           error
   jhon sandbox status [--json] [--project <folder>]
                            sandbox.mode (on or off: whether the runtimes
                            sandbox the model's commands), whether the sandbox

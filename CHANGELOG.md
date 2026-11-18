@@ -6,6 +6,14 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Sandbox: with `sandbox.mode = "on"`, a line of git network commands (fetch, pull, push, ls-remote, clone, remote update, listed options only, working inside the project, a clone included) or gh (a listed subcommand, not auth, extension, alias or config, nothing downloaded) runs outside the sandbox in pi and Claude Code, still judged by the guards (`jhon sandbox profile [--project <folder>] -- <line>`); every other line, one that redirects to a file, and one Jhon cannot read keep the work profile. That git runs with `core.hooksPath=/dev/null`, `core.sshCommand=ssh`, `core.fsmonitor=false`, the repository's credential helpers reset (the owner's global and system ones kept), the ext, fd and file transports off and no submodule recursion, after the owner's own `GIT_CONFIG_COUNT` entries; `url.*.insteadOf` and `include.*` in the repository's configuration remain an accepted residual risk. In the work profile uv's tools go to `$XDG_CACHE_HOME/jhon/sandbox/uv-tools` (`UV_TOOL_DIR`, `UV_TOOL_BIN_DIR`, unless set), and `~/.local/share/uv` stays read-only (L1305, L1306). A wrapped command that fails on a read-only path ends with `the sandbox refused a write to <path>; that is a stop: tell the owner the path (jhon settings sandbox.allow_write), never write it elsewhere`, and every run records a `jhon.sandbox` telemetry event (profile, exit code) (T128g).
+
+### Fixed
+
+- Sandbox docs: `--die-with-parent` ends bubblewrap and its command, not a child the command detached (`setsid`, `nohup`): with no PID namespace that child outlives the sandbox, an accepted residual risk (T128g, L1262).
+
 ## [0.3.7] - 2026-11-18
 
 ### Added

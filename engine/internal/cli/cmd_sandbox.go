@@ -23,15 +23,25 @@ import (
 //
 //	jhon sandbox run [--profile work|delivery] [--project <folder>] -- <program> [args...]
 //	jhon sandbox status [--json] [--project <folder>]
+//	jhon sandbox profile -- <command>
 //
-// run replaces this process with bubblewrap running the program, so its
-// stdin, stdout, stderr, exit code and signals are the program's. It starts
-// no other program, git included, and takes bubblewrap only from a PATH
-// folder a sandboxed command cannot write (L888). It always sandboxes: where
-// the sandbox cannot run it runs nothing, says why and the fix on one line,
-// and exits 126. sandbox.mode in the settings is for the
-// callers (the shell, the hook), which read it through status: the setting,
-// whether the sandbox can run here, and why not.
+// run runs the program under bubblewrap with the program's stdin, stdout,
+// stderr, exit code and signals: on a terminal it replaces this process
+// with bubblewrap; for a runtime, whose output is a pipe, it runs
+// bubblewrap as its child (sandboxSupervised), so it can end a failure on a
+// read-only path with the stop note and record a jhon.sandbox event (T128g,
+// L1303 G3, G4). It starts no other program, git included, and takes
+// bubblewrap only from a PATH folder a sandboxed command cannot write
+// (L888). It always sandboxes: where the sandbox cannot run it runs
+// nothing, says why and the fix on one line, and exits 126. The one
+// exception is the runtimes' --profile unsandboxed, which runs `<shell> -c
+// <line>` with no sandbox only when the line is a git or gh network line of
+// trusted programs (sandbox.RunsOutside), and anything else with the work
+// profile. sandbox.mode in the settings is for the callers (the shell, the
+// hook), which read it through status: the setting, whether the sandbox
+// can run here, and why not. profile prints how a command line runs
+// (sandbox.ProfileFor, T128g): `unsandboxed` or `work`; the pi shell asks
+// it for each line, and Claude Code's wrap calls the same function.
 func init() {
 	register("sandbox", runSandbox)
 	hook.SandboxInput = func(dir, pinned string) sandbox.Input { return sandboxInputAt(dir, pinned, sandbox.Work) }
@@ -40,6 +50,11 @@ func init() {
 const sandboxUsage = `usage: jhon sandbox run [--profile work|delivery] [--project <folder>] -- <program> [args...]
        jhon sandbox status [--json] [--project <folder>]
 `
+
+// sandboxProfileUsage is the usage of `jhon sandbox profile`, the runtimes'
+// question rather than the owner's: the usage above leaves it out, as it
+// leaves out run's --profile unsandboxed.
+const sandboxProfileUsage = "usage: jhon sandbox profile [--project <folder>] -- <command>\n"
 
 func sandboxUsageError(msg string) (int, error) {
 	fmt.Fprintf(os.Stderr, "jhon sandbox: %s\n\n%s", msg, sandboxUsage)
@@ -57,6 +72,23 @@ func runSandbox(argv []string) (int, error) {
 	switch argv[0] {
 	case "run":
 		return sandboxRun(argv[1:])
+	case "profile":
+		pinned, rest := "", argv[1:]
+		if len(rest) == 4 && rest[0] == "--project" {
+			var ok bool
+			if pinned, ok = sandbox.ProjectFolder(rest[1]); !ok {
+				fmt.Fprintf(os.Stderr, "jhon sandbox: %s%s\n\n%s", sandboxProjectRefused, rest[1], sandboxProfileUsage)
+				return 2, nil
+			}
+			rest = rest[2:]
+		}
+		if len(rest) != 2 || rest[0] != "--" {
+			fmt.Fprintf(os.Stderr, "jhon sandbox: profile takes one command line after --\n\n%s", sandboxProfileUsage)
+			return 2, nil
+		}
+		in := sandboxInput(pinned, sandbox.Work)
+		fmt.Println(sandbox.ProfileAt(rest[1], in.Cwd, in.Roots, in.Stat))
+		return 0, nil
 	case "status":
 		asJSON, pinned := false, ""
 		for i := 1; i < len(argv); i++ {
@@ -104,7 +136,7 @@ func sandboxRun(argv []string) (int, error) {
 		}
 		switch name {
 		case "--profile":
-			if !slices.Contains(sandbox.Profiles, value) {
+			if !slices.Contains(sandbox.Profiles, value) && value != sandbox.Unsandboxed {
 				return sandboxUsageError("unknown profile: " + value + " (accepted: " + strings.Join(sandbox.Profiles, ", ") + ")")
 			}
 			profile = value
@@ -119,13 +151,26 @@ func sandboxRun(argv []string) (int, error) {
 	if i+1 >= len(argv) {
 		return sandboxUsageError("run takes a program after --")
 	}
+	program := argv[i+1:]
+	if profile == sandbox.Unsandboxed {
+		// git runs with the repository's hooks, ssh command, helpers and
+		// transports overridden (sandbox.UnsandboxedEnv, L1306).
+		if sandbox.RunsOutside(sandbox.ThisHost(), sandboxInput(pinned, sandbox.Work), program) {
+			return sandboxProgram(program[0], program, sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers()), sandbox.Unsandboxed)
+		}
+		profile = sandbox.Work
+	}
 	in := sandboxInput(pinned, profile)
 	bwrap, p := sandbox.Check(sandbox.ThisHost(), in)
 	if p != nil {
 		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
 		return sandboxRefused, nil
 	}
-	return execProgram(bwrap, append(sandbox.Args(in), argv[i:]...), os.Environ())
+	env := os.Environ()
+	if profile == sandbox.Work {
+		env = append(env, sandbox.UVToolEnv(in)...)
+	}
+	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile)
 }
 
 // sandboxInput is the sandbox of a program started here, in the pinned
