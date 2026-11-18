@@ -1233,3 +1233,44 @@ func TestRouteGuardFolderChangeOnOtherBranchNameNeedsALightVerify(t *testing.T) 
 	code(t, res, 2, "a change with a folder keeps its light verify")
 	matches(t, res.Stderr, "no passing light verify of the tree its last run tested is on record", "the light-verify refusal")
 }
+
+// T146g G3 (L1289, L1290): a change folder under another name, committed or
+// archived, keeps the light verify even with the branch's folderless record.
+func TestRouteGuardSmallExemptionNeedsNoFolderChangeOnTheBranch(t *testing.T) {
+	t.Parallel()
+	pr := cmd("gh pr create --title x --body y")
+	for name, files := range map[string]map[string]string{
+		"committed login-x": {"openspec/changes/login-x/tasks.md": "## Intent\nDelivers: X is 2\n",
+			"openspec/changes/login-x/execution-record.json": redGreenUnverified("")},
+		"archived login-x": {"openspec/changes/archive/2026-11-18-login-x/tasks.md": "## Intent\nDelivers: X is 2\n",
+			"openspec/changes/archive/2026-11-18-login-x/execution-record.json": redGreenUnverified("")},
+	} {
+		r := newRG(t, "")
+		support.Git(t, r.p, "checkout", "-q", "-b", "fix/small")
+		support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"})
+		support.Write(t, r.p, files)
+		support.Git(t, r.p, "add", "-A")
+		support.Git(t, r.p, "commit", "-q", "-m", "c")
+		support.Write(t, r.p, map[string]string{".git/jhon/changes/fix-small/execution-record.json": redGreenUnverified("")})
+		res := r.call(t, "Bash", pr, true)
+		code(t, res, 2, name)
+		matches(t, res.Stderr, "no passing light verify of the tree its last run tested is on record", name)
+	}
+}
+
+// T146g G3: a folder of the branch's own name deleted from the base is a
+// change with a folder, not a small one.
+func TestRouteGuardDeletedBaseFolderKeepsTheLightVerify(t *testing.T) {
+	t.Parallel()
+	r := newRG(t, "")
+	support.Write(t, r.p, map[string]string{"openspec/changes/fix-small/tasks.md": "## Intent\nDelivers: X is 2\n"})
+	support.Git(t, r.p, "add", "-A")
+	support.Git(t, r.p, "commit", "-q", "-m", "f")
+	support.Git(t, r.p, "checkout", "-q", "-b", "fix/small")
+	support.Git(t, r.p, "rm", "-q", "-r", "openspec/changes/fix-small")
+	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n",
+		".git/jhon/changes/fix-small/execution-record.json": redGreenUnverified("")})
+	res := r.call(t, "Bash", cmd("gh pr create --title x --body y"), true)
+	code(t, res, 2, "deleted base folder")
+	matches(t, res.Stderr, "no passing light verify", "light verify still due")
+}
