@@ -351,7 +351,10 @@ func TestRelease(t *testing.T) {
 		wantCode(t, guard("ls"), 0)
 		wantCode(t, guard("rm -rf /"), 2)
 		equal(t, support.Read(t, filepath.Join(env.home, ".claude", "CLAUDE.md")), "@RTK.md\n", "the global CLAUDE.md kept Jhon text")
-		match(t, orch, `(?m)^## Strict TDD$`)
+		// T146h: the orchestrator starts lean; the full context, Strict TDD
+		// included, is the release's full-claude-code.md it points to.
+		match(t, orch, `jhon executions run`)
+		match(t, support.Read(t, filepath.Join(current, "prose", "full-claude-code.md")), `(?m)^## Strict TDD$`)
 
 		// Nothing installed names the live source: agents, skills, and command targets.
 		equal(t, namingSource(t, filepath.Join(env.home, ".claude", "agents"), env.home, src), []string{})
@@ -559,6 +562,10 @@ func TestRelease(t *testing.T) {
 		env := scratchHome(t)
 		src := scratchSource(t)
 		r := run(t, env, cliOf(src), []string{"executions", "run", "--help"})
+		wantCode(t, r, 0)
+		// T146h: a command's help opens with that command's own usage.
+		match(t, r.Out(), `usage\s+jhon executions run \[<change>\]`)
+		r = run(t, env, cliOf(src), []string{"sync", "--help"})
 		wantCode(t, r, 0)
 		match(t, r.Out(), `jhon sync\s+build a release`)
 	})
