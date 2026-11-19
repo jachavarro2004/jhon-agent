@@ -105,6 +105,15 @@ record, not project input: marking a task after the GREEN run and committing
 it needs no re-run either. An edit anywhere else, another change's folder
 included, does.
 
+A data migration is high risk, so never small: `jhon risk` reads as
+`migration or schema` a code file whose base name starts with `migrate` or
+`migration` (`migrate.py`, `migrations.ts`, `migrate_users.go`), any file
+under a `migrations`, `migration`, `migrate` or `db/migrate` folder at any
+depth, and SQL (`NNNN_*.up.sql`, Flyway's `V1__*.sql`), and the change takes
+the verified route. A document or a test that only names a migration
+(`docs/migration-guide.md`, `MIGRATING.md`, `test_migrate.py`), and
+vendored code under `vendor/` or `node_modules/`, keep their own reading.
+
 ## A worktree per change
 
 By default a change works on its own branch in the main checkout.

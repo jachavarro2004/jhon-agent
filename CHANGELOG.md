@@ -33,6 +33,7 @@ All notable changes to Jhon are recorded here. The format follows
 ### Fixed
 
 - `jhon deliver check` no longer asks for a re-run when only the change's own folder (tasks.md, proposal, design, spec deltas, under `openspec/changes/<change>/` or `ldd/changes/<change>/`) changed after the passing run and was committed: it is the change's record, as `--affected` reads it. An edit outside that folder, another change's folder included, still makes the check not ready (T150).
+- `jhon risk` reads a data migration as high (`migration or schema`, naming the file), so the change takes the verified route: a code file whose base name starts with `migrate` or `migration` (a root `migrate.py`, `migrations.ts`, `migrate_users.go`) and any file under a `migrate` folder at any depth, beside the migrations folders and SQL files it already read; documents and tests that only name a migration (`docs/migration-guide.md`, `test_migrate.py`) and vendored code keep their tier (T148).
 
 ## [0.3.7] - 2026-11-18
 
