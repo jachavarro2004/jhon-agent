@@ -12,9 +12,9 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 )
 
-// A glob the allow-list admits (credential_allow.go) is expanded here: a
-// bounded walk that never follows a link, and that fails closed when it
-// cannot finish.
+// A glob a file tool searches with (ToolGlob, the secrets guard's) is
+// expanded here: a bounded walk that never follows a link, and that fails
+// closed when it cannot finish.
 
 // globMaxEntries bounds the entries one glob's expansion reads.
 const globMaxEntries = 100000
@@ -153,6 +153,12 @@ func looseGlob(glob string) string {
 func gitProject(dir, root string) bool {
 	top, ok := project.ReadGit(dir, "rev-parse", "--show-toplevel")
 	return ok && root != "" && project.Realish(top) == project.Realish(root) && project.Within(project.Realish(dir), project.Realish(root))
+}
+
+// credentialGlobWord is a glob read as naming a credentials file: by
+// CredentialGlob, or by CredentialFile (`x*.pem`).
+func credentialGlobWord(w string) bool {
+	return isGlob(w) && (CredentialGlob(w) || CredentialFile(w))
 }
 
 // ToolGlob is the secrets guard's reading of a tool's glob (Grep's glob,

@@ -57,15 +57,9 @@ func SafetyGuard(args []string, io IO) int {
 	findings := guard.Classify(command, ctx)
 
 	var lines, alts []string
-	credentials, destructive := false, false
 	for _, f := range findings {
 		if f.Level != "deny" {
 			continue
-		}
-		if f.Cls == guard.Credentials {
-			credentials = true
-		} else {
-			destructive = true
 		}
 		if l := f.What + ": " + f.Why; !slices.Contains(lines, l) {
 			lines = append(lines, l)
@@ -79,18 +73,7 @@ func SafetyGuard(args []string, io IO) int {
 		if len(alts) > 0 {
 			instead = "Allowed instead: " + strings.Join(alts, "; ") + ". "
 		}
-		// A credentials file is refused as the owner's, not as destructive.
-		class := ""
-		if destructive {
-			class = "This is destructive or irreversible, and never granted to an agent. "
-		}
-		if credentials {
-			class += "Credentials are the owner's alone, and never handed to an agent. "
-		}
-		if !destructive {
-			return block("refused: " + strings.Join(lines, "; ") + ". " + class + instead + "Stop and report this refusal verbatim.")
-		}
-		return block("refused: " + strings.Join(lines, "; ") + ". " + class +
+		return block("refused: " + strings.Join(lines, "; ") + ". This is destructive or irreversible, and never granted to an agent. " +
 			instead + "Stop and report this refusal verbatim; if it is intended, the owner runs it with `!` in Claude Code, or in their own terminal in pi.")
 	}
 	// An ask stays open unless a live grant of its class covers the

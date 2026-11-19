@@ -137,7 +137,7 @@ counts what each one costs).
 | Guard | Judges | Covers |
 |---|---|---|
 | `inspect-guard` | Bash | a reviewer changing what it reviews: 4R and Judgment Day reviewers stay read-only |
-| `safety-guard` | Bash | a destructive or irreversible command (refused), a credentials file in the project (refused), an outward-facing one without your consent (asked), a sub-agent's unbounded wait; a write or a credentials file outside the project is the sandbox's |
+| `safety-guard` | Bash | a destructive or irreversible command (refused), a write or delete of a credentials file (refused), an outward-facing one without your consent (asked), a sub-agent's unbounded wait; a read, a write outside the project or one it cannot resolve is not limited (the sandbox bounds it) |
 | `vcs-guard` | Edit, Write | a write into `.git/` or the grants, an agent writing Claude Code's settings, a write outside the project (asked) |
 | `framework-guard` | Edit, Write, Bash | an agent editing Jhon or its installed release while it runs on it (Edit, Write), or running Jhon's own code by hand (Bash); a Bash write or git there is the sandbox's, where they are read-only |
 | `secrets-guard` | Read, Grep, Glob, Edit, Write | a file that holds credentials (`.env`, keys); a template such as `.env.example` passes |
@@ -300,7 +300,7 @@ own terminal in pi).
 | `outside-write` | an Edit or Write outside the project (a shell write there is the sandbox's) |
 | `destroy` | a deletion that loses work (a forced branch delete, `reset --hard`); the rest of the destructive operations are never grantable |
 
-**The hard lines, in every mode.** Refused: credentials (by the shell, those in the project), the
+**The hard lines, in every mode.** Refused: credentials (by the file tools; by the shell, a write or delete), the
 never-grantable destructive operations, writes into `.git/`, the grants
 and the modes, Jhon's own files. Asked: a write to Claude Code's settings,
 and a `git config` that changes what git runs. A folder that is not a git

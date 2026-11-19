@@ -12,7 +12,8 @@ import (
 // or NotebookEdit of a file that holds credentials (secrets-guard), and of
 // any file in a home credentials directory: the owner handles them. A
 // template of one (`.env.example`) passes like any file; a shell command
-// that names one is safety-guard's.
+// that writes or deletes one is safety-guard's; one that reads it is not
+// judged (L1366).
 func SecretsGuard(args []string, io IO) int {
 	scoped, name, _ := owner(args)
 	var p Payload

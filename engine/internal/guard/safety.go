@@ -23,22 +23,11 @@ type Ctx struct {
 	Cwd, Home, Root                                     string
 	Projects, Roots, Worktrees, Tmp, Scratch, Deletable []string
 	roots                                               map[string]string
-	// globsProven says the allow-list proved every credentials glob of the
-	// line safe (proveGlobs): a glob is no longer read by its name.
-	globsProven bool
 	// scratch is the variables the line proves directories mktemp -d makes
 	// (scratchVars), by the path each reads as; mktempRm, that the whole
 	// line is `rm $(mktemp -d)` (T64c).
 	scratch  map[string]string
 	mktempRm bool
-	// scratchUsed is the scratch variables a command of the line has named
-	// so far: a redirect into one resolves only before (scratchRedirects).
-	scratchUsed map[string]bool
-	// fresh is the line's fresh mktemp variables (freshVars).
-	fresh map[string]string
-	// extLine says the line cannot change what lies under the directories
-	// an extension glob is walked in (extLine, T87b).
-	extLine bool
 	// targets, when set, collects each program the walk judges, with the
 	// root it acts on (Targets, T140).
 	targets *[]Target
@@ -199,14 +188,18 @@ func unreadableAsk(err error) Finding {
 
 // Classify is the findings of a command line run in ctx.Cwd.
 func Classify(command string, ctx *Ctx) []Finding {
-	proof := proveGlobs(command, ctx)
-	ctx.globsProven, ctx.extLine = proof.proven, extLine(command)
-	ctx.scratch, ctx.mktempRm, ctx.fresh = scratchVars(command, ctx), mktempRm(command), freshVars(command, ctx.Cwd)
-	out := classify(command, ctx, 0, &State{Dir: ctx.Cwd, Links: &Links{}})
-	ctx.globsProven, ctx.scratch, ctx.mktempRm, ctx.extLine, ctx.scratchUsed, ctx.fresh = false, nil, false, false, nil, nil
-	// A glob the allow-list expanded to a credentials file is refused, whatever the name rule says.
-	for _, g := range proof.reached {
-		out = append(out, denyCredentials(g, CredentialsWhy(g)))
+	ctx.scratch, ctx.mktempRm = scratchVars(command, ctx), mktempRm(command)
+	st := &State{Dir: ctx.Cwd, Links: &Links{}}
+	out := classify(command, ctx, 0, st)
+	ctx.scratch, ctx.mktempRm = nil, false
+	// A file the write reader finds the line writing (curl -o, go build -o) is
+	// refused when it is a credentials file, as judgeWrite's targets are (L1368).
+	if !slices.ContainsFunc(out, func(f Finding) bool { return f.Level == "deny" && strings.Contains(f.Why, "which the owner handles") }) {
+		for _, f := range slices.Sorted(maps.Keys(st.written)) {
+			if CredentialFile(f) {
+				out = append(out, deny("a write of "+f, CredentialsWhy(filepath.Base(f))))
+			}
+		}
 	}
 	return out
 }
@@ -419,136 +412,6 @@ func runsGrant(name string, argv []string) bool {
 	return grantScript.MatchString(at(argv, 0)) || (tsRunners[name] && len(argv) > 1 && slices.ContainsFunc(argv[1:], grantScript.MatchString))
 }
 
-// credentialNamers are the programs whose operands are text or a name's
-// existence, never a file's content: `echo .env >> .gitignore`, `test -f .env`.
-var credentialNamers = set("echo", "printf", "ls", "test", "[", "stat")
-
-// judgeCredentials refuses a command that names a credentials file as an
-// operand, an option's value, or a redirection's target, save as the file a
-// program loads its environment from (`docker compose --env-file .env up`),
-// which hands the agent none of its content. A glob is read by its name
-// unless the allow-list proved the line's globs safe (Ctx.globsProven); a
-// namer's glob counts inside a substitution, whose output is a command's
-// words (`cat $(echo *.json)`). An extension glob (`*.json`) is refused only
-// where it can reach a credentials file (extensionGlobRefused), on a line
-// that writes nothing (Ctx.extLine), run from the line's known directory by
-// a program none of whose words takes paths from elsewhere (localSearch).
-// A path outside the project is the sandbox's, which hides the home
-// credentials (T128f): only a word inside it, or one the guard cannot
-// place, is refused (projectPath).
-func judgeCredentials(name string, args []string, redirects []*sh.Redirect, ctx *Ctx, sub bool, dir string, via []string, vars map[string]string) []Finding {
-	var out []Finding
-	local := ctx.extLine && localSearch(name, args, via)
-	outside := func(w string) bool {
-		a := pathOf(w, dir, ctx, vars)
-		return a != "" && !projectPath(a, ctx)
-	}
-	// A glob into a home credentials directory is refused for every program, a namer's too (T87c).
-	for _, w := range args {
-		if _, v, ok := strings.Cut(w, "="); ok && strings.HasPrefix(w, "-") {
-			w = v
-		}
-		if homeCredentialGlob(w, dir, ctx.Home) && !outside(w) {
-			out = append(out, denyCredentials(w, CredentialsWhy(w)))
-		}
-	}
-	for _, r := range redirects {
-		if homeCredentialGlob(r.Target, dir, ctx.Home) && !outside(r.Target) {
-			out = append(out, denyCredentials(r.Target, CredentialsWhy(r.Target)))
-		}
-	}
-	if len(out) > 0 {
-		return out
-	}
-	check := func(w string) {
-		// `<rev>:<path>` reads the path from history, where no walk reaches:
-		// a credentials name or glob there is refused by its name (T94, L636).
-		if p, ok := revPath(w); ok && name == "git" && (CredentialFile(p) || CredentialGlob(p)) {
-			out = append(out, denyCredentials(w, CredentialsWhy(w)))
-			return
-		}
-		if outside(w) {
-			return
-		}
-		if ctx.globsProven && isGlob(w) {
-			return
-		}
-		if isGlob(w) && extensionGlob(w) && local && !extensionGlobRefused(w, dir, ctx.Home) {
-			return
-		}
-		if CredentialFile(w) || CredentialGlob(w) {
-			out = append(out, denyCredentials(w, CredentialsWhy(w)))
-		}
-	}
-	if credentialNamers[name] && sub {
-		for _, a := range args {
-			if isGlob(a) {
-				check(a)
-			}
-		}
-	}
-	if !credentialNamers[name] {
-		for k := 0; k < len(args); k++ {
-			a := args[k]
-			switch {
-			case a == "--env-file":
-				k++
-			case strings.HasPrefix(a, "--env-file="):
-			case strings.HasPrefix(a, "-"):
-				if _, v, ok := strings.Cut(a, "="); ok {
-					check(v)
-				}
-			default:
-				check(a)
-			}
-		}
-	}
-	for _, r := range redirects {
-		if !(strings.HasSuffix(r.Op, "&") && descriptor.MatchString(r.Target)) {
-			check(r.Target)
-		}
-	}
-	return out
-}
-
-// pathSources are the options that take paths or a directory from somewhere
-// the guard does not walk: a list file, another directory, followed links.
-var pathSources = lazyre.New(`^(?:-C|-L|-H|-T|-a|-f|-follow|--work-tree|--git-dir|--directory|--files-from|--files0-from|--arg-file|--file|--follow|--from-file|--exclude-from|--include-from|--rawfile|--slurpfile)(?:=.*)?$`)
-
-// localSearch is whether a program's search stays below its directory: it
-// is not xargs, git reads no history, and no word names a path outside it
-// (absolute, `~`, a variable, a substitution, a `..` part) or a
-// pathSources option.
-func localSearch(name string, args, via []string) bool {
-	if name == "xargs" || slices.Contains(via, "xargs") {
-		return false
-	}
-	// git reads history as well as the work tree: only these read the tree alone.
-	if name == "git" && !slices.ContainsFunc(args, func(a string) bool { return a == "add" || a == "ls-files" || a == "status" }) {
-		return false
-	}
-	for _, a := range args {
-		if pathSources.MatchString(a) {
-			return false
-		}
-		if isGlob(a) || strings.HasPrefix(a, "-") {
-			continue
-		}
-		if strings.HasPrefix(a, "/") || strings.HasPrefix(a, "~") || strings.ContainsAny(a, "$`") || slices.Contains(strings.Split(a, "/"), "..") {
-			return false
-		}
-	}
-	return true
-}
-
-// credentialDir is the directory a program's globs expand from, or "" when the line lost it.
-func credentialDir(dir string, st *State) string {
-	if st.Lost {
-		return ""
-	}
-	return dir
-}
-
 func hasInPlace(args []string) bool { return slices.ContainsFunc(args, sh.InPlace) }
 
 func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]string, st *State, depth int) []Finding {
@@ -591,7 +454,6 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	for i, v := range p.Via {
 		via[i] = sh.Base(v)
 	}
-	out = append(out, judgeCredentials(name, args, redirects, ctx, len(p.Scope) > 0, credentialDir(dir, st), via, vars)...)
 	if i := slices.IndexFunc(via, func(v string) bool { return escalate[v] }); i >= 0 && !rootReads[name] &&
 		!(name == "systemctl" && slices.Contains([]string{"status", "is-active", "show", "list-units"}, at(args, 0))) {
 		out = append(out, deny(via[i]+" "+name, "it runs a program as root, which may write anywhere"))
@@ -627,9 +489,6 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 		out = append(out, judgeScriptFile(name, argv, ctx, vars, st, depth, p)...)
 	}
 	if p.Code != nil {
-		for _, c := range codeCredentials(*p.Code, dir, ctx, vars) {
-			out = append(out, denyCredentials(name+" code naming "+c, CredentialsWhy(c)))
-		}
 		out = append(out, judgeCode(p, ctx, vars, dir, st.Lost, depth)...)
 		if joined != nil {
 			q := p
@@ -814,6 +673,9 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 				}
 			} else {
 				why := protectedWhy(t, ctx)
+				if why == "" {
+					why = credentialWhy(of, t)
+				}
 				if why == "" {
 					why = writeWhy(t, ctx)
 				}
@@ -1130,6 +992,10 @@ func judgeDelete(name string, args []string, p sh.Program, ctx *Ctx, vars map[st
 			if a != "" {
 				a = followLinks(a, st)
 			}
+			if why := credentialWhy(e.w, a); why != "" {
+				out = append(out, deny(name+r+" "+t, why))
+				continue
+			}
 			if a == "" && !recursive {
 				out = append(out, writeAsk(unknown, name+" "+t+": its target cannot be resolved"))
 				continue
@@ -1183,7 +1049,6 @@ func judgeCode(p sh.Program, ctx *Ctx, vars map[string]string, dir string, lost 
 	if sh.CodeWrites(targets, isProtected) {
 		out = append(out, deny(p.Name+" code", "it writes or deletes a VCS directory, the grants directory, or a Claude Code settings file"))
 	}
-	out = append(out, codeCredentialsElsewhere(p.Name, code, dir, ctx, vars)...)
 	// A call that runs a program with the literals `mode` and a mode, or
 	// `grant` and a class, in a row (`run(["x", "mode", "yolo"])`).
 	if sh.CodeExec.MatchString(code) {
@@ -1583,7 +1448,6 @@ func judgeCommand(c *sh.Command, ctx *Ctx, vars map[string]string, st *State, de
 	}
 	cc := *c
 	cc.Words = words
-	cc.Redirects = scratchRedirects(c, ctx, depth)
 	found, err := sh.CommandPrograms(&cc, nil, nil, sh.Opts{})
 	if err != nil {
 		return []Finding{unreadableAsk(err)}

@@ -3,16 +3,17 @@ package guard
 import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
-	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 )
 
-// The owner handles credentials: no agent reads, edits, or deletes a file
-// that holds them. A template of one (`.env.example`) holds none, and is read
-// and edited like any file.
+// The file tools' reading of credentials (secrets-guard) and the home
+// directories the sandbox hides (ProtectedHome). A template of one
+// (`.env.example`) holds none, and is read and edited like any file. A shell
+// command is no longer read for them: guards limit only destructive acts
+// (T128f, L1366).
 
 var (
 	// credentialName is a file name that holds credentials: an env file
@@ -30,9 +31,6 @@ var (
 	// pathspec's magic (`:(top,glob)`, `:/`, `:!`), or an `@` of a file of names.
 	globLead = lazyre.New(`^(?::(?:\([^)]*\)|[/!^]*:?)|@)`)
 )
-
-// Credentials is the class of a refusal for a credentials file (Finding.Cls).
-const Credentials = "credentials"
 
 // CredentialFile is whether the file p names holds credentials: its name
 // is one credentialName reads and no part of it marks a template.
@@ -268,109 +266,6 @@ func extensionGlobRefused(glob, cwd, home string) bool {
 	}
 	found, ok := globReachesFrom(start, rel)
 	return found || !ok
-}
-
-// credentialWord finds a credentials file named in code or shell text, as a
-// quoted or bare path whose last part is one: `open('.env')`, `cat
-// config/.env.local`.
-var credentialWord = lazyre.New(`(?:^|[\s'"(=:,/])((?:\.env(?:\.[A-Za-z0-9_-]+)*|\.envrc|id_(?:rsa|dsa|ecdsa|ed25519)|credentials\.json|\.netrc|\.pgpass|\.pypirc))(?:$|[\s'")\],;])`)
-
-// codeCredentials is the credentials files code names (CredentialsIn) but
-// those it names only as string words outside the project (codeOutside).
-func codeCredentials(code, dir string, ctx *Ctx, vars map[string]string) []string {
-	words := strings.FieldsFunc(strings.Join(sh.CodeStrings(code), "\n"), func(r rune) bool {
-		return r == ' ' || r == '\t' || r == '\n' || r == '\'' || r == '"' || r == '=' || r == ','
-	})
-	var out []string
-	for _, c := range CredentialsIn(code) {
-		outside, named := 0, 0
-		for _, w := range words {
-			if filepath.Base(w) == c && strings.ContainsAny(w, "/~") && codeOutside(code, w, dir, ctx, vars) {
-				outside++
-			}
-		}
-		for _, m := range credentialWord.FindAllStringSubmatch(code, -1) {
-			if m[1] == c {
-				named++
-			}
-		}
-		if outside == 0 || outside != named {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-// codeOutside is whether the string word w of code names a path outside
-// the project, the sandbox's (T128f): every literal of it is the whole
-// string, a call's first argument or an assigned value, never joined to
-// another part (`cwd + '/.env'`, `join(root, '/x')`), and it resolves
-// outside the project (projectPath).
-func codeOutside(code, w, dir string, ctx *Ctx, vars map[string]string) bool {
-	if a := pathOf(w, dir, ctx, vars); a == "" || projectPath(a, ctx) {
-		return false
-	}
-	seen := false
-	for i := strings.Index(code, w); i >= 0; {
-		end := i + len(w)
-		if i == 0 || end >= len(code) || !strings.ContainsRune("'\"`", rune(code[i-1])) || code[end] != code[i-1] {
-			return false
-		}
-		before := strings.TrimRight(code[:i-1], " \t")
-		after := strings.TrimLeft(code[end+1:], " \t")
-		if (before != "" && !strings.ContainsRune("(=[:", rune(before[len(before)-1]))) || (after != "" && !strings.ContainsRune("),;]\n", rune(after[0]))) {
-			return false
-		}
-		seen = true
-		j := strings.Index(code[end:], w)
-		if j < 0 {
-			break
-		}
-		i = end + j
-	}
-	return seen
-}
-
-// projectPath is whether abs, written or resolved, may lie in the project:
-// its roots, its worktrees, or the directory the call runs in; a glob, where
-// its base holds one of them too.
-func projectPath(abs string, ctx *Ctx) bool {
-	ours := slices.Concat(ctx.Roots, ctx.Worktrees, []string{ctx.Cwd})
-	for _, p := range []string{abs, project.Realish(abs)} {
-		g, globbed := globBase(p)
-		if slices.ContainsFunc(ours, func(r string) bool {
-			return r != "" && (project.Within(p, r) || (globbed && (project.Within(g, r) || project.Within(r, g))))
-		}) {
-			return true
-		}
-	}
-	return false
-}
-
-// CredentialsIn is the credentials files text names, each once.
-func CredentialsIn(text string) []string {
-	var out []string
-	for _, m := range credentialWord.FindAllStringSubmatch(text, -1) {
-		if CredentialFile(m[1]) && !slices.Contains(out, m[1]) {
-			out = append(out, m[1])
-		}
-	}
-	return out
-}
-
-// revWord is a git object name `<rev>:<path>`, the index's `:<path>` and
-// `:<stage>:<path>` included.
-var revWord = lazyre.New(`^(?:[^\s:\-][^\s:]*)?(?::[0-3])?:([^:].*)$`)
-
-// revPath is the path of a `<rev>:<path>` word (`HEAD:*.json`,
-// `main:config/.env`): git reads it from history, so it names a
-// credentials file by its name alone (T94, L636).
-func revPath(w string) (string, bool) {
-	m := revWord.FindStringSubmatch(w)
-	if m == nil {
-		return "", false
-	}
-	return m[1], true
 }
 
 // CredentialsWhy is the refusal of touching a credentials file; a glob is

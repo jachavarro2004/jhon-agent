@@ -39,7 +39,7 @@ var wrapCalls = []struct {
 	code       int
 	decision   string
 }{
-	{"a refusal", "Bash", cmd("cat .env"), 2, ""},
+	{"a refusal", "Bash", cmd("rm .env"), 2, ""},
 	{"an ask", "Bash", cmd("git push origin main"), 0, "ask"},
 	{"an allow", "Bash", cmd("ls src"), 0, ""},
 	{"a monitor", "Monitor", map[string]any{"command": "tail -f build.log", "description": "the build", "timeout_ms": 300000}, 0, ""},

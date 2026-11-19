@@ -2,7 +2,7 @@
 // greps, edits, or writes a file that holds credentials (.env and its
 // stages, private keys, credentials.json); the owner handles them. A
 // template of one (.env.example, .env.sample) passes like any file. A shell
-// command that names one is safety-guard's (safety_guard_test.go).
+// command's write or delete of one is safety-guard's (safety_guard_test.go).
 
 package guards
 

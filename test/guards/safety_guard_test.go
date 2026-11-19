@@ -239,14 +239,14 @@ func TestSafetyGuardUnboundedWait(t *testing.T) {
 // A for loop over literal words runs its body once per word, so a target
 // naming the loop variable resolves: a worker generating files with one is
 // judged like one written out per file (a client project, 2026-10-28). A value that leads
-// into a protected path, or a loop over an expansion, is judged as before.
+// into a protected path is refused; one the guard cannot resolve passes (L1366).
 func TestSafetyGuardLiteralForLoop(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
 	s.code(t, "for f in repository locks; do sed s/a/b/ src/a.py > src/test_$f.py; done", sgOpts{}, 0, "every value inside the project")
 	s.code(t, "for f in src .git; do echo x > $f/out.txt; done", sgOpts{}, 2, "one value leads into a protected path")
-	s.code(t, "for f in $(ls); do echo x > src/$f.txt; done", sgOpts{}, 2, "a loop over an expansion")
-	s.code(t, "for d in src lib; do cd $d; echo x > $d.txt; done", sgOpts{}, 2, "a loop that changes directory leaves its variable unresolved")
+	s.code(t, "for f in $(ls); do echo x > src/$f.txt; done", sgOpts{}, 0, "a loop over an expansion")
+	s.code(t, "for d in src lib; do cd $d; echo x > $d.txt; done", sgOpts{}, 0, "a loop that changes directory leaves its variable unresolved")
 }
 
 // ── ask versus deny: who calls, and in which permission mode ────────────────
@@ -883,16 +883,10 @@ func TestSafetyGuardRefusalWithoutPronoun(t *testing.T) {
 // The lists of commands each verdict covers.
 
 var sgDeny = []string{
-	// Credentials are the owner's: no command reads, writes, or deletes them.
-	"cat .env",
-	"cat backend/.env.production",
+	// No command overwrites or deletes a credentials file (L1368).
 	"rm .env.local",
-	"source .env",
-	"cp .env /tmp/x",
 	"cp .env.example .env",
 	"echo X=1 >> .env",
-	"grep KEY .env*",
-	"python3 -c \"print(open('.env').read())\"",
 	"git clean -fdx",
 	"rm -rf .git",
 	"rm -rf ./.git/",
@@ -1135,13 +1129,21 @@ var sgAsk = [][2]string{
 }
 
 var sgAllow = []string{
-	// A file whose name alone is a value stays in its scratch root.
+	// A write the guard cannot resolve passes; the sandbox bounds it (L1366).
 	"echo x > /tmp/ntf_$$.log",
+	"echo x > \"$(printf .git)/config\"",
+	"echo x > \"$OUT\"",
+	"cp a `pwd`/.git/x",
 	"for s in $(ls); do echo x > /tmp/col_$s.txt; done",
 	"f() { echo x >> /tmp/$1.log; }; f a",
 	// Listing the grants changes none.
 	"jhon grant --list",
-	// A template of a credentials file is any file; naming one is not reading it.
+	// Reading a credentials file is not limited (L1366); a template is any file.
+	"cat .env",
+	"source .env",
+	"cp .env /tmp/x",
+	"grep KEY .env*",
+	"python3 -c \"print(open('.env').read())\"",
 	"cat .env.example",
 	"cp .env.example .env.sample",
 	"echo .env >> .gitignore",
@@ -1349,10 +1351,6 @@ var sgProbeAsk = [][2]string{
 	{"fd -e pyc | xargs rm", "unknown"},
 	{"fd . | xargs -I{} mv {} /x", "unknown"},
 	{"cat list | xargs tee", "unknown"},
-	{"echo x > \"$(printf .git)/config\"", "unknown"},
-	{"echo x > ./$(printf .git)/config", "unknown"},
-	{"echo x > \"$OUT\"", "unknown"},
-	{"cp a `pwd`/.git/x", "unknown"},
 	{"rm -f \"$X/config\"", "unknown"},
 	{"git config alias.ship \"!git push --force\"", "git-config"},
 	{"git config core.hooksPath /dev/null", "git-config"},

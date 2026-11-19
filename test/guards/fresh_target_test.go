@@ -1,23 +1,17 @@
 // T109/T62 (L765, L796): a write whose whole target is a variable the
-// same line assigned from `mktemp` is not resolved by safety-guard: the
-// WU1 relaxation that let it pass was reverted (L796), so it asks at the
-// top level and is refused in sub-agents, in Claude Code and in pi (whose
-// bash, bash_background and monitor tools all send the command as a Bash
-// payload, shell/lib/guards.ts claudeCall). The parsed-line gate the
-// relaxation brought (lineFacts) stays: it only tightens the fresh and
-// scratch mktemp rules scope-, route- and safety-guard share.
+// same line assigned from `mktemp` is not resolved by safety-guard; since
+// T128f slice 6 it passes as any unresolved write does, the sandbox
+// bounding it (L1366). The parsed-line gate (lineFacts) stays: it tightens
+// the fresh and scratch mktemp rules scope-, route- and safety-guard share.
 package guards
 
 import (
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/jachavarro2004/jhon-agent/test/support"
 )
 
-// freshTargetL765 asks again, as at baseline 71086791 (L796).
+// freshTargetL765 were the L765 asks (L796).
 var freshTargetL765 = []string{
 	// The exact L765 command shape (smoke-6cb76991-opus slow-suite, pi monitor).
 	`L=$(mktemp); python3 run_suite.py > "$L"`,
@@ -102,31 +96,15 @@ var freshTargetAsks = []string{
 	"z=L=0; L=$(mktemp); ((z)); echo x > $L",
 }
 
-func TestFreshMktempTargetNotProvenAsks(t *testing.T) {
+func TestFreshMktempTargetPasses(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
-	support.Write(t, s.p, map[string]string{"a.py": "x = 1\n", "run_suite.py": "print(1)\n"})
-	check := func(c, cwd string) {
-		t.Helper()
-		o := top()
-		o.cwd = cwd
-		askedWhy(t, s.bash(t, c, o).Stdout, "top level: "+c)
-		o = sgOpts{cwd: cwd}
-		code(t, s.bash(t, c, o), 2, "sub-agent: "+c)
-	}
 	for _, c := range append(slices.Clone(freshTargetL765), freshTargetAsks...) {
-		c = s.expand(c)
-		check(c, s.p)
-		code(t, s.piCall(t, c, true), 2, "pi child: "+c)
-		// pi's top level asks, or route-guard refuses first in a repository with no layout.
-		if r := s.piCall(t, c, false); !strings.Contains(r.Stdout, `"ask"`) && r.Code != 2 {
-			t.Errorf("pi top level: %s: no ask: %q %q", c, r.Stdout, r.Stderr)
+		if strings.Contains(c, "rm -f $L") || strings.Contains(c, "$CMD") {
+			continue // an unresolved delete or program still asks
 		}
+		s.code(t, s.expand(c), sgOpts{}, 0, "an unresolved write")
 	}
-	// A cd before mktemp changes what a relative -p names: run from the
-	// temporary root, `-p .` after `cd <project>` is the project.
-	check("cd "+s.p+"; L=$(mktemp -p .); echo x > $L", s.tmp)
-	check("cd "+filepath.Join(s.p, "src")+" && d=$(mktemp -d -p .) && cp ../a.py $d/", s.tmp)
 }
 
 // freshPoisoned are lines whose `out=$(mktemp -d)` scope- and route-guard

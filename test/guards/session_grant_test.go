@@ -114,7 +114,7 @@ func TestSessionGrantFolder(t *testing.T) {
 	}{
 		{"Write", map[string]any{"file_path": filepath.Join(f.folder, ".git", "config"), "content": "x"}},
 		{"Read", map[string]any{"file_path": filepath.Join(f.folder, ".env")}},
-		{"Bash", cmd("cat .env")},
+		{"Bash", cmd("rm .env")},
 		{"Bash", cmd("git clean -fdx")},
 		{"Bash", cmd("git push --force")},
 		{"Write", map[string]any{"file_path": filepath.Join(f.fw, "orchestrator.md"), "content": "x"}},

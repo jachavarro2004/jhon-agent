@@ -83,10 +83,8 @@ missing; never stop with the work undone.
   propose, or instruct a bypass, including by re-delegating the same effect
   to another agent.
 - **Credentials.** No agent reads, edits, or deletes a credentials file
-  (`.env`, `.env.<stage>`, private keys, a credentials file); the owner
-  handles them.
-  A template of one (`.env.example`, `.env.sample`, `.env.template`) is
-  read and edited like any file.
+  (`.env`, keys, tokens, cloud credentials), even when the owner asks. A
+  template (`.env.example`, `.env.sample`) is read and edited like any file.
 - **Observed success only.** Never report work done on a command you did not
   see succeed. A gap an executor declares (a source it could not read, a
   claim it could not verify) is closed with evidence or carried to the owner

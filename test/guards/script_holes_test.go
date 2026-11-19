@@ -31,11 +31,9 @@ func TestScriptWrittenBeforeItRunsAsks(t *testing.T) {
 		code(t, r, 0, c)
 		matches(t, askedWhy(t, r.Stdout, c), "writes before it runs", c)
 	}
-	// A cycle of assignments leaves the copy's target unresolved: it asks too.
-	cycle := "X=$Y; Y=$X; cp far.sh $X; bash g3.sh"
-	r := s.bash(t, cycle, top())
-	code(t, r, 0, cycle)
-	askedWhy(t, r.Stdout, cycle)
+	// A cycle of assignments leaves the copy's target unresolved: it passes,
+	// as any unresolved write does (L1366); g3.sh does not exist.
+	s.code(t, "X=$Y; Y=$X; cp far.sh $X; bash g3.sh", top(), 0, "a cycle of assignments")
 	for _, c := range []string{"source gone.sh", "bash ok.sh", "echo hi > log.txt; bash ok.sh", "source ok.sh", "git diff > p.patch; bash ok.sh", "cp ok.sh backup.sh; bash ok.sh",
 		"wget -o log.txt http://x/a; bash ok.sh", "curl -O http://x/data.json; bash ok.sh",
 		"curl -oL http://x/g3.sh; bash ok.sh", "X=$Y; Y=$X; echo $X", "curl -o", "wget -O", "curl ''", "curl -"} {
@@ -50,7 +48,7 @@ func TestScriptWrittenBeforeItRunsAsks(t *testing.T) {
 func TestNodeOptionValueIsNotTheScript(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
-	support.Write(t, s.p, map[string]string{"far.mjs": "import { execSync } from 'node:child_process';\nexecSync('cat ../id_rsa');\n", "ok.mjs": "console.log(1);\n"})
+	support.Write(t, s.p, map[string]string{"far.mjs": "import { execSync } from 'node:child_process';\nexecSync('git push --force');\n", "ok.mjs": "console.log(1);\n"})
 	for _, c := range []string{"node -C dev far.mjs", "node --conditions dev far.mjs", "node --title x far.mjs", "nodejs -C dev far.mjs", "bun --cwd . far.mjs",
 		"bun run far.mjs", "bun run --cwd . far.mjs"} {
 		s.code(t, c, top(), 2, c+": the script past an option's value is read")
@@ -67,7 +65,7 @@ func TestNodeOptionValueIsNotTheScript(t *testing.T) {
 func TestInheritedNodeOptionsAsks(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
-	support.Write(t, s.p, map[string]string{"far.mjs": "import { execSync } from 'node:child_process';\nexecSync('cat ../id_rsa');\n"})
+	support.Write(t, s.p, map[string]string{"far.mjs": "import { execSync } from 'node:child_process';\nexecSync('git push --force');\n"})
 	for _, c := range []string{"export NODE_OPTIONS='--require ./far.mjs'; npm test", "NODE_OPTIONS='--import ./far.mjs' npx vitest",
 		"export NODE_OPTIONS=--require=./far.mjs; pnpm run build", "export NODE_OPTIONS='-r ./far.mjs'; yarn test", "NODE_OPTIONS='-r ./far.mjs' npm run lint",
 		"npm test --node-options='--require ./far.mjs'", "npm test --node-options '--require ./far.mjs'", "npm_config_node_options='--require ./far.mjs' npm test",

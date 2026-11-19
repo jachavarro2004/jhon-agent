@@ -30,7 +30,7 @@ type Place = "ldd" | "repo" | "folder";
 type Mode = "normal" | "yolo" | "super-yolo";
 type Caller = "interactive" | "non-interactive" | "child";
 type Fixture = { place: Place; dir: string; fw: string };
-type Row = { name: string; kind: "ask" | "refuse" | "delivery" | "commit" | "code"; cls?: string; passes?: Mode[]; inRepo?: boolean; call: (f: Fixture) => [string, Record<string, unknown>] };
+type Row = { name: string; kind: "ask" | "refuse" | "allow" | "delivery" | "commit" | "code"; cls?: string; passes?: Mode[]; inRepo?: boolean; call: (f: Fixture) => [string, Record<string, unknown>] };
 
 const yoloUp: Mode[] = ["yolo", "super-yolo"];
 const superOnly: Mode[] = ["super-yolo"];
@@ -43,14 +43,14 @@ const TABLE: Row[] = [
   { name: "destroy-deny-force-push", kind: "refuse", call: bash("git push --force") },
   { name: "destroy-deny-clean-fdx", kind: "refuse", call: bash("git clean -fdx") },
   { name: "outside-write-tool", kind: "ask", cls: "outside-write", passes: yoloUp, call: write(() => "/etc/jhon.conf") },
-  { name: "outside-write-bash", kind: "ask", cls: "outside-write", passes: yoloUp, call: bash("echo x > /etc/jhon.conf") },
+  { name: "outside-write-bash", kind: "allow", call: bash("echo x > /etc/jhon.conf") },
   { name: "push", kind: "ask", cls: "push", passes: yoloUp, call: bash("git push origin main") },
   { name: "gh-write", kind: "ask", cls: "gh-write", passes: yoloUp, call: bash("gh pr merge 1 --squash") },
   { name: "remote", kind: "ask", cls: "remote", passes: yoloUp, call: bash("ssh host") },
   { name: "publish", kind: "ask", cls: "publish", passes: yoloUp, call: bash("npm publish") },
   { name: "deploy", kind: "ask", cls: "deploy", passes: yoloUp, call: bash("kubectl apply -f x.yaml") },
   { name: "credentials-read", kind: "refuse", call: (f) => ["read", { path: join(f.dir, ".env") }] },
-  { name: "credentials-bash", kind: "refuse", call: bash("cat .env") },
+  { name: "credentials-bash", kind: "allow", call: bash("cat .env") },
   { name: "settings-write", kind: "ask", cls: "settings", inRepo: true, call: write((f) => join(f.dir, ".claude", "settings.json")) },
   { name: "git-config", kind: "ask", cls: "git-config", call: bash("git config core.hooksPath /tmp/h") },
   { name: "framework-write", kind: "refuse", call: write((f) => join(f.fw, "orchestrator.md")) },
@@ -71,7 +71,7 @@ function want(row: Row, place: Place, mode: Mode, caller: Caller): "pass" | "all
   // T72 (L557): a repository without LDD delivers nothing until LDD is set up;
   // T89 (L646): nor is any file in it written, outside .git and the layout's directory.
   if (row.kind === "refuse" || (row.kind === "delivery" && place !== "folder") || ((row.kind === "commit" || row.kind === "code" || row.inRepo) && place === "repo")) return "refuse";
-  if (row.kind === "delivery" || row.kind === "commit" || (row.kind === "code" && place !== "repo")) return "allow";
+  if (row.kind === "allow" || row.kind === "delivery" || row.kind === "commit" || (row.kind === "code" && place !== "repo")) return "allow";
   if (row.passes?.includes(mode)) return "pass";
   return caller === "interactive" ? "ask" : "refuse";
 }

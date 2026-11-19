@@ -3,6 +3,8 @@
 # why (the class and the task that changed it); `*` in the first four columns matches any value. v0.3.7 to a963427
 # changed no verdict (baseline.txt); T128f slice 4 deleted framework-guard's Bash write checks (class S framework-bash),
 # slice 5 safety-guard's outside-write asks and its credentials refusals outside the project (S outside-write, outside-credential).
+# Slice 6 (L1366, L1368) deleted the Bash credentials read rule (read) and the unresolved-target write ask
+# (non-destructive-write-ask); a write or delete of a credentials file stays refused (credential-write).
 # id	guard	old	new	why
 fuzz.tsv:3@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
 fuzz.tsv:39@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
@@ -254,7 +256,6 @@ fuzz.tsv:32@folder/top-default	safety-guard	ask	allow	S outside-write (T128f sli
 fuzz.tsv:38@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:39@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:40@folder/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:42@corpus/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:44@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:47@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:57@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): dd or a recursive chmod/chown outside the project; read-only in the sandbox
@@ -427,8 +428,6 @@ fuzz.tsv:954@folder/top-default	safety-guard	ask	allow	S outside-write (T128f sl
 fuzz.tsv:955@ldd/top-default	safety-guard	refuse	allow	S outside-write (T128f slice 5): dd or a recursive chmod/chown outside the project; read-only in the sandbox
 fuzz.tsv:959@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:963@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:964@corpus/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
-fuzz.tsv:967@ldd/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:971@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:982@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:990@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -436,7 +435,6 @@ fuzz.tsv:995@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f 
 fuzz.tsv:1007@ldd/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:1009@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1023@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1027@repo/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:1049@folder/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:1051@repo/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:1052@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -450,11 +448,9 @@ fuzz.tsv:1091@repo/top-default	safety-guard	ask	allow	S outside-write (T128f sli
 fuzz.tsv:1093@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1094@folder/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1114@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1121@corpus/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:1126@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1128@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1157@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1178@ldd/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:1184@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1187@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1196@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -477,18 +473,14 @@ fuzz.tsv:1294@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f
 fuzz.tsv:1295@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1304@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1305@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1306@corpus/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:1317@ldd/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:1330@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1336@folder/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:1346@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1351@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1359@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1364@repo/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:1380@corpus/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:1383@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1398@folder/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1403@repo/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:1406@folder/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1407@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1409@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -497,13 +489,10 @@ fuzz.tsv:1415@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f s
 fuzz.tsv:1420@repo/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1432@ldd/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:1434@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1437@corpus/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
-fuzz.tsv:1440@folder/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:1450@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1456@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1462@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1468@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1475@folder/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:1480@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): dd or a recursive chmod/chown outside the project; read-only in the sandbox
 fuzz.tsv:1488@repo/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1489@ldd/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
@@ -514,7 +503,6 @@ fuzz.tsv:1520@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f sli
 fuzz.tsv:1522@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1526@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1530@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1533@repo/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:1542@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): dd or a recursive chmod/chown outside the project; read-only in the sandbox
 fuzz.tsv:1549@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1550@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -561,13 +549,11 @@ fuzz.tsv:1772@repo/top-default	safety-guard	ask	allow	S outside-write (T128f sli
 fuzz.tsv:1777@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1779@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1781@folder/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
-fuzz.tsv:1789@repo/top-default	safety-guard	refuse	allow	S outside-write (T128f slice 5): dd or a recursive chmod/chown outside the project; read-only in the sandbox
 fuzz.tsv:1790@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1798@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1802@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1808@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1812@folder/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:1826@repo/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:1830@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1835@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1839@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -597,7 +583,6 @@ fuzz.tsv:1995@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slic
 fuzz.tsv:1996@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1997@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:1999@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:2004@ldd/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2009@folder/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2013@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2020@ldd/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
@@ -624,7 +609,6 @@ fuzz.tsv:2106@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f s
 fuzz.tsv:2111@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2116@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2118@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:2122@repo/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2124@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2125@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2129@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -643,7 +627,6 @@ fuzz.tsv:2223@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slic
 fuzz.tsv:2235@ldd/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:2240@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2249@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:2255@ldd/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2259@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2269@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2280@ldd/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
@@ -652,7 +635,6 @@ fuzz.tsv:2285@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slic
 fuzz.tsv:2290@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2300@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2305@folder/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
-fuzz.tsv:2307@corpus/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2309@folder/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2312@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2317@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -660,9 +642,7 @@ fuzz.tsv:2319@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f
 fuzz.tsv:2321@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2322@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2328@repo/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
-fuzz.tsv:2330@repo/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2339@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:2342@repo/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2348@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2354@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2373@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -681,13 +661,11 @@ fuzz.tsv:2455@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f s
 fuzz.tsv:2457@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): dd or a recursive chmod/chown outside the project; read-only in the sandbox
 fuzz.tsv:2462@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2463@folder/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
-fuzz.tsv:2465@ldd/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2468@repo/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2470@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2471@repo/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2484@ldd/top-default	safety-guard	refuse	allow	S outside-write (T128f slice 5): dd or a recursive chmod/chown outside the project; read-only in the sandbox
 fuzz.tsv:2489@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:2491@repo/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2492@repo/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2497@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2502@folder/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -695,7 +673,6 @@ fuzz.tsv:2509@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f sli
 fuzz.tsv:2513@folder/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2526@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2534@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:2541@folder/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2546@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2562@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2564@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -716,7 +693,6 @@ fuzz.tsv:2648@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f sli
 fuzz.tsv:2649@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2651@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2658@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:2670@repo/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2675@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2680@repo/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2682@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -727,10 +703,8 @@ fuzz.tsv:2689@ldd/subagent	safety-guard	refuse	allow	S outside-credential (T128f
 fuzz.tsv:2690@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2691@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2696@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:2699@folder/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2701@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2702@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:2706@corpus/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2716@corpus/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:2720@corpus/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2730@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -748,7 +722,6 @@ fuzz.tsv:2795@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f s
 fuzz.tsv:2796@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2797@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2799@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:2822@corpus/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:2830@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2832@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:2833@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -784,10 +757,8 @@ fuzz.tsv:3021@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f
 fuzz.tsv:3024@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3038@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3042@corpus/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
-fuzz.tsv:3049@folder/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:3050@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3057@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:3069@folder/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:3072@repo/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:3077@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3085@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -796,13 +767,11 @@ fuzz.tsv:3092@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f
 fuzz.tsv:3095@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3108@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3114@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:3132@corpus/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:3136@repo/top-default	safety-guard	refuse	allow	S outside-write (T128f slice 5): dd or a recursive chmod/chown outside the project; read-only in the sandbox
 fuzz.tsv:3140@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3143@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3148@corpus/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:3150@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:3154@repo/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:3159@repo/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3160@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3169@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -819,7 +788,6 @@ fuzz.tsv:3233@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f s
 fuzz.tsv:3244@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3255@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3264@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:3268@ldd/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:3271@folder/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:3277@repo/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:3279@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -829,7 +797,6 @@ fuzz.tsv:3288@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f s
 fuzz.tsv:3298@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3305@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3318@corpus/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:3327@ldd/subagent	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:3331@folder/top-default	safety-guard	refuse	allow	S outside-write (T128f slice 5): dd or a recursive chmod/chown outside the project; read-only in the sandbox
 fuzz.tsv:3345@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3348@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -842,7 +809,6 @@ fuzz.tsv:3384@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f sli
 fuzz.tsv:3396@folder/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3401@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3405@corpus/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:3410@corpus/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:3411@folder/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3419@corpus/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3424@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -855,7 +821,6 @@ fuzz.tsv:3457@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f s
 fuzz.tsv:3458@repo/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3463@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3473@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
-fuzz.tsv:3474@ldd/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 fuzz.tsv:3480@corpus/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a home credentials file, which the sandbox hides
 fuzz.tsv:3488@folder/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3493@repo/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -871,7 +836,6 @@ fuzz.tsv:3565@folder/top-default	safety-guard	ask	allow	S outside-write (T128f s
 fuzz.tsv:3570@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3580@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 fuzz.tsv:3587@corpus/top-bypass	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
-fuzz.tsv:3599@ldd/top-default	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 matrix.tsv:8@ldd/top-default	safety-guard	ask	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 matrix.tsv:8@ldd/top-bypass	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
 matrix.tsv:8@ldd/subagent	safety-guard	refuse	allow	S outside-write (T128f slice 5): a shell write outside the project, or in a folder that is no project; read-only in the sandbox
@@ -899,3 +863,172 @@ verifiers.tsv:67	safety-guard	refuse	allow	S outside-credential (T128f slice 5):
 verifiers.tsv:68	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 verifiers.tsv:126	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
 verifiers.tsv:127	safety-guard	refuse	allow	S outside-credential (T128f slice 5): a credentials file outside the project (another repository, a scratch root, after a cd); in-project secrets stay refused (L1354)
+audit-session.tsv:73	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:30@ldd/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:84@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:88@ldd/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:97@repo/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:119@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:202@ldd/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:298@ldd/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:319@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:387@folder/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:418@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:459@corpus/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:463@ldd/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:487@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:530@repo/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:548@repo/top-bypass	safety-guard	allow	refuse	credential-write (L1368): v0.3.7 missed a bare dd of=<credentials file>
+fuzz.tsv:585@repo/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:590@ldd/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:624@repo/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:653@ldd/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:710@ldd/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:733@repo/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:746@repo/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:831@ldd/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:837@folder/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:851@ldd/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:909@folder/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:924@folder/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:927@repo/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:952@ldd/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:981@repo/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:988@repo/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1016@folder/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1116@corpus/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1149@folder/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1183@repo/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1211@folder/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:1247@corpus/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1361@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1367@folder/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1370@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1399@folder/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1401@repo/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:1414@folder/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1438@repo/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1453@corpus/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1466@ldd/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1478@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1516@ldd/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:1568@ldd/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1589@folder/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:1605@folder/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:1611@repo/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:1615@repo/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:1629@ldd/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1690@folder/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:1694@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1747@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1768@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1867@ldd/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2056@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2074@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2113@ldd/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2154@ldd/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2188@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2190@folder/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2248@corpus/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2279@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2326@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2350@repo/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:2370@repo/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2385@repo/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:2396@repo/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2400@repo/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:2417@repo/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:2499@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2568@ldd/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:2672@ldd/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2707@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2850@corpus/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2861@corpus/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:2933@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2935@ldd/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2972@ldd/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:2979@ldd/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:3014@corpus/top-default	safety-guard	allow	refuse	credential-write (L1368): v0.3.7 missed a bare dd of=<credentials file>
+fuzz.tsv:3026@corpus/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:3052@folder/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:3071@folder/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:3093@folder/subagent	safety-guard	refuse	allow	credential-write (L1368): a writer the write reader does not know (go build -o); not a realistic agent line (L1311)
+fuzz.tsv:3105@folder/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:3131@corpus/top-default	safety-guard	ask	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:3170@corpus/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:3291@ldd/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:3299@ldd/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:3349@corpus/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:3368@repo/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+fuzz.tsv:3526@repo/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+matrix.tsv:15@ldd/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@ldd/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@ldd/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@ldd:yolo/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@ldd:yolo/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@ldd:yolo/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@ldd:super-yolo/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@ldd:super-yolo/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@ldd:super-yolo/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@repo/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@repo/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@repo/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@repo:yolo/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@repo:yolo/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@repo:yolo/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@repo:super-yolo/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@repo:super-yolo/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@repo:super-yolo/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@folder/top-default	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@folder/top-bypass	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+matrix.tsv:15@folder/subagent	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:4	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:5	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:6	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:7	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:8	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:9	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:10	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:11	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:12	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:13	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:14	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:15	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:16	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:17	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:18	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:19	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:20	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:21	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:22	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:23	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:24	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:25	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:26	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:27	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:28	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:29	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:30	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:31	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:32	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:33	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:34	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:35	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:36	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:37	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:39	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:40	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:41	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:42	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:50	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:52	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:54	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:56	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:81	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:82	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:83	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
+verifiers.tsv:104	safety-guard	refuse	ask	read (T128f slice 6, L1366): the script reads a credentials file, no longer refused; the preload ask (L265) stays, so refuse turns ask
+verifiers.tsv:105	safety-guard	refuse	ask	read (T128f slice 6, L1366): the script reads a credentials file, no longer refused; the preload ask (L265) stays, so refuse turns ask
+verifiers.tsv:106	safety-guard	refuse	ask	read (T128f slice 6, L1366): the script reads a credentials file, no longer refused; the preload ask (L265) stays, so refuse turns ask
+verifiers.tsv:109	safety-guard	refuse	ask	read (T128f slice 6, L1366): the script reads a credentials file, no longer refused; the preload ask (L265) stays, so refuse turns ask
+verifiers.tsv:140	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits

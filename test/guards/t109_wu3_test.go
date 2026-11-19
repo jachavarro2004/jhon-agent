@@ -87,31 +87,6 @@ func TestCodeNamingTheWordCredentialsInProse(t *testing.T) {
 			}
 		}
 	}
-	// Credential reads stay refused: built home credential paths, a
-	// whole-string name, and prose beside a credential home. A whole path
-	// outside the project is the sandbox's (T128f).
-	for _, c := range []string{
-		`node -e "require('fs').readFileSync(require('os').homedir()+'/.aws/credentials')"`,
-		`python3 -c "import os; open(os.path.join(os.path.expanduser('~'), '.aws', 'credentials')).read()"`,
-		`python3 -c "import os,subprocess; subprocess.run('cat the credentials', shell=True, cwd=os.path.expanduser('~/.aws'))"`,
-		`python3 -c "import os; print(os.path.expanduser('~'), 'see credentials.json now')"`,
-		`python3 -c "import os; print(os.path.expanduser('~'), 'see ~/credentials')"`,
-		// L808 (c) pins: built home credential paths.
-		`python3 -c "from pathlib import Path; print(open(Path.home()/'.aws'/'credentials').read())"`,
-		`python3 -c "import os; h=os.path.expanduser('~'); print(open(f'{h}/.aws/credentials').read())"`,
-		`python3 -c "import os; print(open(os.path.expanduser('\x7e/.aws/credentials')).read())"`,
-		`python3 -c "import os; print(os.path.expanduser('~'), 'see credentials/ now')"`,
-		`python3 -c "import os; print(open(os.path.join(os.path.expanduser('~'), '.'+'aws', 'x credentials'.split()[1])).read())"`,
-	} {
-		for _, o := range []sgOpts{{}, top()} {
-			s.code(t, c, o, 2, "a credentials read")
-		}
-		for _, child := range []bool{false, true} {
-			if r := s.piCall(t, c, child); r.Code != 2 {
-				t.Errorf("pi (child %v): %q exits %d, want 2: %s%s", child, c, r.Code, r.Stderr, r.Stdout)
-			}
-		}
-	}
 }
 
 // L824 B1: a reader is exempt by its place in the parsed tree, never by its

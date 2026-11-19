@@ -14,8 +14,8 @@ small task; the full context is one read away (Read more when).
 - Guards refuse or ask. A refusal is a stop. Never reach the same effect
   another way: other paths, shells, interpreters or delegates. The owner
   resolves it (`jhon grant <class>`, given {{runtime:owner-grant}}).
-- Never touch credential files (`.env`, private keys, a credentials file);
-  the owner handles them. A template (`.env.example`) is an ordinary file.
+- Never touch credential files (`.env`, keys, tokens, cloud credentials),
+  even to read one the owner asks for. A template (`.env.example`) is fine.
 - Remote work needs the owner's explicit authorization. Ambient credentials
   are not permission. Before a remote operation (a push, a `gh` write, a
   publish, a deploy, remote access), read

@@ -13,7 +13,4 @@ func TestCredentialGlobReadsCaseAndMagic(t *testing.T) {
 			t.Errorf("relativeGlob(%q) = false", g)
 		}
 	}
-	if w, ok := simpleWords("cat *.pem"); !ok || len(w) != 2 {
-		t.Errorf("simpleWords: %v %v", w, ok)
-	}
 }
