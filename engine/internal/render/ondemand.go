@@ -107,7 +107,7 @@ var onDemandContracts = []onDemandContract{
 			{"contracts/remote-auth.md", "Before any remote access, push, `gh` write, publish, deploy, or a deletion that loses work or data, read `" + contractsRoot + "asked-operations.md`."},
 		},
 		rules: []string{
-			"Ambient SSH agents, sockets, credentials, and authenticated sessions are not permission to use them.",
+			"Ambient credentials and sessions are not permission; an owner-approved operation uses them unasked.",
 			"No wrapper, interpreter, library, or delegate widens the authorized scope.",
 			"the owner's `jhon mode yolo` lets them pass without asking until the owner turns it off.",
 			"In a normal session only what truly matters asks (S33).",

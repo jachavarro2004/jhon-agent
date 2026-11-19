@@ -1,6 +1,7 @@
 package ldd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -173,5 +174,79 @@ func TestHandoffContext(t *testing.T) {
 	if err != nil || decoded["decisions"] != nil || !strings.HasPrefix(decoded["decisions_note"].(string), "engram unavailable") ||
 		!strings.Contains(out, `"risk":{"tier":"passive","base":"HEAD","reasons":[]}`) {
 		t.Errorf("engram unavailable: %v %s", err, out)
+	}
+}
+
+// script is an executable shell script named engram in a fresh directory.
+func script(t *testing.T, body string) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "engram")
+	write(t, bin, "#!/bin/sh\n"+body)
+	os.Chmod(bin, 0o755)
+	return bin
+}
+
+// T163 (L1421, L1430): the handoff's decisions_note names why Engram could
+// not be asked, and an Engram that answers with nothing is no failure.
+func TestHandoffDecisionsNote(t *testing.T) {
+	jhonRoot(t)
+	root := gitRepoT(t)
+	write(t, filepath.Join(root, "services/notifications/mailer.ts"), "export const send = () => 1;\n")
+	const tail = "): search Engram for the change's decisions before handing off"
+	for _, tc := range []struct {
+		name, engram, note string
+	}{
+		{"exit with stderr", script(t, "printf '\\n  boom  \\nsecond line\\n' >&2; exit 1\n"), "engram unavailable (engram exited 1: boom" + tail},
+		{"exit without stderr", script(t, "exit 3\n"), "engram unavailable (engram exited 3" + tail},
+		{"long stderr", script(t, "printf '%0300d\\n' 0 >&2; exit 2\n"), "engram unavailable (engram exited 2: " + strings.Repeat("0", 200) + tail},
+		{"missing", filepath.Join(root, "no-such-engram"), "engram unavailable (engram not found" + tail},
+		{"under a file", "/dev/null/engram", "engram unavailable (engram not found" + tail},
+		{"too much output", script(t, "head -c 1100000 /dev/zero | tr '\\0' x\n"), "engram unavailable (engram output over 1 MiB" + tail},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("JHON_ENGRAM", tc.engram)
+			c, err := HandoffContext(resolve(t, root, s("hu-12-items"), "none"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(keysOf(c), append(slices.Clone(ContextKeys), "risk", "decisions", "decisions_note")) ||
+				c.Fields[1].Value != nil || c.Fields[2].Value != tc.note {
+				t.Errorf("got %+v, want note %q", c.Fields, tc.note)
+			}
+		})
+	}
+	for _, tc := range []struct{ name, engram string }{
+		{"no memories", script(t, "echo 'No memories found for: \"x\"'\n")},
+		{"no output", script(t, "exit 0\n")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("JHON_ENGRAM", tc.engram)
+			c, err := HandoffContext(resolve(t, root, s("hu-12-items"), "none"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(keysOf(c), append(slices.Clone(ContextKeys), "risk", "decisions")) ||
+				!reflect.DeepEqual(c.Fields[1].Value, []Decision{}) {
+				t.Errorf("got %+v, want decisions [] and no note", c.Fields)
+			}
+		})
+	}
+}
+
+// Engram not on PATH, with JHON_ENGRAM unset, is not found.
+func TestDecisionsWhyNotOnPath(t *testing.T) {
+	t.Setenv("JHON_ENGRAM", "")
+	t.Setenv("PATH", t.TempDir())
+	if d, why := decisionsWithin(context.Background(), t.TempDir(), "q"); d != nil || why != "engram not found" {
+		t.Errorf("no engram on PATH: %v %q", d, why)
+	}
+}
+
+// A search that outlives its budget timed out.
+func TestDecisionsWhyTimeout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if d, why := decisionsWhy(ctx, script(t, "exec sleep 5\n"), t.TempDir(), "q"); d != nil || why != "engram timed out after 15s" {
+		t.Errorf("slow engram: %v %q", d, why)
 	}
 }

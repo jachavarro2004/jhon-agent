@@ -115,7 +115,7 @@ Added at launch from CodeGraph for what the brief names; lines are as of the lau
 
 test("with neither Engram nor CodeGraph a launch is byte-identical to the brief alone", async () => {
   const cwd = repo(false);
-  const noEngram = JSON.stringify({ ...PACKET, decisions: null, decisions_note: "engram unavailable: search Engram for the change's decisions before handing off" });
+  const noEngram = JSON.stringify({ ...PACKET, decisions: null, decisions_note: "engram unavailable (engram not found): search Engram for the change's decisions before handing off" });
   const { prompt, argv, scope, f } = await launch(cwd, BRIEF, { FAKE_PACKET: noEngram });
   assert.equal(prompt, BRIEF);
   assert.equal(argv.filter((a) => a.includes(DECISIONS_HEADING) || a.includes(CODE_MAP_HEADING)).length, 0);
