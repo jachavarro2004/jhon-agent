@@ -148,7 +148,7 @@ audit_rules:
     validation_status: pending-real-fixture
   - anchor: framework-boundary/no-framework-write
     check: none
-    reason: jhon hook framework-guard refuses every Jhon agent's Edit, Write, recognised Bash write, and git invocation on a protected framework path at runtime in Claude Code; a program that writes a protected file without naming it leaves no command line to read, so a transcript check would see no more than the guard
+    reason: jhon hook framework-guard refuses every Jhon agent's Edit or Write of a protected framework path, and a Bash line running Jhon's own code by hand, at runtime in Claude Code; the sandbox keeps a Bash write or git run there read-only, so a transcript check would see no more than the guard and the sandbox
   - anchor: safety/destructive-deny
     check: none
     reason: jhon hook safety-guard refuses a destructive or irreversible Bash operation, and jhon hook vcs-guard a write into a VCS directory, the grants directory, or a Claude Code settings file, at runtime for every agent and the top-level session; a transcript shows no more than the refusal, and a later bypass of it is runtime-boundaries/same-effect

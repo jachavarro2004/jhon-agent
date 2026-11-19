@@ -141,7 +141,7 @@ safety-guard	Bash	"node -C dev deploy/far.mjs"	refuse	cred-far	L294	-	fixed in T
 safety-guard	Bash	"export NODE_OPTIONS='--require ./deploy/pre.cjs'; npm test"	ask	cred-far	L294	-	fixed in T34b: inherited NODE_OPTIONS through npm
 safety-guard	Bash	"source genc.sh"	ask	cred-far	L295	-	fixed in T34b: a nested script that writes then sources a file passes as missing
 safety-guard	Bash	"node $X"	ask	cred-far	L300	-	A4 fixed in T34b: an interpreter script named by an unresolved parameter
-framework-guard	Bash	"git status --short --branch"	refuse	framework-cwd	review-E	-	git on the framework: refused by design (AV2), git status writes .git/index
-framework-guard	Bash	"git -C <FW> status --short --branch"	refuse	framework	review-E	-	git on the framework, named by -C
+framework-guard	Bash	"git status --short --branch"	allow	framework-cwd	review-E	-	git on the framework: the sandbox's since T128f (read-only there); refused by design (AV2) before
+framework-guard	Bash	"git -C <FW> status --short --branch"	allow	framework	review-E	-	git on the framework, named by -C: the sandbox's since T128f
 framework-guard	Bash	"git status --short --branch"	allow	framework	review-E	-	git status in the project
 framework-guard	Bash	"cat <FW>/src/tdd-evidence.ts"	allow	framework	review-E	-	reading the framework's source

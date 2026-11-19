@@ -165,14 +165,6 @@ func askJSON(reason string) string {
 	}})
 }
 
-// at is xs[k], or "" past the end.
-func at(xs []string, k int) string {
-	if k >= 0 && k < len(xs) {
-		return xs[k]
-	}
-	return ""
-}
-
 // writes is what a file-writing tool call writes: the tool, and every path
 // as the call names it (an Edit's or a Write's file_path, a NotebookEdit's
 // notebook_path). isWrite is false
