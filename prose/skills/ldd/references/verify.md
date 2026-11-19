@@ -62,5 +62,5 @@ route, verify it lightly instead: read the slice's diff and its tests, run
 the focused tests (`jhon executions run {change-name} --affected <base-ref>`),
 write no report, and record the verdict beside the change's runs:
 `jhon executions verify {change-name} --verdict pass|fail --note "<why>"`.
-A blocking finding is `fail`. A PR with no `pass` on the tree the last run
-tested runs with a note; the verified route keeps the full report above.
+A blocking finding is `fail`. A PR with no `pass` on the last run's tree
+gets a note; the verified route keeps the full report above.

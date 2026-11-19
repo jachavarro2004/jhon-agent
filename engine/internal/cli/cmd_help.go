@@ -273,7 +273,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            and integrations, /jhon:customize the shell.* keys
   jhon settings migrate [--json]
                            the one-time move from profiles.json, then drops
-                           the keys v0.1 and v0.2 removed
+                           the keys v0.1, v0.2 and v0.4 removed
                            (card_style, quiet_tools, key_hints, [shell.extra],
                            keys.usage, ...), placing renamed values, after a
                            backup to settings-backup-<UTC>/settings.toml
