@@ -90,8 +90,10 @@ func gitInside(args []string, cwd string, inside func(string) bool) bool {
 	if k >= len(args) || args[k] != "clone" {
 		return true
 	}
+	// A folder that starts with ~, quoted or not, gives work, as -C ~ does
+	// (gitDelivers): unquoted, the shell puts the home there (T128h3, L1350).
 	target := cloneTarget(args[k+1:])
-	if target == "" {
+	if target == "" || strings.HasPrefix(target, "~") {
 		return false
 	}
 	if !filepath.IsAbs(target) {
@@ -539,11 +541,15 @@ func literal(command string) bool {
 	return ok
 }
 
+// literalWord is whether w is literal, as literal reads a word. A word
+// with an unquoted ~ at its start, or after = or :, is not (T128h3, L1350): the shell may put a home folder there, outside the
+// project (git clone <url> ~/y, docker run -v ~/x:/x); after : it gives
+// work though bash expands it only in an assignment, to fail closed.
 func literalWord(w *syntax.Word) bool {
-	for _, p := range w.Parts {
+	for i, p := range w.Parts {
 		switch x := p.(type) {
 		case *syntax.Lit:
-			if strings.ContainsAny(x.Value, "$`*?[{}") {
+			if strings.ContainsAny(x.Value, "$`*?[{}") || i == 0 && strings.HasPrefix(x.Value, "~") || strings.Contains(x.Value, "=~") || strings.Contains(x.Value, ":~") {
 				return false
 			}
 		case *syntax.SglQuoted:

@@ -561,3 +561,102 @@ func TestRunsOutsideRefusesAPlantedDocker(t *testing.T) {
 		}
 	}
 }
+
+// T128h3 (L1350): the T128h2 re-verify's rows. Expansions in every form,
+// quoted options and file reads, and redirects give work; quoted literal
+// templates, globs and the version forms stay unsandboxed; a clone into
+// the home (~/y) gives work.
+func TestT128h2VerifierRows(t *testing.T) {
+	for line, want := range map[string]string{
+		"git fetch 'a'$X":                                       Work,
+		`git fetch "$HOME"`:                                     Work,
+		`git fetch "${X}"`:                                      Work,
+		`git fetch "$(echo o)"`:                                 Work,
+		"git fetch \"`echo o`\"":                                Work,
+		`git fetch $'\x2d\x2dupload-pack=x' origin`:             Work,
+		`git fetch $'\055\055upload-pack=x' origin`:             Work,
+		`git fetch $"origin"`:                                   Work,
+		"gh $'auth' token":                                      Work,
+		"docker $'login'":                                       Work,
+		"docker $'--config=/tmp/c' login":                       Work,
+		"gh api x -F $'b=@file'":                                Work,
+		"git fetch {--upload-pack=x,origin}":                    Work,
+		"docker ps --format '{{.Names}}'{a,b}":                  Work,
+		"docker ps --filter 'name=a'*":                          Work,
+		"docker rm @(a|b)":                                      Work,
+		"git -C ~ fetch":                                        Work,
+		"git -C ~root fetch":                                    Work,
+		"docker load <(cat i.tar)":                              Work,
+		"gh pr view 1 > >(cat)":                                 Work,
+		"git fetch > 'out.txt'":                                 Work,
+		`docker ps > "$F"`:                                      Work,
+		`docker ps <<< "$X"`:                                    Work,
+		"docker run -i app <<EOF\nx\nEOF":                       Work,
+		"git fetch '--upload-pack=x' origin":                    Work,
+		"git '--upload-pack=x' fetch":                           Work,
+		"gh 'auth' token":                                       Work,
+		"gh api x -F 'b=@file'":                                 Work,
+		`gh api x -F "b=@file"`:                                 Work,
+		"docker '--config=/tmp/c' login":                        Work,
+		"docker 'login'":                                        Work,
+		"docker 'context' 'use' x":                              Work,
+		"docker --version login":                                Work,
+		"docker -v login":                                       Work,
+		`docker "$CMD"`:                                         Work,
+		"docker ps -a --format '{{.Names}}'":                    Unsandboxed,
+		`docker ps --format="{{.Names}}"`:                       Unsandboxed,
+		"docker ps --filter 'name=a*'":                          Unsandboxed,
+		"docker inspect --format '{{.State.Status}}' c":         Unsandboxed,
+		"docker exec c sh -c 'echo $HOME'":                      Unsandboxed,
+		"gh api 'repos/{owner}/{repo}/pulls'":                   Unsandboxed,
+		"gh pr view 1 --json t --jq '.[] | .x'":                 Unsandboxed,
+		"git fetch origin 'refs/heads/*:refs/remotes/origin/*'": Unsandboxed,
+		"docker -v":                                             Unsandboxed,
+		"docker '--version'":                                    Unsandboxed,
+		"docker -c x --version":                                 Unsandboxed,
+		"docker ps --format '{{.Names}}' > /dev/null":           Unsandboxed,
+	} {
+		if got := ProfileFor(line); got != want {
+			t.Errorf("ProfileFor(%q) = %q, want %q", line, got, want)
+		}
+	}
+	for _, line := range []string{"git clone https://x/y.git ~/y", "git clone https://x/y.git ~root/y"} {
+		if got := ProfileAt(line, "/home/u/project", []string{"/home/u/project"}, machine.stat); got != Work {
+			t.Errorf("ProfileAt(%q) = %q, want work", line, got)
+		}
+	}
+}
+
+// T128h3 (L1350): a word the shell starts with a home folder (an unquoted ~
+// at its start, or after = or : as bash expands it) names a folder
+// outside the project, so it gives work wherever it is on the line. A
+// quoted ~ at the start of a clone's folder gives work too, as -C '~'
+// already does; a ~ inside a word, or quoted elsewhere, is text.
+func TestATildeWordGivesWork(t *testing.T) {
+	for line, want := range map[string]string{
+		"git clone https://x/y.git ~/y":    Work,
+		"git clone https://x/y.git ~":      Work,
+		"docker run -v ~/x:/x app":         Work,
+		"docker build --build-arg K=~/k .": Work,
+		"docker run -v /a:~/b app":         Work,
+		"git -C '~' fetch":                 Work,
+		"gh pr list --search a~b":          Unsandboxed,
+		"docker ps --format '~{{.Names}}'": Unsandboxed,
+		"git clone https://x/y.git '~/y'":  Unsandboxed,
+		"git clone https://x/y.git y":      Unsandboxed,
+	} {
+		if got := ProfileFor(line); got != want {
+			t.Errorf("ProfileFor(%q) = %q, want %q", line, got, want)
+		}
+	}
+	for line, want := range map[string]string{
+		"git clone https://x/y.git '~/y'":     Work,
+		`git clone https://x/y.git "~root/y"`: Work,
+		"git clone https://x/y.git y":         Unsandboxed,
+		"git clone https://x/y.git a~/y":      Unsandboxed,
+	} {
+		if got := ProfileAt(line, "/home/u/project", []string{"/home/u/project"}, machine.stat); got != want {
+			t.Errorf("ProfileAt(%q) = %q, want %q", line, got, want)
+		}
+	}
+}
