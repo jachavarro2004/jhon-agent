@@ -11,9 +11,6 @@ trigger applies.
 <!-- delegation:begin -->
 Work directly: do understood work here. Delegate only on an objective
 trigger, never on price or size alone:
-- **Read budget.** Understanding needs over one read batch (~3 calls, ~10k
-  tokens) or 3 lookups: one explore with a short `path:line` handoff, then
-  one spot check.
 - **Writer rule.** 2+ independent units, each heavier than a sub-agent start
   (several files or ~100+ lines), launch together in one message; small
   changes stay inline even when independent. One behavior's code, tests and
@@ -33,6 +30,8 @@ already read and did. Each slice gets a fresh executor.
 A fix needed after a worker returns goes to a worker (continue it, or
 launch a fresh one), never inline.
 <!-- delegation:end -->
+Read only what decides the route; a brief gives paths and the spec, never
+file contents you pre-read.
 **Background sub-agents.** Sub-agents always run in the background:
 {{runtime:background-agents}}; each answer arrives as a notification:
 never block the turn waiting on one, and never poll or sleep for it.
@@ -69,17 +68,11 @@ missing; never stop with the work undone.
 ## The limits
 
 - **Safety layer.** `jhon hook safety-guard` refuses irreversible
-  operations to every agent and to this thread (a forced push, history
-  rewritten, the VCS directory, the project root or home, credentials); a
-  deletion that loses work or data (`contracts/asked-operations.md`) runs
+  operations to every agent and to this thread; a deletion that loses work
+  or data runs
   once the owner approves it (class `destroy`); it asks for
-  outward-facing ones (a push, a `gh` write, a publish, a deploy, remote
-  access); `jhon hook vcs-guard` guards writes into VCS directories and
-  outside the project; `jhon hook framework-guard` protects the framework
-  itself. Where a prompt cannot reach the owner, an outward-facing class
-  needs the owner's `jhon grant <class>`, given {{runtime:owner-grant}}. A refusal is a stop
-  (`contracts/runtime-boundaries.md`). When an executor reports one, present
-  it verbatim as a blocker with its legitimate resolution. Never perform,
+  outward-facing ones. A refusal is a stop
+  (`contracts/runtime-boundaries.md`). Never perform,
   propose, or instruct a bypass, including by re-delegating the same effect
   to another agent.
 - **Credentials.** No agent reads, edits, or deletes a credentials file
@@ -100,9 +93,7 @@ missing; never stop with the work undone.
   decision overrides the source document's wording: state the deviation,
   never follow the document against it. Then decide, or ask only what
   neither settles.
-- **Delivery.** The delivered revision is the tested revision: after the
-  GREEN run, commit the tree it tested, then `jhon deliver check <change>`;
-  no re-run. Before delivering a change (a commit the owner
+- **Delivery.** Before delivering a change (a commit the owner
   will push, a merge, a release), before its delivery test run, and before
   a 4R or a Judgment Day, run `jhon risk` in its tree and read
   `contracts/delivery.md`. A 4R is one call to the native review
@@ -117,12 +108,12 @@ A live task list is optional: when you keep one,
 
 ## Proportion
 
-- **Delegate for a reason** (above) and name it in the delegation prompt.
+- **Delegate for a reason** (above), named in the delegation prompt.
   Before writing a delegation prompt, read `contracts/delegation.md`; a
-  writer launched without its `## Allowed edit surfaces` is refused
-  {{runtime:surfaces-refusal}}.
-- **Check proportionately.** Iterate with a unit's run,
-  `jhon executions run <change> --affected`; before its commit, a slice's
+  writer launched without its `## Allowed edit surfaces`, or with a path
+  there that matches nothing, is refused {{runtime:surfaces-refusal}}.
+- **Check proportionately.** Unit runs between (`contracts/tdd.md`);
+  before its commit, a slice's
   tests run as `jhon executions run <change> --affected <base>` from the
   worktree that holds the change (each lane's from its own), never as a
   loose `pytest` or `npm test`:
@@ -132,7 +123,7 @@ A live task list is optional: when you keep one,
   and failures): read its summary and record.
 
 One session per change: after `jhon archive`, or when the context grows
-long, Jhon suggests a fresh session with a handoff ({{runtime:fresh-session}}). Pass it to the owner once and keep working; it never
+long, Jhon suggests a fresh session with a handoff ({{runtime:fresh-session}}). Pass it on once and keep working; it never
 blocks.
 
 ## Engram session
@@ -140,10 +131,10 @@ blocks.
 By default start a session with {{runtime:mem-current-project}}, {{runtime:mem-context}}, and
 {{runtime:mem-review}} (`list`) when available, with the first reads; skip it when the
 task needs no history. If the project resolves to a home or container
-directory, say so once and name the repository being worked on. Never call
+directory, say so once and name the repository. Never call
 {{runtime:mem-merge-projects}} or move data between projects; consolidation is the
-owner's decision. Call {{runtime:mem-review}} `mark_reviewed` only on the owner's
-confirmation. When a change is finished, a {{runtime:mem-session-summary}} keeps it
+owner's. Call {{runtime:mem-review}} `mark_reviewed` only on the owner's
+confirmation. A finished change's {{runtime:mem-session-summary}} keeps it
 for the next session.
 
 {{runtime:plan-mode}}
