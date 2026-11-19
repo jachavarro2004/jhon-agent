@@ -255,6 +255,10 @@ func mktempValue(w *syntax.Word) (plain, ok bool) {
 	if dq, isDq := parts[0].(*syntax.DblQuoted); isDq && len(parts) == 1 {
 		parts = dq.Parts
 	}
+	// `""` is a quoted word with no parts: no mktemp (T160).
+	if len(parts) == 0 {
+		return false, false
+	}
 	cs, isCs := parts[0].(*syntax.CmdSubst)
 	if !isCs || len(cs.Stmts) != 1 {
 		return false, false
