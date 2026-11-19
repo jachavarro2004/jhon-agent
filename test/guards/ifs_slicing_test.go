@@ -143,7 +143,7 @@ func TestIFSPlainWordBreakKeepsHardRefusal(t *testing.T) {
 			t.Parallel()
 			repo, _, env := ownerFixture(t, mode)
 			for _, c := range []string{"git${IFS}push${IFS}--" + "force", "git$IFS push$IFS --" + "force",
-				"chmod${IFS}-R${IFS}777${IFS}/etc", "claude${IFS}--dangerously-skip-permissions"} {
+				"chmod${IFS}-R${IFS}777${IFS}..", "claude${IFS}--dangerously-skip-permissions"} {
 				for _, caller := range callers {
 					code(t, ownerCall(t, env, repo, caller, c), 2, mode+"/"+caller+": "+c)
 				}

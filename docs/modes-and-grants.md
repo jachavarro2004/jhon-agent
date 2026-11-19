@@ -9,8 +9,8 @@ them. See `jhon help` and the README's `jhon grant` and `jhon mode` rows.
   (`normal`, `yolo`, `super-yolo`) and grants for a while (`--for 30m`).
 - A folder that is not a git repository is no project. `jhon mode` and a
   timed `jhon grant` refuse there, as in HOME and `/`, and its calls are
-  judged as in normal mode. A write that lands outside the scratch roots
-  asks.
+  judged as in normal mode. An Edit or Write that lands outside the
+  scratch roots asks; a shell write is the sandbox's (T128f).
 
 ## The session grant
 
@@ -18,8 +18,8 @@ When pi asks about such a write, it offers "Yes, and allow writes in this
 folder for this session". That runs
 `jhon grant outside-write --session <id>` in the folder.
 
-- **Covers:** writes, by a tool or by the shell, whose resolved path is
-  inside the folder, for that session id only. A link that points outside
+- **Covers:** Edit and Write calls whose resolved path is inside the
+  folder, for that session id only. A link that points outside
   the folder, and a git repository nested in it, are not covered: those
   writes still ask.
 - **Never:** HOME, `/`, a folder above HOME, or a folder that is or holds

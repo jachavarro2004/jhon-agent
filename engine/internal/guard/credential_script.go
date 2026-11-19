@@ -126,8 +126,9 @@ func wholeCredentialStrings(code string) []string {
 // credentials file (by the name rule) under an absolute path, `~`, or a
 // `..` part, or
 // anywhere when the code asks for the home directory (T28 G2): no
-// allow-list can expand it there.
-func codeCredentialsElsewhere(name, code string) []Finding {
+// allow-list can expand it there. A path outside the project is the
+// sandbox's (T128f, codeOutside).
+func codeCredentialsElsewhere(name, code, dir string, ctx *Ctx, vars map[string]string) []Finding {
 	home := codeHome.MatchString(code)
 	var out []Finding
 	seen := map[string]bool{}
@@ -137,10 +138,14 @@ func codeCredentialsElsewhere(name, code string) []Finding {
 		if named && strings.EqualFold(w, "credentials") && prose && !credentialHomeNamed.MatchString(code) && !slices.Contains(wholeCredentialStrings(code), w) {
 			continue
 		}
-		if !named || seen[w] || !(home || strings.HasPrefix(w, "/") || strings.HasPrefix(w, "~") || upSegment.MatchString(w)) {
+		placed := strings.HasPrefix(w, "/") || strings.HasPrefix(w, "~") || upSegment.MatchString(w)
+		if !named || seen[w] || !(home || placed) {
 			continue
 		}
 		seen[w] = true
+		if placed && codeOutside(code, w, dir, ctx, vars) {
+			continue
+		}
 		out = append(out, denyCredentials(name+" code naming "+w, CredentialsWhy(w)))
 	}
 	return out

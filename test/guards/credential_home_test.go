@@ -29,14 +29,11 @@ func homeSG(t *testing.T) (sgEnv, string) {
 	return s, home
 }
 
-func TestHomeCredentialDirectoryGlobsRefused(t *testing.T) {
+// A glob under the home is outside the project: the sandbox hides the home
+// credential directories (T128f).
+func TestHomeGlobOutsideTheCredentialDirectoriesPasses(t *testing.T) {
 	t.Parallel()
 	s, _ := homeSG(t)
-	for _, c := range []string{"cat ~/.ssh/*", "cat ~/.ssh/*.json", "cat ~/.config/gcloud/*.json", "cat ~/.config/*/*.json",
-		"cat ~/*.json", "ls $HOME/.config/gcloud/*.json", "cat ~/.aws/*"} {
-		s.code(t, c, sgOpts{}, 2, "a read glob into a home credential directory")
-		s.code(t, c, top(), 2, "a read glob into a home credential directory (top level)")
-	}
 	support.Write(t, filepath.Join(s.scratch, "home"), map[string]string{"notes/a.md": "x\n"})
 	for _, c := range []string{"cat ~/notes/*.md", "ls ~/*", "cat src/*.go"} {
 		s.code(t, c, sgOpts{}, 0, "a glob outside the home credential directories")

@@ -381,8 +381,8 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
   jhon grant [--revoke] outside-write --session <id> [--root <folder>]
                            in a folder that is no git repository (no project:
                            no mode and no grant for a while), let one
-                           session's writes under it pass until the session
-                           ends (12h at most); never HOME or /, and nothing
+                           session's Edit and Write calls under it pass until
+                           the session ends (12h at most); never HOME or /, and nothing
                            but outside-write. pi offers it when it asks
                            about a write there and revokes it at the end;
                            in Claude Code a yes covers that one call

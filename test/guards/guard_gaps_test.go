@@ -18,23 +18,20 @@ import (
 func TestSourcedScriptIsJudged(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
-	support.Write(t, s.other, map[string]string{"id_rsa": "k\n"})
-	support.Write(t, s.p, map[string]string{"deploy/far.sh": "cd " + s.other + "\nfind . -name 'id_*' -exec cat {} \\;\n", "deploy/ok.sh": "echo hi\n"})
+	support.Write(t, s.p, map[string]string{"deploy/far.sh": "cat .env\n", "deploy/ok.sh": "echo hi\n"})
 	for _, c := range []string{"bash deploy/far.sh", "source deploy/far.sh", ". deploy/far.sh", "source ./deploy/far.sh"} {
-		s.code(t, c, sgOpts{}, 2, "a script that reads a credentials file elsewhere")
+		s.code(t, c, sgOpts{}, 2, "a script that reads a credentials file in the project")
 	}
 	s.code(t, "source deploy/ok.sh", sgOpts{}, 0, "a harmless sourced script")
 }
 
-// Inline code whose strings glob or name a credentials file under an
-// absolute path, `~`, or a home it asks for is refused by the name rule.
+// Inline code whose strings glob or name a credentials file under a home
+// it asks for, or a path joined to another part, is refused by the name
+// rule; a whole path outside the project is the sandbox's (T128f).
 func TestInlineCodeGlobbingElsewhereIsRefused(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
 	for _, c := range []string{
-		`node -e "require('fs').globSync('/srv/keys/id_*')"`,
-		`node -p "require('fs').readdirSync('/srv').filter(f => f.endsWith('.json')).concat(require('fs').globSync('/srv/*.json'))"`,
-		`python3 -c "import glob; print(glob.glob('~/keys/id_*'))"`,
 		`python3 -c "import glob, os; print(glob.glob(os.path.expanduser('~') + '/x/credentials.json'))"`,
 		`python3 -c "import glob, os; print(glob.glob(os.path.join(os.path.expanduser('~'), 'keys', 'id_*')))"`,
 		`node -e "const os = require('os'); require('fs').globSync(os.homedir() + '/x/' + 'cred*')"`,
@@ -93,11 +90,10 @@ func TestGrepHomePathIsTheHome(t *testing.T) {
 func TestSourcedScriptEveryForm(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
-	support.Write(t, s.other, map[string]string{"id_rsa": "k\n"})
-	support.Write(t, s.p, map[string]string{"far.sh": "cd " + s.other + "\nfind . -name 'id_*' -exec cat {} \\;\n", "far2.sh": "source far.sh\n"})
+	support.Write(t, s.p, map[string]string{"far.sh": "cat .env\n", "far2.sh": "source far.sh\n"})
 	for _, c := range []string{"builtin source far.sh", "builtin . far.sh", "true && builtin source far.sh",
 		"eval source far.sh", "bash -c 'source far.sh'", "source far2.sh"} {
-		s.code(t, c, sgOpts{}, 2, "a sourced script that reads a credentials file elsewhere")
+		s.code(t, c, sgOpts{}, 2, "a sourced script that reads a credentials file in the project")
 	}
 }
 
@@ -207,8 +203,7 @@ func TestNodePreloadAnywhereAsks(t *testing.T) {
 func TestUnresolvedScriptNameAsks(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
-	support.Write(t, s.other, map[string]string{"id_rsa": "k\n"})
-	support.Write(t, s.p, map[string]string{"far.sh": "cd " + s.other + "\nfind . -name 'id_*' -exec cat {} \\;\n", ".venv/bin/activate": "export VIRTUAL_ENV=.venv\n"})
+	support.Write(t, s.p, map[string]string{"far.sh": "cat .env\n", ".venv/bin/activate": "export VIRTUAL_ENV=.venv\n"})
 	for _, c := range []string{`bash -c 'source "$1"' far.sh`, `bash -c 'bash $2' x far.sh`, "bash /dev/fd/3 3< far.sh", "source ${X:-far.sh}",
 		". $X", `bash -c 'bash -c "source \$0"' far.sh`} {
 		r := s.bash(t, c, top())

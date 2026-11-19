@@ -219,7 +219,8 @@ func (f sessionFixture) state() string {
 }
 
 // A link inside the granted folder to one outside it lends the outside
-// folder nothing: the write's resolved path decides, by a tool and by the shell.
+// folder nothing: the write's resolved path decides. A shell write is the
+// sandbox's (T128f).
 func TestSessionGrantSymlinkOut(t *testing.T) {
 	t.Parallel()
 	f := newSessionFixture(t)
@@ -231,10 +232,6 @@ func TestSessionGrantSymlinkOut(t *testing.T) {
 	f.grantFolder(t)
 	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, "link", "y.txt")), "outside-write", "Write through the link")
 	wantAsked(t, f.call(t, f.folder, "s1", "Edit", map[string]any{"file_path": filepath.Join(f.folder, "link", "e.txt"), "old_string": "a", "new_string": "b"}), "outside-write", "Edit through the link")
-	for _, c := range []string{"echo x > link/y.txt", "echo x | tee link/t", "cp a.txt " + f.folder + "/link/c",
-		"mv a.txt link/m", "ln a.txt link/h", "install a.txt link/i", "sed -i s/a/b/ link/e.txt", "cd link && echo x > z"} {
-		wantAsked(t, f.call(t, f.folder, "s1", "Bash", cmd(c)), "outside-write", c)
-	}
 	// The folder itself still passes.
 	wantAllowed(t, f.call(t, f.folder, "s1", "Bash", cmd("echo x > in.txt")), "a write in the folder")
 }
@@ -263,7 +260,6 @@ func TestSessionGrantNestedRepo(t *testing.T) {
 	support.GitRepo(t, nested)
 	f.grantFolder(t)
 	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(nested, "a.txt")), "outside-write", "Write into the nested repo")
-	wantAsked(t, f.call(t, f.folder, "s1", "Bash", cmd("echo x > nested/b.txt")), "outside-write", "bash into the nested repo")
 }
 
 // Whatever the session id, its record is one hashed file in the session-grants directory.
@@ -344,14 +340,9 @@ func TestSessionGrantNestedRepoExistingFiles(t *testing.T) {
 	f := newSessionFixture(t)
 	nested := mkdir(t, filepath.Join(f.folder, "nested"))
 	support.GitRepo(t, nested)
-	support.Write(t, nested, map[string]string{"e.txt": "a\n", "src/main.go": "package main\n", "g.txt": "g\n", "t.txt": "t\n"})
-	support.Write(t, f.folder, map[string]string{"a.txt": "a\n", "a2.txt": "a\n"})
+	support.Write(t, nested, map[string]string{"e.txt": "a\n", "src/main.go": "package main\n"})
 	f.grantFolder(t)
 	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(nested, "e.txt")), "outside-write", "Write an existing file")
 	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(nested, "src", "main.go")), "outside-write", "Write an existing deep file")
 	wantAsked(t, f.call(t, f.folder, "s1", "Edit", map[string]any{"file_path": filepath.Join(nested, "e.txt"), "old_string": "a", "new_string": "b"}), "outside-write", "Edit")
-	for _, c := range []string{"echo x > nested/e.txt", "echo x | tee nested/src/main.go", "sed -i s/a/b/ nested/e.txt",
-		"cp a.txt nested/f.txt", "mv a2.txt nested/m.txt", "echo x >> nested/g.txt", "truncate -s 0 nested/t.txt", "cd nested && echo x > e.txt"} {
-		wantAsked(t, f.call(t, f.folder, "s1", "Bash", cmd(c)), "outside-write", c)
-	}
 }

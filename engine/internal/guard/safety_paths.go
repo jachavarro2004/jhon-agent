@@ -391,6 +391,15 @@ func outsideWhy(abs string, ctx *Ctx, root bool) string {
 // approve (deleteFinding).
 const outsideRoots = "it is outside the project and the scratch roots (/tmp, $TMPDIR, ~/.cache)"
 
+// writeWhy is outsideWhy for a recursive mode or owner change, or a dd:
+// a write, so a path outside the project is the sandbox's (T128f).
+func writeWhy(abs string, ctx *Ctx) string {
+	if why := outsideWhy(abs, ctx, true); why != outsideRoots {
+		return why
+	}
+	return ""
+}
+
 // deleteFinding is the finding of deleting abs, which outsideWhy refused
 // with why: an ask of the destroy class for a path under the home directory
 // that holds no credentials, a deny for anything else.
@@ -446,21 +455,6 @@ func protectedWhy(abs string, ctx *Ctx) string {
 	return ""
 }
 
-// inWriteScope is whether a write to abs stays in the project, its
-// worktrees, a scratch root, or a folder a session grant covers. The roots
-// accept the written path or the resolved one, so a link inside a project
-// to outside it passes: a known finding (L472), kept as the contract is
-// (L464). A session grant takes the resolved path alone (grant.CoversWrite).
-func inWriteScope(abs string, ctx *Ctx) bool {
-	for _, p := range []string{abs, project.Realish(abs)} {
-		in := func(r string) bool { return project.Within(p, r) }
-		if slices.ContainsFunc(ctx.Roots, in) || slices.ContainsFunc(ctx.Worktrees, in) || slices.ContainsFunc(ctx.Scratch, in) {
-			return true
-		}
-	}
-	return slices.ContainsFunc(ctx.Granted, func(f string) bool { return grant.CoversWrite(f, abs) })
-}
-
 type link struct{ from, to string }
 
 // Links are the links a command created, in the order it created them.
@@ -491,7 +485,10 @@ func followLinks(abs string, st *State) string {
 	return abs
 }
 
-// judgeWrite is the findings of one shell write of the word w.
+// judgeWrite is the findings of one shell write of the word w: a device,
+// a path no agent writes (protectedWhy), or a target the guard cannot
+// resolve, which may be one (`$(printf .git)/config`). Where else a write
+// lands, inside the project or outside it, is the sandbox's (T128f).
 func judgeWrite(w, label string, ctx *Ctx, vars map[string]string, st *State) []Finding {
 	if w == "(…)" {
 		return nil // a process substitution, not a file
@@ -518,10 +515,7 @@ func judgeWrite(w, label string, ctx *Ctx, vars map[string]string, st *State) []
 	if why := protectedWhy(a, ctx); why != "" {
 		return []Finding{deny(label, why)}
 	}
-	if inWriteScope(a, ctx) {
-		return nil
-	}
-	return []Finding{writeAsk("outside-write", label)}
+	return nil
 }
 
 func isDirAt(w string, st *State, ctx *Ctx, vars map[string]string) bool {

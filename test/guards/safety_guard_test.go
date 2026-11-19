@@ -239,12 +239,12 @@ func TestSafetyGuardUnboundedWait(t *testing.T) {
 // A for loop over literal words runs its body once per word, so a target
 // naming the loop variable resolves: a worker generating files with one is
 // judged like one written out per file (a client project, 2026-10-28). A value that leads
-// outside the project, or a loop over an expansion, is judged as before.
+// into a protected path, or a loop over an expansion, is judged as before.
 func TestSafetyGuardLiteralForLoop(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
 	s.code(t, "for f in repository locks; do sed s/a/b/ src/a.py > src/test_$f.py; done", sgOpts{}, 0, "every value inside the project")
-	s.code(t, "for f in src /etc; do echo x > $f/out.txt; done", sgOpts{}, 2, "one value leads outside the project")
+	s.code(t, "for f in src .git; do echo x > $f/out.txt; done", sgOpts{}, 2, "one value leads into a protected path")
 	s.code(t, "for f in $(ls); do echo x > src/$f.txt; done", sgOpts{}, 2, "a loop over an expansion")
 	s.code(t, "for d in src lib; do cd $d; echo x > $d.txt; done", sgOpts{}, 2, "a loop that changes directory leaves its variable unresolved")
 }
@@ -576,14 +576,6 @@ func TestSafetyGuardGrantFollowsTargetRepository(t *testing.T) {
 	s.grant(t, "push", o, 30, nil)
 	s.code(t, "cd "+o+" && git push", sgOpts{}, 0, "a grant for the target repository allows it")
 	s.code(t, "git push", sgOpts{}, 2, "and only it")
-}
-
-func TestSafetyGuardOutsideWriteGrantFollowsDirectory(t *testing.T) {
-	t.Parallel()
-	s := newSG(t)
-	s.grant(t, "outside-write", "", 30, nil)
-	s.code(t, "echo x > ~/notes.txt", sgOpts{}, 0, "in the project")
-	s.code(t, "cd "+s.other+" && echo x > ~/notes.txt", sgOpts{}, 2, "in another repository")
 }
 
 // varTemp is a new directory under /var/tmp, outside the scratch roots, by
@@ -977,12 +969,9 @@ var sgDeny = []string{
 	"gh pr merge 1 --admin",
 	"gh pr merge --admin --squash",
 	"gh repo delete x --yes",
-	"chmod -R 777 /etc",
 	"chown -R me ~/",
 	"chmod -R 755 ..",
-	"chown --recursive me /var",
 	"dd if=/dev/zero of=/dev/sda",
-	"dd if=x of=/etc/x",
 	"mkfs.ext4 /dev/sda1",
 	"mkfs -t ext4 /dev/sdb",
 	"wipefs -a /dev/sda",
@@ -1365,14 +1354,6 @@ var sgProbeAsk = [][2]string{
 	{"echo x > \"$OUT\"", "unknown"},
 	{"cp a `pwd`/.git/x", "unknown"},
 	{"rm -f \"$X/config\"", "unknown"},
-	{"echo x > ~/notes.txt", "outside-write"},
-	{"cp a /opt/x", "outside-write"},
-	{"tee ~/x", "outside-write"},
-	{"mkdir -p /srv/x", "outside-write"},
-	{"echo x > ~/.claude/agents/general.md", "outside-write"},
-	{"mv a ~/b", "outside-write"},
-	{"sed -i s/a/b/ /etc/hosts", "outside-write"},
-	{"touch /opt/x", "outside-write"},
 	{"git config alias.ship \"!git push --force\"", "git-config"},
 	{"git config core.hooksPath /dev/null", "git-config"},
 	{"git config --global user.name x", "git-config"},
