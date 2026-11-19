@@ -38,7 +38,10 @@ import (
 // the same tree is the same revision. The change's own record files
 // (verify-report.md, the execution record, delivery.json) are written after
 // the run and never count as a difference, committed or not; a committed
-// Judgment Day record under its judgments/ does not either.
+// Judgment Day record under its judgments/ does not either, nor any other
+// committed file under the change's own folder (tasks.md, the proposal, the
+// design, the spec deltas): the change's record, never project input, as
+// `--affected` reads it (T150). Another change's folder still counts.
 //
 // A high-risk change (risk.go) also carries an independent verification
 // (verification.go): a verify-report.md stating `verdict: pass`, or a
@@ -217,14 +220,17 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 			reasons = append(reasons, "the candidate changed during the last test run: what was tested is not one revision; run the tests again")
 		}
 		// outsideRecord is the paths that differ between two trees, but for
-		// the change's records (Judgment Day's under it included), written
-		// after the run; ok is false when a tree does not resolve.
+		// the change's records (Judgment Day's under it included) and the
+		// rest of its own folder, written after the run (T150); ok is false
+		// when a tree does not resolve.
+		folder := execution.ChangeDirInRepo(root, change) + "/"
+		ownFolder := func(p string) bool { return change != "" && strings.HasPrefix(p, folder) }
 		outsideRecord := func(a, b string) ([]string, bool) {
 			diff, ok := vcs.TreeDiff(root, a, b)
 			judged := layout.For(root).Artifact(change, "judgments") + "/"
 			outside := []string{}
 			for _, p := range diff {
-				if !exempt[p] && !strings.HasPrefix(p, judged) && !strings.Contains(p, "/"+judged) {
+				if !exempt[p] && !ownFolder(p) && !strings.HasPrefix(p, judged) && !strings.Contains(p, "/"+judged) {
 					outside = append(outside, p)
 				}
 			}
