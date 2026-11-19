@@ -9,12 +9,14 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/grant"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/guard"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // VCSGuard is the PreToolUse guard for the file-writing tools (Edit, Write,
 // NotebookEdit):
 // no one writes a VCS directory or the grants directory, no agent writes
-// Claude Code settings, and a write outside the project is the
+// Claude Code settings, and a write outside the project (with a workspace's
+// primary and joined members, workspace.ProjectRoots) is the
 // outside-write ASK class, which the owner's yolo or super-yolo mode passes
 // with a note. Fail closed.
 func VCSGuard(args []string, io IO) int {
@@ -126,7 +128,7 @@ func vcsJudge(p Payload, tool, raw string, names []string) (vcsVerdict, string, 
 	}
 
 	home := project.Realish(project.Home())
-	allowed := append(append(project.Roots(cwd), project.TmpRoots()...), filepath.Join(home, ".claude"), filepath.Join(home, ".cache"))
+	allowed := append(append(workspace.ProjectRoots(cwd), project.TmpRoots()...), filepath.Join(home, ".claude"), filepath.Join(home, ".cache"))
 	for _, r := range allowed {
 		if project.Within(real, r) || project.Within(real, project.Realish(r)) {
 			return vcsAllow, "", none

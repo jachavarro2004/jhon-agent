@@ -24,6 +24,7 @@ All notable changes to Jhon are recorded here. The format follows
 
 - Sandbox docs: `--die-with-parent` ends bubblewrap and its command, not a child the command detached (`setsid`, `nohup`): with no PID namespace that child outlives the sandbox, an accepted residual risk (T128g, L1262).
 ### Added
+- Guards across a workspace's repositories: in a session in the primary or a joined member, the primary and every joined member count as the project for the vcs guard, the safety guard and the OS sandbox's writable roots, so editing a joined sibling needs no `outside-write` grant; route-guard judges a joined member's PR with the primary's record, the change its branch names (RED before GREEN, light verify), and asks the member for no LDD layout. A listed sibling that has not joined stays outside; nothing changes outside a workspace (T57 slice 5).
 - A multi-repository workspace, reported: the primary's LDD config lists its sibling repositories (`workspace:`, name: path relative to its top); the owner's `jhon workspace join <primary>`, run in a sibling, records its pointer under Jhon's state (`leave` removes it, `list` shows them); `jhon status` reports the role, the primary and the members (`workspace` in `--json`) and notes a sibling that has not joined or a pointer the primary does not list. The safety guard refuses `jhon workspace join|leave` to agents and keeps the pointers' folder as it keeps the grants (T57).
 
 ## [0.3.7] - 2026-11-18
