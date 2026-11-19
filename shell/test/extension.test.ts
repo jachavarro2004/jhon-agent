@@ -13,7 +13,7 @@ import { test, after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, unwatchFile, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -917,6 +917,18 @@ function loadedWith(agentDir: string, env: Record<string, string>, api: Record<s
   return { handlers, commands };
 }
 
+/**
+ * The desktop palette file a session's rose ink follows, stopped when t ends:
+ * the follower polls it for the life of the process, and the agent folder's
+ * removal would otherwise start one more `jhon palette --write-pi`, writing
+ * themes/ into the folder again after it is gone.
+ */
+function followedColors(t: TestContext, dir: string): string {
+  const colors = join(dir, "colors.json");
+  t.after(() => unwatchFile(colors));
+  return colors;
+}
+
 /** The theme file `jhon palette --write-pi` writes, once it stands (the write is asynchronous). */
 async function roseInk(dir: string): Promise<any> {
   const file = join(dir, "themes", "rose-ink.json");
@@ -941,7 +953,7 @@ function ownerSettings(t: TestContext, palette = "desktop"): void {
 test("integrations.theme.palette = \"ryoku\", the older name of \"desktop\", still follows the desktop palette", async (t) => {
   ownerSettings(t, "ryoku");
   const dir = agentDir();
-  const colors = join(dir, "colors.json");
+  const colors = followedColors(t, dir);
   writeFileSync(colors, JSON.stringify({ primary: "#aabbcc" }));
   const loaded = loadedWith(dir, { PI_CODING_AGENT_DIR: dir, JHON_DESKTOP_COLORS: colors, JHON_DESKTOP_NVIM_SPEC: join(dir, "absent.lua") });
   await loaded.handlers.get("session_start")!({}, { cwd: project(), mode: "tui", hasUI: true, ui: { setHeader: () => {} } });
@@ -951,7 +963,7 @@ test("integrations.theme.palette = \"ryoku\", the older name of \"desktop\", sti
 test("with a desktop palette the main session draws the poster and writes rose ink from the palette; a child draws nothing (L50)", async (t) => {
   ownerSettings(t);
   const dir = agentDir();
-  const colors = join(dir, "colors.json");
+  const colors = followedColors(t, dir);
   writeFileSync(colors, JSON.stringify({ primary: "#aabbcc", error: "#ff0000" }));
   const env = { PI_CODING_AGENT_DIR: dir, JHON_DESKTOP_COLORS: colors, JHON_DESKTOP_NVIM_SPEC: join(dir, "absent.lua") };
   let header: any = null;
@@ -1685,14 +1697,13 @@ test("a pi write to tasks.md is never refused for a slice's size or depth, as Cl
 
 test("a child's limits come from its environment; an unreadable task file allows no surface", async () => {
   const { childLimits } = await import("../extensions/jhon.ts");
-  const dir = mkdtempSync(join(tmpdir(), "jhon-pi-limits-"));
+  const dir = tempDir("jhon-pi-limits-");
   const task = join(dir, "task.md");
   writeFileSync(task, "## Allowed edit surfaces\n- a.txt\n");
   assert.deepEqual(childLimits({ JHON_PI_CHILD: "1", JHON_PI_TOOLS: "read,bash", JHON_PI_TASK_FILE: task }), { tools: ["read", "bash"], launchPrompt: "## Allowed edit surfaces\n- a.txt\n" });
   assert.deepEqual(childLimits({ JHON_PI_CHILD: "1", JHON_PI_TASK_FILE: join(dir, "gone.md") }), { launchPrompt: "## Allowed edit surfaces\n" });
   assert.deepEqual(childLimits({ JHON_PI_TOOLS: "read" }), {}, "the main session has no limits");
   assert.deepEqual(childLimits({ JHON_PI_CHILD: "1", JHON_PI_MAX_TURNS: "40" }), {}, "a turn cap in the environment is not a limit");
-  rmSync(dir, { recursive: true, force: true });
 });
 
 // T42c: the shell's own tools reach the model with short descriptions that
@@ -1962,7 +1973,7 @@ test("the orchestrator learns the owner's shell and that pi has no `!`: a comman
 
 test("changeRoot reads each folder's status once and hands back the one it found, for the panel to show without reading it again", async () => {
   const { changeRoot } = await import("../extensions/jhon.ts");
-  const dir = mkdtempSync(join(tmpdir(), "change-root-"));
+  const dir = tempDir("change-root-");
   const wt = join(dir, "geo-handlers");
   mkdirSync(wt);
   const log = join(dir, "calls.log");

@@ -1201,8 +1201,9 @@ test("an incomplete bracketed paste that crosses the 16 MiB bound without a term
 // T29 S3: the prompt has no vim mode. An owner file that still sets
 // shell.editor.vim = true changes nothing: Esc then i types the i, and the
 // rule names no mode.
-test("the prompt has no vim mode: Esc then i types i even with shell.editor.vim = true", async () => {
+test("the prompt has no vim mode: Esc then i types i even with shell.editor.vim = true", async (t) => {
 	const home = mkdtempSync(join(tmpdir(), "jhon-no-vim-"));
+	t.after(() => rmSync(home, { recursive: true, force: true }));
 	homeSettings(home, { "shell.editor.vim": true } as Record<string, SettingValue>);
 	const { pi, handlers } = fakePi();
 	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home });
@@ -3385,7 +3386,7 @@ test("STATUS reads the change again when the branch switches or a change is arch
 	const { ctx, ui } = fakeContext();
 	(ctx as unknown as { cwd: string }).cwd = repo;
 	installedPrompt(ctx, ui, handlers);
-	t.after(async () => { await fire(handlers, "session_shutdown", ctx); });
+	t.after(async () => { await fire(handlers, "session_shutdown", ctx); rmSync(repo, { recursive: true, force: true }); });
 	await new Promise((r) => setTimeout(r, 100));
 	const settle = () => new Promise((r) => setTimeout(r, 700));
 	let before = reads;
@@ -3453,7 +3454,7 @@ test("STATUS follows the worktree the session works in and the lanes beside it a
 	const { ctx, ui } = fakeContext({ entries: [entry] });
 	(ctx as unknown as { cwd: string }).cwd = repo;
 	installedPrompt(ctx, ui, handlers);
-	t.after(async () => { await fire(handlers, "session_shutdown", ctx); });
+	t.after(async () => { await fire(handlers, "session_shutdown", ctx); rmSync(base, { recursive: true, force: true }); });
 	await new Promise((r) => setTimeout(r, 400));
 	const settle = () => new Promise((r) => setTimeout(r, 700));
 	const step = async (what: string, act: () => void) => { const before = reads; act(); await settle(); assert.ok(reads > before, what); };
@@ -3479,7 +3480,7 @@ test("a watch firing in one lane re-reads the session's change and that lane onl
 	const { ctx, ui } = fakeContext({ entries: [entry] });
 	(ctx as unknown as { cwd: string }).cwd = repo;
 	installedPrompt(ctx, ui, handlers);
-	t.after(async () => { await fire(handlers, "session_shutdown", ctx); });
+	t.after(async () => { await fire(handlers, "session_shutdown", ctx); rmSync(base, { recursive: true, force: true }); });
 	await new Promise((r) => setTimeout(r, 400));
 	assert.ok(reads[laneA]! > 0 && reads[laneB]! > 0, "a lane never read is read");
 	const before = { ...reads };
@@ -3508,7 +3509,7 @@ async function laneSession(t: { after(fn: () => Promise<void>): void }, watchDir
 	const { ctx, ui } = fakeContext({ entries: [entry] });
 	(ctx as unknown as { cwd: string }).cwd = repo;
 	installedPrompt(ctx, ui, handlers);
-	t.after(async () => { await fire(handlers, "session_shutdown", ctx); });
+	t.after(async () => { await fire(handlers, "session_shutdown", ctx); rmSync(base, { recursive: true, force: true }); });
 	await new Promise((r) => setTimeout(r, 400));
 	const nextRefresh = async () => { now += 31_000; await fire(handlers, "turn_end", ctx); await new Promise((r) => setTimeout(r, 400)); };
 	return { lane, reads, nextRefresh };

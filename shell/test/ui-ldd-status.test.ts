@@ -6,12 +6,18 @@
  */
 
 import "./isolated-env.ts";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
+import { rmSync } from "node:fs";
 import { ago, estadoLines, lddFromStatus } from "../lib/ui/ldd-status.ts";
 import { renderShellJobsSection, renderShellStatusSections, type ShellBarModel } from "../lib/ui/shell-bar.ts";
 
 const plain = { fg: (_r: string, t: string) => t, bold: (t: string) => t, value: (t: string) => t, label: (t: string) => t };
+
+// The scratch folders the tests make, removed when the file's tests end.
+const temps: string[] = [];
+after(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
+const scratch = (d: string) => { temps.push(d); return d; };
 
 test("STATUS says the change and where it is, its slices done of all and the open one, the next step, and the tests (T35, L110)", () => {
   const status = { route: { level: "verified" }, next: "apply", strict_tdd: { value: true },
@@ -78,7 +84,7 @@ test("the change's tasks.md is found from the session's folder or a parent, for 
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { findUp } = await import("../lib/ui/ldd-status.ts");
-  const root = mkdtempSync(join(tmpdir(), "ldd-"));
+  const root = scratch(mkdtempSync(join(tmpdir(), "ldd-")));
   mkdirSync(join(root, "openspec/changes/x"), { recursive: true });
   mkdirSync(join(root, "src/deep"), { recursive: true });
   writeFileSync(join(root, "openspec/changes/x/tasks.md"), "- [ ] a\n");
@@ -92,7 +98,7 @@ test("a fresh session finds the change of the repository's worktree whose tasks.
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { lddInWorktrees } = await import("../lib/ui/ldd-status.ts");
-  const base = realpathSync(mkdtempSync(join(tmpdir(), "wt-estado-")));
+  const base = scratch(realpathSync(mkdtempSync(join(tmpdir(), "wt-estado-"))));
   const repo = join(base, "app");
   execFileSync("git", ["init", "-q", repo]);
   execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"]);
@@ -114,7 +120,7 @@ test("lddLanes reads the other worktrees' changes in progress, one row each, aft
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { lddLanes } = await import("../lib/ui/ldd-status.ts");
-  const base = realpathSync(mkdtempSync(join(tmpdir(), "wt-lanes-")));
+  const base = scratch(realpathSync(mkdtempSync(join(tmpdir(), "wt-lanes-"))));
   const repo = join(base, "app");
   execFileSync("git", ["init", "-q", repo]);
   execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"]);
@@ -147,7 +153,7 @@ test("a session that worked in a worktree shows that worktree's change, or none:
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { lddOfSession } = await import("../lib/ui/ldd-status.ts");
-  const base = realpathSync(mkdtempSync(join(tmpdir(), "wt-session-")));
+  const base = scratch(realpathSync(mkdtempSync(join(tmpdir(), "wt-session-"))));
   const repo = join(base, "app");
   execFileSync("git", ["init", "-q", repo]);
   execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"]);
@@ -198,7 +204,7 @@ test("readLddStatus: a change, no change, and a read that fails are three answer
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { readLddStatus } = await import("../lib/ui/ldd-status.ts");
-  const dir = mkdtempSync(join(tmpdir(), "ldd-read-"));
+  const dir = scratch(mkdtempSync(join(tmpdir(), "ldd-read-")));
   const bin = (name: string, body: string) => { const p = join(dir, name); writeFileSync(p, `#!/bin/sh\n${body}\n`); chmodSync(p, 0o755); return p; };
   const some = await readLddStatus(dir, bin("some", `echo '{"change":"x","tasks":{"slices":[]}}'`));
   assert.equal(some?.change, "x");
@@ -211,7 +217,7 @@ const laneRepo = async (prefix: string) => {
   const { mkdtempSync, realpathSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const base = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+  const base = scratch(realpathSync(mkdtempSync(join(tmpdir(), prefix))));
   const repo = join(base, "app");
   execFileSync("git", ["init", "-q", repo]);
   execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"]);
@@ -303,7 +309,7 @@ test("a change with no folder (directory null) is found, shown with its next ste
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { readLddStatus, lddWatchTargets } = await import("../lib/ui/ldd-status.ts");
-  const repo = realpathSync(mkdtempSync(join(tmpdir(), "ldd-nofolder-")));
+  const repo = scratch(realpathSync(mkdtempSync(join(tmpdir(), "ldd-nofolder-"))));
   execFileSync("git", ["-C", repo, "init", "-q"]);
   const bin = join(repo, "fake-jhon");
   writeFileSync(bin, `#!/bin/sh\necho '{"ok":true,"change":"feat-small-fix","directory":null,"tasks":{"total":0,"completed":0,"slices":[],"slice":null},"next":"merge","route":{"level":"standard"},"tests":{"timestamp":"2026-10-29T05:00:00Z","passed":true,"failed":[],"red_before_green":true},"folder":false}'\n`);
