@@ -1,6 +1,7 @@
 // return-shape: a bounded writer that stops without contracts/efficiency.md's
-// return shape is asked for it once, through the release plugin's
-// SubagentStop hook (spike test/testdata/spikes/claude-code-subagent-stop).
+// return shape ends with a note, never a block (T154, L1394: no real case),
+// through the release plugin's SubagentStop hook (spike
+// test/testdata/spikes/claude-code-subagent-stop).
 
 package guards
 
@@ -28,21 +29,23 @@ func returnShape(t *testing.T, payload any) support.Result {
 	return hook(t, nil, "return-shape", []string{"worker", "jd-fix-agent"}, payload)
 }
 
-func TestReturnShapeBlocksProseOnce(t *testing.T) {
+func TestReturnShapeNotesProseAndLetsItStop(t *testing.T) {
 	t.Parallel()
 	r := returnShape(t, returnShapeEvent())
-	if r.Code != 0 {
+	if r.Code != 0 || r.Stderr != "" {
 		t.Fatalf("code = %d: %s", r.Code, r.Stderr)
 	}
-	var j struct{ Decision, Reason string }
+	var j map[string]any
 	if err := json.Unmarshal([]byte(r.Stdout), &j); err != nil {
 		t.Fatalf("stdout %q: %v", r.Stdout, err)
 	}
-	if j.Decision != "block" {
-		t.Errorf("decision = %q; want block", j.Decision)
+	if _, ok := j["decision"]; ok {
+		t.Errorf("the stop is decided (%v); want it let through: %q", j["decision"], r.Stdout)
 	}
-	matches(t, j.Reason, `^End with the return shape of contracts/efficiency\.md`, "reason")
-	matches(t, j.Reason, `(?m)^status: success \| partial \| blocked$`, "reason")
+	want := "note (not a refusal; the writer stopped): the worker ended without the return shape of contracts/efficiency.md (its `status:` and `validation:` lines): read its result for what changed and what was run"
+	if got, _ := j["systemMessage"].(string); got != want || len(j) != 1 {
+		t.Errorf("stdout = %v; want only systemMessage %q", j, want)
+	}
 }
 
 func TestReturnShapeEndsTheWriter(t *testing.T) {

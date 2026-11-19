@@ -2,7 +2,8 @@
 // members the owner joined are one project for the guards that judge
 // "outside the project" (S1), and route-guard judges a member's PR with the
 // primary's record, the change its branch names (S2). A listed sibling that
-// has not joined, and any other repository, stay outside as before.
+// has not joined, and any other repository, stay outside as before: a
+// write there runs with a note (T153).
 
 package guards
 
@@ -54,7 +55,8 @@ func (w wsFixture) guard(t *testing.T, cwd, tool string, input map[string]any) s
 
 // S1: a joined sibling's files are the project's, from the primary and
 // from the member; a listed sibling that has not joined, and another
-// repository, are outside, refused to a sub-agent as before.
+// repository, are outside: a sub-agent's Write or Edit there runs with the
+// outside note (a refusal until T153).
 func TestWorkspaceJoinedMembersAreTheProject(t *testing.T) {
 	t.Parallel()
 	w := newWorkspace(t, "ldd/config.yaml")
@@ -73,17 +75,17 @@ func TestWorkspaceJoinedMembersAreTheProject(t *testing.T) {
 			{"Bash", cmd("sed -i s/1/2/ " + filepath.Join(target, "src", "a.py"))},
 		}
 	}
-	// Outside: Write and Edit are refused by the guards; a shell write there
+	// Outside: Write and Edit run with the outside note; a shell write there
 	// is the sandbox's (T128f slice 5): the guards let it through and the
 	// sandbox keeps the folder read-only (test/sandbox/workspace_test.go).
 	outside := func(cwd, target, label string) {
 		t.Helper()
 		for _, c := range writes(cwd, target) {
-			want := 2
-			if c.tool == "Bash" {
-				want = 0
+			r := w.guard(t, cwd, c.tool, c.input)
+			code(t, r, 0, label+": "+c.tool+" "+js(t, c.input))
+			if c.tool != "Bash" {
+				matches(t, adviceOf(t, r.Stdout), outsideNote, label+": "+c.tool)
 			}
-			code(t, w.guard(t, cwd, c.tool, c.input), want, label+": "+c.tool+" "+js(t, c.input))
 		}
 	}
 	inside := func(cwd, target, label string) {
@@ -92,6 +94,9 @@ func TestWorkspaceJoinedMembersAreTheProject(t *testing.T) {
 			r := w.guard(t, cwd, c.tool, c.input)
 			code(t, r, 0, label+": "+c.tool+" "+js(t, c.input))
 			noDecision(t, r.Stdout, label)
+			if note := adviceOf(t, r.Stdout); note != "" {
+				t.Errorf("%s: %s inside the project has a note: %q", label, c.tool, note)
+			}
 		}
 	}
 	// Nobody joined: every sibling is outside, as outside a workspace.
@@ -123,7 +128,8 @@ func TestWorkspaceJoinedMembersAreTheProject(t *testing.T) {
 // S2: route-guard on a joined member takes the primary's record: the change
 // the member's branch names, its RED before GREEN and its light verify; the
 // member needs no LDD layout of its own. A listed sibling that has not
-// joined is still refused until LDD is set up.
+// joined still delivers nothing until LDD is set up, and its code edit runs
+// with the set-up note (T153).
 func TestRouteGuardMemberPRUsesThePrimarysRecord(t *testing.T) {
 	t.Parallel()
 	w := newWorkspace(t, "openspec/config.yaml")
@@ -142,7 +148,11 @@ func TestRouteGuardMemberPRUsesThePrimarysRecord(t *testing.T) {
 	edit := map[string]any{"file_path": filepath.Join(w.lib, "src", "a.py"), "content": "X = 2\n"}
 	setUp := "^route-guard: .*LDD"
 	// Not joined: lib is a repository with no layout, as today.
-	code(t, call(w.lib, "Write", edit), 2, "a code edit in lib before it joined")
+	noted := call(w.lib, "Write", edit)
+	code(t, noted, 0, "a code edit in lib before it joined")
+	if got := adviceOf(t, noted.Stdout); got != setUpNote() {
+		t.Errorf("a code edit in lib before it joined: note %q", got)
+	}
 	matches(t, call(w.lib, "Bash", cmd("git commit -qam x")).Stderr, setUp, "a commit in lib before it joined")
 	matches(t, call(w.lib, "Bash", pr).Stderr, setUp, "a PR in lib before it joined")
 
@@ -159,8 +169,10 @@ func TestRouteGuardMemberPRUsesThePrimarysRecord(t *testing.T) {
 	rec := ".git/jhon/changes/feat-c1/execution-record.json"
 	support.Write(t, w.app, map[string]string{rec: redGreenUnverified("")})
 	res = call(w.lib, "Bash", pr)
-	code(t, res, 2, "a member's PR with no light verify in the primary")
-	matches(t, res.Stderr, lead+"has no passing light verify of the tree its last run tested on record \\(LDD, contracts/ldd.md, \"Light verify\"\\): ", "the refusal names the light verify")
+	code(t, res, 0, "a member's PR with no light verify in the primary runs, with a note (T154)")
+	if got := adviceOf(t, res.Stdout); got != lightVerifyNote("feat-c1") {
+		t.Errorf("a member's PR with no light verify: note %q; want %q", got, lightVerifyNote("feat-c1"))
+	}
 	support.Write(t, w.app, map[string]string{rec: redGreenRecord})
 	code(t, call(w.lib, "Bash", pr), 0, "the primary's record judges the member's PR")
 	code(t, call(w.app, "Bash", cmd("cd "+w.lib+" && gh pr create --title x --body y")), 0, "the member's PR from the primary's session")
@@ -171,7 +183,11 @@ func TestRouteGuardMemberPRUsesThePrimarysRecord(t *testing.T) {
 	// web joined, but the primary no longer lists it: no member, fail closed.
 	support.Write(t, w.web, map[string]string{"src/a.py": "X = 2\n"})
 	matches(t, call(w.web, "Bash", pr).Stderr, setUp, "a PR in an unlisted sibling")
-	code(t, call(w.web, "Write", map[string]any{"file_path": filepath.Join(w.web, "src", "b.py"), "content": "x"}), 2, "a code edit in an unlisted sibling")
+	noted = call(w.web, "Write", map[string]any{"file_path": filepath.Join(w.web, "src", "b.py"), "content": "x"})
+	code(t, noted, 0, "a code edit in an unlisted sibling")
+	if got := adviceOf(t, noted.Stdout); got != setUpNote() {
+		t.Errorf("a code edit in an unlisted sibling: note %q", got)
+	}
 	if strings.Contains(call(w.web, "Bash", pr).Stderr, "member") {
 		t.Error("an unlisted sibling is judged as a member")
 	}
@@ -179,7 +195,7 @@ func TestRouteGuardMemberPRUsesThePrimarysRecord(t *testing.T) {
 
 // S1 (L1323): a config entry that reaches a folder through a symlink, a
 // `..` or the parent folder is no member: writes there stay outside, from
-// the primary and from a joined member.
+// the primary and from a joined member, and run with the outside note.
 func TestWorkspaceConfigPathsThroughLinksStayOutside(t *testing.T) {
 	t.Parallel()
 	w := newWorkspace(t, "ldd/config.yaml")
@@ -189,7 +205,9 @@ func TestWorkspaceConfigPathsThroughLinksStayOutside(t *testing.T) {
 	w.join(t, w.lib)
 	for _, cwd := range []string{w.app, w.lib} {
 		for _, target := range []string{filepath.Join(w.other, "src", "b.py"), filepath.Join(parent, "lnk", "src", "b.py"), filepath.Join(parent, "top.txt")} {
-			code(t, w.guard(t, cwd, "Write", map[string]any{"file_path": target, "content": "X = 2\n"}), 2, "from "+cwd+": Write "+target)
+			r := w.guard(t, cwd, "Write", map[string]any{"file_path": target, "content": "X = 2\n"})
+			code(t, r, 0, "from "+cwd+": Write "+target)
+			matches(t, adviceOf(t, r.Stdout), outsideNote, "from "+cwd+": Write "+target)
 		}
 	}
 }

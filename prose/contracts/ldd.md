@@ -15,8 +15,9 @@ something better.
    cover is covered by a check: TDD, the delivered tree being the tested
    tree, and an independent verification when the risk asks for one. The
    owner decides once; only real decisions go back to the owner.
-3. **Nothing is a contract.** Every rule is a hypothesis with its evidence:
-   each guard carries a card (the risk it covers, the case that put it
+3. **Nothing is a contract.** Every rule, guard, or flow step is a
+   hypothesis naming its real case; without one it is an advisory. A
+   guard carries a card (the risk it covers, the case that put it
    there), `jhon audit --all` measures whether it pays, and it is removed or
    replaced when it does not, or when something better appears (see
    "Rounds"). A rejected idea returns only with new evidence.
@@ -49,7 +50,7 @@ sessions of real work, never on a calendar:
    thread, instead of through `jhon executions` (a focused TDD run on named
    files or a filter does not count); per
    guard, its refusals, the time the agents lost after them, and its card
-   (`guard.Cards`: the risk it covers and the real case that put it there).
+   (`guard.Cards`).
    `jhon audit <session>` states the same per change of one session: its
    slices (the `## Slice` headings of its `tasks.md`) and the owner's
    messages per slice; its planning rewrites after its first verify
@@ -236,15 +237,11 @@ whole change:
    record it needs ("The record"), and `jhon hook route-guard` refuses its
    PR without its RED before GREEN. The route (`jhon status`,
    `ldd/route.go`) sets only the rigor, re-read on each slice's diff; it
-   only rises:
-
-| Route | When | Record | Verification | 4R |
-|---|---|---|---|---|
-| `standard` | risk under the verified tier, whatever its size (a large change gets a note) | RED and GREEN runs; tasks.md, a spec delta, a proposal, or a design only when needed | the affected tests of each slice | only when the owner asks or `review_required` names it |
-| `verified` | risk at the verified tier (`high`, `route_verified_tier`), or `review_required` names `verify` | the same, and tasks.md at risk high | each slice's tests, and an independent verification before delivery (`verify-report.md` or Judgment Day, see "Delivery") | at high risk, automatic, with only the pertinent lenses, recorded in `review-4r.md` (`contracts/review-4r.md`) |
-
-`review_required` (see "Delivery") always wins over this table. A Judgment
-Day runs only when the owner asks, or `review_required` names it.
+   only rises: `verified` at the verified tier (`high`,
+   `route_verified_tier`) or when `review_required` names `verify`,
+   `standard` under it, whatever its size. What each tier verifies, asks and
+   reviews is the one table, `contracts/delivery.md`'s; `review_required`
+   (see "Delivery") always wins over it.
 A change with a folder is archived once, after its last slice is merged; a
 change with no folder has nothing to archive.
 
@@ -300,8 +297,9 @@ When a slice of a change that alters behaviour closes on the standard
 route, the `verify` agent verifies it lightly: it reads the slice's diff
 and its tests, runs the focused tests, and records its verdict with
 `jhon executions verify <change> --verdict pass|fail [--note <text>]`.
-`jhon status` notes when one is due; route-guard opens the PR only once
-the newest one passed on the tree the last run tested. A small change
+`jhon status` notes when one is due; a PR with no passing one of the
+tree the last run tested runs with a note: none caught a defect on record.
+A small change
 (`jhon status` says so) keeps no tasks.md, archive, light verify or todo
 list. The verified route keeps its full `verify-report.md`.
 

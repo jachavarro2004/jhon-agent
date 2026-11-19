@@ -1,7 +1,6 @@
 package render
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 
@@ -36,20 +35,12 @@ func TestLDDProseIsProportionalAndBinding(t *testing.T) {
 		"contracts/tdd.md": {
 			"TDD always.",
 			"through `jhon executions run <change> --affected <base>` while it fails (RED), unit runs (`--affected`) between",
-			"refuses the PR of a behaviour change without its RED before GREEN",
-		},
-		"contracts/routing.md": {
-			"Start with `jhon status` and `jhon risk`",
-			"before the first behaviour-changing edit",
-			"`jhon executions run <change> --affected <base>` while it fails; unit runs (`--affected`) between",
-			"a small change has no folder",
-			"Outline every slice first; write a slice's tasks after delivering the one before, on what exists.",
 		},
 		"orchestrator.md": {
 			"start with `jhon status` and `jhon risk`",
 			"before the first behaviour-changing edit",
 			"`jhon executions run <change> --affected <base>` while it fails (RED)",
-			"Iterate with a unit's run, `jhon executions run <change> --affected`",
+			"Unit runs between (`contracts/tdd.md`)",
 			// T146 FA3 (L1217): the delivery rules are read on demand.
 			"read `contracts/delivery.md`",
 			// T64: the session says whether LDD is active; a record LDD cannot keep never stops the work.
@@ -112,8 +103,8 @@ func TestLDDProseIsProportionalAndBinding(t *testing.T) {
 			}
 		}
 	}
-	// The route table names the record each route needs.
-	if !regexp.MustCompile(`\| Route \| When \| Record \|`).MatchString(read("contracts/ldd.md")) {
-		t.Error("contracts/ldd.md's route table has no Record column")
+	// One table (T154): delivery.md's tier table; ldd.md points to it.
+	if ldd := read("contracts/ldd.md"); strings.Contains(ldd, "| Route |") || !strings.Contains(ldd, "is the one table, `contracts/delivery.md`'s") {
+		t.Error("contracts/ldd.md keeps its own route table instead of pointing to delivery.md's")
 	}
 }

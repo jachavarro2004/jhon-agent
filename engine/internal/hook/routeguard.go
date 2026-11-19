@@ -19,9 +19,10 @@ import (
 // RouteGuard holds every agent to LDD and the route its change takes
 // (ldd/route.go) in a repository with LDD's layout: `route-guard --agent <owner>`.
 // In a repository without one, a commit or a PR is refused until LDD is
-// set up (ldd.SetUpRefusal, T72), and so is the first code edit, by a tool
-// or by a Bash write (ldd.SetUpEditRefusal, T89): every file in the
-// repository outside .git and the layout's directory is code.
+// set up (ldd.SetUpRefusal, T72); a code edit, by a tool or by a Bash
+// write, runs with a note to set it up (setUpEditNote; T89, a refusal until
+// T153, L957: an edit is not destructive): every file in the repository
+// outside .git and the layout's directory is code.
 //
 //   - The record is never refused: a spec delta, tasks.md, a proposal, and
 //     a design are written on any route, when the change needs one or the
@@ -29,16 +30,20 @@ import (
 //     route calls for them).
 //   - A PR of a change that alters behaviour opens only once the branch
 //     carries its RED before GREEN in `jhon executions`, and its record when
-//     the change needs one (ldd.Recorded, ldd.NeedsOf), and on the standard
-//     route a passing light verify of the tree its last run tested
-//     (execution.LightVerified, T31.5), but for a small change (T146g):
+//     the change needs one (ldd.Recorded, ldd.NeedsOf); on the standard
+//     route one with no passing light verify of the tree its last run tested
+//     (execution.LightVerified, T31.5) runs with a note (lightVerifyNote,
+//     T154: none caught a defect on record), but for a small change (T146g):
 //     tasks.md and a spec
 //     delta only when needed; at risk passive or medium a tasks.md with an
 //     `## Intent` and a `Delivers:` line is enough. A change with no folder,
 //     the one its branch names, counts too.
 //   - A bounded writer (the names route-guard is given) is launched only
 //     with its `## Allowed edit surfaces`: without them scope-guard has no
-//     scope to hold it to (pi's sub-agents refuse such a task too).
+//     scope to hold it to (pi's sub-agents refuse such a task too). Each
+//     path listed matches something (guard.MissingSurfaces: a file or
+//     folder there, a glob's match, or a new file's parent folder; T153,
+//     L1364 b), so a wrong path is fixed before the launch.
 //   - The verify agent may always be launched, on any route. 4R reviewers run
 //     without asking when 4R is due (risk at the verified tier, or
 //     review_required naming 4r), which the owner approved; its correction
@@ -60,8 +65,8 @@ import (
 //     (ldd.DesignDueNotes), a note as `jhon status` says it (T101).
 //   - With `delivery: change`, a commit that closes a slice commits the
 //     tree the change's last test run tested (ldd.SliceCommitRefusal); a PR
-//     opens once the branch's change has no unchecked task, and merges with
-//     --rebase.
+//     opens once the branch's change has every slice done (ldd.SlicesLeft,
+//     deliver check's words), and merges with --rebase.
 //   - A commit or a PR is judged at the repository it runs in: a cd, a
 //     pushd, env -C or git -C to another worktree moves it there from the
 //     session's root (deliveryRoots, T140); one the guard cannot place is
@@ -92,8 +97,12 @@ func RouteGuard(args []string, io IO) int {
 	}
 	// A bounded writer is launched with its scope, in any project.
 	if kind := strings.TrimSpace(p.Obj("tool_input").Str("subagent_type")); p.Str("tool_name") == "Agent" && slices.Contains(bounded, kind) {
-		if _, ok := guard.SurfacesOf(p.Obj("tool_input").Str("prompt")); !ok {
+		surfaces, ok := guard.SurfacesOf(p.Obj("tool_input").Str("prompt"))
+		if !ok {
 			return block("a " + kind + " is launched with its scope: list the files it may edit under a `## Allowed edit surfaces` heading, one path or narrow glob per line; without it nothing holds the writer to its task (contracts/efficiency.md, \"Writer scope\").")
+		}
+		if why := missingSurfaces(kind, p.Cwd(), surfaces); why != "" {
+			return block(why)
 		}
 	}
 	cwd := p.Cwd()
@@ -105,18 +114,18 @@ func RouteGuard(args []string, io IO) int {
 		if command, _ := p.Obj("tool_input")["command"].(string); top != "" && p.Str("tool_name") == "Bash" && deliveryOf(command).any() {
 			return block(ldd.SetUpRefusal())
 		}
-		// The first code edit is refused too (T89, L646), so LDD is set up
-		// before any code changes: a file the call writes in the repository,
-		// outside .git and every layout's directory, is code.
-		if top != "" && slices.ContainsFunc(writtenBy(p, cwd), func(f string) bool { return isCode(top, f) }) {
-			return block(ldd.SetUpEditRefusal())
-		}
+		// A code edit runs with a note to set LDD up (T89, L646; T153): a
+		// file the call writes in the repository, outside .git and every
+		// layout's directory, is code.
+		edits := top != "" && slices.ContainsFunc(writtenBy(p, cwd), func(f string) bool { return isCode(top, f) })
 		// A write whose file the parser cannot name (inline interpreter
 		// code, git apply, patch, a variable target) counts as one in the
 		// repository when it runs there (T94, L652, L656).
-		if command, _ := p.Obj("tool_input")["command"].(string); top != "" && p.Str("tool_name") == "Bash" &&
-			slices.ContainsFunc(guard.UnresolvedWrites(command, cwd), func(u guard.UnresolvedWrite) bool { return unresolvedCode(top, u) }) {
-			return block(ldd.SetUpEditRefusal())
+		if command, _ := p.Obj("tool_input")["command"].(string); !edits && top != "" && p.Str("tool_name") == "Bash" {
+			edits = slices.ContainsFunc(guard.UnresolvedWrites(command, cwd), func(u guard.UnresolvedWrite) bool { return unresolvedCode(top, u) })
+		}
+		if edits {
+			fmt.Fprint(io.Out, noteJSON(setUpEditNote()))
 		}
 		return 0
 	}
@@ -187,19 +196,22 @@ func RouteGuard(args []string, io IO) int {
 		if notSetUp(prRoots) {
 			return block(ldd.SetUpRefusal())
 		}
+		var notes []string
 		for _, root := range prRoots {
 			r, v := judgedAt(root)
-			why := ""
+			why, note := "", ""
 			if primary := memberPrimary(root); primary != "" {
-				why = memberRefusal(root, primary, command, r)
-			} else if why = deliveryRefusal(root, command, r, v); why == "" {
+				why, note = memberRefusal(root, primary, command, r)
+			} else if why, note = deliveryRefusal(root, command, r, v); why == "" {
 				why = membersRefusal(root, cwd, command)
 			}
 			if why != "" {
 				return block(layout.Words(root, why))
 			}
+			if note != "" {
+				notes = append(notes, layout.Words(root, note))
+			}
 		}
-		var notes []string
 		if note := suiteNote(top, command); note != "" {
 			notes = append(notes, layout.Words(top, note))
 		}
@@ -247,6 +259,43 @@ func RouteGuard(args []string, io IO) int {
 	}
 }
 
+// setUpEditNote is the note on a code edit in a repository with no layout:
+// set LDD up by the init steps ldd.SetUpEditRefusal names, and start the
+// edit's change before finishing. The edit has run; it is not refused.
+func setUpEditNote() string {
+	steps := ""
+	if _, rest, ok := strings.Cut(ldd.SetUpEditRefusal(), "`"); ok {
+		steps, _, _ = strings.Cut(rest, "`")
+	}
+	return modeNotePrefix + "LDD is not set up in this project yet: set it up by following `" + steps +
+		"` (ask how to deliver and test with your ask tool, or use the recommended values), and before you finish, start this edit's change (tasks.md) and record a run (`jhon executions run`)"
+}
+
+// missingSurfaces is why a bounded writer of kind, launched from cwd, may not
+// start: its surfaces name a path that matches nothing in the project (each
+// of its roots, workspace.ProjectRoots), or in cwd when it is no project;
+// "" when every path matches (guard.MissingSurfaces, T153, L1364 b).
+func missingSurfaces(kind, cwd string, surfaces []string) string {
+	roots := workspace.ProjectRoots(cwd)
+	if len(roots) == 0 {
+		roots = []string{project.Realish(cwd)}
+	}
+	missing := guard.MissingSurfaces(surfaces, roots)
+	if len(missing) == 0 {
+		return ""
+	}
+	var named []string
+	for _, s := range missing {
+		named = append(named, s+" (its folder "+guard.SurfaceParent(s)+" does not exist)")
+	}
+	verb := "matches"
+	if len(missing) > 1 {
+		verb = "match"
+	}
+	return "a " + kind + " is launched with surfaces that exist: its `## Allowed edit surfaces` names " + strings.Join(named, ", ") + ", which " + verb + " nothing in " + roots[0] +
+		". A path matches when a file or folder exists there, a glob when it matches one, and a new file's path when its parent folder exists. Fix the path in the brief before the launch: scope-guard holds the writer to the paths listed and refuses the real file a wrong one stands for (contracts/efficiency.md, \"Writer scope\")."
+}
+
 // memberPrimary is the primary whose record judges root, a joined member of
 // its workspace (workspace.Of) when the primary uses LDD; "" for any other
 // root.
@@ -261,40 +310,50 @@ func memberPrimary(root string) string {
 }
 
 // memberRefusal is why a PR command in member, a joined member of primary's
-// workspace, is refused, "" when it may run (T57 slice 5, L1314). Its
-// change is the primary's change its branch names (the branch's name, a
-// slash a dash, as for a change with no folder), and the primary's record
-// judges it: a change that alters behaviour in the member, by the member's
-// route, opens its PR with that change's RED before GREEN, on the standard
-// route its passing light verify, and on the verified route its independent
-// verification; `delivery: change` in the primary merges with rebase.
-func memberRefusal(member, primary, command string, routeOf func() ldd.Route) string {
+// workspace, is refused, "" when it may run (T57 slice 5, L1314), and the
+// note it runs with. Its change is the primary's change its branch names
+// (the branch's name, a slash a dash, as for a change with no folder), and
+// the primary's record judges it: a change that alters behaviour in the
+// member, by the member's route, opens its PR with that change's RED before
+// GREEN, and on the verified route its independent verification; on the
+// standard route one with no passing light verify runs with a note;
+// `delivery: change` in the primary merges with rebase.
+func memberRefusal(member, primary, command string, routeOf func() ldd.Route) (why, note string) {
 	if prMerge.MatchString(command) && ldd.DeliveryUnit(primary) == "change" && !rebase.MatchString(command) {
-		return "delivery: change merges with rebase, so each slice stays its own commit: run `gh pr merge <n> --rebase --delete-branch`."
+		return "delivery: change merges with rebase, so each slice stays its own commit: run `gh pr merge <n> --rebase --delete-branch`.", ""
 	}
 	r := routeOf()
 	if !deliveryOf(command).pr || !r.Behaviour {
-		return ""
+		return "", ""
 	}
 	branch, _ := project.ReadGit(member, "branch", "--show-current")
 	change := strings.ReplaceAll(branch, "/", "-")
 	lead := "this change alters behaviour in " + member + ", a member of the workspace of " + primary + ", and "
 	route := " Route: " + r.String() + "."
 	if change == "" {
-		return lead + "the member is on no branch, so it names no change of the primary: check out the branch named after the primary's change before the PR." + route
+		return lead + "the member is on no branch, so it names no change of the primary: check out the branch named after the primary's change before the PR." + route, ""
 	}
 	lead += "the primary's change " + change + ", which the member's branch names, "
 	switch {
 	case !execution.RedBeforeGreen(primary, change):
-		return lead + "has no RED before GREEN on record (LDD, contracts/ldd.md, TDD always): " + ldd.RedGreenHint(change) + " in " + primary + ", before the PR." + route
+		return lead + "has no RED before GREEN on record (LDD, contracts/ldd.md, TDD always): " + ldd.RedGreenHint(change) + " in " + primary + ", before the PR." + route, ""
 	case r.Level == ldd.RouteStandard && !execution.LightVerified(primary, change):
-		return lead + "has no passing light verify of the tree its last run tested on record (LDD, contracts/ldd.md, \"Light verify\"): launch the `verify` agent in light mode; it records `jhon executions verify " + change + " --verdict pass` in " + primary + ", before the PR." + route
+		return "", lightVerifyNote(change)
 	case r.Level == ldd.RouteVerified:
 		if v, _ := ldd.IndependentVerification(primary, change, nil); v == nil {
-			return lead + "has no independent verification on record: the route is verified (" + strings.Join(r.Reasons, "; ") + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) for " + change + " in " + primary + " before the PR (contracts/ldd.md, \"Delivery\")." + route
+			return lead + "has no independent verification on record: the route is verified (" + strings.Join(r.Reasons, "; ") + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) for " + change + " in " + primary + " before the PR (contracts/ldd.md, \"Delivery\")." + route, ""
 		}
 	}
-	return ""
+	return "", ""
+}
+
+// lightVerifyNote is the note a standard-route PR of change runs with when
+// no passing light verify of the tree its last run tested is on record: an
+// advisory since T154 (L1394), as `jhon audit` found no light verify that
+// caught a defect the recorded runs missed.
+func lightVerifyNote(change string) string {
+	return modeNotePrefix + "the PR runs with no passing light verify of the tree its last run tested on record for " + change +
+		" (contracts/ldd.md, \"Light verify\"): an advisory, as no light verify has caught a defect on record; the `verify` agent in light mode records one with `jhon executions verify " + change + " --verdict pass|fail`"
 }
 
 // judged is the route and the reviews of the branch in the repository at
@@ -400,34 +459,30 @@ var (
 	rebase  = lazyre.New(`(?:^|\s)(?:--rebase|-r)(?:\s|$)`)
 )
 
-// deliveryRefusal is why a PR command is refused, "" when it may run.
-func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf func() []ldd.Review) string {
+// deliveryRefusal is why a PR command is refused, "" when it may run, and
+// the note it runs with.
+func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf func() []ldd.Review) (refusal, note string) {
 	byChange := ldd.DeliveryUnit(top) == "change"
 	if prMerge.MatchString(command) && byChange && !rebase.MatchString(command) {
-		return "delivery: change merges with rebase, so each slice stays its own commit: run `gh pr merge <n> --rebase --delete-branch`."
+		return "delivery: change merges with rebase, so each slice stays its own commit: run `gh pr merge <n> --rebase --delete-branch`.", ""
 	}
 	if !deliveryOf(command).pr {
-		return ""
+		return "", ""
 	}
 	active, archived := ldd.BranchChanges(top)
 	lay := layout.For(top)
 	dir := func(c string) string { return layout.At(top, lay.ChangeDir(c)) }
 	if byChange {
+		// A slice not done, unchecked or outlined (T127), waits as
+		// `jhon deliver check --action merge` waits, in its words (T154).
 		for _, c := range active {
-			if left := ldd.Unchecked(lay, dir(c)); len(left) > 0 {
-				return fmt.Sprintf("delivery: change opens one PR per change, after its last slice: %s has %d unchecked task(s) (%s). Commit each slice on the branch and open the PR when every task is done.", c, len(left), strings.Join(left[:min(3, len(left))], ", "))
-			}
-		}
-		// An outlined slice is a slice not done (T127): the change's PR
-		// waits for it as `jhon deliver check --action merge` does.
-		for _, c := range active {
-			if left := ldd.Outlined(lay, dir(c)); len(left) > 0 {
-				return fmt.Sprintf("delivery: change opens one PR per change, after its last slice: %s has %d outlined slice(s) with no tasks yet (%s). Task and commit each slice on the branch and open the PR when every slice is done.", c, len(left), strings.Join(left[:min(3, len(left))], ", "))
+			if left := ldd.SlicesLeft(top, c); len(left) > 0 {
+				return c + ": " + strings.Join(left, "; ") + ".", ""
 			}
 		}
 	}
 	if undocumented := ldd.UndocumentedProjects(top); len(undocumented) > 0 {
-		return fmt.Sprintf("docs_with_code: %s change(s) code but not its docs/. Update the documentation the change makes stale before the PR, or state `No docs change: <why>` in the change's tasks.md.", strings.Join(undocumented, ", "))
+		return fmt.Sprintf("docs_with_code: %s change(s) code but not its docs/. Update the documentation the change makes stale before the PR, or state `No docs change: <why>` in the change's tasks.md.", strings.Join(undocumented, ", ")), ""
 	}
 	if r := routeOf(); r.Behaviour {
 		// The branch's changes: active, archived, and the one its name gives
@@ -456,25 +511,26 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 				// T146h L4: a small change's two runs are the bare one.
 				hint = ldd.SmallRedGreen
 			}
-			return "this change alters behaviour, and its RED before GREEN is not on record (LDD, contracts/ldd.md, TDD always): " + hint + ", before the PR. Route: " + r.String() + "."
+			return "this change alters behaviour, and its RED before GREEN is not on record (LDD, contracts/ldd.md, TDD always): " + hint + ", before the PR. Route: " + r.String() + ".", ""
 		case documented:
 		case ldd.OneLineRecord(r.Tier):
-			return "this change alters behaviour, and the branch carries no change with its record (LDD, contracts/ldd.md): write its tasks.md under openspec/changes/<change>/ before the PR: at risk " + string(r.Tier) + " an `## Intent` line and a `Delivers:` line are enough, with a spec delta only when a main spec changes or is added. Route: " + r.String() + "."
+			return "this change alters behaviour, and the branch carries no change with its record (LDD, contracts/ldd.md): write its tasks.md under openspec/changes/<change>/ before the PR: at risk " + string(r.Tier) + " an `## Intent` line and a `Delivers:` line are enough, with a spec delta only when a main spec changes or is added. Route: " + r.String() + ".", ""
 		default:
-			return "this change alters behaviour, and the branch carries no change with its record (LDD, contracts/ldd.md): write its tasks.md and spec delta under openspec/changes/<change>/ before the PR, or state `No spec change: <why>` in tasks.md when its behaviour stays. Route: " + r.String() + "."
+			return "this change alters behaviour, and the branch carries no change with its record (LDD, contracts/ldd.md): write its tasks.md and spec delta under openspec/changes/<change>/ before the PR, or state `No spec change: <why>` in tasks.md when its behaviour stays. Route: " + r.String() + ".", ""
 		}
 		// On the standard route the light verify at slice close stands in
-		// for the verified route's verify-report (T31.5).
+		// for the verified route's verify-report (T31.5); with none the PR
+		// runs with a note (T154).
 		// A small change (no folder, its record needs no tasks.md) keeps no
 		// light verify (T146g G3); a branch that also carries a change with a
 		// folder, under any name, is not one (L1289).
 		small := folderless != "" && len(active) == 0 && len(archived) == 0 && !n.Tasks
 		if r.Level == ldd.RouteStandard && !small && !slices.ContainsFunc(changes, func(c string) bool { return execution.LightVerified(top, c) }) {
-			return "this change alters behaviour, and no passing light verify of the tree its last run tested is on record (LDD, contracts/ldd.md, \"Light verify\"): launch the `verify` agent in light mode when the slice closes; it records `jhon executions verify " + named + " --verdict pass`, before the PR. Route: " + r.String() + "."
+			note = lightVerifyNote(named)
 		}
 	}
 	if why, due := verifyDue(top, routeOf()); due {
-		return "the route is verified (" + why + "): verify is due before delivery: launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/<change>/ before the PR; a Judgment Day closed APPROVED counts too (contracts/ldd.md, \"Delivery\")."
+		return "the route is verified (" + why + "): verify is due before delivery: launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/<change>/ before the PR; a Judgment Day closed APPROVED counts too (contracts/ldd.md, \"Delivery\").", ""
 	}
 	change := "<change>"
 	if active, _ := ldd.BranchChanges(top); len(active) == 1 {
@@ -492,16 +548,16 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		}
 		switch v.Review {
 		case ldd.ReviewUnreadable:
-			return v.Line()
+			return v.Line(), ""
 		case ldd.ReviewVerify:
-			return "verify is due before delivery (" + why + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/" + change + "/ before the PR; a Judgment Day closed APPROVED counts too (contracts/ldd.md, \"Delivery\")."
+			return "verify is due before delivery (" + why + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/" + change + "/ before the PR; a Judgment Day closed APPROVED counts too (contracts/ldd.md, \"Delivery\").", ""
 		case ldd.ReviewFourR:
-			return "4R is due before delivery (" + why + "): run the pertinent lenses (" + strings.Join(r.Lenses, ", ") + ") with the native review (`jhon_review` in pi, `jhon review run` in Claude Code; the lens agents when it cannot run), only those its diff calls for (contracts/review-4r.md, \"Lenses\"), and record openspec/changes/" + change + "/review-4r.md with the lenses it ran (`lenses: " + strings.Join(r.Lenses, ", ") + "`) and `verdict: pass` before the PR; a Judgment Day closed APPROVED counts too."
+			return "4R is due before delivery (" + why + "): run the pertinent lenses (" + strings.Join(r.Lenses, ", ") + ") with the native review (`jhon_review` in pi, `jhon review run` in Claude Code; the lens agents when it cannot run), only those its diff calls for (contracts/review-4r.md, \"Lenses\"), and record openspec/changes/" + change + "/review-4r.md with the lenses it ran (`lenses: " + strings.Join(r.Lenses, ", ") + "`) and `verdict: pass` before the PR; a Judgment Day closed APPROVED counts too.", ""
 		case ldd.ReviewJD:
-			return "a Judgment Day is due before delivery (" + why + "): openspec/config.yaml requires it; run it (contracts/judgment.md) and close it APPROVED under openspec/changes/" + change + "/judgments/ before the PR."
+			return "a Judgment Day is due before delivery (" + why + "): openspec/config.yaml requires it; run it (contracts/judgment.md) and close it APPROVED under openspec/changes/" + change + "/judgments/ before the PR.", ""
 		}
 	}
-	return ""
+	return "", note
 }
 
 // branchReviews is the reviews the branch's changes, active and archived,

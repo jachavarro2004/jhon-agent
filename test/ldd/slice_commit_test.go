@@ -161,7 +161,7 @@ func TestASliceCommitIsJudgedWhereItRuns(t *testing.T) {
 	// K2: a PR from the other worktree waits for no task of the session's change.
 	r := run("gh pr create --title x")
 	equal(t, r.Code, 2, "the session's change has an unchecked task", r.Stderr)
-	match(t, r.Stderr, `c1 has 1 unchecked task`, r.Stderr)
+	match(t, r.Stderr, `c1: delivery: change .* 1 task\(s\) of tasks\.md are unchecked`, r.Stderr)
 	// It is judged by the other worktree's branch, which carries an
 	// unrecorded edit and no change of its own.
 	r = run("cd " + other + " && gh pr create --title x")
@@ -169,10 +169,10 @@ func TestASliceCommitIsJudgedWhereItRuns(t *testing.T) {
 	match(t, r.Stderr, `the branch carries no change with its record`, r.Stderr)
 	r = run("cd " + other + " && gh pr create -R o/r --title x")
 	equal(t, r.Code, 2, "a PR gh is given its repository for", r.Stderr)
-	match(t, r.Stderr, `c1 has 1 unchecked task`, r.Stderr)
+	match(t, r.Stderr, `c1: delivery: change .* 1 task\(s\) of tasks\.md are unchecked`, r.Stderr)
 	r = run(`cd "$X" && gh pr create --title x`)
 	equal(t, r.Code, 2, "a PR from a directory it cannot tell", r.Stderr)
-	match(t, r.Stderr, `c1 has 1 unchecked task`, r.Stderr)
+	match(t, r.Stderr, `c1: delivery: change .* 1 task\(s\) of tasks\.md are unchecked`, r.Stderr)
 
 	// K1: the other worktree's own closed, untested slice refuses its commit.
 	support.Write(t, other, map[string]string{"openspec/changes/c2/tasks.md": "## Slice 1: c\n\nDelivers: CA-03\n\n- [ ] 1.1 c\n"})

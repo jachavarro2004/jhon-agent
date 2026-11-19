@@ -1,7 +1,6 @@
 package ldd
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"os"
@@ -109,10 +108,10 @@ func ClosedSliceLines(top string, r Route) []SliceLines {
 // `delivery: change`, a slice is delivered as a commit on the change's
 // branch, so a commit that closes a slice (its tasks were not all checked
 // in HEAD's tasks.md and are in the working one) must commit the tree the
-// change's last test run tested: complete, undisturbed, passing, and the
-// wide kind, not a unit's (execution.Record.Unit). The change's record
-// (openspec/) is left out of the comparison, since its tasks are checked off
-// after the tests pass. Each scenario the slice adds or edits in the
+// change's last test run tested (TestedTree, as `jhon deliver check` judges
+// it): complete, undisturbed, passing, and the wide kind, not a unit's. The
+// change's own folder is left out of the comparison, since its tasks are
+// checked off after the tests pass. Each scenario the slice adds or edits in the
 // change's spec deltas is named by a test (unnamedSliceScenarios), as delivery
 // asks of them all. A slice that changes a declared data-access path needs
 // a declared real-database test that reached the changed file in that run
@@ -132,11 +131,13 @@ func SliceCommitRefusal(top string) string {
 			return fmt.Sprintf("this commit closes %s of %s, and of the scenarios the slice adds or edits in the change's spec deltas, %s: a test names the scenario it proves (its test name, or a `scenario: <name>` comment), then commit.",
 				strings.Join(closed, ", "), change, why)
 		}
-		if why, full := untestedSlice(top, change); why != "" {
+		// The tree it records is judged as deliver check judges HEAD's (TestedTree).
+		if tt := TestedTree(top, change, vcs.WorkingTree(top, execution.ChangeRecordPaths(top, change))); tt.Why != "" {
+			why := tt.Why
 			// An affected run of nothing is what wrote an empty record: only
 			// the full run clears it.
 			run := "`jhon executions run " + change + " --affected <base>`"
-			if full {
+			if tt.Full {
 				run = "`jhon executions run " + change + "` (the full run)"
 			}
 			return fmt.Sprintf("this commit closes %s of %s, and %s. Run %s on the slice as it will be committed, then commit: each slice of a `delivery: change` is a tested tree, not only the last one.",
@@ -196,55 +197,6 @@ func newlyClosed(lay layout.Layout, before, after string) []string {
 		}
 	}
 	return out
-}
-
-// untestedSlice is why the working tree is not the one the change's last
-// run tested, outside openspec/; "" when it is. full is whether only a full
-// run clears it: the last run holds no execution (execution.LastRun.Empty).
-func untestedSlice(top, change string) (why string, full bool) {
-	run, err := execution.ReadLastRun(top, change)
-	if err != nil || run == nil {
-		return "the change has no recorded test run", false
-	}
-	if run.Empty() {
-		return "its last test run holds no execution", true
-	}
-	if !run.Passed || run.Dirty {
-		return "its last test run did not pass complete and undisturbed", false
-	}
-	if run.Unit {
-		return "its last test run was a unit's (`--affected` with no base), which runs only what changed since the change's last passing run", false
-	}
-	b, err := os.ReadFile(execution.RecordFile(top, change))
-	var record struct {
-		WorkingTree string `json:"working_tree"`
-	}
-	if err != nil || json.Unmarshal(b, &record) != nil || record.WorkingTree == "" {
-		return "its last test run records no working tree", false
-	}
-	// Only a run whose working tree read again at its end is the start's
-	// tested one tree (T146f): a record an earlier binary wrote has none.
-	if !isSha(run.AfterWorkingTree) || run.AfterWorkingTree != record.WorkingTree {
-		return "its last test run recorded no working tree at its end, or another than at its start", false
-	}
-	now := vcs.WorkingTree(top, execution.ChangeRecordPaths(top, change))
-	if now == "" {
-		return "the working tree cannot be read", false
-	}
-	paths, ok := vcs.TreeDiff(top, record.WorkingTree, now)
-	if !ok {
-		return "the tree its last test run tested is not in the repository", false
-	}
-	var untested []string
-	for _, p := range paths {
-		if !layout.For(top).Ignored(p) {
-			untested = append(untested, p)
-		}
-	}
-	if len(untested) == 0 {
-		return "", false
-	}
-	return fmt.Sprintf("%d file(s) changed after its last test run (%s)", len(untested), strings.Join(untested[:min(5, len(untested))], ", ")), false
 }
 
 // DesignDueNotes are, for each active change of the branch whose commit in
