@@ -49,6 +49,9 @@ func guardTools(t *testing.T) map[string][]string {
 func TestPreToolDecidesWhatTheSeparateGuardsDecide(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
+	// The guards' decisions alone: the sandbox's wrap, on by default on
+	// Linux (T128f), is sandbox_wrap_test.go's.
+	s.env = sandboxEnv(t, s, "off")
 	fw := mkdir(t, filepath.Join(s.scratch, "fw"))
 	type call struct {
 		tool  string

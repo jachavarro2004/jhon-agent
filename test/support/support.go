@@ -26,7 +26,10 @@ import (
 // The binaries the tests run are the tests', not the owner's: they record
 // no telemetry (engine/internal/telemetry), and they read the settings of
 // the HOME a test gives them (~/.config/jhon/settings.toml), never the
-// owner's through an inherited XDG_CONFIG_HOME or JHON_SETTINGS.
+// owner's through an inherited XDG_CONFIG_HOME or JHON_SETTINGS. With no
+// file sandbox.mode is on on Linux (T128f): a test that needs the
+// unsandboxed path of the Claude Code wrap or doctor sets it off in its own
+// settings file, and one that pins the default gives an empty file.
 func init() {
 	os.Setenv("JHON_TELEMETRY", "off")
 	os.Unsetenv("XDG_CONFIG_HOME")

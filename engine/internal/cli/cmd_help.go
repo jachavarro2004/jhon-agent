@@ -182,8 +182,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            how it is mounted, or that it is off); warns when
                            claude, engram or codegraph differs from
                            the version Jhon pins, and where the OS sandbox
-                           cannot run (its section says sandbox on or off,
-                           and the fix); fails when the record of the
+                           cannot run with sandbox.mode off (the model's
+                           commands run unsandboxed: macOS and Windows by
+                           default); fails where it cannot run with the
+                           mode on (by default on Linux: every command is
+                           refused), with the fix; fails when the record of the
                            rendered agents or the main agent's definition
                            is missing from ~/.claude/agents, or the
                            definition cannot be read or is empty
@@ -243,9 +246,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            theme.palette is rose-ink (default) or
                            desktop, the palette file JHON_DESKTOP_COLORS
                            names (ryoku, its older name, still works);
-                           sandbox.mode is on or off (off by default):
-                           whether the runtimes run each command of the
-                           model in the OS sandbox; sandbox.allow_write is
+                           sandbox.mode is on or off: whether the
+                           runtimes run each command of the model in the
+                           OS sandbox, on by default on Linux (elsewhere
+                           off: the commands run unsandboxed, and jhon
+                           doctor warns); sandbox.allow_write is
                            the folders such a command may write besides the
                            project's, separated by commas, each absolute or
                            under ~/, never /, the home folder or one above
@@ -531,14 +536,16 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            error
   jhon sandbox status [--json] [--project <folder>]
                            sandbox.mode (on or off: whether the runtimes
-                           sandbox the model's commands), whether the sandbox
+                           sandbox the model's commands; on by default on
+                           Linux, off elsewhere), whether the sandbox
                            can run here (one empty sandbox is started with
                            the bubblewrap and the options run uses, so one
                            older than 0.5.0 cannot, as for jhon doctor), and
                            the reason and the fix when it cannot, and the
                            project a run from here gets (the folder that
                            holds .git, or none in no repository; with
-                           --project, that folder); --json: mode, can_run,
+                           --project, that folder); --json: mode,
+                           mode_source (default or settings), can_run,
                            reason, fix, project ("" for none); --project as
                            for run; exit 0, 2 on a usage error. With
                            sandbox.mode on it also counts the Bash deny and

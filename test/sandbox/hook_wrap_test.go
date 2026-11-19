@@ -25,6 +25,14 @@ func wired(t *testing.T, shell string) (box, []string) {
 	return b, append(append([]string{}, b.env...), "JHON_SANDBOX_PROJECT="+b.proj, "SHELL="+shell)
 }
 
+// modeOff is env with a settings file of its own that sets sandbox.mode
+// off, which is on by default on Linux (T128f).
+func modeOff(t *testing.T, b box, env []string) []string {
+	t.Helper()
+	support.Write(t, b.base, map[string]string{"off-settings.toml": "schema = 1\n\n[sandbox]\nmode = \"off\"\n"})
+	return append(append([]string{}, env...), "JHON_SETTINGS="+filepath.Join(b.base, "off-settings.toml"))
+}
+
 func realShell(t *testing.T, name string) string {
 	t.Helper()
 	p, err := exec.LookPath(name)
@@ -135,7 +143,7 @@ func TestAnAllowedCommandIsHandedBackWrapped(t *testing.T) {
 func TestTheGuardsDecisionGoesWithTheWrappedCommand(t *testing.T) {
 	bash := realShell(t, "bash")
 	b, env := wired(t, bash)
-	off := append(append([]string{}, env...), "JHON_SETTINGS="+filepath.Join(b.base, "no-settings.toml"))
+	off := modeOff(t, b, env)
 
 	was, asked := preTool(t, b, off, bashGuards, "Bash", `{"command":"git push origin main && echo pushed","timeout":5}`, true)
 	if was.Code != 0 || asked.Out.Decision != "ask" || asked.Out.Updated != nil {
@@ -301,7 +309,7 @@ func TestAMonitorCallReachesTheAgentsBashHooks(t *testing.T) {
 		}
 	}
 	// With the mode off a Monitor call prints nothing, as before.
-	off := append(append([]string{}, env...), "JHON_SETTINGS="+filepath.Join(b.base, "no-settings.toml"))
+	off := modeOff(t, b, env)
 	if r, _ := run(off, payload("PreToolUse", "Monitor", `{"command":"tail -f build.log"}`)); r.Code != 0 || r.Stdout != "" || r.Stderr != "" {
 		t.Errorf("Monitor with the mode off: %+v; want nothing printed", r)
 	}
@@ -319,7 +327,7 @@ func TestAnAllowsNoteStaysWithTheWrappedCommand(t *testing.T) {
 	if r := support.Jhon(t, b.proj, b.env, "mode", "yolo"); r.Code != 0 {
 		t.Fatalf("jhon mode yolo: %d\n%s", r.Code, r.Out())
 	}
-	off := append(append([]string{}, env...), "JHON_SETTINGS="+filepath.Join(b.base, "no-settings.toml"))
+	off := modeOff(t, b, env)
 	for _, c := range []struct{ tool, input string }{
 		{"Bash", `{"command":"git push origin main && echo pushed","timeout":5}`},
 	} {

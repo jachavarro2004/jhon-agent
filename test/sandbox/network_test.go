@@ -86,7 +86,7 @@ func TestClaudeCodeRunsANetworkLineUnsandboxed(t *testing.T) {
 		t.Errorf("a mixed line: the command is\n %s\nwant the work wrap\n %s", got, want)
 	}
 	// The push ask is the guard's, as with the mode off.
-	off := append(append([]string{}, env...), "JHON_SETTINGS="+filepath.Join(b.base, "no-settings.toml"))
+	off := modeOff(t, b, env)
 	_, asked := preTool(t, b, off, bashGuards, "Bash", `{"command":"git push origin main"}`, true)
 	r, a := preTool(t, b, env, bashGuards, "Bash", `{"command":"git push origin main"}`, true)
 	if r.Code != 0 || asked.Out.Decision != "ask" || a.Out.Decision != "ask" || a.Out.Reason != asked.Out.Reason || a.command(t) != unwrapped(t, b.proj, bash, "git push origin main") {

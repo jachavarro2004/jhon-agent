@@ -51,6 +51,14 @@ func (m machine) on(t *testing.T) []string {
 	return m.env
 }
 
+// off is the machine's environment with sandbox.mode off, which is on by
+// default on Linux (T128f).
+func (m machine) off(t *testing.T) []string {
+	t.Helper()
+	support.Write(t, m.home, map[string]string{".config/jhon/settings.toml": "schema = 1\n\n[sandbox]\nmode = \"off\"\n"})
+	return m.env
+}
+
 // claudeSettings writes the three files: three Bash deny rules and one Bash
 // ask rule among rules of other tools and allow rules, which do not count.
 func (m machine) claudeSettings(t *testing.T) {
@@ -96,6 +104,7 @@ func TestStatusCountsClaudeCodesBashRulesWithTheModeOn(t *testing.T) {
 func TestStatusSaysNothingOfTheRulesWithTheModeOff(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
+	m.off(t)
 	before := map[string]support.Result{}
 	commands := [][]string{{"sandbox", "status"}, {"sandbox", "status", "--json"}}
 	for _, args := range commands {

@@ -534,7 +534,8 @@ func osAbs(p string) string {
 	return p
 }
 
-// T128a: sandbox.mode is off unless set, and sandbox.allow_write a list of
+// T128a, T128f: sandbox.mode is on unless set (sandbox.Mode reads that
+// default as off where the sandbox does not run, D3), and sandbox.allow_write a list of
 // folders, each absolute or under ~/, never /, the home folder or one above.
 func TestSandboxKeys(t *testing.T) {
 	t.Setenv("HOME", "/home/u")
@@ -543,8 +544,8 @@ func TestSandboxKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := valueOf(t, vals, "sandbox.mode"); v.Value != "off" || v.Source != SourceDefault || v.Kind != "enum" {
-		t.Errorf("sandbox.mode = %#v (%s, %s), want off by default, an enum", v.Value, v.Source, v.Kind)
+	if v := valueOf(t, vals, "sandbox.mode"); v.Value != "on" || v.Source != SourceDefault || v.Kind != "enum" {
+		t.Errorf("sandbox.mode = %#v (%s, %s), want on by default, an enum", v.Value, v.Source, v.Kind)
 	}
 	if v := valueOf(t, vals, "sandbox.allow_write"); !same(v.Value, []string{}) || v.Kind != "paths" {
 		t.Errorf("sandbox.allow_write = %#v (%s), want an empty list of paths", v.Value, v.Kind)

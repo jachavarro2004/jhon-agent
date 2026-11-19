@@ -207,11 +207,14 @@ func sandboxProject() string { return project.ReadRepo(cwd()).Top }
 // sandbox can run here, the reason and the fix when it cannot, and the
 // project a run from here gets: the pinned one, else sandboxProject.
 type sandboxState struct {
-	Mode    string `json:"mode"`
-	CanRun  bool   `json:"can_run"`
-	Reason  string `json:"reason"`
-	Fix     string `json:"fix"`
-	Project string `json:"project"`
+	Mode string `json:"mode"`
+	// ModeSource is where the mode comes from: default (on on Linux, off
+	// elsewhere, D3) or settings (sandbox.Mode, T128f).
+	ModeSource string `json:"mode_source"`
+	CanRun     bool   `json:"can_run"`
+	Reason     string `json:"reason"`
+	Fix        string `json:"fix"`
+	Project    string `json:"project"`
 	// BashRules is set with the mode on only: with it off the rules apply.
 	BashRules *claudeBashRules `json:"claude_bash_rules,omitempty"`
 }
@@ -306,16 +309,21 @@ func (s sandboxState) line() string {
 	return "sandbox " + s.Mode + "; it cannot run here: " + s.Reason + "; fix: " + s.Fix
 }
 
+// sandboxHost is the machine the status reads the mode for and probes; a
+// test gives another system's.
+var sandboxHost = sandbox.ThisHost
+
 // sandboxNow probes the sandbox of a work command started here, in the
 // pinned project or with "" the one this folder is in: one empty sandbox
 // started for real, with the bubblewrap and the options such a command
-// would get.
+// would get. The mode is sandbox.Mode's, with its source.
 func sandboxNow(pinned string) sandboxState {
-	s := sandboxState{Mode: settings.Str("sandbox.mode"), CanRun: true, Project: pinned}
+	s := sandboxState{CanRun: true, Project: pinned}
+	s.Mode, s.ModeSource = sandbox.Mode(sandboxHost())
 	if pinned == "" {
 		s.Project = sandboxProject()
 	}
-	if p := sandbox.Probe(sandbox.ThisHost(), sandboxInput(pinned, sandbox.Work)); p != nil {
+	if p := sandbox.Probe(sandboxHost(), sandboxInput(pinned, sandbox.Work)); p != nil {
 		s.CanRun, s.Reason, s.Fix = false, p.Reason, p.Fix
 	}
 	if s.Mode == "on" {
@@ -344,17 +352,22 @@ func sandboxStatus(asJSON bool, pinned string) (int, error) {
 	return 0, nil
 }
 
-// sandbox is doctor's sandbox section: the setting and whether the sandbox
-// can run; where it cannot, a warning, never a problem (D3: macOS and
-// Windows run unsandboxed until further notice). With the mode on, a second
+// sandbox is doctor's sandbox section: the mode and whether the sandbox
+// can run. Where it cannot, with the mode on (by default on Linux, or set)
+// every command of the model is refused: a problem, with the fix (T128f,
+// L1352 F2); with the mode off, the default off Linux (D3), a warning that
+// the commands run unsandboxed, never a problem. With the mode on, a second
 // warning counts the Bash rules of Claude Code that no longer apply.
 func (d doctor) sandbox() {
 	d.o.Head("sandbox")
 	s := sandboxNow("")
-	if s.CanRun {
+	switch {
+	case s.CanRun:
 		d.o.OK(s.line())
-	} else {
-		d.o.Warn(s.line())
+	case s.Mode == "on":
+		d.o.Bad(s.line() + "; until then every command of the model is refused")
+	default:
+		d.o.Warn(s.line() + "; the model's commands run unsandboxed")
 	}
 	if w := s.BashRules.warning(); w != "" {
 		d.o.Warn(w)

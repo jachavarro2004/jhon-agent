@@ -1,8 +1,8 @@
 /**
  * The shell suite never reads the machine owner's Jhon settings or state
  * (T147, L1209, L1213): isolated-env.ts, which every test file imports first,
- * puts JHON_SETTINGS on an empty scratch file and Jhon's state and caches on
- * scratch directories, whatever the parent environment names.
+ * puts JHON_SETTINGS on a scratch file that sets only sandbox.mode off (T128f)
+ * and Jhon's state and caches on scratch directories, whatever the parent environment names.
  */
 import "./isolated-env.ts";
 import { test } from "node:test";
@@ -29,9 +29,11 @@ test("every test file imports isolated-env.ts before any other module", () => {
 	assert.deepEqual(missing, [], `these test files do not start with ${ISOLATION}`);
 });
 
-test("a test process holds an empty settings file and Jhon state of its own, whatever its parent names", () => {
+// T128f (L1352 F4): the default is on where the sandbox runs, so the file
+// sets it off: a test meets the sandbox only where it asks for it.
+test("a test process holds a settings file of its own with only sandbox.mode off, and Jhon state of its own, whatever its parent names", () => {
 	assert.equal(process.env.JHON_SETTINGS, ISOLATED_SETTINGS);
-	assert.equal(readFileSync(ISOLATED_SETTINGS, "utf8"), "");
+	assert.equal(readFileSync(ISOLATED_SETTINGS, "utf8"), '[sandbox]\nmode = "off"\n');
 	assert.equal(process.env.XDG_STATE_HOME, join(ISOLATED_ROOT, "state"));
 	assert.equal(process.env.XDG_CACHE_HOME, join(ISOLATED_ROOT, "cache"));
 	assert.equal(process.env.JHON_PROFILES, join(ISOLATED_ROOT, "profiles.json"));

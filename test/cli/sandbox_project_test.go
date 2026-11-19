@@ -93,6 +93,7 @@ func TestStatusNamesTheProjectRunWouldTake(t *testing.T) {
 func TestStatusSaysTheProjectOnItsLine(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
+	m.off(t)
 	r := support.Jhon(t, filepath.Join(m.proj, "src"), m.env, "sandbox", "status")
 	if r.Code != 0 || strings.Count(r.Stdout, "\n") != 1 || !strings.HasPrefix(r.Stdout, "sandbox off; ") || !strings.HasSuffix(r.Stdout, "; project "+m.proj+"\n") {
 		t.Errorf("in the project: exit %d, %q; want one line that ends with the project", r.Code, r.Stdout)

@@ -467,6 +467,23 @@ function suite(): void {
 		assert.deepEqual(fake.runs(), []);
 	});
 
+	// T128f (L1352 F1): pi reads the engine's effective mode, on by default on Linux and off elsewhere (D3).
+	test("with an empty settings file the tree's jhon gives pi the default mode: on on Linux", async (t) => {
+		const bin = process.env.JHON_TEST_BIN || join(REPO, "build", "jhon");
+		if (!existsSync(bin)) { t.skip(`needs the tree's jhon (JHON_TEST_BIN or build/jhon): ${bin}`); return; }
+		const d = scratch(t, "jhon-sbx-default-");
+		const file = join(d, "settings.toml");
+		const was = process.env.JHON_SETTINGS;
+		t.after(() => { process.env.JHON_SETTINGS = was; });
+		const want = process.platform === "linux" ? "on" : "off";
+		for (const [text, mode] of [["", want], ['[sandbox]\nmode = "off"\n', "off"], ['[sandbox]\nmode = "on"\n', "on"]]) {
+			writeFileSync(file, text);
+			process.env.JHON_SETTINGS = file;
+			const pin = await readSandboxStatus({ jhon: bin }, d);
+			assert.equal("unread" in pin ? pin.unread : pin.mode, mode, JSON.stringify(text));
+		}
+	});
+
 	test("rule 6: an abort, the timeout and a job's stop end the program inside a real bubblewrap sandbox", async (t) => {
 		const bin = process.env.JHON_TEST_BIN || join(REPO, "build", "jhon");
 		if (process.platform !== "linux" || !existsSync(bin) || !bash) { t.skip(`needs Linux, /bin/bash and the tree's jhon (JHON_TEST_BIN or build/jhon): ${bin}`); return; }
