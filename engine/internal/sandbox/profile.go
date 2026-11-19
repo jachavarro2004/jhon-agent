@@ -516,12 +516,13 @@ func ghDelivers(sub string, args []string) bool {
 			}
 		case strings.HasPrefix(a, "-") && len(a) > 1:
 			// A cluster of short flags (-dF): the value of -F is the rest of
-			// the word, or the next one.
+			// the word, or the next one. As pflag reads it, a rest that
+			// opens with = drops it: -F=b=@file is -F b=@file (L1318).
 			if k := strings.IndexByte(a, 'F'); k > 0 {
 				if slices.Contains(ghFileShort, sub) {
 					return false
 				}
-				field := a[k+1:]
+				field := strings.TrimPrefix(a[k+1:], "=")
 				if field == "" && i+1 < len(args) {
 					field = args[i+1]
 				}

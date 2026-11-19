@@ -7,9 +7,13 @@ package sandbox
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -296,6 +300,90 @@ func TestEveryRunRecordsItsProfileAndExitCode(t *testing.T) {
 // and a core.fsmonitor in .git/config (all writable from the work profile)
 // do not run on a push, a fetch or a pull, whose remote is a local bare
 // repository reached through the owner's ssh (fakeSSH), which runs.
+// L1318 (b): git 2.54 and later run hooks named in the configuration
+// (hook.<name>.command with hook.<name>.event), which core.hooksPath does
+// not turn off. One planted in the project's .git/config for every event a
+// network command fires runs on no unsandboxed pull, fetch, push or clone.
+func TestAConfigHookDoesNotRunInAnUnsandboxedPull(t *testing.T) {
+	b := newBox(t)
+	ssh := filepath.Join(b.base, "ssh-ran")
+	remote := originOverSSH(t, &b, ssh)
+	// The remote is one commit ahead, so the pull fast-forwards.
+	support.Git(t, b.proj, "commit", "-q", "--allow-empty", "-m", "ahead")
+	support.Git(t, b.proj, "push", "-q", remote, "HEAD:refs/heads/main")
+	support.Git(t, b.proj, "update-ref", "refs/heads/main", "HEAD~1")
+	ran := filepath.Join(b.proj, "ran")
+	hook := "[hook \"x\"]\n\tcommand = echo \"$0 $*\" >> " + ran + "\n"
+	for _, event := range []string{"pre-push", "post-merge", "post-checkout", "post-rewrite", "reference-transaction", "pre-auto-gc", "pre-rebase", "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-index-change"} {
+		hook += "\tevent = " + event + "\n"
+	}
+	f, err := os.OpenFile(filepath.Join(b.proj, ".git", "config"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(hook); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	for _, line := range []string{"git pull -q --ff-only", "git fetch -q origin", "git push -q origin HEAD:refs/heads/other", "git clone -q ssh://example.invalid" + remote + " cloned"} {
+		if r := b.unsandboxed(t, b.env, line); r.Code != 0 {
+			t.Errorf("unsandboxed %q: exit %d, stderr %q; want 0", line, r.Code, r.Stderr)
+		}
+	}
+	if got, err := os.ReadFile(ran); err == nil {
+		t.Errorf("a configured hook ran outside the sandbox:\n%s", got)
+	}
+	if got, want := support.Git(t, b.proj, "rev-parse", "HEAD"), support.Git(t, b.proj, "--git-dir", remote, "rev-parse", "main"); got != want {
+		t.Errorf("the pull did not fast-forward: HEAD %s, the remote's main %s", got, want)
+	}
+	// The same pull in the work profile runs the hook: the plant is live.
+	support.Git(t, b.proj, "update-ref", "refs/heads/main", "HEAD~1")
+	support.Git(t, b.proj, "reset", "-q", "--hard")
+	if r := b.sh(t, b.proj, "work", "git -c core.sshCommand=ssh pull -q --ff-only"); !exists(ran) {
+		t.Errorf("the planted hook does not run in a work pull (exit %d, stderr %q): the test proves nothing", r.Code, r.Stderr)
+	}
+}
+
+// L1318 (c): when the caller gives stdout and stderr one descriptor
+// (2>&1), the program gets one too, so its lines keep their order; the
+// note and the event still come.
+func TestMergedOutputKeepsItsOrder(t *testing.T) {
+	b := newBox(t)
+	b.settings(t, "schema = 1\n\n[integrations]\ntelemetry = true\n")
+	on := append(append([]string{}, b.env...), "JHON_TELEMETRY=on")
+	var want strings.Builder
+	for i := 1; i <= 40; i++ {
+		fmt.Fprintf(&want, "out %d\nerr %d\n", i, i)
+	}
+	merged := func(script string) (string, int) {
+		var out bytes.Buffer
+		cmd := exec.Command(support.Bin(t), "sandbox", "run", "--", "sh", "-c", script)
+		cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = b.proj, on, &out, &out
+		err := cmd.Run()
+		code := 0
+		if e, ok := err.(*exec.ExitError); ok {
+			code = e.ExitCode()
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		return out.String(), code
+	}
+	script := `i=1; while [ $i -le 40 ]; do echo "out $i"; echo "err $i" >&2; i=$((i+1)); done`
+	for run := 0; run < 10; run++ {
+		if got, code := merged(script); got != want.String() || code != 0 {
+			t.Fatalf("run %d: exit %d, the merged output is\n%s\nwant the lines in order", run, code, got)
+		}
+	}
+	escape := filepath.Join(b.home, "escape.txt")
+	got, code := merged(`echo before; echo x > "$HOME/escape.txt"`)
+	if code == 0 || !strings.HasPrefix(got, "before\n") || !strings.HasSuffix(got, escape+": Read-only file system\n"+note(escape)) {
+		t.Errorf("a refused write, merged: exit %d, output %q; want the note last", code, got)
+	}
+	if n := len(events(t, b)); n != 11 {
+		t.Errorf("%d jhon.sandbox events, want 11", n)
+	}
+}
+
 func TestTheRepositorysHooksAndSshCommandDoNotRunUnsandboxed(t *testing.T) {
 	b := newBox(t)
 	ssh := filepath.Join(b.base, "ssh-ran")
@@ -341,14 +429,21 @@ func TestTheOverridesFollowTheOwnersOwnAndRefuseALocalPath(t *testing.T) {
 	if r := b.unsandboxed(t, b.env, "git ls-remote -q origin"); r.Code != 0 {
 		t.Fatalf("ls-remote: exit %d, stderr %q", r.Code, r.Stderr)
 	}
-	// In byte order (LC_ALL=C sort): KEY_10 before KEY_1=.
-	want := []string{"ran",
-		"GIT_CONFIG_KEY_0=user.name", "GIT_CONFIG_KEY_10=submodule.recurse", "GIT_CONFIG_KEY_11=fetch.recurseSubmodules", "GIT_CONFIG_KEY_1=core.hooksPath",
-		"GIT_CONFIG_KEY_2=core.sshCommand", "GIT_CONFIG_KEY_3=core.fsmonitor", "GIT_CONFIG_KEY_4=credential.helper", "GIT_CONFIG_KEY_5=credential.helper", "GIT_CONFIG_KEY_6=credential.https://example.invalid.helper",
-		"GIT_CONFIG_KEY_7=protocol.ext.allow", "GIT_CONFIG_KEY_8=protocol.fd.allow", "GIT_CONFIG_KEY_9=protocol.file.allow",
-		"GIT_CONFIG_VALUE_0=the-owner", "GIT_CONFIG_VALUE_10=false", "GIT_CONFIG_VALUE_11=false", "GIT_CONFIG_VALUE_1=/dev/null",
-		"GIT_CONFIG_VALUE_2=ssh", "GIT_CONFIG_VALUE_3=false", "GIT_CONFIG_VALUE_4=", "GIT_CONFIG_VALUE_5=cache --timeout=1", "GIT_CONFIG_VALUE_6=store",
-		"GIT_CONFIG_VALUE_7=never", "GIT_CONFIG_VALUE_8=never", "GIT_CONFIG_VALUE_9=never"}
+	// The entries in their order, then in the fake ssh's byte order (LC_ALL=C sort).
+	entries := [][2]string{{"user.name", "the-owner"}, {"core.hooksPath", "/dev/null"}, {"core.sshCommand", "ssh"}, {"core.fsmonitor", "false"},
+		{"credential.helper", ""}, {"credential.helper", "cache --timeout=1"}, {"credential.https://example.invalid.helper", "store"},
+		{"protocol.ext.allow", "never"}, {"protocol.fd.allow", "never"}, {"protocol.file.allow", "never"}, {"submodule.recurse", "false"}, {"fetch.recurseSubmodules", "false"}}
+	for _, event := range []string{"applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit", "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-commit",
+		"pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-receive", "update", "proc-receive", "post-receive", "post-update",
+		"reference-transaction", "push-to-checkout", "pre-auto-gc", "post-rewrite", "sendemail-validate", "fsmonitor-watchman", "post-index-change"} {
+		entries = append(entries, [2]string{"hook." + event + ".enabled", "false"})
+	}
+	var want []string
+	for i, e := range entries {
+		want = append(want, fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", i, e[0]), fmt.Sprintf("GIT_CONFIG_VALUE_%d=%s", i, e[1]))
+	}
+	slices.Sort(want)
+	want = append([]string{"ran"}, want...)
 	if got := strings.Split(strings.TrimSpace(support.Read(t, ssh)), "\n"); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("git handed ssh\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}

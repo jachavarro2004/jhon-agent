@@ -480,8 +480,14 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            core.sshCommand=ssh, core.fsmonitor=false,
                            credential.helper reset then the owner's global
                            and system helpers, the ext, fd and file
-                           transports off, no submodule recursion), and
-                           GIT_CONFIG_PARAMETERS unset. url.*.insteadOf and
+                           transports off, no submodule recursion, and
+                           hook.<event>.enabled=false for every hook event,
+                           which also stops hooks named in the
+                           configuration, hook.<name>.command), and
+                           GIT_CONFIG_PARAMETERS unset. A caller whose
+                           stdout and stderr are one file (2>&1) gets the
+                           program's output as one stream, in its order.
+                           url.*.insteadOf and
                            include.* in the repository's configuration are
                            not overridden: an accepted residual risk. In the
                            work profile uv's tools go to

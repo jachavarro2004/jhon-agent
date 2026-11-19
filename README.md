@@ -152,8 +152,8 @@ everything else is read-only, and the home's credentials are not there. A
 line of git network commands (fetch, pull, push, ls-remote, clone, remote
 update) working inside the project, or gh, runs outside the sandbox, still
 judged by the guards: git over SSH and gh cannot run inside it. That git
-runs with the repository's hooks, ssh command, fsmonitor and credential
-helpers overridden; `url.*.insteadOf` and `include.*` in the repository's
+runs with the repository's hooks (configured hooks included), ssh command,
+fsmonitor and credential helpers overridden; `url.*.insteadOf` and `include.*` in the repository's
 configuration are not, an accepted residual risk. uv's tools go to a
 sandbox-only folder under the cache, and `~/.local/share/uv` stays
 read-only. A command that fails on a read-only

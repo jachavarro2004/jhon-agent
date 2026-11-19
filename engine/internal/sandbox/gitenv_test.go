@@ -1,9 +1,19 @@
 package sandbox
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
+
+// L1318 (b): the events a network command fires are among the ones turned off.
+func TestHookEventsHoldEveryEventANetworkCommandFires(t *testing.T) {
+	for _, event := range []string{"pre-push", "post-merge", "post-checkout", "post-rewrite", "reference-transaction", "pre-auto-gc", "pre-rebase", "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-index-change"} {
+		if !strings.Contains(strings.Join(UnsandboxedEnv(nil, nil), "\n"), "=hook."+event+".enabled\n") {
+			t.Errorf("hook.%s.enabled is not set", event)
+		}
+	}
+}
 
 // L1306: the overrides follow the owner's own entries, the owner's helpers
 // follow the reset, GIT_CONFIG_PARAMETERS is gone, the rest is kept.
@@ -20,12 +30,16 @@ func TestUnsandboxedEnvAppendsTheOverridesAfterTheOwners(t *testing.T) {
 		"GIT_CONFIG_KEY_7=protocol.fd.allow", "GIT_CONFIG_VALUE_7=never",
 		"GIT_CONFIG_KEY_8=protocol.file.allow", "GIT_CONFIG_VALUE_8=never",
 		"GIT_CONFIG_KEY_9=submodule.recurse", "GIT_CONFIG_VALUE_9=false",
-		"GIT_CONFIG_KEY_10=fetch.recurseSubmodules", "GIT_CONFIG_VALUE_10=false",
-		"GIT_CONFIG_COUNT=11"}, "\n")
+		"GIT_CONFIG_KEY_10=fetch.recurseSubmodules", "GIT_CONFIG_VALUE_10=false"}, "\n")
+	// L1318 (b): every hook event off, configured hooks included.
+	for i, event := range hookEvents {
+		want += "\nGIT_CONFIG_KEY_" + strconv.Itoa(11+i) + "=hook." + event + ".enabled\nGIT_CONFIG_VALUE_" + strconv.Itoa(11+i) + "=false"
+	}
+	want += "\nGIT_CONFIG_COUNT=" + strconv.Itoa(11+len(hookEvents))
 	if got != want {
 		t.Errorf("UnsandboxedEnv =\n%s\nwant\n%s", got, want)
 	}
-	if got := UnsandboxedEnv([]string{"GIT_CONFIG_COUNT=x"}, nil); got[0] != "GIT_CONFIG_KEY_0=core.hooksPath" || got[len(got)-1] != "GIT_CONFIG_COUNT=9" {
+	if got := UnsandboxedEnv([]string{"GIT_CONFIG_COUNT=x"}, nil); got[0] != "GIT_CONFIG_KEY_0=core.hooksPath" || got[len(got)-1] != "GIT_CONFIG_COUNT="+strconv.Itoa(9+len(hookEvents)) {
 		t.Errorf("a count that is not a number: %q", got)
 	}
 }

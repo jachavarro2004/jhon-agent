@@ -111,6 +111,8 @@ const LINES: [string, "unsandboxed" | "work"][] = [
 	["git submodule update --init", "work"],
 	["gh pr checkout 1", "work"],
 	["gh api repos/o/r/issues -F body=@x", "work"],
+	["gh api x -F=b=@file", "work"],
+	["gh api x -iF=b=@file", "work"],
 	["GIT_SSH_COMMAND=x git fetch", "work"],
 ];
 
