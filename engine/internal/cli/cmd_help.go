@@ -519,8 +519,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            login, logout and context create, use, rm,
                            update, import and export, and the line
                            redirects to no file; work for any other line,
-                           and for one it cannot read. git over SSH, gh and
-                           the owner's docker cannot run inside the
+                           and for one it cannot read or whose words the
+                           shell would still rewrite (a $, a backtick, an
+                           unquoted glob or brace; a single-quoted word,
+                           or a double-quoted one with no $ or backtick, is
+                           literal: --format '{{.Names}}'). git over SSH,
+                           gh and the owner's docker cannot run inside the
                            sandbox; the guards judge these lines as any
                            other.
                            --project as for run. exit 0, 2 on a usage

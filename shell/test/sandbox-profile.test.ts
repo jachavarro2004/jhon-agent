@@ -120,6 +120,10 @@ const LINES: [string, "unsandboxed" | "work"][] = [
 	["docker login", "work"],
 	["docker context use rootless", "work"],
 	["docker ps && npm test", "work"],
+	// T128h2 (L1338): quoted words are literal; an unquoted glob is not.
+	["docker ps -a --format '{{.Names}}'", "unsandboxed"],
+	["docker --version", "unsandboxed"],
+	["docker ps --filter name=a*", "work"],
 ];
 
 const AGENT = mkdtempSync(join(tmpdir(), "jhon-sbx-profile-agent-"));

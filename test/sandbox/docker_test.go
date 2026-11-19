@@ -46,6 +46,13 @@ func TestADockerLineRunsOutsideTheSandbox(t *testing.T) {
 	if want := "compose up -d host=unix:///run/user/1000/docker.sock\n"; r.Code != 0 || string(got) != want {
 		t.Fatalf("an unsandboxed docker line: exit %d, stderr %q, note %q; want 0 and %q", r.Code, r.Stderr, got, want)
 	}
+	// T128h2 (L1338): a single-quoted template reaches docker as written.
+	os.Remove(note)
+	r = b.unsandboxed(t, b.env, "docker ps -a --format '{{.Names}}'")
+	got, _ = os.ReadFile(note)
+	if want := "ps -a --format {{.Names}} host=unix:///run/user/1000/docker.sock\n"; r.Code != 0 || string(got) != want {
+		t.Errorf("a quoted template: exit %d, stderr %q, note %q; want 0 and %q", r.Code, r.Stderr, got, want)
+	}
 	for name, run := range map[string]func() support.Result{
 		"docker ps in the work profile": func() support.Result { return b.sh(t, b.proj, "work", "docker ps") },
 		"docker login":                  func() support.Result { return b.unsandboxed(t, b.env, "docker login") },
@@ -85,7 +92,8 @@ func TestAPlantedDockerRunsInTheWorkProfile(t *testing.T) {
 func TestTheRuntimesRunADockerLineUnsandboxed(t *testing.T) {
 	bash := realShell(t, "bash")
 	b, env := wired(t, bash)
-	for line, want := range map[string]string{"docker compose up -d": "unsandboxed\n", "docker-compose logs": "unsandboxed\n", "docker login": "work\n", "docker ps && npm test": "work\n"} {
+	for line, want := range map[string]string{"docker compose up -d": "unsandboxed\n", "docker-compose logs": "unsandboxed\n", "docker login": "work\n", "docker ps && npm test": "work\n",
+		"docker ps -a --format '{{.Names}}'": "unsandboxed\n", "docker --version": "unsandboxed\n", "docker ps --filter name=a*": "work\n"} {
 		if r := support.Jhon(t, b.proj, env, "sandbox", "profile", "--project", b.proj, "--", line); r.Code != 0 || r.Stdout != want || r.Stderr != "" {
 			t.Errorf("profile %q: exit %d, stdout %q, stderr %q; want %q", line, r.Code, r.Stdout, r.Stderr, want)
 		}

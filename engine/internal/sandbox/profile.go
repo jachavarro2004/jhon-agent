@@ -14,6 +14,8 @@ import (
 	"slices"
 	"strings"
 
+	"mvdan.cc/sh/v3/syntax"
+
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
 )
 
@@ -305,7 +307,7 @@ var ghSubcommands = []string{"pr", "issue", "run", "workflow", "release", "repo"
 // word before the command gives work, as its value is not known.
 var (
 	dockerValues = []string{"--config", "-c", "--context", "-H", "--host", "-l", "--log-level", "--tlscacert", "--tlscert", "--tlskey"}
-	dockerFlags  = []string{"-D", "--debug", "--tls", "--tlsverify"}
+	dockerFlags  = []string{"-D", "--debug", "--tls", "--tlsverify", "-v", "--version"}
 )
 
 // dockerContexts are the docker context commands that only read the
@@ -319,9 +321,10 @@ var dockerContexts = []string{"ls", "list", "inspect", "show"}
 // outside the sandbox, its volume mounts unjudged, but login, logout and a
 // change of contexts.
 func dockerDelivers(args []string) bool {
-	k := 0
+	k, version := 0, false
 	for ; k < len(args) && strings.HasPrefix(args[k], "-"); k++ {
 		name, _, attached := strings.Cut(args[k], "=")
+		version = version || name == "-v" || name == "--version"
 		switch {
 		case slices.Contains(dockerValues, name):
 			if !attached {
@@ -332,7 +335,8 @@ func dockerDelivers(args []string) bool {
 		}
 	}
 	if k >= len(args) {
-		return false
+		// docker --version prints the client's version (T128h2, L1338).
+		return version
 	}
 	switch args[k] {
 	case "login", "logout":
@@ -360,7 +364,9 @@ func dockerDelivers(args []string) bool {
 // cannot read, an empty one, one that defines a function or an alias, and
 // one with a word the shell would still rewrite get work. That is a brace
 // ({a,b} expands after the check), a parameter, a command substitution, a
-// glob. So does any git global option but -C <folder>, --no-pager, -P and
+// glob, a $ or a backtick, unquoted (literal); a single-quoted word, and a
+// double-quoted one with no $ or backtick, reaches its program as written
+// and is judged by its text (T128h2, L1338). So does any git global option but -C <folder>, --no-pager, -P and
 // --no-optional-locks; any option of the subcommand not in its list, by its
 // exact name (gitOptions); a word after `--` that starts with `-`, which
 // git pull and git remote update hand to fetch as an option (T128d3, L1254
@@ -372,7 +378,7 @@ func dockerDelivers(args []string) bool {
 // what gh fetched anywhere (T128g).
 func ProfileFor(command string) string {
 	cmds, err := sh.Parse(command)
-	if err != nil || sh.DefinesFunction(command) {
+	if err != nil || sh.DefinesFunction(command) || !literal(command) {
 		return Work
 	}
 	for _, c := range cmds {
@@ -386,9 +392,6 @@ func ProfileFor(command string) string {
 		// when the environment exports it: the reader keeps no program for
 		// that line. An alias replaces the program it names.
 		if sh.Assignment.MatchString(c.Words[0]) || c.Words[0] == "alias" {
-			return Work
-		}
-		if slices.ContainsFunc(c.Words, braced) {
 			return Work
 		}
 	}
@@ -421,9 +424,6 @@ func quiet(r *sh.Redirect) bool {
 // (dockerDelivers), run as its bare name.
 func networkProgram(p sh.Program) bool {
 	if len(p.Via) > 0 || len(p.Env) > 0 || p.Chdir != nil || p.Code != nil || p.StdinOpaque != "" || len(p.Argv) < 2 {
-		return false
-	}
-	if slices.ContainsFunc(p.Argv, expands) || slices.ContainsFunc(p.Argv, braced) {
 		return false
 	}
 	switch p.Argv[0] {
@@ -517,13 +517,51 @@ func onlyListed(args []string, allowed options) bool {
 	return true
 }
 
-// expands is whether the shell would still expand a word: a parameter, a
-// command substitution or a glob, whose value the reader does not know.
-func expands(word string) bool { return strings.ContainsAny(word, "$`*?[") }
+// literal is whether the shell passes every word of command as written
+// (T128h2, L1338): the words the reader gives have their quotes removed,
+// so this reads the line's own words. A part outside quotes with a $, a
+// backtick, a glob character or a brace ({--upload-pack=x,repo} becomes
+// other words after the check) is not; nor is a parameter, a substitution
+// or an extended glob, quoted or not; a single-quoted part ('…', $'…') is,
+// and so is a double-quoted one with no $ or backtick.
+func literal(command string) bool {
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(command), "")
+	if err != nil {
+		return false
+	}
+	ok := true
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if w, isWord := n.(*syntax.Word); isWord && !literalWord(w) {
+			ok = false
+		}
+		return ok
+	})
+	return ok
+}
 
-// braced is whether a word holds a brace, which the shell's brace expansion
-// may turn into other words after the check ({--upload-pack=x,repo}).
-func braced(word string) bool { return strings.ContainsAny(word, "{}") }
+func literalWord(w *syntax.Word) bool {
+	for _, p := range w.Parts {
+		switch x := p.(type) {
+		case *syntax.Lit:
+			if strings.ContainsAny(x.Value, "$`*?[{}") {
+				return false
+			}
+		case *syntax.SglQuoted:
+		case *syntax.DblQuoted:
+			if x.Dollar {
+				return false
+			}
+			for _, q := range x.Parts {
+				if l, isLit := q.(*syntax.Lit); !isLit || strings.ContainsAny(l.Value, "$`") {
+					return false
+				}
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
 
 // ghFileFlags are gh's options that read a local file: their value is a
 // path (or - for stdin), as --name <file> or --name=<file>.
