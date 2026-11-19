@@ -12,7 +12,7 @@ func TestLensesOf(t *testing.T) {
 		changed []Changed
 		want    []string
 	}{
-		{"a migration calls for risk", []Changed{{"db/migrations/001_a.sql", "create table a (id int);"}}, []string{"risk"}},
+		{"a migration calls for risk", []Changed{{"db/migrations/001_a.sql", "alter table a drop column b;"}}, []string{"risk"}},
 		{"plain code calls for reliability", []Changed{{"src/app.py", "X = 2"}}, []string{"reliability"}},
 		{"code that spawns or retries adds resilience", []Changed{{"src/run.go", "cmd := exec.Command(\"git\")"}}, []string{"resilience", "reliability"}},
 		{"a security path calls for risk", []Changed{{"src/auth/login.py", "x = 1"}}, []string{"risk"}},

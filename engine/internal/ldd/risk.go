@@ -27,7 +27,8 @@ import (
 //     file under a migrations, migration, alembic, flyway, liquibase or
 //     db/migrate folder; outside vendor/ and node_modules/, any file under a
 //     migrate folder and code, no test, whose base name starts with migrate
-//     or migration), a destructive data statement added
+//     or migration) unless its text is clearly additive (risk_migration.go),
+//     a destructive data statement added
 //     (DROP, TRUNCATE, DELETE FROM), a security path (auth, permissions,
 //     crypto, secrets, tokens, .env), a contract others consume (OpenAPI,
 //     AsyncAPI, proto, GraphQL), delivery or infrastructure (CI, Dockerfile,
@@ -37,8 +38,9 @@ import (
 //     (Markdown, JSON, YAML under openspec/changes/**, and the specs it is
 //     archived into, openspec/specs/**), which never raise the tier or the
 //     route; any other file there gets the rules above and below;
-//   - medium: other code (with a test touched), dependency manifests, and any
-//     other file.
+//   - medium: other code (with a test touched), dependency manifests, an
+//     additive migration the other rules leave below high, and any other
+//     file.
 //
 // A project's openspec/config.yaml `risk_rules` mapping (`"<glob>": <level>`,
 // first match wins) replaces the default level of the files it matches. The
@@ -210,18 +212,43 @@ type defaulted struct {
 	code bool
 }
 
+// A content is a changed file's whole text; ok is false when it cannot be read.
+type content func(Changed) (b []byte, ok bool)
+
+// addedText is a file's content as its added lines.
+func addedText(c Changed) ([]byte, bool) { return []byte(c.Added), true }
+
 // defaultLevel is the level and reason of one file by the default rules, and whether it is code.
-func defaultLevel(c Changed) defaulted {
+func defaultLevel(c Changed) defaulted { return defaultLevelOf(c, addedText) }
+
+func defaultLevelOf(c Changed, read content) defaulted {
 	f := c.File
 	r := func(level Level, why string) defaulted { return defaulted{Reason{level, f, why}, false} }
-	// A migration is high wherever it lives, except as a record file; a
-	// test or a document is passive even under a security path, since only
-	// code there changes behavior.
+	// A migration is high wherever it lives, except as a record file, unless
+	// its whole text is clearly additive: then the other rules judge it, its
+	// down part left out as there, and below high it is medium; a test or a document is passive even under a
+	// security path, since only code there changes behavior.
 	switch {
 	case record.MatchString(f):
 		return r(Passive, "change record")
 	case matchI(migration, f), isMigration(f):
-		return r(High, "migration or schema")
+		if b, ok := read(c); !additiveMigration(f, b, ok) {
+			return r(High, "migration or schema")
+		}
+		d := otherLevel(Changed{f, upPart(c.Added)})
+		if d.Level != High {
+			d.Level, d.Why = Medium, "migration (additive)"
+		}
+		return d
+	}
+	return otherLevel(c)
+}
+
+// otherLevel is defaultLevelOf for a file that is no migration or record.
+func otherLevel(c Changed) defaulted {
+	f := c.File
+	r := func(level Level, why string) defaulted { return defaulted{Reason{level, f, why}, false} }
+	switch {
 	case testRe.MatchString(f):
 		return r(Passive, "test")
 	case matchI(docs, f) && !matchI(contractRe, f):
@@ -248,8 +275,14 @@ type Rule struct {
 	Level Level
 }
 
-// Classify is the risk of a set of changed files under a project's rules, in order.
+// Classify is the risk of a set of changed files under a project's rules, in
+// order; a migration's content is its added lines.
 func Classify(changed []Changed, rules []Rule) []Reason {
+	return classify(changed, rules, addedText)
+}
+
+// classify is Classify, a migration's content read by read.
+func classify(changed []Changed, rules []Rule, read content) []Reason {
 	testTouched := slices.ContainsFunc(changed, func(c Changed) bool { return testRe.MatchString(c.File) })
 	out := make([]Reason, 0, len(changed))
 	for _, c := range changed {
@@ -257,7 +290,7 @@ func Classify(changed []Changed, rules []Rule) []Reason {
 			out = append(out, Reason{rules[i].Level, c.File, "project rule " + rules[i].Glob})
 			continue
 		}
-		d := defaultLevel(c)
+		d := defaultLevelOf(c, read)
 		if d.code && !testTouched {
 			out = append(out, Reason{High, c.File, "code changed and no test touched"})
 			continue
@@ -354,6 +387,18 @@ func (g gitReads) changedFiles(top, base string) ([]Changed, bool) {
 	return out, true
 }
 
+// readWhole is a changed file's whole text in the working tree: none (ok
+// false) when it is gone, no regular file, larger than 1 MiB or unreadable.
+func readWhole(top, f string) ([]byte, bool) {
+	p := filepath.Join(top, f)
+	st, err := os.Lstat(p)
+	if err != nil || !st.Mode().IsRegular() || st.Size() > 1024*1024 {
+		return nil, false
+	}
+	b, err := os.ReadFile(p)
+	return b, err == nil
+}
+
 // rulesOf is the project's risk_rules whose level is one of Levels.
 func rulesOf(top string) ([]Rule, error) {
 	if !project.UsesLdd(top) {
@@ -412,7 +457,7 @@ func (g gitReads) riskOf(dir string, asked *string) (Risk, error) {
 		if err != nil {
 			return Risk{}, err
 		}
-		reasons = Classify(changed, rules)
+		reasons = classify(changed, rules, func(c Changed) ([]byte, bool) { return readWhole(top, c.File) })
 	}
 	return Risk{Tier: tierOf(reasons), Base: label, Reasons: reasons, Lenses: lensesOf(changed, reasons)}, nil
 }

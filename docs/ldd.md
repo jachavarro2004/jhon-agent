@@ -110,9 +110,20 @@ A data migration is high risk, so never small: `jhon risk` reads as
 `migration` (`migrate.py`, `migrations.ts`, `migrate_users.go`), any file
 under a `migrations`, `migration`, `migrate` or `db/migrate` folder at any
 depth, and SQL (`NNNN_*.up.sql`, Flyway's `V1__*.sql`), and the change takes
-the verified route. A document or a test that only names a migration
-(`docs/migration-guide.md`, `MIGRATING.md`, `test_migrate.py`), and
-vendored code under `vendor/` or `node_modules/`, keep their own reading.
+the verified route. The exception is a migration that is clearly additive:
+when its text holds only additive operations, it reads as
+`migration (additive)` at medium, and the other rules still apply. Additive
+means SQL `CREATE TABLE`, `CREATE INDEX`, or `ADD COLUMN` that is nullable or
+has a `DEFAULT`; Rails `create_table`, `add_column`, `add_index`,
+`add_reference`; Django `CreateModel`, `AddField` with `null=True` or
+`default=`, `AddIndex`; Alembic `op.create_table`, `op.add_column` with
+`nullable=True` or `server_default`, `op.create_index`. Comments, transaction
+wrappers and framework boilerplate are allowed around them. Only the up part
+of a file with a down part is read. Anything else stays high: a drop, rename,
+type change, `SET NOT NULL`, a backfill, a data-rewriting script, an unknown
+language, or a file that cannot be read. A document or a test that only names
+a migration (`docs/migration-guide.md`, `MIGRATING.md`, `test_migrate.py`),
+and vendored code under `vendor/` or `node_modules/`, keep their own reading.
 
 ## A worktree per change
 
@@ -170,7 +181,7 @@ and every joined member are the project for the guards that judge "outside
 the project": the vcs guard's and the safety guard's writes (and their
 deletions inside a root; removing a member's root itself stays refused), and
 the OS sandbox's writable roots, read from the disk with no git process.
-Editing a sibling the owner joined runs with no outside note. A listed
+Editing a sibling the owner joined needs no `outside-write` grant. A listed
 sibling that has not joined, a joined one the primary does not list, and
 any other repository stay outside, as before.
 
