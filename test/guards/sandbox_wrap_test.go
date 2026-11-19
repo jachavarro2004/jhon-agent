@@ -80,7 +80,7 @@ func TestSandboxModeOffLeavesThePreToolOutputAsItWas(t *testing.T) {
 
 // T128f (L1352 F1): the setting absent is the setting on where the sandbox
 // runs, Linux; elsewhere it is off (D3).
-func TestSandboxModeAbsentIsOnOnLinux(t *testing.T) {
+func TestSandboxModeAbsentIsOnOnLinuxWhereItCanRun(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
 	support.Write(t, s.scratch, map[string]string{"settings-empty.toml": ""})
@@ -90,10 +90,16 @@ func TestSandboxModeAbsentIsOnOnLinux(t *testing.T) {
 		same = "on"
 	}
 	for _, c := range wrapCalls {
-		for _, extra := range [][]string{nil, {"JHON_SANDBOX_PROJECT=" + s.p, "PATH=" + mkdir(t, filepath.Join(s.scratch, "no-bwrap"))}} {
+		for i, extra := range [][]string{nil, {"JHON_SANDBOX_PROJECT=" + s.p, "PATH=" + mkdir(t, filepath.Join(s.scratch, "no-bwrap"))}} {
+			// Where the sandbox cannot run (no bubblewrap on PATH) the default
+			// is off (T128f slice 8, L1375): an absent setting answers as off.
+			like := same
+			if i == 1 {
+				like = "off"
+			}
 			got := hook(t, append(append([]string{}, empty...), extra...), "pre-tool", claudeGuards, claudePayload(s, c.tool, c.input))
-			if want := hook(t, sandboxEnv(t, s, same, extra...), "pre-tool", claudeGuards, claudePayload(s, c.tool, c.input)); got != want {
-				t.Errorf("%s %v: with no settings %+v, with the mode %s %+v", c.name, extra, got, same, want)
+			if want := hook(t, sandboxEnv(t, s, like, extra...), "pre-tool", claudeGuards, claudePayload(s, c.tool, c.input)); got != want {
+				t.Errorf("%s %v: with no settings %+v, with the mode %s %+v", c.name, extra, got, like, want)
 			}
 		}
 	}
