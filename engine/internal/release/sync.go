@@ -234,10 +234,20 @@ func goCmdEnv(dir string, extra []string, args ...string) (string, bool) {
 // one, so go's telemetry counters (which GOTELEMETRY=off in the environment
 // does not stop: go reads that mode from the config directory) land there,
 // not under the user's home; GOENV keeps the user's own go env file. done
-// removes the directory.
+// removes the directory. Telemetry is off in it: in a fresh config
+// directory go would start a detached telemetry child that creates the
+// directory again after done removed it (T113).
 func goEnv() (env []string, done func(), err error) {
 	dir, err := os.MkdirTemp("", "jhon-go-config-")
 	if err != nil {
+		return nil, nil, err
+	}
+	telemetry := filepath.Join(dir, "go", "telemetry")
+	if err = os.MkdirAll(telemetry, 0o700); err == nil {
+		err = os.WriteFile(filepath.Join(telemetry, "mode"), []byte("off"), 0o600)
+	}
+	if err != nil {
+		os.RemoveAll(dir)
 		return nil, nil, err
 	}
 	env = os.Environ()

@@ -43,6 +43,24 @@ func TestGoCmdEndsWhenGoExitsAndItsChildHoldsTheOutput(t *testing.T) {
 	}
 }
 
+// TestGoCmdLeavesNoConfigDirectory: go runs with its telemetry off in the
+// throwaway config directory, so it records no counters and starts no
+// detached telemetry child, which would create the directory again after
+// goCmd removed it (T113: hundreds of jhon-go-config-* left in /tmp).
+func TestGoCmdLeavesNoConfigDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	out, ok := goCmd(t.TempDir(), "env", "GOTELEMETRY")
+	if !ok || out != "off" {
+		t.Errorf("go env GOTELEMETRY in goCmd's environment: ok %v, %q, want off", ok, out)
+	}
+	// A telemetry child starts within a moment of go; give it one.
+	time.Sleep(time.Second)
+	if left, _ := filepath.Glob(filepath.Join(tmp, "jhon-go-config-*")); len(left) != 0 {
+		t.Errorf("left behind after goCmd: %q", left)
+	}
+}
+
 // TestGoEnvKeepsTheUsersGoEnvFile: go runs with its config directory aside
 // (a throwaway one, removed after), and GOENV still names the user's own
 // go env file, or the one the caller set.
