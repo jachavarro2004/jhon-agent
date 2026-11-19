@@ -5,8 +5,9 @@
  * At session start the shell asks `jhon sandbox status --json` once, in the
  * session's folder, and keeps the answer for the session: `sandbox.mode` as
  * the engine reads it for Claude Code's wrap too (sandbox.Mode, T128f: on by
- * default on Linux, off by default elsewhere, the owner's value on every
- * system), whether the sandbox can run here, the reason and the fix when it cannot,
+ * default on Linux where the sandbox can run, off by default elsewhere and
+ * on Linux with no usable bubblewrap or user namespaces off, the owner's
+ * value on every system), whether the sandbox can run here, the reason and the fix when it cannot,
  * and the project (the folder that holds `.git`). With the mode on, `bash`,
  * `bash_background` and `monitor` run their command as
  *

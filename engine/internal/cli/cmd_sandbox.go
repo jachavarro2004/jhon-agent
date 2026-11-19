@@ -233,9 +233,13 @@ func sandboxProject() string { return project.ReadRepo(cwd()).Top }
 // project a run from here gets: the pinned one, else sandboxProject.
 type sandboxState struct {
 	Mode string `json:"mode"`
-	// ModeSource is where the mode comes from: default (on on Linux, off
-	// elsewhere, D3) or settings (sandbox.Mode, T128f).
+	// ModeSource is where the mode comes from: default (on on Linux where
+	// the sandbox can run, off elsewhere, D3) or settings (sandbox.Mode,
+	// T128f).
 	ModeSource string `json:"mode_source"`
+	// ModeReason is why the default is off on Linux: the reason the
+	// sandbox cannot run (T128f slice 8, L1375); "" otherwise.
+	ModeReason string `json:"mode_reason"`
 	CanRun     bool   `json:"can_run"`
 	Reason     string `json:"reason"`
 	Fix        string `json:"fix"`
@@ -327,9 +331,13 @@ func (r *claudeBashRules) warning() string {
 }
 
 // line is the state on one line, as status and doctor print it.
+// The default's off on Linux says so, and that the fix turns the sandbox on.
 func (s sandboxState) line() string {
 	if s.CanRun {
 		return "sandbox " + s.Mode + "; it can run here"
+	}
+	if s.ModeReason != "" {
+		return "sandbox " + s.Mode + " by default; it cannot run here: " + s.Reason + "; fix: " + s.Fix + " to turn the sandbox on"
 	}
 	return "sandbox " + s.Mode + "; it cannot run here: " + s.Reason + "; fix: " + s.Fix
 }
@@ -345,14 +353,21 @@ var sandboxHost = sandbox.ThisHost
 // sandboxNow probes the sandbox of a work command started here, in the
 // pinned project or with "" the one this folder is in: one empty sandbox
 // started for real, with the bubblewrap and the options such a command
-// would get. The mode is sandbox.Mode's, with its source.
+// would get. The mode is sandbox.Mode's, with its source and, for the
+// default's off on Linux, its reason; the mode and the probe read the same
+// sandbox, built once.
 func sandboxNow(pinned string) sandboxState {
 	s := sandboxState{CanRun: true, Project: pinned}
-	s.Mode, s.ModeSource = sandbox.Mode(sandboxHost())
+	in := sandboxInput(pinned, sandbox.Work)
+	mode, source, why := sandbox.Mode(sandboxHost(), func() sandbox.Input { return in })
+	s.Mode, s.ModeSource = mode, source
+	if why != nil {
+		s.ModeReason = why.Reason
+	}
 	if pinned == "" {
 		s.Project = sandboxProject()
 	}
-	if p := sandbox.Probe(sandboxHost(), sandboxInput(pinned, sandbox.Work)); p != nil {
+	if p := sandbox.Probe(sandboxHost(), in); p != nil {
 		s.CanRun, s.Reason, s.Fix = false, p.Reason, p.Fix
 	}
 	if s.Mode == "on" {
@@ -382,10 +397,11 @@ func sandboxStatus(asJSON bool, pinned string) (int, error) {
 }
 
 // sandbox is doctor's sandbox section: the mode and whether the sandbox
-// can run. Where it cannot, with the mode on (by default on Linux, or set)
-// every command of the model is refused: a problem, with the fix (T128f,
-// L1352 F2); with the mode off, the default off Linux (D3), a warning that
-// the commands run unsandboxed, never a problem. The owner's off on Linux,
+// can run. Where it cannot, with the mode on (by default on Linux where
+// Check passes, or set) every command of the model is refused: a problem,
+// with the fix (T128f, L1352 F2); with the mode off, the default off Linux
+// (D3) or on Linux where it cannot run (slice 8, L1375), a warning that the
+// commands run unsandboxed, never a problem. The owner's off on Linux,
 // where it can run, is a warning too: the guards leave the shell's writes
 // outside the project to the sandbox, so they then run unguarded (T128f
 // slice 7, L1367 gap 2). With the mode on, a second warning counts the Bash
