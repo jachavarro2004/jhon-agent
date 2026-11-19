@@ -85,7 +85,7 @@ var cases = []defectCase{
 	defect("jhon-command", "plugin", "runtimes/claude-code/plugin/skills/jhon-ldd/SKILL.md", "Run `jhon status <change>` from", "Run `jhon state <change>` from"),
 	defect("jhon-command", "agents", "agents/worker.md", "`jhon status <change> --json`", "`jhon derive <change> --json`"),
 	defect("jhon-command", "contracts", "contracts/ldd.md", "`jhon status <change> --json` reads it", "`jhon derive <change>` reads it"),
-	defect("jhon-command", "orchestr", "orchestrator.md", "then `jhon deliver check <change>`;", "then `jhon ship <change>`;"),
+	defect("jhon-command", "orchestr", "orchestrator.md", "lets `jhon deliver check` deliver", "lets `jhon ship` deliver"),
 	defect("jhon-command", "README", "README.md", "| `jhon compose` |", "| `jhon merge` |"),
 	defect("jhon-command", "skills", "skills/judgment-day/SKILL.md", "`jhon judgment append <record> <event-file>`", "`jhon judgement append <record> <event-file>`"),
 
