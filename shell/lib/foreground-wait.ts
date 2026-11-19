@@ -1,11 +1,11 @@
-// Foreground waits (T119, L716).
+// Foreground waits (T119, L716; advisory since T155, L1394).
 //
 // A foreground `bash` call that only waits blocks the whole turn: in one real
-// session 25 calls starting with `sleep N` held it for 82.5 minutes. The wait
-// belongs in a background job, with its condition inside the command, so the
+// session 25 calls starting with `sleep N` held it for 82.5 minutes. A wait
+// fits a background job better, with its condition inside the command, so the
 // job's end arrives as a message. This module recognises such a command; the
-// main session's tool_call guard (lib/background-tasks-tools.ts) refuses it.
-// bash_background and monitor commands are never judged here.
+// main session's guard (lib/background-tasks-tools.ts) lets it run and adds
+// a note to its result. bash_background and monitor commands are never judged here.
 
 import { BASH_BACKGROUND_TOOL, MONITOR_TOOL } from "./ui/background-jobs.ts";
 
@@ -40,9 +40,9 @@ export function foregroundWait(command: string): string | undefined {
 	return undefined;
 }
 
-/** The refusal for a foreground bash call that only waits, or undefined. */
-export function foregroundWaitRefusal(command: string): string | undefined {
+/** The note for a foreground bash call that only waited, or undefined. */
+export function foregroundWaitNote(command: string): string | undefined {
 	const wait = foregroundWait(command);
 	if (!wait) return undefined;
-	return `A foreground wait blocks the turn: ${wait} here would hold it until it ends. Run it with ${BASH_BACKGROUND_TOOL}, with the wait condition inside the command (for example \`until <check>; do sleep 5; done; <cmd>\`), or watch its output with ${MONITOR_TOOL}; its end arrives as a message, so continue other work or end the turn.`;
+	return `Foreground wait: ${wait} held the turn until it ended. Next time run a wait with ${BASH_BACKGROUND_TOOL}, its condition inside the command (for example \`until <check>; do sleep 5; done; <cmd>\`), or watch the output with ${MONITOR_TOOL}; its end arrives as a message, so the turn can go on with other work or end.`;
 }

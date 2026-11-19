@@ -217,24 +217,21 @@ func schema() []spec {
 		{key: "shell.appearance.surface", kind: kEnum, def: "transparent", enum: []string{"transparent", "tinted"}},
 		// L195: the Gentle Shell's Density, comfortable by default as G's.
 		{key: "shell.appearance.density", kind: kEnum, def: "comfortable", enum: []string{"comfortable", "compact", "minimal"}},
+		// T155 (L1377, L1394): the context ladder is these two keys. The main
+		// session compacts at compact_at of its window or past compact_tokens,
+		// whichever is first (T115a, T121); the fresh-session notice comes ten
+		// points of the window before compact_at (at least 1%) or at three
+		// quarters of compact_tokens; the delegation notice (T115e) at half of
+		// compact_tokens or 15% of the window. compact_tokens 0 turns every
+		// token rung off. fresh_session_at, fresh_session_tokens and
+		// backstop_tokens are retired (retired.go).
 		{key: "shell.behaviour.compact_at", kind: kInt, def: 60, min: 1, max: 100, env: "JHON_SHELL_COMPACT_AT", fromEnv: envCompactAt},
-		// T115a (L691): compaction also comes past this many tokens, whichever
-		// is first with compact_at, above fresh_session_tokens; 0 turns the budget off.
 		{key: "shell.behaviour.compact_tokens", kind: kInt, def: 200000, min: 0, max: -1},
-		{key: "shell.behaviour.fresh_session_at", kind: kInt, def: 50, min: 1, max: 100},
-		// T115a (L691): the context notice also comes past this many tokens,
-		// whichever is first, since a share of a very large window never comes; 0 turns the budget off.
-		{key: "shell.behaviour.fresh_session_tokens", kind: kInt, def: 150000, min: 0, max: -1},
-		// T115e (L715): the delegation backstop, the ladder's first rung: the
-		// orchestrator hears once to delegate past this many tokens or 15% of
-		// the window, whichever is first; 0 turns it off.
-		{key: "shell.behaviour.backstop_tokens", kind: kInt, def: 100000, min: 0, max: -1},
-		// T122 (L762 F2): a sub-agent child's own ladder: past this many tokens or
-		// 40% of the window, whichever is first, the child hears once to wrap up
-		// and return path:line evidence; past child_cap_tokens or 75% of the
-		// window its tool calls are refused so it returns; 0 turns each off.
+		// T122 (L762 F2): past this many tokens or 40% of the window, whichever
+		// is first, a sub-agent child hears once to wrap up and return
+		// path:line evidence; 0 turns it off. T155 dropped the cap that refused
+		// its tool calls (child_cap_tokens, retired): a context is the owner's.
 		{key: "shell.behaviour.child_backstop_tokens", kind: kInt, def: 80000, min: 0, max: -1},
-		{key: "shell.behaviour.child_cap_tokens", kind: kInt, def: 150000, min: 0, max: -1},
 		// The seconds of API silence before the shell aborts a turn and sends one
 		// continue, on a direct API provider with thinking off or minimal; 0 turns
 		// all stall recovery off. On claude-bridge or while the model thinks the

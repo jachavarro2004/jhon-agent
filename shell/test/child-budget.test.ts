@@ -1,23 +1,19 @@
 /**
  * T122 (L762 F2, L763): a sub-agent child's context and read budget. The
- * T115a/e ladder is the main session's; a child (JHON_PI_CHILD=1) gets its own:
+ * main session's ladder is not a child's; a child (JHON_PI_CHILD=1) gets:
  *
  * - a context budget notice once per crossing at min(shell.behaviour.child_backstop_tokens
  *   (80000; 0 off), 40% of the window): wrap up, return path:line evidence;
- * - a context cap at min(shell.behaviour.child_cap_tokens (150000; 0 off), 75%
- *   of the window): from it every tool call is refused so the child returns,
- *   and it is stopped three turns later — pi 1.5.0 cannot compact a
- *   child mid-run from an extension (ctx.compact aborts the run) nor take a
- *   per-process compaction setting, so the cap stands in for compaction;
- * - for an explore child with CodeGraph, one read-budget reminder past 12
- *   lookups or 100,000 bytes without a CodeGraph call;
- * - the parent's result names the context cap the child stopped at.
+ * - for an explore or worker child with CodeGraph, one read-budget reminder
+ *   past 12 lookups or 100,000 bytes without a CodeGraph call.
  *
- * T131 (L905, L908): there is no turn cap; a run past 80 turns ends as
- * completed, and the context cap, the timeout and a cancel end it as before.
+ * T155 (L1377, L1394): no context cap. A child's tool calls are never refused
+ * for its context size and it is never stopped for it; the context is the
+ * owner's (child_cap_tokens is retired). T131 (L905, L908): no turn cap
+ * either; the timeout and a cancel end a run as before.
  *
- * Every notice rides the tool result (the T115e/T117e channel), so the
- * system prompt stays byte-stable (L708). The main session is unaffected.
+ * Every notice rides the tool result (the T115e channel), so the system
+ * prompt stays byte-stable (L708). The main session is unaffected.
  */
 import "./isolated-env.ts";
 import { test, after, type TestContext } from "node:test";
@@ -28,7 +24,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import jhon, { CONFIG_FILE } from "../extensions/jhon.ts";
 import { parseAgent, runAgent, type AgentDef, type ChildResult } from "../lib/agents.ts";
-import { childBudgetNotice, childCapReason, readBudgetNotice, workerReadBudgetNotice } from "../lib/child-budget.ts";
+import { childBudgetNotice, readBudgetNotice, workerReadBudgetNotice } from "../lib/child-budget.ts";
 import { installShellSettings, SETTINGS_DEFAULTS, shellSettings } from "../lib/settings.ts";
 import { telemetryDir } from "../lib/telemetry.ts";
 import { memorySettings, OWNER_SETTINGS, useMemorySettings } from "./fake-jhon-settings.ts";
@@ -93,14 +89,12 @@ function clock(t: TestContext) {
   return (ms: number) => t.mock.timers.tick(ms);
 }
 
-test("the child budgets are shell.behaviour.child_backstop_tokens 80000 and child_cap_tokens 150000", () => {
+test("the child wrap-up budget is shell.behaviour.child_backstop_tokens, 80000; there is no child cap key", () => {
   assert.equal(SETTINGS_DEFAULTS["shell.behaviour.child_backstop_tokens"], 80000);
-  assert.equal(SETTINGS_DEFAULTS["shell.behaviour.child_cap_tokens"], 150000);
-  const previous = installShellSettings(memorySettings({ "shell.behaviour.child_backstop_tokens": 50000, "shell.behaviour.child_cap_tokens": 90000 }));
-  try {
-    assert.equal(shellSettings().childBackstopTokens(), 50000);
-    assert.equal(shellSettings().childCapTokens(), 90000);
-  } finally { installShellSettings(previous); }
+  assert.equal("shell.behaviour.child_cap_tokens" in SETTINGS_DEFAULTS, false);
+  assert.equal("childCapTokens" in shellSettings(), false);
+  const previous = installShellSettings(memorySettings({ "shell.behaviour.child_backstop_tokens": 50000 }));
+  try { assert.equal(shellSettings().childBackstopTokens(), 50000); } finally { installShellSettings(previous); }
 });
 
 test("a child hears the context budget once at its threshold, appended to the tool result", async (t) => {
@@ -133,7 +127,7 @@ test("on a 100K window the child budget is 40% of it, and the setting moves it",
   assert.deepEqual(appended(await other.fire("tool_result", result(), ctx)), [childBudgetNotice(31_000, 30_000)]);
 });
 
-test("the main session never hears the child budget nor meets the child cap", async (t) => {
+test("the main session never hears the child budget and its calls run at any size", async (t) => {
   const tick = clock(t);
   const { fire } = load();
   const { ctx, state } = usage(1_000_000);
@@ -142,33 +136,31 @@ test("the main session never hears the child budget nor meets the child cap", as
   assert.equal(appended(r).filter((n) => n.startsWith("Context budget")).length, 0);
   tick(5000);
   state.tokens = 400_000;
-  assert.equal(await fire("tool_call", { toolName: "read", input: { path: "a.txt" } }, ctx), undefined, "no cap in the main session");
+  assert.equal(await fire("tool_call", { toolName: "read", input: { path: "a.txt" } }, ctx), undefined, "no cap");
 });
 
-test("at the child cap every tool call is refused so it returns, and it is stopped past the grace", async (t) => {
-  clock(t);
-  const { fire } = load(CHILD);
-  const { ctx, state } = usage(1_000_000);
-  const call = () => fire("tool_call", { toolName: "read", input: { path: "a.txt" } }, ctx);
-  state.tokens = 149_000;
-  assert.equal(await call(), undefined, "under 150K");
-  state.tokens = 151_000;
-  const refused = await call();
-  assert.equal(refused?.block, true);
-  assert.equal(refused.reason, childCapReason(151_000, 150_000));
-  assert.match(refused.reason, /sub-agent context cap.*Call no more tools: reply now with what is done/);
-  for (let i = 0; i < 3; i++) await fire("turn_end", {}, ctx);
-  assert.equal(state.shutdowns, 0, "within the grace it may still reply");
-  await fire("turn_end", {}, ctx);
-  assert.equal(state.shutdowns, 1, "past the grace it is stopped");
-});
-
-test("child_cap_tokens 0 turns the cap off, the share too", async (t) => {
-  clock(t);
-  useMemorySettings(t, { "shell.behaviour.child_cap_tokens": 0 });
+test("past 150K tokens and 75% of its window a child's tool calls still run and it is never stopped; it heard the wrap-up once", async (t) => {
+  const tick = clock(t);
   const { fire } = load(CHILD);
   const { ctx, state } = usage(200_000);
   state.tokens = 190_000;
+  const heard: string[] = [];
+  for (let turn = 1; turn <= 12; turn++) {
+    assert.equal(await fire("tool_call", { toolName: "read", input: { path: "a.txt" } }, ctx), undefined, `turn ${turn}`);
+    heard.push(...appended(await fire("tool_result", result(), ctx)));
+    await fire("turn_end", {}, ctx);
+    tick(5000);
+  }
+  assert.equal(state.shutdowns, 0, "never stopped for its context");
+  assert.deepEqual(heard, [childBudgetNotice(190_000, 80_000)], "the wrap-up notice, once");
+});
+
+test("an old child_cap_tokens in the settings changes nothing", async (t) => {
+  clock(t);
+  useMemorySettings(t, { "shell.behaviour.child_cap_tokens": 1000 });
+  const { fire } = load(CHILD);
+  const { ctx, state } = usage(1_000_000);
+  state.tokens = 500_000;
   assert.equal(await fire("tool_call", { toolName: "read", input: { path: "a.txt" } }, ctx), undefined);
 });
 
@@ -314,13 +306,12 @@ function fakeJsonPi(reason: string): string {
 
 const AGENT: AgentDef = { name: "explore", description: "", model: "m/x", tools: ["read"], bounded: false, body: "" };
 
-test("the parent's result names the context cap its child stopped at", async () => {
+test("the parent's result is what the child said, with no cap note, even when a tool result names the old cap", async () => {
   const saved = process.env.JHON_PI_BIN;
-  process.env.JHON_PI_BIN = fakeJsonPi(childCapReason(151_000, 150_000));
+  process.env.JHON_PI_BIN = fakeJsonPi("jhon: your context is at 151K tokens, past the 150K-token sub-agent context cap. Call no more tools");
   try {
     const r = await runAgent(AGENT, "look", tempDir("jhon-childbudget-run-"), { onEvent: () => {} });
-    assert.equal(r.ok, true);
-    assert.equal(r.text, "found a.ts:3\n\n[jhon: explore stopped at its sub-agent context cap; what remains goes to a fresh explore with a handoff, not subagent_continue]");
+    assert.deepEqual(r, { ok: true, text: "found a.ts:3" });
   } finally { if (saved === undefined) delete process.env.JHON_PI_BIN; else process.env.JHON_PI_BIN = saved; }
 });
 
@@ -362,10 +353,10 @@ test("a worker past 80 turns keeps running and ends as completed, whatever turn 
   }
 });
 
-test("a run its context cap stopped is still recorded as context-cap", async (t) => {
-  const { result, events } = await recorded(t, fakeJsonPi(childCapReason(151_000, 150_000)), () => runAgent(AGENT, "look", tempDir("jhon-childbudget-run-"), { onEvent: () => {} }));
-  assert.equal(result.text, "found a.ts:3\n\n[jhon: explore stopped at its sub-agent context cap; what remains goes to a fresh explore with a handoff, not subagent_continue]");
-  assert.deepEqual(events, [event("context-cap", "WARN", 2)]);
+test("a run whose tool result names the old context cap is recorded as completed", async (t) => {
+  const { result, events } = await recorded(t, fakeJsonPi("past the 150K-token sub-agent context cap"), () => runAgent(AGENT, "look", tempDir("jhon-childbudget-run-"), { onEvent: () => {} }));
+  assert.equal(result.text, "found a.ts:3");
+  assert.deepEqual(events, [event("completed", "INFO", 2)]);
 });
 
 test("a run past its timeout is still stopped and recorded as timeout", async (t) => {
@@ -381,7 +372,7 @@ test("a cancelled run still fails as cancelled and is recorded so", async (t) =>
   assert.deepEqual(events, [event("cancelled", "WARN", 1)]);
 });
 
-test("the README documents the child budget keys", () => {
+test("the README documents the child budget key", () => {
   const readme = readFileSync(join(REPO, "shell", "README.md"), "utf8");
-  for (const key of ["child_backstop_tokens", "child_cap_tokens", "lib/child-budget.ts"]) assert.ok(readme.includes(key), key);
+  for (const key of ["child_backstop_tokens", "lib/child-budget.ts"]) assert.ok(readme.includes(key), key);
 });

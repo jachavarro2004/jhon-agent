@@ -1,13 +1,15 @@
 /**
  * One session per change (S35): the main session suggests a fresh one, with
- * a handoff, once when its context passes shell.behaviour.fresh_session_at
- * (FRESH_SESSION_AT by default) of its window or, whichever is first,
- * shell.behaviour.fresh_session_tokens (FRESH_SESSION_TOKENS; 0 is no budget,
- * T115a: a share of a very large window never comes) after a reply, and once per change `jhon archive` archived. The
- * ladder's middle rung (T115e, L715): after the context backstop
- * (lib/context-backstop.ts), before compaction. A notice,
- * never a block. The wording is engine/internal/hook FreshSession's, which
- * `jhon archive` prints and Claude Code's context-notice gives.
+ * a handoff, once when its context passes ten points of its window before
+ * shell.behaviour.compact_at (FRESH_SESSION_AT by default) or, whichever is
+ * first, three quarters of shell.behaviour.compact_tokens (FRESH_SESSION_TOKENS
+ * by default; 0 is no budget, T115a: a share of a very large window never
+ * comes) after a reply, and once per change `jhon archive` archived. T155
+ * (L1394) derived both from the compaction keys. The ladder's middle rung
+ * (T115e, L715): after the context backstop (lib/context-backstop.ts), before
+ * compaction. A notice, never a block. The wording is engine/internal/hook
+ * FreshSession's, which `jhon archive` prints and Claude Code's
+ * context-notice gives.
  */
 
 import { shellSettings } from "./settings.ts";

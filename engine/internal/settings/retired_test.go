@@ -22,7 +22,7 @@ animations = "potato"
 [shell.behaviour]
 quiet_tools = false
 key_hints = false
-fresh_session_at = 45 # mine
+stall_seconds = 45 # mine
 
 [shell.notifications.audio]
 backend = "auto"
@@ -60,7 +60,7 @@ func TestRetiredKeysAreNotesNotErrors(t *testing.T) {
 		"shell.appearance.animations":                        "off",
 		"shell.appearance.cards":                             "float",
 		"shell.appearance.status":                            "hidden",
-		"shell.behaviour.fresh_session_at":                   45,
+		"shell.behaviour.stall_seconds":                      45,
 		`shell.notifications.audio.events."agent.completed"`: "builtin:success",
 	} {
 		if v := valueOf(t, vals, key); v.Value != want || v.Source != SourceFile {
@@ -271,7 +271,7 @@ func TestCleanupDropsRetiredKeysAndKeepsTheRest(t *testing.T) {
 			t.Errorf("%s is still in the file:\n%s", gone, text)
 		}
 	}
-	for _, kept := range []string{"# the owner's settings", "fresh_session_at = 45 # mine", `"agent.completed" = "builtin:success"`, `animations = "off"`, `cards = "float"`, `status = "hidden"`} {
+	for _, kept := range []string{"# the owner's settings", "stall_seconds = 45 # mine", `"agent.completed" = "builtin:success"`, `animations = "off"`, `cards = "float"`, `status = "hidden"`} {
 		if !strings.Contains(text, kept) {
 			t.Errorf("%q is missing:\n%s", kept, text)
 		}
@@ -347,7 +347,7 @@ icons = "emoji"
 quiet_tools = false
 key_hints = false
 compact_at = 70 # later
-fresh_session_at = 40
+compact_tokens = 40
 stall_seconds = 30
 
 [shell.editor]
@@ -386,7 +386,7 @@ status = "hidden"
 
 [shell.behaviour]
 compact_at = 70 # later
-fresh_session_at = 40
+compact_tokens = 40
 stall_seconds = 30
 
 [shell.keys]
@@ -558,5 +558,74 @@ func TestTheDashboardKeyIsRetired(t *testing.T) {
 	b, _ := os.ReadFile(path)
 	if text := string(b); text != "schema = 1\n[integrations]\nengram = true\ntelemetry = false\n" {
 		t.Errorf("the dashboard key goes, the others stay:\n%s", text)
+	}
+}
+
+// T155 (L1377, L1394): the context ladder is two keys, compact_at and
+// compact_tokens; the delegation notice and the fresh-session notice come
+// from them. The sub-agent cap is gone (the wrap-up notice at
+// child_backstop_tokens stays). A file that still sets a removed key, even
+// to a value the old schema refused, loads; the key is a note that says
+// why, `set` refuses it, and Cleanup drops it.
+func TestTheContextLadderIsTwoKeys(t *testing.T) {
+	keys := Keys()
+	for _, kept := range []string{"shell.behaviour.compact_at", "shell.behaviour.compact_tokens", "shell.behaviour.child_backstop_tokens"} {
+		if !slices.Contains(keys, kept) {
+			t.Errorf("%s is missing", kept)
+		}
+	}
+	why := map[string]string{
+		"shell.behaviour.fresh_session_at":     "the fresh-session notice comes ten points of the window before shell.behaviour.compact_at",
+		"shell.behaviour.fresh_session_tokens": "the fresh-session notice comes at three quarters of shell.behaviour.compact_tokens",
+		"shell.behaviour.backstop_tokens":      "the delegation notice comes at half of shell.behaviour.compact_tokens, or 15% of the window if that comes first",
+		"shell.behaviour.child_cap_tokens":     "sub-agents are no longer capped; past shell.behaviour.child_backstop_tokens they hear once to wrap up",
+	}
+	for key, w := range why {
+		if slices.Contains(keys, key) || Known(key) {
+			t.Errorf("%s is retired, still in the schema", key)
+		}
+		if got := RetiredWhy(key); got != w {
+			t.Errorf("RetiredWhy(%s) = %q, want %q", key, got, w)
+		}
+		if got := RetiredIn(key); got != "v0.4" {
+			t.Errorf("RetiredIn(%s) = %q, want v0.4", key, got)
+		}
+	}
+	old := "# mine\nschema = 1\n\n[shell.behaviour]\ncompact_at = 55 # mine\nfresh_session_at = 45\nfresh_session_tokens = \"150K\"\nbackstop_tokens = -1\nchild_backstop_tokens = 60000\nchild_cap_tokens = 0\n"
+	path := write(t, old)
+	vals, err := Load(path, noEnv)
+	if err != nil {
+		t.Fatalf("a file with the old ladder keys must still load: %v", err)
+	}
+	for key, want := range map[string]any{"shell.behaviour.compact_at": 55, "shell.behaviour.child_backstop_tokens": 60000} {
+		if v := valueOf(t, vals, key); v.Value != want || v.Source != SourceFile {
+			t.Errorf("%s = %#v (%s), want %#v from the file", key, v.Value, v.Source, want)
+		}
+	}
+	notes, err := Retired(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := noteKeys(notes), []string{"shell.behaviour.backstop_tokens", "shell.behaviour.child_cap_tokens", "shell.behaviour.fresh_session_at", "shell.behaviour.fresh_session_tokens"}; !slices.Equal(got, want) {
+		t.Errorf("notes = %v, want %v", got, want)
+	}
+	for _, n := range notes {
+		if n.Silent || n.Why != why[n.Key] || n.Now != "" {
+			t.Errorf("%s: %+v", n.Key, n)
+		}
+	}
+	for key := range why {
+		_, err := Set(path, key, "1000")
+		var inv *InvalidError
+		if want := key + ": removed in v0.4: " + why[key]; err == nil || err.Error() != want || !errors.As(err, &inv) {
+			t.Errorf("Set(%s) = %v, want %q", key, err, want)
+		}
+	}
+	rep, err := Cleanup(path, time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC))
+	if err != nil || !rep.Done {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "# mine\nschema = 1\n\n[shell.behaviour]\ncompact_at = 55 # mine\nchild_backstop_tokens = 60000\n" {
+		t.Errorf("cleaned file:\n%s", b)
 	}
 }

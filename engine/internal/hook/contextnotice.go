@@ -17,8 +17,9 @@ import (
 // FreshSession is the one-session-per-change notice (S35): why, then what
 // to run in each runtime. handoff is the `jhon context` command that saves
 // the handoff. `jhon archive` prints it once per change, and shell/extensions/
-// jhon.ts says the same at half of pi's context window or its token budget,
-// whichever is first.
+// jhon.ts says the same ten points of pi's window before
+// shell.behaviour.compact_at or at three quarters of compact_tokens,
+// whichever is first (T155).
 func FreshSession(why, handoff string) string {
 	return "One session per change: " + why + " Save a handoff (`" + handoff + "`, then mem_session_summary), " +
 		"then start a fresh session (/new in pi; /clear or a restart in Claude Code) and give it the handoff."
