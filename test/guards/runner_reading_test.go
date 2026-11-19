@@ -61,7 +61,8 @@ func partA(act string) []string {
 }
 
 // partB are the forms whose commands come from input the guard cannot see:
-// unreadable, asked as such (L486). f exists and the line does not write it.
+// judged by their visible words, which harm nothing (T152, L1311). f exists
+// and the line does not write it.
 var partB = []string{
 	"parallel :::: f",
 	"parallel -a f",
@@ -94,7 +95,7 @@ func TestRunnersReadRight(t *testing.T) {
 	}
 }
 
-func TestRunnersUnseenInputIsUnreadable(t *testing.T) {
+func TestRunnersUnseenInputPasses(t *testing.T) {
 	t.Parallel()
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
@@ -105,16 +106,8 @@ func TestRunnersUnseenInputIsUnreadable(t *testing.T) {
 				for _, caller := range callers {
 					r := ownerCall(t, env, repo, caller, c)
 					label := mode + "/" + caller + ": " + c
-					switch {
-					case mode == "super-yolo":
-						code(t, r, 0, label)
-						matches(t, modeNote(t, r.Stdout), `allowed by the owner's super-yolo mode: unknown: `, label)
-					case caller == "top-default":
-						code(t, r, 0, label)
-						matches(t, askedWhy(t, r.Stdout, label), `(^|\n)unknown: `, label)
-					default:
-						code(t, r, 2, label)
-					}
+					code(t, r, 0, label)
+					noDecision(t, r.Stdout, label)
 				}
 			}
 		})

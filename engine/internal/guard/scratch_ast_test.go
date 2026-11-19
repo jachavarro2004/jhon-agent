@@ -54,9 +54,6 @@ func TestLineFactsZshSpecialNames(t *testing.T) {
 			if f := lineFacts(c); f != nil {
 				t.Errorf("%s: not poisoned: %+v", c, f)
 			}
-			if LineIsPlain(c) {
-				t.Errorf("%s: plain", c)
-			}
 		}
 	}
 	// Names that only resemble them stay assignable.

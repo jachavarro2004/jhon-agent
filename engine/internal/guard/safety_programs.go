@@ -315,18 +315,27 @@ func gitNamesRepo(globals []string, vars, envv map[string]string) bool {
 	return slices.Contains(globals, "--git-dir") || slices.Contains(globals, "--work-tree")
 }
 
+// skipsHooks is the advisory of a commit or a push that skips the
+// repository's hooks: it runs, with a note (L1394).
+const skipsHooks = "it skips the repository's hooks; run them unless the owner asked to skip them"
+
+// judgeGit is the findings of a git command; a commit or a push without its
+// hooks that nothing refuses carries the advisory beside them.
 func judgeGit(args []string, dir string, ctx *Ctx, vars, envv map[string]string, depth int) []Finding {
+	out := judgeGitOps(args, dir, ctx, vars, envv, depth)
 	g := sh.GitParts(args)
-	for _, c := range g.Configs {
-		if aliasKey.MatchString(c) {
-			return []Finding{deny("git -c alias.*", "an alias defined on the command line hides the subcommand it runs")}
-		}
+	switch {
+	case slices.ContainsFunc(out, func(f Finding) bool { return f.Level == "deny" }):
+	case g.Sub == "commit" && (hasLong(g.Rest, "--no-verify") || hasFlag(shortFlags(g.Rest, "mFCcSt"), "n")):
+		out = append(out, advise("git commit --no-verify", skipsHooks))
+	case g.Sub == "push" && hasLong(g.Rest, "--no-verify"):
+		out = append(out, advise("git push --no-verify", skipsHooks))
 	}
-	for _, c := range g.Configs {
-		if k, _, _ := strings.Cut(c, "="); runsConfig.MatchString(k) {
-			return []Finding{deny("git -c "+k, "a configuration given on the command line changes what git runs")}
-		}
-	}
+	return out
+}
+
+func judgeGitOps(args []string, dir string, ctx *Ctx, vars, envv map[string]string, depth int) []Finding {
+	g := sh.GitParts(args)
 	gitDir := dir
 	for k := 0; k < len(g.Globals); k++ {
 		if g.Globals[k] == "-C" {
@@ -432,10 +441,6 @@ func judgeGit(args []string, dir string, ctx *Ctx, vars, envv map[string]string,
 		if hasFlag(shortFlags(rest, ""), "d") || has("--stdin") {
 			return X("git update-ref -d", "it deletes a ref")
 		}
-	case "commit":
-		if has("--no-verify") || hasFlag(shortFlags(rest, "mFCcSt"), "n") {
-			return D("git commit --no-verify", "it skips the repository's hooks")
-		}
 	case "push":
 		letters := shortFlags(rest, "o")
 		switch {
@@ -445,8 +450,6 @@ func judgeGit(args []string, dir string, ctx *Ctx, vars, envv map[string]string,
 			return D("git push --mirror", "it overwrites or deletes every remote ref")
 		case has("--prune"):
 			return D("git push --prune", "it deletes every remote ref with no local counterpart")
-		case has("--no-verify"):
-			return D("git push --no-verify", "it skips the repository's hooks")
 		}
 		ops := operands(rest, pushValued, "o")
 		if slices.ContainsFunc(ops, func(o string) bool { return strings.HasPrefix(o, "+") }) {
@@ -471,29 +474,22 @@ func judgeGit(args []string, dir string, ctx *Ctx, vars, envv map[string]string,
 		if g.Sub == "" || strings.HasPrefix(g.Sub, "-") || isGitCommand(g.Sub) {
 			return nil
 		}
-		// Not a git command: an alias. A shell alias (`!…`) or one the guard
-		// cannot read is unknown, in the repository git -C or GIT_DIR names or
-		// else the one it runs in; any other alias is judged as what it expands to.
+		// Not a git command: an alias of the repository's configuration, judged
+		// as the git command it expands to. A shell alias (`!…`), or one the
+		// guard cannot read, is judged by its visible words alone (L1311).
 		def, ok := "", false
 		if gitDir != "" {
 			def, ok = readGit(gitDir, "config", "--get", "alias."+g.Sub)
 		}
-		if !ok {
-			return rooted(ask(unknown, "git "+g.Sub+": neither a git command nor an alias the guard can read"))
-		}
-		if strings.HasPrefix(strings.TrimLeft(def, " \t\n\r"), "!") || depth >= 4 {
-			return rooted(ask(unknown, "git "+g.Sub+": the alias runs `"+def+"`"))
+		if !ok || strings.HasPrefix(strings.TrimLeft(def, " \t\n\r"), "!") || depth >= 4 {
+			return nil
 		}
 		cmds, err := sh.Parse(def)
-		if err != nil {
-			return rooted(ask(unknown, "git "+g.Sub+": the alias cannot be read"))
-		}
-		var words []string
-		if len(cmds) > 0 {
-			words = cmds[0].Words
+		if err != nil || len(cmds) == 0 {
+			return nil
 		}
 		i := slices.Index(args, g.Sub)
-		expanded := append(append(slices.Clone(args[:i]), words...), rest...)
+		expanded := append(append(slices.Clone(args[:i]), cmds[0].Words...), rest...)
 		return judgeGit(expanded, dir, ctx, vars, envv, depth+1)
 	}
 	return nil
@@ -1303,17 +1299,16 @@ var hookFlags = []string{"--settings", "--setting-sources", "--bare"}
 // permission; ok is false for any other program. Jhon's hooks reach a
 // Claude Code session only through the plugin `jhon start` passes: a
 // plain `claude` loads none (~/.claude/settings.json carries no Jhon guard,
-// and 2.1.310 runs no agent frontmatter hooks), so nothing would guard it,
-// and it is refused. Under `jhon start` the plugin's guards refuse what
-// nobody can be asked (test/testdata/spikes/claude-code-plugin-agent-hooks,
-// a push refused under bypassPermissions), and it passes, unless a flag or
+// and 2.1.310 runs no agent frontmatter hooks), so nothing would guard it:
+// it runs, with a note naming the guarded form (L1394). Under `jhon start`
+// the plugin's guards refuse what nobody can be asked
+// (test/testdata/spikes/claude-code-plugin-agent-hooks, a push refused
+// under bypassPermissions), and it passes with none, unless a flag or
 // another program can leave the plugin's hooks out.
 func judgeBypassLaunch(name string, args []string, env map[string]string) ([]Finding, bool) {
-	const alt = "`jhon start --permission-mode bypassPermissions`, whose session runs Jhon's guards"
 	unguarded := func(what, how string) []Finding {
-		f := deny(what, "it starts a session that never asks for permission and runs none of Jhon's guards: "+how)
-		f.Alt = alt
-		return []Finding{f}
+		return []Finding{advise(what, "it starts a session that never asks for permission and runs none of Jhon's guards: "+how+
+			"; the guarded form is `jhon start --permission-mode bypassPermissions`")}
 	}
 	if name == "jhon" && at(args, 0) == "start" {
 		b := bypassFlag("claude", args[1:])

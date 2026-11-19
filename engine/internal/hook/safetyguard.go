@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +17,8 @@ import (
 // outward-facing effects (safety-guard): a deny refuses, in every mode; an
 // ask asks the owner unless a live grant covers it, or the owner's mode for
 // its project (`jhon mode`), which passes it with a note whether or not the
-// owner can be asked; everything else passes.
+// owner can be asked; everything else passes, an advisory's note beside it
+// in additionalContext (L1394).
 func SafetyGuard(args []string, io IO) int {
 	scoped, name, _ := owner(args)
 	var p Payload
@@ -95,7 +97,7 @@ func SafetyGuard(args []string, io IO) int {
 		open = append(open, f)
 	}
 	if len(open) == 0 {
-		passByMode(io, p, "safety-guard", passed)
+		passWithNotes(io, p, passed, findings)
 		return 0
 	}
 	var classes []string
@@ -139,4 +141,30 @@ func SafetyGuard(args []string, io IO) int {
 		parts = append(parts, "Allowed instead: "+strings.Join(instead, "; ")+".")
 	}
 	return block(strings.Join(parts, " "))
+}
+
+// advisoryPrefix opens an advisory's note: the call ran and was not refused.
+const advisoryPrefix = "advisory (not a refusal; the call ran): "
+
+// passWithNotes allows a call: the owner's mode's note (passByMode) and the
+// advisories of findings, joined in one note, or nothing when there is none.
+func passWithNotes(io IO, p Payload, passed []modePass, findings []guard.Finding) {
+	var advisories []string
+	for _, f := range findings {
+		if l := f.What + ": " + f.Why; f.Level == "note" && !slices.Contains(advisories, l) {
+			advisories = append(advisories, l)
+		}
+	}
+	if len(advisories) == 0 {
+		passByMode(io, p, "safety-guard", passed)
+		return
+	}
+	var mode bytes.Buffer
+	passByMode(IO{io.In, &mode, io.Err}, p, "safety-guard", passed)
+	var notes []string
+	if n, ok := noteOf(mode.Bytes()); ok {
+		notes = append(notes, n)
+	}
+	notes = append(notes, advisoryPrefix+strings.Join(advisories, "; "))
+	fmt.Fprint(io.Out, noteJSON(strings.Join(notes, "; ")))
 }
