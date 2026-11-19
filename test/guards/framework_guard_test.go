@@ -155,10 +155,10 @@ func TestFrameworkGuardOutsideAllowed(t *testing.T) {
 // ── Bash: the T81 rule ──────────────────────────────────────────────────────
 
 // A script run from a file is code the guard cannot read: handed a protected
-// path, run inside a protected directory, or written in the same command with
-// a protected path in its text, it may run Jhon's own code. A worker wrote the
-// framework's source this way (2026-10-29): its script in /tmp, the file as
-// its argument.
+// path, or run inside a protected directory, it may run Jhon's own code. A
+// worker wrote the framework's source this way (2026-10-29): its script in
+// /tmp, the file as its argument. A path only in the text a heredoc writes
+// is no script's argument (T152, L1311).
 func TestFrameworkGuardScriptsFromFiles(t *testing.T) {
 	t.Parallel()
 	e := newFwEnv(t)
@@ -167,7 +167,6 @@ func TestFrameworkGuardScriptsFromFiles(t *testing.T) {
 		"node /tmp/fix.js " + e.fw + "/src/a.ts",
 		"cd " + e.fw + " && python3 /tmp/fix.py src/a.ts",
 		"cd " + e.fw + " && python3 /tmp/fix.py",
-		"cat > /tmp/t.py <<'PY'\nopen('" + e.fw + "/src/a.ts','w').write('x')\nPY\npython3 /tmp/t.py",
 		"bash /tmp/fix.sh " + e.fw + "/README.md",
 		"perl /tmp/fix.pl " + e.claudeMd,
 	} {
@@ -178,6 +177,7 @@ func TestFrameworkGuardScriptsFromFiles(t *testing.T) {
 		"node --experimental-strip-types --test test/*.test.ts",
 		"bash scripts/build.sh",
 		"python3 -c 'print(1)'",
+		"cat > /tmp/t.py <<'PY'\nopen('" + e.fw + "/src/a.ts','w').write('x')\nPY\npython3 /tmp/t.py",
 	} {
 		fwAllowed(t, e.guard(t, "Bash", cmd(command), fwWho{}), command)
 	}
@@ -260,5 +260,40 @@ func TestFrameworkGuardJhonInternalsByHand(t *testing.T) {
 		"node --experimental-strip-types --test test/*.test.ts",
 	} {
 		fwAllowed(t, e.guard(t, "Bash", cmd(command), fwWho{}), command)
+	}
+}
+
+// T152 (L1311): the T81 rule reads what a Bash line visibly runs. A path the
+// line names elsewhere (a reader, a heredoc it writes, a function
+// substitution's text) is no script's: the line passes. Interpreter code
+// naming a protected path, or a script run on one, stays refused. Through
+// `jhon hook pre-tool`, as the runtimes call it.
+func TestT152FrameworkGuardReadsTheVisibleProgram(t *testing.T) {
+	t.Parallel()
+	e := newFwEnv(t)
+	pre := func(command string) support.Result {
+		payload := map[string]any{"tool_name": "Bash", "cwd": e.project, "tool_input": cmd(command), "agent_type": "general"}
+		return hook(t, support.Env("HOME="+e.home), "pre-tool", append([]string{"--agent", "*", "framework-guard"}, e.protected...), payload)
+	}
+	a := e.fw + "/src/a.ts"
+	for _, command := range []string{
+		"cat > /tmp/t.py <<'PY'\nopen('" + a + "','w').write('x')\nPY\npython3 /tmp/t.py",
+		"cat " + a + " | python3 /tmp/t.py",
+		"echo " + a + " > /tmp/p.txt && python3 /tmp/t.py",
+		"python3 /tmp/t.py && bash -c 'cat " + a + "'",
+		"x=${ echo " + a + "; }; python3 /tmp/t.py",
+		"ls -d " + a + "; ${ echo python3 /tmp/t.py; }",
+		"python3 -m unittest discover -s tests && cat " + e.current + "/prose/contracts/ldd.md",
+	} {
+		fwAllowed(t, pre(command), command)
+	}
+	for _, command := range []string{
+		`node --experimental-strip-types -e "require('` + e.current + `/shell/lib/agents.ts')"`,
+		"python3 " + e.fw + "/lib/x.py",
+		"cd " + e.fw + " && python3 x.py",
+	} {
+		r := pre(command)
+		fwRefused(t, r, command)
+		matches(t, r.Stderr, "subagent tool", command)
 	}
 }

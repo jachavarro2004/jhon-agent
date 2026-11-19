@@ -1,15 +1,12 @@
 package guard
 
 import (
-	"errors"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
-	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/grant"
@@ -308,12 +305,15 @@ var (
 	escalate    = set("sudo", "doas")
 	deviceOK    = set("/dev/null", "/dev/stdout", "/dev/stderr")
 	codeDelete  = lazyre.New(`unlink|\brm(?:Sync|dir|dirSync)?\s*\(|rmtree|os\.remove|\bremove\s*\(|FileUtils\.rm|File\.delete`)
-	grantText   = lazyre.New(`\bjhon\s+(?:grant|mode|ldd)\b|\bjhon[ \t]+workspace\b[^\n;&|]*?\b(?:join|leave)\b|\bgrant\.ts\b|jhon[\\/]+(?:grants|modes|ldd-switch)\b`)
 	grantScript = lazyre.New(`(?:^|/)src/grant\.ts$`)
 	tsRunners   = set("node", "nodejs", "bun", "deno", "tsx", "ts-node")
-	xargsDanger = set("rm", "rmdir", "unlink", "shred", "srm", "rimraf", "mv", "cp", "tee", "ln", "install", "truncate", "dd", "chmod", "chown", "touch", "mkdir")
+	// xargsDestroy are the programs that delete, overwrite or re-permission
+	// their operands: run by xargs on input the guard cannot see, they are asked.
+	xargsDestroy = set("rm", "rmdir", "unlink", "shred", "srm", "rimraf", "mv", "cp", "tee", "ln", "install", "truncate", "dd", "chmod", "chown")
+	// findWriters are the programs whose -exec on a find's results deletes or writes them.
 	findWriters = func() map[string]bool {
-		m := maps.Clone(xargsDanger)
+		m := maps.Clone(xargsDestroy)
+		m["touch"], m["mkdir"] = true, true
 		for k := range sh.Shells {
 			m[k] = true
 		}
@@ -321,12 +321,7 @@ var (
 		return m
 	}()
 	pythonName = lazyre.New(`^python\d?(\.\d+)?$`)
-	codeValue  = lazyre.New("^(?:\\$\\(…\\)|`…`)")
 )
-
-func mentionsGrant(text *string) bool {
-	return text != nil && (grantText.MatchString(*text) || strings.Contains(*text, grant.Dir()) || strings.Contains(*text, grant.ModesDir()) || strings.Contains(*text, lddswitch.Dir()) || strings.Contains(*text, grant.WorkspaceDir()))
-}
 
 // The owner's acts, refused from an agent whatever the program is called.
 const (
@@ -388,18 +383,6 @@ func ownerActFinding(name string, words []string) []Finding {
 		return []Finding{deny(name+" workspace", workspaceAct)}
 	}
 	return nil
-}
-
-var (
-	singleConcat = lazyre.New(`'\s*\+\s*'`)
-	doubleConcat = lazyre.New(`"\s*\+\s*"`)
-)
-
-// joinConcat is code with each `'a' + 'b'` (or double-quoted) written as
-// one literal, as it runs: `'mo'+'de'` is `'mode'`. A value built any other
-// way (a variable, a join, a format) stays split.
-func joinConcat(code string) string {
-	return doubleConcat.ReplaceAllString(singleConcat.ReplaceAllString(code, ""), "")
 }
 
 // modeRead is whether `jhon mode <args>` only reads the mode: no mode named.
@@ -479,28 +462,14 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	if name == "su" || name == "pkexec" || name == "run0" {
 		out = append(out, deny(name, "it runs a program as another user"))
 	}
-	// The grants: only the owner creates one, and no executed text names them.
-	// Code is read with its concatenated literals joined, too.
-	var joined *string
-	if p.Code != nil {
-		if j := joinConcat(*p.Code); j != *p.Code {
-			joined = &j
-		}
-	}
-	if mentionsGrant(p.Script) || mentionsGrant(p.Code) || mentionsGrant(joined) {
-		out = append(out, deny("jhon grant", "executed shell text or interpreter code names the grant command or the grants directory; a grant is the owner's act"))
-	}
 	// `mode <a mode>` and `grant <a class>` are the owner's, by any program.
+	// A program the guard cannot see (read from stdin, a preload, a
+	// variable) is judged by its visible words alone (L1311).
 	out = append(out, ownerActFinding(name, args)...)
-	if p.StdinOpaque != "" {
-		return append(out, askAt(unknown, name+" reads its program from "+p.StdinOpaque+", which the guard cannot see", ""))
-	}
-	if slices.Contains(via, sh.XargsUnseen) && (xargsDanger[name] || ((name == "sed" || name == "perl") && hasInPlace(args))) {
+	// xargs deleting or overwriting operands the guard cannot see (`find … |
+	// xargs rm -rf`) is the destructive core: asked, as in v0.3.7.
+	if slices.Contains(via, sh.XargsUnseen) && (xargsDestroy[name] || ((name == "sed" || name == "perl") && hasInPlace(args))) {
 		out = append(out, askAt(unknown, "xargs "+name+": its operands come from input the guard cannot see", ""))
-	}
-	// Modules node preloads are code the guard does not read (L265).
-	if why := preloads(name, args, env["NODE_OPTIONS"]+" "+env["npm_config_node_options"]+" "+env["NPM_CONFIG_NODE_OPTIONS"]); why != "" {
-		out = append(out, askAt(unknown, name+" "+why, ""))
 	}
 	// A program eval, a -c string, or a sourced script runs (its Script) runs its script file as well.
 	if p.Code == nil {
@@ -508,11 +477,6 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	}
 	if p.Code != nil {
 		out = append(out, judgeCode(p, ctx, vars, dir, st.Lost, depth)...)
-		if joined != nil {
-			q := p
-			q.Code = joined
-			out = append(out, judgeCode(q, ctx, vars, dir, st.Lost, depth)...)
-		}
 		if (name == "perl" || name == "ruby") && hasInPlace(args) {
 			pieces := strings.Split(*p.Code, "\n")
 			for _, f := range operands(args, nil, "eEIMm") {
@@ -523,10 +487,6 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 		}
 		return out
 	}
-	if strings.HasPrefix(name, "$") || codeValue.MatchString(name) {
-		return append(out, ask(unreadable, "the program "+name+" is a value the guard cannot read"))
-	}
-
 	// The jhon CLI, by any spelling: grant is the owner's; publish is outward.
 	var jhonArgs []string
 	isJhon := false
@@ -1071,11 +1031,6 @@ func judgeCode(p sh.Program, ctx *Ctx, vars map[string]string, dir string, lost 
 	if sh.CodeWrites(targets, isProtected) {
 		out = append(out, deny(p.Name+" code", "it writes or deletes a VCS directory, the grants directory, or a Claude Code settings file"))
 	}
-	// A call that runs a program with the literals `mode` and a mode, or
-	// `grant` and a class, in a row (`run(["x", "mode", "yolo"])`).
-	if sh.CodeExec.MatchString(code) {
-		out = append(out, ownerActFinding(p.Name+" code running", sh.CodeStrings(code))...)
-	}
 	if codeDelete.MatchString(targets) {
 		for _, t := range codePathLike.FindAllString(targets, -1) {
 			if !pathLead.MatchString(t) {
@@ -1165,30 +1120,15 @@ func judgeScriptFile(name string, argv []string, ctx *Ctx, vars map[string]strin
 	if depth >= 2 && !sourced {
 		return nil
 	}
+	// A script the guard cannot read (one the line writes first, a
+	// substitution, a descriptor, a parameter it cannot resolve, one sourced
+	// past the bound) is judged by the line's visible words alone (L1311).
 	kind, word, text, path, ok := "", "", "", "", false
-	// A script the line writes before it runs holds text the guard never
-	// sees, whether the file exists yet or not (T34b).
-	written := func() []Finding {
-		if word != "" && st.wrote(word, ctx, vars) {
-			return []Finding{askAt(unknown, name+" "+word+": a script the command line writes before it runs, which the guard does not read", "")}
-		}
-		return nil
-	}
 	if sourced {
 		// A sourced script runs in the shell itself, as `bash <script>` would
 		// run it; the scripts it sources are judged in turn, up to a bound.
-		if word = positional(at(nonOptions(argv[min(1, len(argv)):]), 0), p.Envv); word != "" {
-			if depth >= maxSourceDepth {
-				return []Finding{askAt(unknown, name+" "+word+": scripts sourced more than "+strconv.Itoa(maxSourceDepth)+" deep, which the guard does not read", "")}
-			}
-			if w := written(); w != nil {
-				return w
-			}
+		if word = positional(at(nonOptions(argv[min(1, len(argv)):]), 0), p.Envv); word != "" && depth < maxSourceDepth {
 			text, path, ok = scriptText(word, st, ctx, vars)
-			// A nested optional source of a missing file runs nothing (L295).
-			if !ok && depth > 0 && !missing(word, st, ctx, vars) {
-				return []Finding{askAt(unknown, name+" "+word+": a sourced script the guard cannot read", "")}
-			}
 		}
 		kind = "shell"
 	} else if sh.Shells[name] || sh.CodeInterpreter.MatchString(name) || tsRunners[name] {
@@ -1199,9 +1139,6 @@ func judgeScriptFile(name string, argv []string, ctx *Ctx, vars map[string]strin
 			word, hasWord = at(ops, 1), len(ops) > 1
 		}
 		word = positional(word, p.Envv)
-		if w := written(); w != nil {
-			return w
-		}
 		if hasWord {
 			text, path, ok = scriptText(word, st, ctx, vars)
 		}
@@ -1211,9 +1148,6 @@ func judgeScriptFile(name string, argv []string, ctx *Ctx, vars map[string]strin
 		}
 	} else if strings.Contains(at(argv, 0), "/") {
 		word = argv[0]
-		if w := written(); w != nil {
-			return w
-		}
 		text, path, ok = scriptText(word, st, ctx, vars)
 		if prog := shebangProgram(text); ok && prog != "" {
 			if sh.Shells[prog] {
@@ -1223,20 +1157,7 @@ func judgeScriptFile(name string, argv []string, ctx *Ctx, vars map[string]strin
 			}
 		}
 	}
-	// A script named by a substitution is a value the guard cannot read, as
-	// `eval "$(…)"` is (L270): `source <(…)`, `bash <(…)`, `. "$(…)"`.
-	if kind == "shell" && substituted(word) {
-		return []Finding{askAt(unknown, name+" "+word+": the script is a value the guard cannot read", "")}
-	}
-	// A script read through a descriptor, or named by a parameter the guard
-	// cannot resolve (`source "$0"`, `${X:-a.sh}`), is not read either (L294).
-	if kind != "" && fdPath.MatchString(word) {
-		return []Finding{askAt(unknown, name+" "+word+": the script comes through a descriptor the guard cannot read", "")}
-	}
-	if (kind == "shell" || kind == "code") && strings.Contains(word, "$") && pathOf(word, st.Dir, ctx, vars) == "" {
-		return []Finding{askAt(unknown, name+" "+word+": the script is a parameter the guard cannot resolve", "")}
-	}
-	if !ok || kind == "" {
+	if !ok || kind == "" || st.wrote(word, ctx, vars) {
 		return nil
 	}
 	label := name + " " + word
@@ -1289,12 +1210,6 @@ func judgeScriptFile(name string, argv []string, ctx *Ctx, vars map[string]strin
 // maxSourceDepth bounds how deep scripts sourced by sourced scripts are read.
 const maxSourceDepth = 6
 
-// substituted is whether a word holds a command or process substitution,
-// as the shell reader writes them.
-func substituted(w string) bool {
-	return strings.Contains(w, "$(…)") || strings.Contains(w, "`…`") || strings.Contains(w, "<(…)") || strings.Contains(w, ">(…)")
-}
-
 // positionalRef is a reference to a shell positional parameter: $1, ${1}.
 var positionalRef = lazyre.New(`\$(\d)|\$\{(\d+)\}`)
 
@@ -1309,30 +1224,8 @@ func positional(w string, envv map[string]string) string {
 	})
 }
 
-// fdPath is a file that is an open descriptor, not a script on disk.
-var fdPath = lazyre.New(`^/(?:dev/(?:fd/\d+|stdin)|proc/(?:self|\d+)/fd/\d+)$`)
-
-// missing is whether the script w names is a file that does not exist; a
-// name the guard cannot resolve is not missing.
-func missing(w string, st *State, ctx *Ctx, vars map[string]string) bool {
-	a := pathOf(w, st.Dir, ctx, vars)
-	if a == "" {
-		return false
-	}
-	_, err := os.Lstat(a)
-	return errors.Is(err, fs.ErrNotExist)
-}
-
-// preloadFlag is an option of node, bun, tsx or deno that loads a module before the script.
-var preloadFlag = lazyre.New(`^(?:-r|--require|--import|--loader|--experimental-loader|--preload)(?:=|$)`)
-
-// envFileFlag is node's or bun's option that loads an env file, which may set NODE_OPTIONS.
-var envFileFlag = lazyre.New(`^--env-file(?:-if-exists)?(?:=|$)`)
-
 var (
 	preloadRunners = set("node", "nodejs", "bun", "bunx", "tsx", "deno")
-	runnerSubs     = set("run", "test", "x", "exec")
-	nodeLaunchers  = set("npm", "npx", "pnpm", "pnpx", "yarn", "yarnpkg", "corepack")
 	// nodeValueOptions are node's, bun's and tsx's options whose value may be
 	// the next word, which is not the script (T34b).
 	nodeValueOptions = set("-C", "--conditions", "--title", "-r", "--require", "--import", "--loader", "--experimental-loader",
@@ -1359,67 +1252,6 @@ func scriptOperands(name string, args []string) []string {
 		out = append(out, a)
 	}
 	return out
-}
-
-// preloads is why name loads code the guard does not read before its
-// script, or "": a preload flag or an env file in its options or in
-// NODE_OPTIONS. The guard does not read an env file, which may hold
-// secrets: naming one asks. A word after an option with no attached value
-// is taken for that option's value, so the scan ends only at a word that
-// must be the script; options after the script are the script's own (L294).
-func preloads(name string, args []string, nodeOptions string) string {
-	if nodeLaunchers[name] {
-		// A package runner's node inherits NODE_OPTIONS (T34b); its own
-		// options are not node's, but --node-options sets them (T34b).
-		for i, a := range args {
-			if a == "--node-options" && i+1 < len(args) {
-				nodeOptions += " " + args[i+1]
-			} else if v, ok := strings.CutPrefix(a, "--node-options="); ok {
-				nodeOptions += " " + v
-			}
-		}
-		for _, a := range strings.Fields(nodeOptions) {
-			if preloadFlag.MatchString(a) || envFileFlag.MatchString(a) {
-				return "runs node with a NODE_OPTIONS that preloads a module the guard does not read"
-			}
-		}
-		return ""
-	}
-	if !preloadRunners[name] {
-		return ""
-	}
-	why := func(a string) string {
-		switch {
-		case preloadFlag.MatchString(a):
-			return "preloads a module the guard does not read"
-		case envFileFlag.MatchString(a):
-			return "reads an env file, which may set NODE_OPTIONS to preload a module the guard does not read"
-		}
-		return ""
-	}
-	valueNext := false
-	for i, a := range args {
-		if a == "--" {
-			break
-		}
-		if !strings.HasPrefix(a, "-") || a == "-" {
-			if valueNext || (i == 0 && (name == "bun" || name == "deno") && runnerSubs[a]) {
-				valueNext = false
-				continue
-			}
-			break
-		}
-		if w := why(a); w != "" {
-			return w
-		}
-		valueNext = !strings.Contains(a, "=")
-	}
-	for _, a := range strings.Fields(nodeOptions) {
-		if w := why(a); w != "" {
-			return w
-		}
-	}
-	return ""
 }
 
 // maxLoopRuns bounds how many times a command inside literal loops is judged.

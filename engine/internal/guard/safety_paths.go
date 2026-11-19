@@ -13,7 +13,8 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
 )
 
-// A Finding is one effect the safety guard judged: a deny, or an ask of a class.
+// A Finding is one effect the safety guard judged: a deny, an ask of a
+// class, or a note the call runs with (an advisory).
 type Finding struct {
 	Level, What, Why, Alt, Cls string
 	// RootSet says the finding names the repository it targets: Root, or "" for none a grant can name.
@@ -25,7 +26,7 @@ type Finding struct {
 
 const (
 	unreadable = "unreadable"
-	// unknown is a program or a target the guard cannot see: never grantable.
+	// unknown is a deletion target the guard cannot resolve: never grantable.
 	unknown = "unknown"
 	// gitConfig is a git configuration write that changes what git runs: never grantable.
 	gitConfig = "git-config"
@@ -39,6 +40,9 @@ const (
 )
 
 func deny(what, why string) Finding { return Finding{Level: "deny", What: what, Why: why} }
+
+// advise is a note the call runs with: a practice to report, not a harm (L1394).
+func advise(what, why string) Finding { return Finding{Level: "note", What: what, Why: why} }
 
 // ask is an ask finding whose repository is the directory it runs in.
 func ask(cls, what string) Finding { return Finding{Level: "ask", Cls: cls, What: what} }
