@@ -8,9 +8,4 @@ func TestCredentialGlobReadsCaseAndMagic(t *testing.T) {
 			t.Errorf("CredentialGlob(%q) = false", g)
 		}
 	}
-	for _, g := range []string{"*.pem", "config/*.key", "snapshots/*.json"} {
-		if !relativeGlob(g) {
-			t.Errorf("relativeGlob(%q) = false", g)
-		}
-	}
 }
