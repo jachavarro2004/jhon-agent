@@ -22,16 +22,11 @@ const byHand = "Jhon's own code is never run or imported by hand: launch a sub-a
 	"(Claude Code), and read the change with inspect. "
 
 var (
-	frameworkWriters = map[string]bool{"tee": true, "sed": true, "perl": true, "cp": true, "mv": true, "rm": true, "rmdir": true,
-		"truncate": true, "install": true, "ln": true, "touch": true, "rsync": true, "patch": true, "dd": true, "shred": true,
-		"unlink": true, "mkdir": true, "chmod": true, "chown": true}
 	// scriptRunners run a script file whose code the guard never reads: what
-	// it writes is known only from the paths it is handed.
+	// it runs is known only from the paths it is handed.
 	scriptRunners = map[string]bool{"node": true, "deno": true, "bun": true, "tsx": true, "ts-node": true, "perl": true, "ruby": true, "php": true, "Rscript": true, "lua": true}
 	pythonName    = lazyre.New(`^python[0-9.]*$`)
 	pathTokens    = lazyre.New(`[^\s'"` + "`" + `(),;=<>{}[\]|&]+`)
-	findStart     = lazyre.New(`^[-(!]`)
-	gitTarget     = lazyre.New(`[/.~]`)
 )
 
 // expand resolves a word's leading ~ against HOME.
@@ -45,8 +40,9 @@ func expand(w string) string {
 	return w
 }
 
-// FrameworkGuard refuses every Jhon agent's write of the framework and git
-// run on it (framework-guard, docket AV2).
+// FrameworkGuard refuses every Jhon agent's file-tool write of the framework
+// (framework-guard, docket AV2) and a Bash line that runs Jhon's own code by
+// hand (T81). A Bash write outside the project is the sandbox's (T128f).
 func FrameworkGuard(args []string, io IO) int {
 	scoped, name, rest := owner(args)
 	var roots []string
@@ -112,17 +108,15 @@ func FrameworkGuard(args []string, io IO) int {
 		return 0
 	}
 
+	// A Bash line is the sandbox's (T128f): outside the project it writes
+	// nothing. What stays here is the T81 rule, which no sandbox enforces:
+	// Jhon's own code is never run or imported by hand.
 	command, _ := input["command"].(string)
 	if strings.TrimSpace(command) == "" {
 		return block("Bash call carries no command")
 	}
 	cmds, err := sh.Parse(command)
 	if err != nil {
-		for _, t := range pathTokens.FindAllString(command, -1) {
-			if named := hit(t, cwd); named != "" {
-				return block(fmt.Sprintf("cannot read this command safely (%s), and it names the protected path %s: %s", err, named, frameworkRule))
-			}
-		}
 		return 0
 	}
 	// A function substitution's output may be the program the line runs
@@ -146,31 +140,16 @@ func FrameworkGuard(args []string, io IO) int {
 			break
 		}
 	}
-	// Walk the programs in order, following each cd; every directory the
-	// command may run in is kept, so a write is judged against all of them.
+	// Walk the programs in order, following each cd.
 	dir := cwd
-	dirs := []string{cwd}
 	judge := func(p sh.Program, c *sh.Command) string {
 		raw := c.Raw
 		if p.Raw != nil {
 			raw = *p.Raw
 		}
-		for _, r := range p.Redirects {
-			if !strings.Contains(r.Op, ">") || strings.HasSuffix(r.Op, "&") {
-				continue
-			}
-			if root := hit(r.Target, dir); root != "" {
-				return fmt.Sprintf("the redirection %s %s writes under the protected path %s: %s", r.Op, r.Target, root, frameworkRule)
-			}
-		}
 		prog, args := "", []string(nil)
 		if len(p.Argv) > 0 {
 			prog, args = p.Argv[0], p.Argv[1:]
-		}
-		// The programs a wrapper, a shell's -c string, or eval runs are read
-		// unwrapped here; the segment recogniser below sees only the outer word.
-		if p.Code != nil && sh.CodeWrites(*p.Code, func(t string) bool { return hit(t, dir) != "" }) {
-			return fmt.Sprintf("`%s` writes a protected path (%s code): %s", raw, p.Name, frameworkRule)
 		}
 		// Interpreter code naming a protected path runs or imports Jhon's own
 		// code by hand (T81, L596: sub-agents launched from inline node code
@@ -184,11 +163,10 @@ func FrameworkGuard(args []string, io IO) int {
 			}
 		}
 		// A script run from a file is code the guard cannot read: handed a
-		// protected path, it may write there (an agent wrote the framework's
-		// source this way, its script in /tmp and the file as its argument).
-		// So may a script run inside a protected directory, or one whose own
-		// text, written in the same command, names a protected path.
-		if p.Code == nil && len(args) > 0 && (scriptRunners[p.Name] || pythonName.MatchString(p.Name) || sh.Shells[p.Name]) {
+		// protected path, run inside a protected directory, or written in the
+		// same command with a protected path in its text, it may run or import
+		// Jhon's own code.
+		if p.Code == nil && len(args) > 0 && (interpreter || sh.Shells[p.Name]) {
 			root := hit(dir, dir)
 			for _, a := range args {
 				if root == "" && !strings.HasPrefix(a, "-") {
@@ -202,99 +180,12 @@ func FrameworkGuard(args []string, io IO) int {
 				return fmt.Sprintf("`%s` runs a script, whose code this guard cannot read, on the protected path %s. %s%s", raw, root, byHand, frameworkRule)
 			}
 		}
-		inPlace := slices.ContainsFunc(args, sh.InPlace)
-		if len(p.Via) > 0 && frameworkWriters[p.Name] && (inPlace || (p.Name != "sed" && p.Name != "perl")) {
-			for _, a := range args {
-				if strings.HasPrefix(a, "-") {
-					continue
-				}
-				if root := hit(a, dir); root != "" {
-					return fmt.Sprintf("`%s` writes under the protected path %s (%s): %s", raw, root, strings.Join(append(slices.Clone(p.Via), p.Name), " > "), frameworkRule)
-				}
-			}
-		}
 		if (p.Name == "cd" || p.Name == "pushd") && prog != "" {
 			to := "~"
 			if i := slices.IndexFunc(args, func(a string) bool { return !strings.HasPrefix(a, "-") }); i >= 0 {
 				to = args[i]
 			}
 			dir = project.Resolve(dir, expand(to))
-			dirs = append(dirs, dir)
-			return ""
-		}
-		if p.Name == "find" {
-			// find deleting, or running a writer on, what it finds under a protected root.
-			var execs []string
-			for k, a := range args {
-				if sh.FindExec[a] {
-					execs = append(execs, sh.Base(at(args, k+1)))
-				}
-			}
-			if slices.Contains(args, "-delete") || slices.ContainsFunc(execs, func(e string) bool {
-				return frameworkWriters[e] || sh.Shells[e] || e == "xargs" || e == "env"
-			}) {
-				var starts []string
-				for k := 0; k < len(args) && !findStart.MatchString(args[k]); k++ {
-					starts = append(starts, args[k])
-				}
-				if len(starts) == 0 {
-					starts = []string{"."}
-				}
-				for _, w := range starts {
-					// The search root is under a protected path, or holds one.
-					root := hit(w, dir)
-					if root == "" {
-						abs := project.Resolve(dir, expand(w))
-						if at := slices.IndexFunc(guarded, func(g string) bool {
-							return project.Within(g, abs) || project.Within(g, project.Realish(abs))
-						}); at >= 0 {
-							root = roots[at/2]
-						}
-					}
-					if root != "" {
-						return fmt.Sprintf("`%s` deletes or writes what it finds under the protected path %s: %s", raw, root, frameworkRule)
-					}
-				}
-			}
-			return ""
-		}
-		// git on a protected path is refused whatever its subcommand, a
-		// read-only one included (review-E, L266, is this rule, not a false
-		// positive): `git status` refreshes the index and writes .git/index
-		// through .git/index.lock, and the repository's own config runs
-		// programs (core.fsmonitor, hooks, filters). Reading the framework's
-		// files with cat, rg or the Read tool stays allowed.
-		if p.Name != "git" {
-			return ""
-		}
-		gitDir := dir
-		var targets []string
-		g := sh.GitParts(args)
-		for k := 0; k < len(args) && strings.HasPrefix(args[k], "-"); k++ {
-			flag, value, attached := strings.Cut(args[k], "=")
-			if !sh.GitValueGlobals[flag] {
-				continue
-			}
-			if !attached {
-				k++
-				value = at(args, k)
-			}
-			if flag == "-C" {
-				gitDir = project.Resolve(gitDir, expand(value))
-			} else if flag == "--git-dir" || flag == "--work-tree" {
-				targets = append(targets, value)
-			}
-		}
-		targets = append(targets, gitDir)
-		for _, a := range g.Rest {
-			if !strings.HasPrefix(a, "-") && gitTarget.MatchString(a) {
-				targets = append(targets, a)
-			}
-		}
-		for _, t := range targets {
-			if root := hit(t, gitDir); root != "" {
-				return fmt.Sprintf("`%s` runs git on the protected path %s: %s", raw, root, frameworkRule)
-			}
 		}
 		return ""
 	}
@@ -309,9 +200,6 @@ func FrameworkGuard(args []string, io IO) int {
 			for _, d := range prog.Chdir {
 				dir = project.Resolve(dir, expand(d))
 			}
-			if len(prog.Chdir) > 0 {
-				dirs = append(dirs, dir)
-			}
 			if why := judge(prog, c); why != "" {
 				return block(why)
 			}
@@ -319,12 +207,6 @@ func FrameworkGuard(args []string, io IO) int {
 				dir = outer
 			}
 		}
-	}
-	isTarget := func(w string) bool {
-		return slices.ContainsFunc(dirs, func(d string) bool { return hit(w, d) != "" })
-	}
-	if ws := sh.ShellWrites(command, isTarget); len(ws) > 0 {
-		return block(fmt.Sprintf("`%s` writes a protected path (%s): %s", ws[0].Segment, ws[0].Why, frameworkRule))
 	}
 	return 0
 }

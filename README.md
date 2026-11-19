@@ -139,7 +139,7 @@ counts what each one costs).
 | `inspect-guard` | Bash | a reviewer changing what it reviews: 4R and Judgment Day reviewers stay read-only |
 | `safety-guard` | Bash | a destructive or irreversible command (refused), an outward-facing one without your consent (asked), a sub-agent's unbounded wait |
 | `vcs-guard` | Edit, Write | a write into `.git/` or the grants, an agent writing Claude Code's settings, a write outside the project (asked) |
-| `framework-guard` | Edit, Write, Bash | an agent editing Jhon or its installed release while it runs on it |
+| `framework-guard` | Edit, Write, Bash | an agent editing Jhon or its installed release while it runs on it (Edit, Write), or running Jhon's own code by hand (Bash); a Bash write or git there is the sandbox's, where they are read-only |
 | `secrets-guard` | Read, Grep, Glob, Edit, Write | a file that holds credentials (`.env`, keys); a template such as `.env.example` passes |
 | `scope-guard` | Edit, Write, Bash | a writer editing outside the edit surfaces its handoff names |
 | `route-guard` | Edit, Write, Bash, Agent | LDD: a writer launched without its scope, a change without its record, a slice commit of an untested tree, a PR without its docs, a merge without rebase |

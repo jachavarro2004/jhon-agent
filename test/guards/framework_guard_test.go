@@ -1,10 +1,13 @@
 // framework-guard (docket AV2), the PreToolUse hook every Jhon agent
 // carries, the orchestrator included: no Jhon agent writes the framework's
 // source, its releases, the `current` pointer, the CLI link, the owned
-// projections, or ~/.claude/CLAUDE.md, or runs git on any of them, in any
-// session. There is no framework-session exemption (docket AV2, amendment of
-// 2026-10-04): the payload's cwd is not an unforgeable origin
-// (test/testdata/spikes/claude-code-session-origin/record.json).
+// projections, or ~/.claude/CLAUDE.md, in any session. There is no
+// framework-session exemption (docket AV2, amendment of 2026-10-04): the
+// payload's cwd is not an unforgeable origin
+// (test/testdata/spikes/claude-code-session-origin/record.json). A Bash
+// write or git run there is the sandbox's, where they are read-only
+// (T128f); on Bash the guard keeps the T81 rule: Jhon's own code is never
+// run by hand.
 //
 // The guard is spawned as Claude Code runs it: the payload on stdin,
 // `--agent <owner>` and the protected paths as arguments, here scratch roots.
@@ -101,13 +104,6 @@ func TestFrameworkGuardIncidentEdit(t *testing.T) {
 	fwRefused(t, e.guard(t, "Edit", map[string]any{"file_path": filepath.Join(e.fw, "src", "tdd-evidence.ts"), "old_string": "export", "new_string": "x"}, fwWho{}), "Edit")
 }
 
-func TestFrameworkGuardIncidentCommit(t *testing.T) {
-	t.Parallel()
-	e := newFwEnv(t)
-	command := "cd " + e.fw + ` && git add src/tdd-evidence.ts hooks/evidence-runs.mjs && git commit -m "fix(evidence): accept all-N/A runs and scope the guard to change evidence"`
-	fwRefused(t, e.guard(t, "Bash", cmd(command), fwWho{owner: "vcs-worker"}), command)
-}
-
 func TestFrameworkGuardIncidentVerbatimPaths(t *testing.T) {
 	t.Parallel()
 	// Pure path arithmetic: the guard writes nothing and reads only the payload.
@@ -117,7 +113,6 @@ func TestFrameworkGuardIncidentVerbatimPaths(t *testing.T) {
 			map[string]any{"tool_name": tool, "cwd": "/home/owner/Projects/work/acme_app", "tool_input": input, "agent_type": owner})
 	}
 	code(t, run("Edit", map[string]any{"file_path": real + "/src/tdd-evidence.ts", "old_string": "a", "new_string": "b"}, "general"), 2, "edit")
-	code(t, run("Bash", cmd("cd "+real+" && git add src/tdd-evidence.ts && git commit -m x"), "vcs-worker"), 2, "commit")
 }
 
 // ── Edit and Write ──────────────────────────────────────────────────────────
@@ -157,32 +152,11 @@ func TestFrameworkGuardOutsideAllowed(t *testing.T) {
 	fwAllowed(t, e.guard(t, "Read", map[string]any{"file_path": filepath.Join(e.fw, "src", "tdd-evidence.ts")}, fwWho{}), "a read")
 }
 
-// ── Bash ────────────────────────────────────────────────────────────────────
-
-func TestFrameworkGuardBashWrites(t *testing.T) {
-	t.Parallel()
-	e := newFwEnv(t)
-	for _, command := range []string{
-		"sed -i s/a/b/ " + e.fw + "/src/tdd-evidence.ts",
-		"echo x > ../../../.agents/jhon/src/tdd-evidence.ts",
-		"echo x >> ~/.agents/jhon/src/tdd-evidence.ts",
-		"cd " + e.fw + " && sed -i s/a/b/ src/tdd-evidence.ts",
-		"cp src/a.ts fwlink/src/",
-		`python3 -c "open('` + e.fw + `/src/tdd-evidence.ts','w').write('x')"`,
-		"tee " + e.claudeMd + " < /dev/null",
-		"ln -sfn " + e.releases + "/other " + e.current,
-		"rm " + e.cli,
-		"rm -rf " + e.skill,
-		"cp x.md " + e.agent,
-		"touch " + e.release + "/x",
-	} {
-		fwRefused(t, e.guard(t, "Bash", cmd(command), fwWho{}), command)
-	}
-}
+// ── Bash: the T81 rule ──────────────────────────────────────────────────────
 
 // A script run from a file is code the guard cannot read: handed a protected
 // path, run inside a protected directory, or written in the same command with
-// a protected path in its text, it may write there. A worker wrote the
+// a protected path in its text, it may run Jhon's own code. A worker wrote the
 // framework's source this way (2026-10-29): its script in /tmp, the file as
 // its argument.
 func TestFrameworkGuardScriptsFromFiles(t *testing.T) {
@@ -209,22 +183,6 @@ func TestFrameworkGuardScriptsFromFiles(t *testing.T) {
 	}
 }
 
-func TestFrameworkGuardGitOnProtected(t *testing.T) {
-	t.Parallel()
-	e := newFwEnv(t)
-	for _, command := range []string{
-		"git -C " + e.fw + " log --oneline",
-		"git --git-dir=" + e.fw + "/.git status",
-		"git --git-dir " + e.fw + "/.git --work-tree " + e.fw + " diff",
-		"cd " + e.fw + " && git status",
-		"cd ../../../.agents/jhon; git log",
-		"git -C fwlink status",
-		`sh -c "cd ` + e.fw + ` && git commit -m x"`,
-	} {
-		fwRefused(t, e.guard(t, "Bash", cmd(command), fwWho{owner: "vcs-worker"}), command)
-	}
-}
-
 func TestFrameworkGuardBashReadsAllowed(t *testing.T) {
 	t.Parallel()
 	e := newFwEnv(t)
@@ -240,23 +198,6 @@ func TestFrameworkGuardBashReadsAllowed(t *testing.T) {
 	}
 }
 
-func TestFrameworkGuardDescriptorDuplication(t *testing.T) {
-	t.Parallel()
-	e := newFwEnv(t)
-	inFw := fwWho{cwd: e.fw}
-	for _, command := range []string{"ls /tmp 2>&1", "ls /tmp 2>&1 | tail -3", "echo x >&2", "ls 2>&-", "ls 1>&2 2>/dev/null"} {
-		fwAllowed(t, e.guard(t, "Bash", cmd(command), inFw), command)
-	}
-	fwRefused(t, e.guard(t, "Bash", cmd("echo x 2>src/a.ts"), inFw), "a descriptor redirected to a file")
-	fwRefused(t, e.guard(t, "Bash", cmd("echo x &>src/a.ts"), inFw), "both streams redirected to a file")
-}
-
-func TestFrameworkGuardUnreadableCommand(t *testing.T) {
-	t.Parallel()
-	e := newFwEnv(t)
-	fwRefused(t, e.guard(t, "Bash", cmd("echo 'unterminated "+e.fw+"/src/a.ts"), fwWho{}), "unterminated quote")
-}
-
 func TestFrameworkGuardScopedAndFailsClosed(t *testing.T) {
 	t.Parallel()
 	e := newFwEnv(t)
@@ -267,47 +208,21 @@ func TestFrameworkGuardScopedAndFailsClosed(t *testing.T) {
 	code(t, hook(t, nil, "framework-guard", []string{"--agent", "general", "/x"}, "not json"), 2, "not json")
 }
 
-// ── verified bypasses (harness safety commit): wrappers and inline deletes ──
+// ── verified bypasses (harness safety commit): inline interpreter deletes ──
+// Interpreter code naming a protected path stays refused (T81); a plain
+// program's write there is the sandbox's (T128f).
 
-func TestFrameworkGuardWrappersAndInterpreterDeletes(t *testing.T) {
+func TestFrameworkGuardInterpreterDeletes(t *testing.T) {
 	t.Parallel()
 	e := newFwEnv(t)
 	for _, command := range []string{
-		"env rm -rf " + e.fw + "/src",
-		"sudo rm -rf " + e.fw + "/src",
-		"nice -n 5 rm " + e.cli,
-		"timeout 5 cp x.md " + e.agent,
-		"command touch " + e.release + "/x",
-		"bash -c 'rm -rf " + e.skill + "'",
+		`python3 -c "open('` + e.fw + `/src/tdd-evidence.ts','w').write('x')"`,
 		`node -e "require('fs').unlinkSync('` + e.fw + `/src/tdd-evidence.ts')"`,
 		`node -e "require('fs').rmSync('` + e.fw + `/src', { recursive: true })"`,
 		`python3 -c "import os; os.remove('` + e.fw + `/src/tdd-evidence.ts')"`,
 		`python3 -c "import shutil; shutil.rmtree('` + e.fw + `/src')"`,
 	} {
 		fwRefused(t, e.guard(t, "Bash", cmd(command), fwWho{}), command)
-	}
-}
-
-// ── review probes (2026-10-08): find, executable input, env -C ──
-
-func TestFrameworkGuardFindStdinScriptsEnvC(t *testing.T) {
-	t.Parallel()
-	e := newFwEnv(t)
-	for _, c := range [][2]string{
-		{"find . -delete", e.fw},
-		{"find " + e.fw + " -name '*.ts' -delete", e.project},
-		{"find fwlink -type f -exec rm {} +", e.project},
-		{"find " + e.skill + " -exec tee {} ;", e.project},
-		{"sh <<'EOF'\nrm -rf " + e.fw + "/src\nEOF", e.project},
-		{`printf "echo x > ` + e.agent + `\n" | bash`, e.project},
-		{`bash <<< "touch ` + e.release + `/x"`, e.project},
-		{"env -C " + e.fw + " rm -rf src", e.project},
-		{"env --chdir=" + e.fw + " git status", e.project},
-	} {
-		fwRefused(t, e.guard(t, "Bash", cmd(c[0]), fwWho{cwd: c[1]}), c[0])
-	}
-	for _, command := range []string{"find src -name '*.tmp' -delete", "sh <<'EOF'\necho hi > src/a.ts\nEOF", "env -C src rm -rf build"} {
-		fwAllowed(t, e.guard(t, "Bash", cmd(command), fwWho{}), command)
 	}
 }
 

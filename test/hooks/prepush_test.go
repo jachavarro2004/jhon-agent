@@ -22,7 +22,7 @@ exit "${FAKE_GO_EXIT:-0}"
 `
 
 // scratch is a jhon-shaped repository (engine/cmd/jhon/main.go) with one
-// commit on main, a copy of the real pre-push hook as its only hook, two
+// tagged commit on main, a copy of the real pre-push hook as its only hook, two
 // bare remotes (origin and mirror), and a bin directory holding the fake go.
 type scratch struct {
 	t                *testing.T
@@ -49,6 +49,9 @@ func newScratch(t *testing.T) *scratch {
 	support.GitInit(t, s.repo)
 	support.Write(t, s.repo, map[string]string{"engine/cmd/jhon/main.go": "package main\n\nfunc main() {}\n"})
 	s.commit("init")
+	// A release tag: the guards' differential needs one, and runs only when a
+	// push changes what judges the guards since it, which no push here does.
+	support.Git(t, s.repo, "tag", "v0.0.0")
 	for _, remote := range []string{"origin", "mirror"} {
 		bare := filepath.Join(base, remote+".git")
 		support.Git(t, base, "init", "-q", "--bare", bare)

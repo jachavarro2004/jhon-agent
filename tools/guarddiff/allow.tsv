@@ -1,5 +1,246 @@
 # The changed guard verdicts the owner accepted against the last release (tools/guarddiff/README.md).
 # One per line, tab-separated: id (file:line, @place/caller for a 6-column line), guard, old verdict, new verdict,
-# why (the task that changed it); `*` in the first four columns matches any value. Empty: v0.3.7 to a963427
-# changed no verdict (baseline.txt).
+# why (the class and the task that changed it); `*` in the first four columns matches any value. v0.3.7 to a963427
+# changed no verdict (baseline.txt); T128f slice 4 deleted framework-guard's Bash write checks (class S framework-bash).
 # id	guard	old	new	why
+fuzz.tsv:3@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:39@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:47@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:77@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:100@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:110@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:112@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:133@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:135@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:140@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:155@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:184@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:191@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:197@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:208@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:215@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:227@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:233@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:240@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:260@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:261@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:271@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:280@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:289@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:309@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:313@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:338@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:361@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:365@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:369@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:370@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:391@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:414@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:415@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:417@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:427@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:445@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:464@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:466@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:471@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:493@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:529@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:534@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:541@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:549@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:569@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:576@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:594@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:596@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:598@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:606@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:617@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:643@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:648@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:670@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:691@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:694@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:707@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:718@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:725@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:752@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:759@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:778@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:784@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:788@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:802@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:815@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:817@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:854@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:869@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:870@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:898@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:921@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:961@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:971@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:990@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:995@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1024@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1043@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1055@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1084@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1091@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1093@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1110@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1126@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1144@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1158@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1195@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1196@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1209@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1220@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1224@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1258@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1304@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1323@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1340@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1346@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1351@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1359@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1407@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1409@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1420@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1452@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1459@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1518@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1522@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1526@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1549@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1550@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1586@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1594@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1617@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1627@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1628@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1637@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1640@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1642@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1658@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1665@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1679@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1682@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1726@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1727@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1731@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1763@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1773@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1824@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1839@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1842@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1845@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1849@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1925@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1926@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:1956@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2013@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2047@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2067@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2072@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2092@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2093@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2095@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2106@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2115@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2116@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2124@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2129@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2172@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2182@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2185@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2187@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2207@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2226@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2300@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2316@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2319@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2321@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2333@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2337@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2348@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2354@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2359@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2378@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2381@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2432@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2440@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2454@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2462@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2471@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2489@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2493@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2526@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2556@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2562@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2588@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2614@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2617@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2628@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2649@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2651@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2658@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2664@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2680@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2686@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2687@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2691@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2728@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2760@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2771@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2780@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2789@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2797@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2799@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2813@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2820@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2821@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2830@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2832@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2833@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2853@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2910@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2940@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2951@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2957@repo/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:2984@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3009@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3013@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3021@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3024@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3025@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3038@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3077@ldd/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3085@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3114@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3138@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): an unreadable line naming a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3140@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3169@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3177@ldd/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3221@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3230@ldd/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3255@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3258@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3264@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3279@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3280@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3311@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3315@repo/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a wrapped writer on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3348@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3361@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3384@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3396@folder/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3419@corpus/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a write the shell reader finds under a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3435@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3450@corpus/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3488@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3492@corpus/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3493@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3514@folder/top-bypass	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3564@repo/subagent	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+fuzz.tsv:3565@folder/top-default	framework-guard	refuse	allow	S framework-bash (T128f slice 4): a redirect into a framework path; outside the project, read-only in the sandbox
+verifiers.tsv:144	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox
+verifiers.tsv:145	framework-guard	refuse	allow	S framework-bash (T128f slice 4): git on a framework path; outside the project, read-only in the sandbox

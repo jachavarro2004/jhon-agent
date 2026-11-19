@@ -134,10 +134,10 @@ guarantees:
   delivery/tested-revision: { claude-code: behavioural, pi: behavioural }
   delivery/same-tree: { claude-code: behavioural, pi: behavioural }
   delivery/high-risk-verified: { claude-code: behavioural, pi: behavioural }
-  # Docket AV2: enforced on the surface jhon hook framework-guard recognises
-  # (Edit, Write, the Bash writes its recogniser reads, and git on a protected
-  # path). A program that writes a protected file without naming it is outside
-  # that surface; absolute confinement needs runtime filesystem isolation.
+  # Docket AV2: jhon hook framework-guard refuses an Edit or Write of a
+  # protected path, and a Bash line running Jhon's own code by hand (T81).
+  # A Bash write or git run there is the sandbox's, read-only on Linux;
+  # with no sandbox (macOS, Windows) Bash is not confined.
   framework-boundary/no-framework-write: { by: blocking-hook-agent, claude-code: enforced, pi: enforced }
   # The safety layer: jhon hook safety-guard on Bash and jhon hook vcs-guard
   # on Edit/Write/NotebookEdit, for every Jhon agent, as a sub-agent or as
