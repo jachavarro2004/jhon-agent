@@ -390,3 +390,102 @@ func TestProfileForGivesWorkToALineThatRedirectsToAFile(t *testing.T) {
 		}
 	}
 }
+
+// T128h (L1331, L1332 K1): Docker is where the owner deploys, so a line
+// whose every program is docker or docker-compose runs unsandboxed, with
+// the line rules of the git/gh rule; login, logout and a change of the
+// owner's contexts stay work, as does anything the allowlist cannot read.
+func TestProfileForLeavesDockerLinesUnsandboxedButLoginAndContexts(t *testing.T) {
+	for line, want := range map[string]string{
+		"docker ps":                                     Unsandboxed,
+		"docker images":                                 Unsandboxed,
+		"docker build -t app .":                         Unsandboxed,
+		"docker run --rm -p 8080:80 app":                Unsandboxed,
+		"docker push o/app:1":                           Unsandboxed,
+		"docker compose up -d":                          Unsandboxed,
+		"docker compose down":                           Unsandboxed,
+		"docker compose logs -f api":                    Unsandboxed,
+		"docker compose exec api npm test":              Unsandboxed,
+		"docker-compose up -d":                          Unsandboxed,
+		"docker-compose -f compose.yml ps":              Unsandboxed,
+		"docker --context rootless ps":                  Unsandboxed,
+		"docker -c rootless ps":                         Unsandboxed,
+		"docker -H unix:///run/user/1000/d.sock ps":     Unsandboxed,
+		"docker --debug --log-level=info ps":            Unsandboxed,
+		"docker context ls":                             Unsandboxed,
+		"docker context inspect rootless":               Unsandboxed,
+		"docker context show":                           Unsandboxed,
+		"docker ps 2>&1":                                Unsandboxed,
+		"docker ps > /dev/null 2>&1":                    Unsandboxed,
+		"docker compose build && docker compose up -d":  Unsandboxed,
+		"docker build -t app . && git push origin main": Unsandboxed,
+		// Credentials and the owner's contexts.
+		"docker login":                                  Work,
+		"docker login -u bob registry.example":          Work,
+		"docker logout":                                 Work,
+		"docker --config /tmp/c login":                  Work,
+		"docker -H tcp://x:2375 login":                  Work,
+		"docker --context=rootless login":               Work,
+		"docker context create x --docker host=tcp://x": Work,
+		"docker context use rootless":                   Work,
+		"docker context rm x":                           Work,
+		"docker context update x --description y":       Work,
+		"docker context import x x.tar":                 Work,
+		"docker context export x":                       Work,
+		"docker context":                                Work,
+		"docker ps && docker login":                     Work,
+		// The line rules of the git/gh rule.
+		"docker":                         Work,
+		"docker ps && npm test":          Work,
+		"docker ps | grep api":           Work,
+		"docker ps > out.txt":            Work,
+		"docker save app > app.tar":      Work,
+		"docker ps 'unterminated":        Work,
+		"docker $CMD":                    Work,
+		"docker run $(echo app)":         Work,
+		"docker run {a,b}":               Work,
+		"docker --unknown ps":            Work,
+		"docker -- ps":                   Work,
+		"docker --config":                Work,
+		"DOCKER_HOST=tcp://x docker ps":  Work,
+		"sudo docker ps":                 Work,
+		"/usr/bin/docker ps":             Work,
+		"./docker ps":                    Work,
+		"sh -c 'docker ps'":              Work,
+		"docker() { cat x; }; docker ps": Work,
+	} {
+		if got := ProfileFor(line); got != want {
+			t.Errorf("ProfileFor(%q) = %q, want %q", line, got, want)
+		}
+	}
+}
+
+// T128h (L1332 K1): an unsandboxed docker line runs only when the docker
+// and docker-compose the shell finds first on PATH are not files a
+// sandboxed command could have written.
+func TestRunsOutsideRefusesAPlantedDocker(t *testing.T) {
+	d := with(machine, disk{
+		"/usr/bin": "dir", "/usr/bin/bash": "file", "/usr/bin/docker": "file", "/usr/bin/docker-compose": "file",
+		"/home/u/project/bin": "dir", "/home/u/project/bin/docker": "file", "/home/u/project/bin/docker-compose": "file",
+	})
+	h := host("linux", d, nil)
+	for _, c := range []struct {
+		name string
+		path []string
+		line string
+		want bool
+	}{
+		{"docker", []string{"/usr/bin"}, "docker compose up -d", true},
+		{"docker-compose", []string{"/usr/bin"}, "docker-compose up -d", true},
+		{"a planted docker", []string{"/home/u/project/bin", "/usr/bin"}, "docker ps", false},
+		{"a planted docker-compose", []string{"/home/u/project/bin", "/usr/bin"}, "docker-compose ps", false},
+		{"a planted docker after the real one", []string{"/usr/bin", "/home/u/project/bin"}, "docker ps", true},
+		{"docker login", []string{"/usr/bin"}, "docker login", false},
+	} {
+		in := sample(Work, d)
+		in.Path = slices.Clone(c.path)
+		if got := RunsOutside(h, in, []string{"/usr/bin/bash", "-c", c.line}); got != c.want {
+			t.Errorf("%s: RunsOutside(%q) = %v, want %v", c.name, c.line, got, c.want)
+		}
+	}
+}

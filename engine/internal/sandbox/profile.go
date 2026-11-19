@@ -144,8 +144,8 @@ func cloneTarget(args []string) string {
 // shell named by an absolute path, the line one ProfileAt leaves
 // unsandboxed in in's working directory and project, and none of the
 // programs it may start is one a sandboxed command could have written: the
-// shell's file, and the git, gh and ssh the shell finds first on PATH, lie
-// outside every writable area of in, and
+// shell's file, and the git, gh, ssh, docker and docker-compose the shell
+// finds first on PATH, lie outside every writable area of in, and
 // PATH has no relative folder (L888, F1, as for bubblewrap). Anything else
 // runs with the work profile.
 func RunsOutside(h Host, in Input, argv []string) bool {
@@ -169,7 +169,7 @@ func RunsOutside(h Host, in Input, argv []string) bool {
 			return false
 		}
 	}
-	for _, name := range []string{"git", "gh", "ssh"} {
+	for _, name := range []string{"git", "gh", "ssh", "docker", "docker-compose"} {
 		for _, dir := range in.Path {
 			file := filepath.Join(dir, name)
 			if _, isDir, ok := in.Stat(file); !ok || isDir {
@@ -300,13 +300,58 @@ var gitGlobals = []string{"--no-pager", "-P", "--no-optional-locks"}
 // know, which an extension may hold) gives work.
 var ghSubcommands = []string{"pr", "issue", "run", "workflow", "release", "repo", "api", "search", "label", "status", "browse", "cache"}
 
+// dockerValues are docker's global options that take a value (as the next
+// word or after =), and dockerFlags the ones that take none: any other
+// word before the command gives work, as its value is not known.
+var (
+	dockerValues = []string{"--config", "-c", "--context", "-H", "--host", "-l", "--log-level", "--tlscacert", "--tlscert", "--tlskey"}
+	dockerFlags  = []string{"-D", "--debug", "--tls", "--tlsverify"}
+)
+
+// dockerContexts are the docker context commands that only read the
+// owner's contexts; create, use, rm, update, import and export change
+// them or write a file.
+var dockerContexts = []string{"ls", "list", "inspect", "show"}
+
+// dockerDelivers is whether docker's arguments run a command that leaves
+// the owner's credentials and contexts as they are (T128h, L1332 K1):
+// Docker is the owner's deployment tool (L1331), so any command runs
+// outside the sandbox, its volume mounts unjudged, but login, logout and a
+// change of contexts.
+func dockerDelivers(args []string) bool {
+	k := 0
+	for ; k < len(args) && strings.HasPrefix(args[k], "-"); k++ {
+		name, _, attached := strings.Cut(args[k], "=")
+		switch {
+		case slices.Contains(dockerValues, name):
+			if !attached {
+				k++
+			}
+		case !slices.Contains(dockerFlags, args[k]):
+			return false
+		}
+	}
+	if k >= len(args) {
+		return false
+	}
+	switch args[k] {
+	case "login", "logout":
+		return false
+	case "context":
+		return k+1 < len(args) && slices.Contains(dockerContexts, args[k+1])
+	}
+	return true
+}
+
 // ProfileFor is how a runtime runs a command line with sandbox.mode on
 // (T128g, L1303 G1; the classifier of T128d, L1245 K1): Unsandboxed when
 // every program the shell reader finds on it is git with a network
 // subcommand (fetch, pull, push, ls-remote, clone, remote update) or gh with
 // one of ghSubcommands that runs no git and reads no local file
-// (ghDelivers), and the line writes no file through the shell; Work for any
-// other line. The pi shell asks it through `jhon sandbox profile` and
+// (ghDelivers), or docker or docker-compose with any command but docker's
+// login, logout and a change of contexts (dockerDelivers, T128h, L1332
+// K1), and the line writes no file through the shell; Work for any other
+// line. The pi shell asks it through `jhon sandbox profile` and
 // Claude Code's wrap calls it, so both runtimes take the same answer; `jhon
 // sandbox run --profile unsandboxed` asks it again before it runs a line
 // with no sandbox.
@@ -372,7 +417,8 @@ func quiet(r *sh.Redirect) bool {
 }
 
 // networkProgram is whether p is git with a network subcommand and only
-// listed options, or gh with a listed subcommand, run as its bare name.
+// listed options, gh with a listed subcommand, or docker or docker-compose
+// (dockerDelivers), run as its bare name.
 func networkProgram(p sh.Program) bool {
 	if len(p.Via) > 0 || len(p.Env) > 0 || p.Chdir != nil || p.Code != nil || p.StdinOpaque != "" || len(p.Argv) < 2 {
 		return false
@@ -385,6 +431,10 @@ func networkProgram(p sh.Program) bool {
 		return slices.Contains(ghSubcommands, p.Argv[1]) && !slices.Contains(p.Argv, "--") && ghDelivers(p.Argv[1], p.Argv[2:])
 	case "git":
 		return gitDelivers(p.Argv[1:])
+	case "docker":
+		return dockerDelivers(p.Argv[1:])
+	case "docker-compose":
+		return true
 	}
 	return false
 }

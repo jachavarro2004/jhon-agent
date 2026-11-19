@@ -35,8 +35,8 @@ import (
 // (L888). It always sandboxes: where the sandbox cannot run it runs
 // nothing, says why and the fix on one line, and exits 126. The one
 // exception is the runtimes' --profile unsandboxed, which runs `<shell> -c
-// <line>` with no sandbox only when the line is a git or gh network line of
-// trusted programs (sandbox.RunsOutside), and anything else with the work
+// <line>` with no sandbox only when the line is a git or gh network line,
+// or a docker one (T128h), of trusted programs (sandbox.RunsOutside), and anything else with the work
 // profile. sandbox.mode in the settings is for the callers (the shell, the
 // hook), which read it through status: the setting, whether the sandbox
 // can run here, and why not. profile prints how a command line runs
