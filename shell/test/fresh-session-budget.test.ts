@@ -1,7 +1,8 @@
 /**
  * T115a (L691): the context notice comes at whichever is first, the share of
- * the window (shell.behaviour.fresh_session_at) or an absolute token budget
- * (shell.behaviour.fresh_session_tokens, 150000 by default; 0 turns it off).
+ * the window (ten points before shell.behaviour.compact_at) or an absolute
+ * token budget (three quarters of shell.behaviour.compact_tokens, 150000 by
+ * default; 0 turns it off). T155 (L1394) merged the keys.
  */
 import "./isolated-env.ts";
 import assert from "node:assert/strict";
@@ -10,9 +11,9 @@ import { installShellSettings, SETTINGS_DEFAULTS, shellSettings } from "../lib/s
 import { FreshSessionLatch } from "../lib/fresh-session.ts";
 import { memorySettings } from "./fake-jhon-settings.ts";
 
-test("the token budget is shell.behaviour.fresh_session_tokens, 150000 by default", () => {
-	assert.equal(SETTINGS_DEFAULTS["shell.behaviour.fresh_session_tokens"], 150000);
-	const previous = installShellSettings(memorySettings({ "shell.behaviour.fresh_session_tokens": 90000 }));
+test("the token budget is three quarters of shell.behaviour.compact_tokens, 150000 by default", () => {
+	assert.equal(SETTINGS_DEFAULTS["shell.behaviour.compact_tokens"], 200000);
+	const previous = installShellSettings(memorySettings({ "shell.behaviour.compact_tokens": 120000 }));
 	try { assert.equal(shellSettings().freshSessionTokens(), 90000); } finally { installShellSettings(previous); }
 	installShellSettings(memorySettings());
 	try { assert.equal(shellSettings().freshSessionTokens(), 150000); } finally { installShellSettings(previous); }

@@ -27,7 +27,7 @@ import { TasksView } from "./background-tasks-view.ts";
 import { openInExternalEditor } from "./ui/jhon-panel-editor.ts";
 import { OPEN_TASKS_EVENT, TASKS_EVENT } from "./events.ts";
 import { BASH_BACKGROUND_TOOL, isStandaloneSleep, MONITOR_TOOL, type JobExecOperations } from "./ui/background-jobs.ts";
-import { foregroundWaitRefusal } from "./foreground-wait.ts";
+import { foregroundWaitNote } from "./foreground-wait.ts";
 import { createMonitorController, MONITOR_BATCH_MS, MONITOR_FLOOD_LINES, MONITOR_FLOOD_WINDOW_MS, MONITOR_LINES_PER_NOTICE, MONITOR_MAX_TIMEOUT_SECONDS, type MonitorBatch, type MonitorNotice, type MonitorStopReason } from "./ui/background-monitor.ts";
 import { NOTIFICATION_SOURCE_EVENT, subagentNotificationEvent } from "./ui/notification-events.ts";
 import { withOverlayRepaint } from "./ui/overlay-repaint.ts";
@@ -457,17 +457,27 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 	});
 
 	// A turn that sleeps while background work runs only burns the turn: each
-	// end already arrives as a message. bash_background and monitor are the way to wait;
-	// a foreground bash that sleeps over a few seconds or waits long is refused too.
+	// end already arrives as a message. bash_background and monitor are the way
+	// to wait. A foreground bash that sleeps over a few seconds or waits long
+	// still runs (T155, L1394: advisory, it was refused since T119); its result
+	// carries one note, by its tool call id.
+	const waitNotes = new Map<string, string>();
 	pi.on("tool_call", (event: any) => {
-		if (event.toolName !== "bash") return undefined;
+		if (event.toolName !== "bash" || typeof event.toolCallId !== "string") return undefined;
 		const command = (event.input as { command?: unknown }).command;
 		if (typeof command !== "string") return undefined;
 		const running = isStandaloneSleep(command) ? tasks.list(sessionId()).filter((task) => task.status === "running").length : 0;
-		if (running > 0) return { block: true, reason: `Standalone sleep is refused while background work runs (${plural(running, "background task")}). End the turn; each one's end arrives as a message and starts a new turn.` };
-		// Every wait goes to the background (T119, L716): a foreground sleep or long wait is refused before it runs.
-		const wait = foregroundWaitRefusal(command);
-		return wait ? { block: true, reason: wait } : undefined;
+		const note = running > 0
+			? `Standalone sleep while background work runs (${plural(running, "background task")}): it only held the turn. Each task's end arrives as a message and starts a new turn, so end the turn instead.`
+			: foregroundWaitNote(command);
+		if (note) waitNotes.set(event.toolCallId, note);
+		return undefined;
+	});
+	pi.on("tool_result", (event: any) => {
+		const note = typeof event.toolCallId === "string" ? waitNotes.get(event.toolCallId) : undefined;
+		if (!note) return undefined;
+		waitNotes.delete(event.toolCallId);
+		return { content: [...(event.content ?? []), { type: "text", text: note }] };
 	});
 
 	/** A sub-agent's saved session file: `<id>.jsonl` or `<timestamp>_<id>.jsonl` in its directory. */
@@ -573,6 +583,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 	pi.on("session_shutdown", async () => {
 		// Tasks never outlive their session; a stopped task sends no notice.
 		held = [];
+		waitNotes.clear();
 		wake?.();
 		monitors.cancelAll();
 		const stopped = tasks.stopAll();

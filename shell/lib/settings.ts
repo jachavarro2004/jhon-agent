@@ -77,11 +77,7 @@ export const SETTINGS_DEFAULTS: Readonly<Record<string, SettingValue>> = Object.
 	"shell.appearance.density": "comfortable",
 	"shell.behaviour.compact_at": 60,
 	"shell.behaviour.compact_tokens": 200000,
-	"shell.behaviour.fresh_session_at": 50,
-	"shell.behaviour.fresh_session_tokens": 150000,
-	"shell.behaviour.backstop_tokens": 100000,
 	"shell.behaviour.child_backstop_tokens": 80000,
-	"shell.behaviour.child_cap_tokens": 150000,
 	"shell.behaviour.stall_seconds": 75,
 	"shell.behaviour.thinking_stall_seconds": 300,
 	"shell.behaviour.double_esc_cancel": false,
@@ -282,17 +278,16 @@ export class ShellSettings {
 	density(): DensitySetting { const v = this.string("shell.appearance.density"); return v === "compact" || v === "minimal" ? v : "comfortable"; }
 	/** The share of the window at which the main session compacts; 100 leaves it to pi. */
 	compactAt(): number { return this.int("shell.behaviour.compact_at"); }
-	/** The context tokens past which the main session compacts, whichever is first with compact_at; 0 is no budget. */
+	/** The context tokens past which the main session compacts, whichever is first with compact_at; 0 is no budget, and turns every token rung of the ladder off. */
 	compactTokens(): number { return this.int("shell.behaviour.compact_tokens"); }
-	freshSessionAt(): number { return this.int("shell.behaviour.fresh_session_at"); }
-	/** The context tokens past which the fresh-session notice comes, whichever is first with fresh_session_at; 0 is no budget. */
-	freshSessionTokens(): number { return this.int("shell.behaviour.fresh_session_tokens"); }
-	/** T115e: the context tokens past which the orchestrator hears once to delegate, or 15% of the window if smaller; 0 turns it off. */
-	backstopTokens(): number { return this.int("shell.behaviour.backstop_tokens"); }
-	/** T122: the context tokens past which a sub-agent child hears once to wrap up, or 40% of the window if smaller; 0 turns it off. */
+	/** T155 (L1394): the fresh-session notice's share, ten points of the window before compact_at, at least 1. */
+	freshSessionAt(): number { return Math.max(1, this.compactAt() - 10); }
+	/** T155: the context tokens past which the fresh-session notice comes, whichever is first with its share: three quarters of compact_tokens; 0 is no budget. */
+	freshSessionTokens(): number { return Math.floor((this.compactTokens() * 3) / 4); }
+	/** T115e, T155: the context tokens past which the orchestrator hears once to delegate, or 15% of the window if smaller: half of compact_tokens; 0 turns it off. */
+	backstopTokens(): number { return Math.floor(this.compactTokens() / 2); }
+	/** T122: the context tokens past which a sub-agent child hears once to wrap up, or 40% of the window if smaller; 0 turns it off. A child is never capped (T155). */
 	childBackstopTokens(): number { return this.int("shell.behaviour.child_backstop_tokens"); }
-	/** T122: the context tokens past which a child's tool calls are refused so it returns, or 75% of the window if smaller; 0 turns it off. */
-	childCapTokens(): number { return this.int("shell.behaviour.child_cap_tokens"); }
 	/** Seconds of API silence before stall recovery aborts the turn on a direct API provider with thinking off or minimal; 0 turns all stall recovery off. */
 	stallSeconds(): number { return this.int("shell.behaviour.stall_seconds"); }
 	/** The same on claude-bridge or while the model thinks (T38, L382); 0 never recovers there. */

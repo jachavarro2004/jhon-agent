@@ -107,12 +107,8 @@ func TestDefaultsWithNoFile(t *testing.T) {
 		"shell.appearance.surface":                           "transparent",
 		"shell.appearance.density":                           "comfortable",
 		"shell.behaviour.compact_at":                         60,
-		"shell.behaviour.fresh_session_at":                   50,
-		"shell.behaviour.fresh_session_tokens":               150000,
 		"shell.behaviour.compact_tokens":                     200000,
-		"shell.behaviour.backstop_tokens":                    100000,
 		"shell.behaviour.child_backstop_tokens":              80000,
-		"shell.behaviour.child_cap_tokens":                   150000,
 		"shell.behaviour.stall_seconds":                      75,
 		"shell.behaviour.thinking_stall_seconds":             300,
 		"shell.behaviour.double_esc_cancel":                  false, // today's shell default (L199)
@@ -214,12 +210,8 @@ func TestValidationErrors(t *testing.T) {
 	for _, c := range []struct{ name, text, want string }{
 		{"range", "[shell.behaviour]\ncompact_at = 150\n", `shell.behaviour.compact_at: 150 is not accepted (accepted: a whole number from 1 to 100)`},
 		{"type", "[shell.behaviour]\ncompact_at = \"60\"\n", `shell.behaviour.compact_at: "60" is not accepted (accepted: a whole number from 1 to 100)`},
-		{"tokens", "[shell.behaviour]\nfresh_session_tokens = -1\n", `shell.behaviour.fresh_session_tokens: -1 is not accepted (accepted: a whole number, 0 or more)`},
-		{"tokens type", "[shell.behaviour]\nfresh_session_tokens = \"150K\"\n", `shell.behaviour.fresh_session_tokens: "150K" is not accepted (accepted: a whole number, 0 or more)`},
 		{"compact tokens", "[shell.behaviour]\ncompact_tokens = -1\n", `shell.behaviour.compact_tokens: -1 is not accepted (accepted: a whole number, 0 or more)`},
 		{"compact tokens type", "[shell.behaviour]\ncompact_tokens = 1.5\n", `shell.behaviour.compact_tokens: 1.5 is not accepted (accepted: a whole number, 0 or more)`},
-		{"backstop tokens", "[shell.behaviour]\nbackstop_tokens = -1\n", `shell.behaviour.backstop_tokens: -1 is not accepted (accepted: a whole number, 0 or more)`},
-		{"backstop tokens type", "[shell.behaviour]\nbackstop_tokens = \"100K\"\n", `shell.behaviour.backstop_tokens: "100K" is not accepted (accepted: a whole number, 0 or more)`},
 		{"enum", "[shell.appearance]\nicons = \"boxy\"\n", `shell.appearance.icons: "boxy" is not accepted (accepted: geometric, emoji)`},
 		{"cards", "[shell.appearance]\ncards = \"sections\"\n", `shell.appearance.cards: "sections" is not accepted (accepted: float, neon)`},
 		{"surface", "[shell.appearance]\nsurface = \"band\"\n", `shell.appearance.surface: "band" is not accepted (accepted: transparent, tinted)`},
@@ -330,10 +322,8 @@ func TestSetRejects(t *testing.T) {
 		{"integrations.codegraph", "false", "integrations.codegraph: required for now: Jhon's own memory/indexer will make it optional"},
 		{"shell.appearance.animations", "fast", `shell.appearance.animations: "fast" is not accepted (accepted: full, off)`},
 		{"shell.behaviour.compact_at", "0", `shell.behaviour.compact_at: 0 is not accepted (accepted: a whole number from 1 to 100)`},
-		{"shell.behaviour.fresh_session_tokens", "-5", `shell.behaviour.fresh_session_tokens: -5 is not accepted (accepted: a whole number, 0 or more)`},
 		{"shell.behaviour.compact_tokens", "-5", `shell.behaviour.compact_tokens: -5 is not accepted (accepted: a whole number, 0 or more)`},
-		{"shell.behaviour.backstop_tokens", "-5", `shell.behaviour.backstop_tokens: -5 is not accepted (accepted: a whole number, 0 or more)`},
-		{"shell.behaviour.backstop_tokens", "1.5", `shell.behaviour.backstop_tokens: "1.5" is not accepted (accepted: a whole number, 0 or more)`},
+		{"shell.behaviour.compact_tokens", "1.5", `shell.behaviour.compact_tokens: "1.5" is not accepted (accepted: a whole number, 0 or more)`},
 		{"nope.key", "1", "nope.key: unknown key"},
 	} {
 		_, err := Set(path, c.key, c.value)

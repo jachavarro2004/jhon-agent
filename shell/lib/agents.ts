@@ -29,7 +29,6 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordEvent, type Attributes } from "./telemetry.ts";
 import { childContext, leanBody } from "./child-context.ts";
-import { capNote, CONTEXT_CAP_MARK } from "./child-budget.ts";
 import { SESSION_PROFILE_ENV } from "./session-profile.ts";
 import { withoutLaunchContext } from "./launch-context.ts";
 
@@ -296,15 +295,12 @@ export function runAgent(agent: AgentDef, task: string, cwd: string, options: Ru
     const child = spawn(program, childArgs(agent, task, session, onEvent ? "json" : "print", base), { cwd, env: childEnv(agent, taskFile, process.env, sessionProfile), stdio: ["ignore", "pipe", "pipe"] });
     // JSONL framing: records end at LF only (docs/json.md), so the decoder splits on "\n" itself.
     let pending = "", answer = "";
-    // T122: a tool call the child's context cap refused (lib/child-budget.ts).
-    let contextCapped = false;
     const record = (line: string) => {
       if (!line.trim()) return;
       let event: ChildEvent;
       try { event = JSON.parse(line.replace(/\r$/, "")); } catch { return; }
       if (event.type === "message_end" && (event.message as { role?: unknown } | undefined)?.role === "assistant") turns++;
       if (event.type === "message_end") answer = assistantText(event.message) || answer;
-      if (event.type === "message_end" && (event.message as { role?: unknown } | undefined)?.role === "toolResult" && JSON.stringify(event.message).includes(CONTEXT_CAP_MARK)) contextCapped = true;
       try { onEvent?.(event); } catch { /* a viewer's failure never stops the run */ }
     };
     const abort = () => { child.kill("SIGTERM"); done({ ok: false, text: `jhon: the sub-agent "${agent.name}" was cancelled` }, "cancelled"); };
@@ -333,10 +329,7 @@ export function runAgent(agent: AgentDef, task: string, cwd: string, options: Ru
       if (onEvent) { record(pending); out = answer; }
       const text = out.trim();
       if (code === 0) {
-        // T122: the parent hears that its child stopped at its context cap, so it hands the rest to a fresh one.
-        const note = contextCapped ? capNote(agent.name) : "";
-        const said = clip(text || "(the sub-agent printed nothing)");
-        return done({ ok: true, text: note ? `${said}\n\n${note}` : said }, contextCapped ? "context-cap" : "completed");
+        return done({ ok: true, text: clip(text || "(the sub-agent printed nothing)") }, "completed");
       }
       done({ ok: false, text: clip(childFailure(agent, code, sig, [text, err.trim()].filter(Boolean).join("\n"))) }, "failed");
     });
@@ -358,7 +351,7 @@ export function childFailure(agent: Pick<AgentDef, "name" | "model">, code: numb
   return `${head}${why ? `:\n${why}` : ""}`;
 }
 
-/** How a sub-agent's run ended: done, stopped at its context cap (T122), past its timeout, cancelled, or failed. Events from before T131 also say `turn-cap`, which the engine still counts. */
+/** How a sub-agent's run ended: done, past its timeout, cancelled, or failed. Events from before T155 also say `context-cap` (the child cap T122 had), and from before T131 `turn-cap`, which the engine still counts. */
 export type SubagentOutcome = "completed" | "context-cap" | "timeout" | "cancelled" | "failed";
 
 /** A sub-agent's run as its jhon.subagent event says it; turns only when they were counted (a JSON run). */

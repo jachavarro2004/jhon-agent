@@ -195,19 +195,34 @@ test("no shell module reads a variable `jhon settings` resolves; only the engine
 	assert.deepEqual(offenders, []);
 });
 
-test("the fresh-session notice comes past shell.behaviour.fresh_session_at, 50 by default", () => {
-	const previous = installShellSettings(memorySettings({ "shell.behaviour.fresh_session_at": 70 }));
+// T155 (L1377, L1394): the context ladder is compact_at and compact_tokens; the notices come from them.
+test("the fresh-session notice comes ten points of the window before shell.behaviour.compact_at, 50 by default, at least 1", () => {
+	assert.equal("shell.behaviour.fresh_session_at" in SETTINGS_DEFAULTS, false);
+	const previous = installShellSettings(memorySettings({ "shell.behaviour.compact_at": 80, "shell.behaviour.fresh_session_at": 20 }));
 	try {
+		assert.equal(shellSettings().freshSessionAt(), 70, "an old fresh_session_at changes nothing");
 		const latch = new FreshSessionLatch();
 		assert.equal(latch.context(69), undefined);
 		assert.match(latch.context(70) ?? "", /^One session per change: the context is at 70%/);
 	} finally { installShellSettings(previous); }
+	for (const [at, fresh] of [[5, 1], [11, 1], [12, 2], [100, 90]]) {
+		const p = installShellSettings(memorySettings({ "shell.behaviour.compact_at": at }));
+		try { assert.equal(shellSettings().freshSessionAt(), fresh, String(at)); } finally { installShellSettings(p); }
+	}
 	installShellSettings(memorySettings());
 	try {
 		const latch = new FreshSessionLatch();
 		assert.equal(latch.context(49), undefined);
 		assert.match(latch.context(50) ?? "", /^One session per change: the context is at 50%/);
 	} finally { installShellSettings(previous); }
+});
+
+test("the fresh-session token budget is three quarters of shell.behaviour.compact_tokens, 150000 by default, 0 off", () => {
+	assert.equal("shell.behaviour.fresh_session_tokens" in SETTINGS_DEFAULTS, false);
+	for (const [tokens, fresh] of [[undefined, 150000], [100000, 75000], [1001, 750], [0, 0]] as const) {
+		const p = installShellSettings(memorySettings(tokens === undefined ? { "shell.behaviour.fresh_session_tokens": 9 } : { "shell.behaviour.compact_tokens": tokens }));
+		try { assert.equal(shellSettings().freshSessionTokens(), fresh, String(tokens)); } finally { installShellSettings(p); }
+	}
 });
 
 // T30 (L314): v0.2 retired keys too, so the drop notice names no version.

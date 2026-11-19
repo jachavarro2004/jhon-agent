@@ -1,9 +1,9 @@
 /**
- * T117e (L745, L746): the exploration-budget notice. Per owner request the
- * main session's lookups (read, grep, find, ls, inspect, codegraph, a bash
- * command that only reads) and the bytes they returned are counted; past 3
- * lookups or 40,000 bytes the tool result carries one short notice, its
- * wording by delegation mode. Children never; a new owner message resets it.
+ * T155 (L1377, L1394): the main session's exploration-budget notice (T117e)
+ * is gone; how much it reads is the owner's. What stays in
+ * lib/exploration-budget.ts is the lookup classifier (read, grep, find, ls,
+ * inspect, codegraph, a bash command that only reads) a sub-agent's
+ * CodeGraph read budget counts with (lib/child-budget.ts).
  */
 
 import "./isolated-env.ts";
@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import jhon, { CONFIG_FILE } from "../extensions/jhon.ts";
-import { explorationNotice, readOnlyBash } from "../lib/exploration-budget.ts";
+import { readOnlyBash } from "../lib/exploration-budget.ts";
 import { useMemorySettings } from "./fake-jhon-settings.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -27,7 +27,7 @@ const tempDir = (prefix: string) => { const d = realpathSync(mkdtempSync(join(tm
 type Handler = (event: any, ctx: any) => Promise<any>;
 
 async function session(t: TestContext, mode: "inline" | "writer", env: Record<string, string> = {}) {
-	useMemorySettings(t, { "shell.behaviour.backstop_tokens": 0 });
+	useMemorySettings(t, { "shell.behaviour.compact_tokens": 0 });
 	const dir = tempDir("jhon-xbudget-agent-");
 	const repo = tempDir("jhon-xbudget-repo-");
 	spawnSync("git", ["init", "-q"], { cwd: repo });
@@ -61,43 +61,20 @@ async function session(t: TestContext, mode: "inline" | "writer", env: Record<st
 	return { look, owner, fire, repo };
 }
 
-test("past 3 lookups the fourth result carries the notice, once per request; a new owner message resets it, a notice does not", async (t) => {
-	const s = await session(t, "inline");
-	assert.equal(await s.look("read", { path: "a.ts" }), undefined);
-	assert.equal(await s.look("grep", { pattern: "x" }), undefined);
-	assert.equal(await s.look("bash", { command: "git log --oneline -5 | head -3" }), undefined);
-	assert.equal(await s.look("bash", { command: "npm test" }), undefined, "a command that does more than read is no lookup");
-	const n = await s.look("find", { pattern: "*.ts" });
-	assert.equal(n, explorationNotice(4, 4, "inline"));
-	assert.equal(await s.look("ls", {}), undefined, "once per request");
-	await s.fire("input", { type: "input", text: "notice", source: "extension", streamingBehavior: "followUp" }, { cwd: s.repo });
-	assert.equal(await s.look("read", { path: "b.ts" }), undefined, "an extension message is no new request");
-	await s.owner();
-	for (let i = 0; i < 3; i++) assert.equal(await s.look("inspect", { command: "git diff" }), undefined);
-	assert.ok(await s.look("read", { path: "c.ts" }), "a new request, a new notice");
+// T155 (L1377, L1394): the main session's reading is the owner's; the notice is gone.
+test("the main session hears no exploration-budget notice however much it reads, in either mode, and a child neither", async (t) => {
+	for (const [mode, env] of [["inline", {}], ["writer", {}], ["inline", { JHON_PI_CHILD: "1" }]] as const) {
+		const s = await session(t, mode, env);
+		for (let i = 0; i < 3; i++) {
+			await s.owner();
+			for (let j = 0; j < 8; j++) assert.equal(await s.look(j % 2 ? "read" : "grep", { path: "a.ts" }, "z".repeat(20_000)), undefined, `${mode} ${JSON.stringify(env)} ${i}/${j}`);
+		}
+	}
 });
 
-test("past 40,000 bytes the notice comes on fewer lookups", async (t) => {
-	const s = await session(t, "inline");
-	assert.equal(await s.look("read", { path: "a.ts" }, "é".repeat(15_000)), undefined);
-	assert.equal(await s.look("read", { path: "b.ts" }, "y".repeat(10_001)), explorationNotice(2, 40_001, "inline"));
-});
-
-test("the wording by mode, short, and the writer's names the worker's brief", async (t) => {
-	const inline = explorationNotice(4, 50_000, "inline");
-	const writer = explorationNotice(4, 50_000, "writer");
-	assert.match(inline, /one explore sub-agent with a short handoff/);
-	assert.match(inline, /prepares an understood inline write is exempt/);
-	assert.match(writer, /belongs in its brief/);
-	assert.ok(inline.length < 300 && writer.length < 300, `${inline.length} ${writer.length}`);
-	const s = await session(t, "writer");
-	for (let i = 0; i < 3; i++) await s.look("read", { path: "a.ts" });
-	assert.equal(await s.look("read", { path: "a.ts" }), explorationNotice(4, 4, "writer"));
-});
-
-test("a child never hears it", async (t) => {
-	const s = await session(t, "inline", { JHON_PI_CHILD: "1" });
-	for (let i = 0; i < 6; i++) assert.equal(await s.look("read", { path: "a.ts" }, "z".repeat(20_000)), undefined);
+test("lib/exploration-budget.ts keeps only the lookup classifiers the sub-agent read budget uses", async () => {
+	const lib = await import("../lib/exploration-budget.ts");
+	assert.deepEqual(Object.keys(lib).sort(), ["isLookup", "readOnlyBash"]);
 });
 
 // T134 (L1021 H3): 5,198 of 5,688 real sub-agent bash reads open with `cd <dir> &&`; they count, and nothing else changes.

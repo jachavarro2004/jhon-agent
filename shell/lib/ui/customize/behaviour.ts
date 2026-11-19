@@ -8,46 +8,32 @@ import { attempt, boolRow, textRow, type CustomizeCategory } from "./row.ts";
 export const BEHAVIOUR: CustomizeCategory = {
 	id: "behaviour", title: "Behaviour", summary: "Compaction, the fresh-session notice, stall recovery, double Esc",
 	rows: [
-		textRow("shell.behaviour.compact_at", "Compact at (%)", "The share of the window at which the session compacts; 100 leaves it to pi.", {
+		// T155 (L1394): the context ladder is these two keys; the notices before compaction come from them.
+		textRow("shell.behaviour.compact_at", "Compact at (%)", "The share of the window at which the session compacts; the fresh-session notice comes ten points before it. 100 leaves compaction to pi.", {
 			preview: (v) => ({
 				caption: "what happens",
-				lines: [Number(v) >= 100 ? "100: pi decides when the session compacts." : `At ${v}% of the context window the session compacts.`],
+				lines: [Number(v) >= 100
+					? "100: pi decides when the session compacts; the fresh-session notice comes at 90%."
+					: `At ${v}% of the context window the session compacts; from ${Math.max(1, Number(v) - 10)}% the context notice suggests a fresh session.`],
 			}),
 		}),
 		// T115a (L691): a share of a very large window never comes, so a token budget sits beside it.
-		textRow("shell.behaviour.compact_tokens", "Compact at (tokens)", "Past this many tokens the session compacts, whichever comes first with the share; 0 turns it off.", {
-			preview: (v) => ({
-				caption: "what happens",
-				lines: [Number(v) === 0 ? "0: off; only the share compacts." : `Past ${v} tokens the session compacts, or at the share if that comes first.`],
-			}),
+		textRow("shell.behaviour.compact_tokens", "Compact at (tokens)", "Past this many tokens the session compacts, whichever comes first with the share; the fresh-session notice comes at three quarters of it, the delegation notice at half (or 15% of the window). 0 turns all three off.", {
+			preview: (v) => {
+				const n = Number(v);
+				return {
+					caption: "what happens",
+					lines: n === 0
+						? ["0: off; only the shares compact and suggest a fresh session, and no delegation notice."]
+						: [`Past ${v} tokens the session compacts, or at the share if that comes first.`, `Past ${Math.floor((n * 3) / 4)} tokens the context notice suggests a fresh session; past ${Math.floor(n / 2)} tokens, or 15% of the window, the orchestrator hears once to delegate.`],
+				};
+			},
 		}),
-		textRow("shell.behaviour.fresh_session_at", "Fresh session at (%)", "From this share of the window the context notice suggests a fresh session.", {
-			preview: (v) => ({ caption: "what happens", lines: [`From ${v}% of the window the context notice suggests a fresh session.`] }),
-		}),
-		textRow("shell.behaviour.fresh_session_tokens", "Fresh session at (tokens)", "Past this many tokens the context notice suggests a fresh session, whichever comes first with the share; 0 turns it off.", {
-			preview: (v) => ({
-				caption: "what happens",
-				lines: [Number(v) === 0 ? "0: off; only the share brings the notice." : `Past ${v} tokens the context notice suggests a fresh session, or at the share if that comes first.`],
-			}),
-		}),
-		// T115e (L715): the ladder's first rung, before the fresh-session notice and compaction.
-		textRow("shell.behaviour.backstop_tokens", "Delegate at (tokens)", "Past this many tokens, or 15% of the window if that comes first, the orchestrator hears once to delegate its next several-step unit; 0 turns it off.", {
-			preview: (v) => ({
-				caption: "what happens",
-				lines: [Number(v) === 0 ? "0: off; no delegation backstop." : `Past ${v} tokens, or 15% of the window if that comes first, the orchestrator hears once to delegate its next several-step unit.`],
-			}),
-		}),
-		// T122 (L762 F2): a sub-agent child's own ladder.
+		// T122 (L762 F2): a sub-agent's wrap-up notice; never a cap (T155).
 		textRow("shell.behaviour.child_backstop_tokens", "Sub-agent wrap-up at (tokens)", "Past this many tokens, or 40% of the window if that comes first, a sub-agent hears once to wrap up and return path:line evidence; 0 turns it off.", {
 			preview: (v) => ({
 				caption: "what happens",
 				lines: [Number(v) === 0 ? "0: off; no sub-agent wrap-up notice." : `Past ${v} tokens, or 40% of the window if that comes first, a sub-agent hears once to wrap up and return.`],
-			}),
-		}),
-		textRow("shell.behaviour.child_cap_tokens", "Sub-agent cap at (tokens)", "Past this many tokens, or 75% of the window if that comes first, a sub-agent may call no more tools and returns what it has; 0 turns it off.", {
-			preview: (v) => ({
-				caption: "what happens",
-				lines: [Number(v) === 0 ? "0: off; no sub-agent context cap." : `Past ${v} tokens, or 75% of the window if that comes first, a sub-agent may call no more tools and returns.`],
 			}),
 		}),
 		textRow("shell.behaviour.stall_seconds", "Stall recovery (s)", "Seconds without an answer before the shell retries the turn; 0 turns it off.", {

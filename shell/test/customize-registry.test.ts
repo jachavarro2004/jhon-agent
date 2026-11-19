@@ -107,34 +107,24 @@ test("Behaviour has the thinking stall row after stall recovery: a typed shell.b
 	assert.equal(row.value(), "300");
 });
 
-// T115a (L691): each share row has its token budget beside it; 0 turns the budget off.
-test("Behaviour has the token budgets after their shares: compact_tokens 200000 and fresh_session_tokens 150000, 0 off", () => {
+// T155 (L1377, L1394): the context ladder is two rows, compact_at and compact_tokens; the notices come from them.
+test("Behaviour has the context ladder as two rows, compact_at then compact_tokens 200000, and the sub-agent wrap-up; no removed key", () => {
 	const rows = customizeRows(hooks);
 	const keys = rows.filter(({ group }) => group === "Behaviour").map(({ key }) => key);
 	assert.equal(keys.indexOf("shell.behaviour.compact_tokens"), keys.indexOf("shell.behaviour.compact_at") + 1);
-	assert.equal(keys.indexOf("shell.behaviour.fresh_session_tokens"), keys.indexOf("shell.behaviour.fresh_session_at") + 1);
+	assert.equal(keys.indexOf("shell.behaviour.child_backstop_tokens"), keys.indexOf("shell.behaviour.compact_tokens") + 1);
+	for (const gone of ["fresh_session_at", "fresh_session_tokens", "backstop_tokens", "child_cap_tokens"]) assert.equal(keys.includes(`shell.behaviour.${gone}`), false, gone);
+	const at = rows.find(({ key }) => key === "shell.behaviour.compact_at")!;
+	assert.deepEqual(at.preview!("60", false).lines, ["At 60% of the context window the session compacts; from 50% the context notice suggests a fresh session."]);
+	assert.deepEqual(at.preview!("100", false).lines, ["100: pi decides when the session compacts; the fresh-session notice comes at 90%."]);
 	const compact = rows.find(({ key }) => key === "shell.behaviour.compact_tokens")!;
 	assert.equal(compact.label, "Compact at (tokens)");
 	assert.equal(compact.value(), "200000");
-	assert.deepEqual(compact.preview!("200000", false).lines, ["Past 200000 tokens the session compacts, or at the share if that comes first."]);
-	assert.deepEqual(compact.preview!("0", false).lines, ["0: off; only the share compacts."]);
-	const fresh = rows.find(({ key }) => key === "shell.behaviour.fresh_session_tokens")!;
-	assert.equal(fresh.label, "Fresh session at (tokens)");
-	assert.equal(fresh.value(), "150000");
-	assert.deepEqual(fresh.preview!("150000", false).lines, ["Past 150000 tokens the context notice suggests a fresh session, or at the share if that comes first."]);
-	assert.deepEqual(fresh.preview!("0", false).lines, ["0: off; only the share brings the notice."]);
-	const share = rows.find(({ key }) => key === "shell.behaviour.fresh_session_at")!;
-	assert.deepEqual(share.preview!("50", false).lines, ["From 50% of the window the context notice suggests a fresh session."], "the share row as before");
-});
-
-// T115e (L715): the delegation backstop, the ladder's first rung, after the fresh-session rows.
-test("Behaviour has the context backstop after the fresh-session budget: backstop_tokens 100000, 0 off", () => {
-	const rows = customizeRows(hooks);
-	const keys = rows.filter(({ group }) => group === "Behaviour").map(({ key }) => key);
-	assert.equal(keys.indexOf("shell.behaviour.backstop_tokens"), keys.indexOf("shell.behaviour.fresh_session_tokens") + 1);
-	const row = rows.find(({ key }) => key === "shell.behaviour.backstop_tokens")!;
-	assert.equal(row.label, "Delegate at (tokens)");
-	assert.equal(row.value(), "100000");
-	assert.deepEqual(row.preview!("100000", false).lines, ["Past 100000 tokens, or 15% of the window if that comes first, the orchestrator hears once to delegate its next several-step unit."]);
-	assert.deepEqual(row.preview!("0", false).lines, ["0: off; no delegation backstop."]);
+	assert.deepEqual(compact.preview!("200000", false).lines, [
+		"Past 200000 tokens the session compacts, or at the share if that comes first.",
+		"Past 150000 tokens the context notice suggests a fresh session; past 100000 tokens, or 15% of the window, the orchestrator hears once to delegate.",
+	]);
+	assert.deepEqual(compact.preview!("0", false).lines, ["0: off; only the shares compact and suggest a fresh session, and no delegation notice."]);
+	const child = rows.find(({ key }) => key === "shell.behaviour.child_backstop_tokens")!;
+	assert.equal(child.value(), "80000");
 });

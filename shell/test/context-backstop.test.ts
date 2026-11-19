@@ -1,8 +1,9 @@
 /**
  * T115e (L705, L715): the context backstop. The main session, never a child,
  * tells the orchestrator once per crossing to delegate the next unit that needs
- * several steps, at min(shell.behaviour.backstop_tokens (100000 by default; 0
- * turns it off), 15% of the model's window). It reads ctx.getContextUsage() at
+ * several steps, at min(half of shell.behaviour.compact_tokens (100000 by
+ * default; compact_tokens 0 turns it off), 15% of the model's window); T155
+ * (L1394) merged backstop_tokens into compact_tokens. It reads ctx.getContextUsage() at
  * most once per 5 s, re-arms after a compaction drops the context below the
  * threshold, and reaches the agent appended to a tool result or as a persisted
  * message: the system prompt never changes. The ladder: backstop, then the
@@ -80,10 +81,12 @@ function clock(t: TestContext) {
   return (ms: number) => t.mock.timers.tick(ms);
 }
 
-test("the backstop is shell.behaviour.backstop_tokens, 100000 by default", () => {
-  assert.equal(SETTINGS_DEFAULTS["shell.behaviour.backstop_tokens"], 100000);
-  const previous = installShellSettings(memorySettings({ "shell.behaviour.backstop_tokens": 80000 }));
+test("the backstop is half of shell.behaviour.compact_tokens, 100000 by default; no backstop_tokens key", () => {
+  assert.equal("shell.behaviour.backstop_tokens" in SETTINGS_DEFAULTS, false);
+  const previous = installShellSettings(memorySettings({ "shell.behaviour.compact_tokens": 160000 }));
   try { assert.equal(shellSettings().backstopTokens(), 80000); } finally { installShellSettings(previous); }
+  const old = installShellSettings(memorySettings({ "shell.behaviour.backstop_tokens": 5000 }));
+  try { assert.equal(shellSettings().backstopTokens(), 100000, "an old backstop_tokens changes nothing"); } finally { installShellSettings(old); }
   const again = installShellSettings(memorySettings());
   try { assert.equal(shellSettings().backstopTokens(), 100000); } finally { installShellSettings(again); }
 });
@@ -143,9 +146,9 @@ test("a compaction that drops the context below the threshold re-arms it", async
   assert.deepEqual(appended(await fire("tool_result", RESULT, ctx)), [notice(102, 100)], "the next crossing fires again");
 });
 
-test("0 turns it off, the window's share too", async (t) => {
+test("compact_tokens 0 turns it off, the window's share too", async (t) => {
   const tick = clock(t);
-  const previous = installShellSettings(memorySettings({ "shell.behaviour.backstop_tokens": 0 }));
+  const previous = installShellSettings(memorySettings({ "shell.behaviour.compact_tokens": 0 }));
   try {
     const { fire } = load();
     const { ctx, state } = usage(200_000);

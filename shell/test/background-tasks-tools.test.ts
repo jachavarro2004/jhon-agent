@@ -2,8 +2,9 @@
  * lib/background-tasks-tools.ts: background tasks in Jhon's main session. A
  * job's exit reaches the agent as a follow-up message through pi's own
  * delivery, the shell UI hears the running tasks, task_list, task_result, and
- * task_stop take any task, a standalone sleep is refused while one runs, and
- * a sub-agent gets none of it.
+ * task_stop take any task, and a sub-agent gets none of it. A foreground
+ * wait (a standalone sleep while a task runs, a long sleep, a known long
+ * wait) runs, and its result carries an advisory note (T155, L1394).
  */
 import "./isolated-env.ts";
 import assert from "node:assert/strict";
@@ -156,72 +157,84 @@ test("a notice held through a turn the owner aborted rides with the next message
 	assert.equal(h.sent.length, 1, "delivered once");
 });
 
-test("a standalone sleep is refused while a job runs, and allowed when none does", async () => {
+// T155 (L1377, L1394): a foreground wait is advisory: the command runs, and its result carries one note.
+const bash = (h: ReturnType<typeof harness>, command: string, toolName = "bash") => h.fire("tool_call", { toolName, toolCallId: "call-w", input: { command } }) as Promise<{ block: boolean; reason: string } | undefined>;
+/** The call, then its result: the guard's verdict and the notes appended to the output. */
+async function ran(h: ReturnType<typeof harness>, command: string, toolName = "bash", toolCallId = "call-w") {
+	const call = await h.fire("tool_call", { toolName, toolCallId, input: { command } });
+	const result = await h.fire("tool_result", { toolName, toolCallId, input: { command }, content: [{ type: "text", text: "out" }], isError: false }) as { content?: Array<{ text: string }> } | undefined;
+	if (result) assert.equal(result.content![0]!.text, "out", "the output as the command gave it");
+	return { call, notes: (result?.content ?? []).slice(1).map((c) => c.text) };
+}
+
+test("a standalone sleep while a job runs still runs, and its result says the wait only held the turn", async () => {
 	const h = harness();
 	await h.fire("session_start");
-	assert.equal(await h.fire("tool_call", { toolName: "bash", input: { command: "sleep 3" } }), undefined);
+	assert.deepEqual(await ran(h, "sleep 3"), { call: undefined, notes: [] }, "no job runs");
 	await h.tools.get("bash_background").execute("call-1", { command: "gh run watch 1" }, undefined, undefined, h.ctx);
-	const refused = await h.fire("tool_call", { toolName: "bash", input: { command: "sleep 30" } }) as { block: boolean; reason: string };
-	assert.equal(refused.block, true);
-	assert.match(refused.reason, /background/);
-	assert.equal(await h.fire("tool_call", { toolName: "bash", input: { command: "npm test" } }), undefined);
+	for (const command of ["sleep 3", "sleep 30"]) {
+		const { call, notes } = await ran(h, command);
+		assert.equal(call, undefined, command);
+		assert.deepEqual(notes, ["Standalone sleep while background work runs (1 background task): it only held the turn. Each task's end arrives as a message and starts a new turn, so end the turn instead."], command);
+	}
+	assert.deepEqual(await ran(h, "npm test"), { call: undefined, notes: [] });
 });
 
-test("a standalone sleep is refused while a background sub-agent runs too", async () => {
+test("a standalone sleep while a background sub-agent runs gets the note too, and none once it ended", async () => {
 	const h = harness();
 	await h.fire("session_start");
 	h.background!.startAgent(worker, "fix it", h.ctx.cwd, "main");
-	const refused = await h.fire("tool_call", { toolName: "bash", input: { command: "sleep 30" } }) as { block: boolean; reason: string };
-	assert.equal(refused.block, true);
-	assert.match(refused.reason, /1 background task/);
+	const { call, notes } = await ran(h, "sleep 30");
+	assert.equal(call, undefined);
+	assert.match(notes[0]!, /^Standalone sleep while background work runs \(1 background task\)/);
 	h.answers[0]!({ ok: true, text: "fixed" });
 	await until(() => h.sent.length > 0);
-	assert.equal(await h.fire("tool_call", { toolName: "bash", input: { command: "sleep 3" } }), undefined);
+	assert.deepEqual(await ran(h, "sleep 3"), { call: undefined, notes: [] });
 });
 
-// T119 (L716): every wait goes to the background; a foreground bash that only waits is refused before it runs.
-const bash = (h: ReturnType<typeof harness>, command: string, toolName = "bash") => h.fire("tool_call", { toolName, input: { command } }) as Promise<{ block: boolean; reason: string } | undefined>;
+const waitNote = (wait: string) => `Foreground wait: ${wait} held the turn until it ended. Next time run a wait with bash_background, its condition inside the command (for example \`until <check>; do sleep 5; done; <cmd>\`), or watch the output with monitor; its end arrives as a message, so the turn can go on with other work or end.`;
 
-for (const command of ["sleep 420", "sleep 500; gh pr checks 12", "sleep 60 && npm test", "sleep 2m\nmake", "  sleep 10;make"]) {
-	test(`a foreground bash that starts by sleeping over 5 s is refused, pointing to bash_background with the wait inside: ${JSON.stringify(command)}`, async () => {
+for (const [command, wait] of [["sleep 420", "`sleep 420`"], ["sleep 500; gh pr checks 12", "`sleep 500`"], ["sleep 60 && npm test", "`sleep 60`"], ["sleep 2m\nmake", "`sleep 2m`"], ["  sleep 10;make", "`sleep 10`"]]) {
+	test(`a foreground bash that starts by sleeping over 5 s runs, and its result points to bash_background with the wait inside: ${JSON.stringify(command)}`, async () => {
 		const h = harness();
 		await h.fire("session_start");
-		const refused = await bash(h, command);
-		assert.equal(refused?.block, true);
-		assert.match(refused!.reason, /^A foreground wait blocks the turn: /);
-		assert.match(refused!.reason, /bash_background/);
-		assert.match(refused!.reason, /until <check>; do sleep 5; done; <cmd>/);
-		assert.match(refused!.reason, /monitor/);
-		assert.equal(h.shell.runs.length, 0, "nothing ran");
+		assert.deepEqual(await ran(h, command!), { call: undefined, notes: [waitNote(wait!)] });
 	});
 }
 
-for (const command of ["gh run watch 123 --exit-status", "cd app && gh run watch", "wait", "make & wait $!", "tail -f build.log", "tail -F log | grep -m1 ready", "timeout 600 npm test", "timeout 2m make"]) {
-	test(`a foreground bash that is a known long wait is refused, pointing to bash_background or monitor: ${JSON.stringify(command)}`, async () => {
+for (const [command, wait] of [["gh run watch 123 --exit-status", "`gh run watch`"], ["cd app && gh run watch", "`gh run watch`"], ["wait", "`wait`"], ["make & wait $!", "`wait`"], ["tail -f build.log", "`tail -f`"], ["tail -F log | grep -m1 ready", "`tail -f`"], ["timeout 600 npm test", "`timeout 600`"], ["timeout 2m make", "`timeout 2m`"]]) {
+	test(`a foreground bash that is a known long wait runs, and its result points to bash_background or monitor: ${JSON.stringify(command)}`, async () => {
 		const h = harness();
 		await h.fire("session_start");
-		const refused = await bash(h, command);
-		assert.equal(refused?.block, true);
-		assert.match(refused!.reason, /^A foreground wait blocks the turn: /);
-		assert.match(refused!.reason, /bash_background/);
-		assert.match(refused!.reason, /monitor/);
+		assert.deepEqual(await ran(h, command!), { call: undefined, notes: [waitNote(wait!)] });
 	});
 }
+
+test("the note comes once per call, on that call's result alone, a failed one too", async () => {
+	const h = harness();
+	await h.fire("session_start");
+	assert.equal(await bash(h, "sleep 420"), undefined);
+	const other = await h.fire("tool_result", { toolName: "bash", toolCallId: "call-other", input: { command: "ls" }, content: [{ type: "text", text: "a" }], isError: false });
+	assert.equal(other, undefined, "another call's result");
+	const failed = await h.fire("tool_result", { toolName: "bash", toolCallId: "call-w", input: { command: "sleep 420" }, content: [{ type: "text", text: "Command aborted" }], isError: true }) as any;
+	assert.deepEqual(failed.content.map((c: any) => c.text), ["Command aborted", waitNote("`sleep 420`")]);
+	assert.equal(await h.fire("tool_result", { toolName: "bash", toolCallId: "call-w", input: { command: "sleep 420" }, content: [{ type: "text", text: "x" }], isError: false }), undefined, "once");
+});
 
 for (const command of ["sleep 5", "sleep 0.5", "sleep 3 && ls", "for i in 1 2 3; do sleep 0.5; done", "until curl -s localhost:3000; do sleep 5; done; npm test", "while ! test -f done; do sleep 10; done", "npm test", "timeout 30 npm test", "tail -n 50 build.log", "echo wait", "git log --oneline -3", "make sleep 30"]) {
-	test(`a foreground bash that does not just wait still runs: ${JSON.stringify(command)}`, async () => {
+	test(`a foreground bash that does not just wait runs with no note: ${JSON.stringify(command)}`, async () => {
 		const h = harness();
 		await h.fire("session_start");
-		assert.equal(await bash(h, command), undefined);
+		assert.deepEqual(await ran(h, command), { call: undefined, notes: [] });
 	});
 }
 
 for (const command of ["sleep 420; gh pr checks 12", "until gh run view 1 --json status | grep -q completed; do sleep 5; done; gh run view 1", "gh run watch 1", "tail -f log"]) {
-	test(`a wait inside bash_background or monitor is never refused: ${JSON.stringify(command)}`, async () => {
+	test(`a wait inside bash_background or monitor gets no note: ${JSON.stringify(command)}`, async () => {
 		const h = harness();
 		await h.fire("session_start");
-		assert.equal(await bash(h, command, "bash_background"), undefined);
-		assert.equal(await bash(h, command, "monitor"), undefined);
+		assert.deepEqual(await ran(h, command, "bash_background"), { call: undefined, notes: [] });
+		assert.deepEqual(await ran(h, command, "monitor"), { call: undefined, notes: [] });
 	});
 }
 

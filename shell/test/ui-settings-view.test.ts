@@ -269,7 +269,7 @@ test("the real Settings at 186, 120, 80 and 60 columns: previews for animations,
 		text = open("behaviour");
 		assert.match(text, /▸ Compact at \(%\) +60/, at);
 		assert.match(text, /Preview · 60 · what happens/, at);
-		assert.match(text, /At 60% of the context window the session compacts\./, at);
+		assert.match(text, /At 60% of the context window the session compacts;/, at);
 		text = open("keys");
 		assert.match(text, /Keys · 1\/6/, at);
 		assert.match(text, /Preview · alt\+j · what the key opens/, at);

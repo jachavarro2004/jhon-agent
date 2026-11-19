@@ -407,7 +407,7 @@ func TestMigrationWritesNoDashboardKeyForAnOldShell(t *testing.T) {
 // backed up, keeping the owner's comments, and says what it did.
 func TestRetiredKeysAreWarnedThenMigrated(t *testing.T) {
 	h := newHome(t)
-	old := "# mine\nschema = 1\n\n[shell.appearance]\ncard_style = \"float\"\nanimations = \"potato\"\n\n[shell.behaviour]\nquiet_tools = false\nfresh_session_at = 45\n\n[shell.notifications.audio]\nbackend = \"auto\"\n\n[shell.extra]\nvisual_customization = '{\"statusPlacement\":\"right\"}'\n"
+	old := "# mine\nschema = 1\n\n[shell.appearance]\ncard_style = \"float\"\nanimations = \"potato\"\n\n[shell.behaviour]\nquiet_tools = false\nstall_seconds = 45\n\n[shell.notifications.audio]\nbackend = \"auto\"\n\n[shell.extra]\nvisual_customization = '{\"statusPlacement\":\"right\"}'\n"
 	support.Write(t, filepath.Join(h.config, "jhon"), map[string]string{"settings.toml": old})
 	r := h.jhon(t, "list")
 	if r.Code != 0 {
@@ -455,7 +455,7 @@ func TestRetiredKeysAreWarnedThenMigrated(t *testing.T) {
 			t.Errorf("%s stays:\n%s", gone, now)
 		}
 	}
-	for _, kept := range []string{"# mine", "fresh_session_at = 45", "animations = \"off\"", "cards = \"float\"", "status = \"auto\""} {
+	for _, kept := range []string{"# mine", "stall_seconds = 45", "animations = \"off\"", "cards = \"float\"", "status = \"auto\""} {
 		if !strings.Contains(now, kept) {
 			t.Errorf("%q is missing:\n%s", kept, now)
 		}

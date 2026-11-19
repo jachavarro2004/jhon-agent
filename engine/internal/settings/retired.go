@@ -52,6 +52,11 @@ var retiredWhy = map[string]string{
 	// T15.7 (L97); their values no longer pick the palette (T29 E6, L329).
 	"integrations.theme.follow_desktop": `the palette is integrations.theme.palette now: set it to "desktop" to follow the desktop palette`,
 	"integrations.theme.source":         `the palette names its source: integrations.theme.palette = "desktop"`,
+	// T155 (L1377, L1394): the context ladder is compact_at and compact_tokens.
+	"shell.behaviour.fresh_session_at":     "the fresh-session notice comes ten points of the window before shell.behaviour.compact_at",
+	"shell.behaviour.fresh_session_tokens": "the fresh-session notice comes at three quarters of shell.behaviour.compact_tokens",
+	"shell.behaviour.backstop_tokens":      "the delegation notice comes at half of shell.behaviour.compact_tokens, or 15% of the window if that comes first",
+	"shell.behaviour.child_cap_tokens":     "sub-agents are no longer capped; past shell.behaviour.child_backstop_tokens they hear once to wrap up",
 }
 
 const herdrGone = "herdr is no longer part of Jhon; use any multiplexer, or none"
@@ -62,6 +67,11 @@ var retiredIn = map[string]string{
 	"integrations.herdr_bin":        "v0.2",
 	"integrations.herdr_plugin_dir": "v0.2",
 	"shell.editor.vim":              "v0.2",
+	// T155.
+	"shell.behaviour.fresh_session_at":     "v0.4",
+	"shell.behaviour.fresh_session_tokens": "v0.4",
+	"shell.behaviour.backstop_tokens":      "v0.4",
+	"shell.behaviour.child_cap_tokens":     "v0.4",
 }
 
 // RetiredIn is the release that removed key: v0.1 unless retiredIn says.
@@ -84,7 +94,7 @@ var retiredEvents = map[string]string{
 	"subagent.waiting":   "the event never fires",
 	"subagent.cancelled": "the event never fires",
 	"subagent.timed_out": "the event never fires",
-	"context.high":       "one context notice at shell.behaviour.fresh_session_at replaces it",
+	"context.high":       "one context notice, ten points of the window before shell.behaviour.compact_at, replaces it",
 }
 
 const eventsPrefix = "shell.notifications.audio.events."
