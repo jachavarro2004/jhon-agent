@@ -42,6 +42,9 @@ func TestClassify(t *testing.T) {
 	}{
 		{"db/migrations/0042.sql", "", "high db/migrations/0042.sql: migration or schema"},
 		{"prisma/schema.prisma", "", "high prisma/schema.prisma: migration or schema"},
+		{"db/migrations/0043.sql", "alter table a drop column b;\n", "high db/migrations/0043.sql: migration or schema"},
+		{"db/migrations/0044.sql", "create table a (id int);\n", "medium db/migrations/0044.sql: migration (additive)"},
+		{"auth/migrations/0045.sql", "create table a (id int);\n", "high auth/migrations/0045.sql: security path"},
 		{"src/auth/login.ts", "", "high src/auth/login.ts: security path"},
 		{"src/İam/x.ts", "", "medium src/İam/x.ts: code"},
 		{".env.production", "", "high .env.production: security path"},

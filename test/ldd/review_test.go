@@ -41,7 +41,7 @@ func reviews(t *testing.T, root string) map[string]map[string]any {
 func TestStatusFourRDueOnRiskHigh(t *testing.T) {
 	t.Parallel()
 	root := reviewRepo(t, "schema: spec-driven\n", map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [ ] 1.1 a\n",
-		"src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n"})
+		"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	r := reviews(t, root)
 	equal(t, r["4r"], map[string]any{"review": "4r", "by": []any{"risk high"}, "done": false}, "4R due")
 	equal(t, r["verify"]["done"], false, "verify due")

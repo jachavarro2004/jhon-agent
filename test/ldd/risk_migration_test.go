@@ -34,11 +34,11 @@ func TestRiskDataMigrationIsHigh(t *testing.T) {
 		{"src/migration/001.ts", "export {};\n"},
 		{"db/migrate/20240101000000_add_users.rb", "class AddUsers; end\n"},
 		{"migrations/versions/abc123_add.py", "def upgrade(): pass\n"},
-		{"prisma/migrations/20240101_init/migration.sql", "create table a (id int);\n"},
+		{"prisma/migrations/20240101_init/migration.sql", "alter table a drop column b;\n"},
 		{"migrations/20240101_users.js", "exports.up = () => {};\n"},
-		{"sql/0001_init.up.sql", "create table a (id int);\n"},
+		{"sql/0001_init.up.sql", "alter table a drop column b;\n"},
 		{"sql/0001_init.down.sql", "drop table a;\n"},
-		{"db/V1__init.sql", "create table a (id int);\n"},
+		{"db/V1__init.sql", "alter table a drop column b;\n"},
 		{"db/U1__init.sql", "drop table a;\n"},
 	} {
 		t.Run(c.file, func(t *testing.T) {

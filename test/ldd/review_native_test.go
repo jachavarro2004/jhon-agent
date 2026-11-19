@@ -37,7 +37,7 @@ func nativeEnv(t *testing.T, profilesJSON string) []string {
 func nativeRepo(t *testing.T) string {
 	t.Helper()
 	return reviewRepo(t, "schema: spec-driven\n", map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n",
-		"src/migrations/0001_add.sql": "create table a (id int);\n", "src/app.py": "def total(xs):\n    return sum(xs)\n"})
+		"src/migrations/0001_add.sql": "alter table a drop column b;\n", "src/app.py": "def total(xs):\n    return sum(xs)\n"})
 }
 
 func reviewRun(t *testing.T, root string, env []string, stdin string, args ...string) support.Result {
@@ -96,7 +96,7 @@ func TestReviewStart(t *testing.T) {
 		p := m["prompt"].(string)
 		equal(t, m["bytes"], float64(len(p)), "bytes")
 		equal(t, m["est_tokens"], float64(int(float64(len(p))/3.5)), "est_tokens")
-		match(t, p, `(?m)^\+create table a \(id int\);$`, "the diff inline")
+		match(t, p, `(?m)^\+alter table a drop column b;$`, "the diff inline")
 		match(t, p, `(?m)^----- FILE src/app\.py -----\ndef total\(xs\):\n    return sum\(xs\)\n----- END FILE src/app\.py -----$`, "the file inline")
 		match(t, p, `"subject_hash": "`+s["subject"].(string)+`"`, "the answer's shape names the subject")
 		noMatch(t, p, `\{\{\w+\}\}`, "no placeholder left")
