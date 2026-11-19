@@ -480,17 +480,18 @@ function suite(): void {
 		assert.deepEqual(fake.runs().map((c) => c.args), [["sandbox", "run", "--project", d, "--profile", "work", "--", shell, "-c", "echo agent"]]);
 	});
 
-	test("the foreground-sleep refusal still holds with the sandbox on", async (t) => {
+	// T155 (L1394): a foreground wait runs, and its result carries the note (refused before).
+	test("the foreground-sleep note still holds with the sandbox on", async (t) => {
 		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);
 		const d = project(t);
 		const { pi, fire } = fakePi();
 		const sandbox = wireSandbox(pi, { jhon: fake.bin });
 		registerBackgroundTasks(pi as any, { env: {}, outputDir: () => d, sandbox: sandbox.jobOperations });
 		await fire("session_start", {}, ctxAt(d));
-		const r = await fire("tool_call", { toolName: "bash", input: { command: "sleep 60" } }, ctxAt(d));
-		assert.equal(r?.block, true);
-		assert.match(r.reason, /^A foreground wait blocks the turn: `sleep 60`/);
-		assert.deepEqual(fake.runs(), []);
+		const r = await fire("tool_call", { toolName: "bash", toolCallId: "w1", input: { command: "sleep 60" } }, ctxAt(d));
+		assert.equal(r?.block, undefined, JSON.stringify(r));
+		const result = await fire("tool_result", { toolName: "bash", toolCallId: "w1", input: { command: "sleep 60" }, content: [{ type: "text", text: "out" }], isError: false }, ctxAt(d));
+		assert.match(textOf(result), /^out\nForeground wait: `sleep 60` held the turn until it ended\./);
 	});
 
 	// T128f (L1352 F1): pi reads the engine's effective mode, on by default on Linux and off elsewhere (D3).

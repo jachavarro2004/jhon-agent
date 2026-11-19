@@ -26,7 +26,10 @@ func TestSourcedScriptIsJudged(t *testing.T) {
 	s.code(t, "source deploy/ok.sh", sgOpts{}, 0, "a harmless sourced script")
 }
 
-// The Glob tool is guarded as Grep's glob is (Claude Code's Glob, pi's find).
+// The Glob tool reaches the guards as Grep's glob does (Claude Code's Glob,
+// pi's find), and neither refuses a read: a glob that names credentials,
+// outside the project or beside a credentials file, is left to the prose
+// since T151 (L1366, L1369; refused before).
 func TestGlobToolIsGuarded(t *testing.T) {
 	t.Parallel()
 	p := realTemp(t)
@@ -39,20 +42,20 @@ func TestGlobToolIsGuarded(t *testing.T) {
 	}
 	for _, in := range []map[string]any{{"pattern": "/srv/**/id_*"}, {"pattern": "id_*", "path": "~/keys"}, {"pattern": "*.json", "path": "~"},
 		{"pattern": "{a,b}/*.json"}, {"pattern": "**/id_*", "path": "~"}} {
-		if got := toolCall(t, p, "Glob", in); got != 2 {
-			t.Errorf("Glob %v outside the project: exit %d, want 2", in, got)
+		if got := toolCall(t, p, "Glob", in); got != 0 {
+			t.Errorf("Glob %v outside the project: exit %d, want 0", in, got)
 		}
 	}
 	support.Write(t, p, map[string]string{"deep/sub/id_rsa": "k\n"})
 	for _, in := range []map[string]any{{"pattern": "**/id_*"}, {"pattern": "deep/**/id_*"}} {
-		if got := toolCall(t, p, "Glob", in); got != 2 {
-			t.Errorf("Glob %v beside a credentials file: exit %d, want 2", in, got)
+		if got := toolCall(t, p, "Glob", in); got != 0 {
+			t.Errorf("Glob %v beside a credentials file: exit %d, want 0", in, got)
 		}
 	}
 }
 
-// Grep's path `~` is the home directory, outside the project: its glob is
-// read by its name.
+// Grep's path `~` is the home directory, outside the project; a read there,
+// of credentials too, is not judged since T151 (L1366; refused before).
 func TestGrepHomePathIsTheHome(t *testing.T) {
 	t.Parallel()
 	p := realTemp(t)
@@ -60,8 +63,8 @@ func TestGrepHomePathIsTheHome(t *testing.T) {
 	support.Write(t, p, map[string]string{"~/keys/a.json": "{}\n"})
 	for _, in := range []map[string]any{{"path": "~/keys", "glob": "*.json"}, {"path": "~", "glob": "id_*"}, {"path": "~/keys/id_rsa"}} {
 		in["pattern"] = "x"
-		if got := toolCall(t, p, "Grep", in); got != 2 {
-			t.Errorf("Grep %v: exit %d, want 2", in, got)
+		if got := toolCall(t, p, "Grep", in); got != 0 {
+			t.Errorf("Grep %v: exit %d, want 0", in, got)
 		}
 	}
 }
@@ -78,9 +81,9 @@ func TestSourcedScriptEveryForm(t *testing.T) {
 	}
 }
 
-// Sourcing past the bound, or a sourced script that cannot be read, is not
-// passed unseen.
-func TestSourcedScriptChainFailsClosed(t *testing.T) {
+// Sourcing past the bound, or a sourced script that cannot be read, is
+// judged by the visible words (T152, L1311): the chain passes.
+func TestSourcedScriptChainPastTheBoundPasses(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
 	files := map[string]string{"s9.sh": "echo hi\n", "gone.sh": "source missing.sh\n", "locked.sh": "echo hi\n", "shut.sh": "source locked.sh\n"}
@@ -93,15 +96,15 @@ func TestSourcedScriptChainFailsClosed(t *testing.T) {
 	}
 	s.code(t, "source s8.sh", sgOpts{}, 0, "a short chain of harmless sourced scripts")
 	for _, c := range []string{"source s0.sh", "source shut.sh"} {
-		s.code(t, c, sgOpts{}, 2, "a sourced script the guard does not read")
+		s.code(t, c, sgOpts{}, 0, "a sourced script the guard does not read")
 	}
 	// A nested optional source of a missing file runs nothing (L295).
 	s.code(t, "source gone.sh", sgOpts{}, 0, "a nested source of a missing file")
 }
 
 // A sourced or shell-run script whose name is a substitution is a program
-// the guard cannot read: it asks, as `eval "$(…)"` does (L270).
-func TestSourcedSubstitutionAsks(t *testing.T) {
+// the guard cannot read: it passes on the visible words (T152, L1311).
+func TestSourcedSubstitutionPasses(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
 	support.Write(t, s.other, map[string]string{"id_rsa": "k\n"})
@@ -110,7 +113,7 @@ func TestSourcedSubstitutionAsks(t *testing.T) {
 		". `echo far.sh`", "sh <(cat far.sh)", "true && builtin source <(cat far.sh)"} {
 		r := s.bash(t, c, top())
 		code(t, r, 0, c)
-		matches(t, askedWhy(t, r.Stdout, c), "a value the guard cannot read", c)
+		noDecision(t, r.Stdout, c)
 	}
 	for _, c := range []string{"source .venv/bin/activate", `echo "$(git rev-parse HEAD)"`, "diff <(sort a.txt) <(sort b.txt)", "cat <(echo hi)"} {
 		r := s.bash(t, c, top())
@@ -121,8 +124,8 @@ func TestSourcedSubstitutionAsks(t *testing.T) {
 
 // node and bun load the modules -r, --require, --import, --loader or
 // --preload name, or NODE_OPTIONS names, before the script: code the guard
-// does not read, so the call asks (L265).
-func TestNodePreloadAsks(t *testing.T) {
+// does not read, so the call passes on its visible words (L265, T152).
+func TestNodePreloadPasses(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
 	support.Write(t, s.p, map[string]string{"ok.cjs": "module.exports = {};\n", "far.mjs": "import { execSync } from 'node:child_process';\nexecSync('git push --force');\n", "ok.mjs": "console.log(1);\n"})
@@ -130,7 +133,7 @@ func TestNodePreloadAsks(t *testing.T) {
 		"bun --preload ./far.mjs ok.mjs", "NODE_OPTIONS='--require ./far.mjs' node ok.mjs", "export NODE_OPTIONS='--import ./far.mjs'; node ok.mjs"} {
 		r := s.bash(t, c, top())
 		code(t, r, 0, c)
-		matches(t, askedWhy(t, r.Stdout, c), "preloads", c)
+		noDecision(t, r.Stdout, c)
 	}
 	for _, c := range []string{"node ok.mjs", "node --experimental-strip-types --test ok.mjs", "NODE_OPTIONS=--max-old-space-size=4096 node ok.mjs"} {
 		r := s.bash(t, c, top())
@@ -141,9 +144,9 @@ func TestNodePreloadAsks(t *testing.T) {
 }
 
 // A preload flag anywhere before the script, past an option's value or a
-// bun subcommand, asks; so does an env file, which may set NODE_OPTIONS
-// (L294).
-func TestNodePreloadAnywhereAsks(t *testing.T) {
+// bun subcommand, passes; so does an env file, which may set NODE_OPTIONS
+// (L294, T152).
+func TestNodePreloadAnywherePasses(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
 	support.Write(t, s.p, map[string]string{"far.mjs": "import { execSync } from 'node:child_process';\nexecSync('git push --force');\n", "ok.mjs": "console.log(1);\n", "ok.cjs": "module.exports = {};\n",
@@ -153,12 +156,12 @@ func TestNodePreloadAnywhereAsks(t *testing.T) {
 		"nodejs -r ./ok.cjs ok.mjs", "tsx --import ./ok.cjs ok.mjs", "deno run --preload ./ok.cjs ok.mjs"} {
 		r := s.bash(t, c, top())
 		code(t, r, 0, c)
-		matches(t, askedWhy(t, r.Stdout, c), "preloads", c)
+		noDecision(t, r.Stdout, c)
 	}
 	for _, c := range []string{"node --env-file=cfg.txt ok.mjs", "node --env-file cfg.txt ok.mjs", "node --env-file-if-exists=cfg.txt ok.mjs", "nodejs --env-file=cfg.txt ok.mjs"} {
 		r := s.bash(t, c, top())
 		code(t, r, 0, c)
-		matches(t, askedWhy(t, r.Stdout, c), "env file", c)
+		noDecision(t, r.Stdout, c)
 	}
 	for _, c := range []string{"node ok.mjs", "nodejs ok.mjs", "node ok.mjs -r x", "node --test ok.mjs", "bun run build", "npx vitest", "node -C dev ok.mjs"} {
 		r := s.bash(t, c, top())
@@ -168,8 +171,9 @@ func TestNodePreloadAnywhereAsks(t *testing.T) {
 }
 
 // A script a shell runs or sources by a name the guard cannot resolve, a
-// parameter or a descriptor, is a program it does not read (L294).
-func TestUnresolvedScriptNameAsks(t *testing.T) {
+// parameter or a descriptor, is a program it does not read: the line passes
+// on its visible words (L294, T152).
+func TestUnresolvedScriptNamePasses(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
 	support.Write(t, s.p, map[string]string{"far.sh": "git push --force\n", ".venv/bin/activate": "export VIRTUAL_ENV=.venv\n"})
@@ -177,7 +181,7 @@ func TestUnresolvedScriptNameAsks(t *testing.T) {
 		". $X", `bash -c 'bash -c "source \$0"' far.sh`} {
 		r := s.bash(t, c, top())
 		code(t, r, 0, c)
-		askedWhy(t, r.Stdout, c)
+		noDecision(t, r.Stdout, c)
 	}
 	// The words after a -c string are its $0, $1, …: the script they name is read.
 	for _, c := range []string{`bash -c 'source "$0"' far.sh`, `bash -c 'bash "$1"' x far.sh`, `sh -c '. "${0}"' far.sh`} {

@@ -56,13 +56,13 @@ retired switch had).
   answer (no ask tool, a headless run, no answer) it uses the recommended
   values. Either way it says in one line what it set up and goes on with
   the task under LDD in the same turn, on the change's own branch.
-- **Delivery and code wait for the set-up.** In a git repository with no
-  layout, route-guard refuses `git commit` and `gh pr create`, and the
-  first code edit, in every mode and for every caller (sub-agents too: the
-  main session sets LDD up first), naming the init steps:
+- **Delivery waits for the set-up.** In a git repository with no layout,
+  route-guard refuses `git commit` and `gh pr create` in every mode and for
+  every caller, naming the init steps; a code edit runs, with a note that
+  names them:
 
   ```text
-  route-guard: refused: LDD is not set up in this project yet; set it up first by following `<install>/prose/skills/ldd/references/init.md` (ask how to deliver and test with your ask tool, or use the recommended values), then make this edit and, before you finish, start its change (tasks.md) and record a run (`jhon executions run`)
+  note (not a refusal; the call ran): LDD is not set up in this project yet: set it up by following `<install>/prose/skills/ldd/references/init.md` (ask how to deliver and test with your ask tool, or use the recommended values), and before you finish, start this edit's change (tasks.md) and record a run (`jhon executions run`)
   ```
 
   A code edit is any file the call writes inside the repository outside
@@ -70,11 +70,11 @@ retired switch had).
   exemption (a README or docs count too): an Edit, Write or NotebookEdit
   in Claude Code, pi's edit and write, and a Bash command the safety guard
   reads as writing a file (`>`, `tee`, `sed -i`, `cp`, ...). What sets LDD
-  up is not refused (`jhon init`, `mkdir -p ldd/specs ldd/changes/archive`,
-  writing `ldd/config.yaml` by a tool or Bash), nor reads, searches, or a
+  up gets no note (`jhon init`, `mkdir -p ldd/specs ldd/changes/archive`,
+  writing `ldd/config.yaml` by a tool or Bash), nor do reads, searches, or a
   command that writes no file in the repository. Once the layout's config
-  exists, edits pass and delivery follows LDD's rules; an OpenSpec project
-  is unchanged. A folder in no git repository is not refused.
+  exists, edits pass with none and delivery follows LDD's rules; an
+  OpenSpec project is unchanged. A folder in no git repository gets none.
 
 ## Test runs: the inner loop
 
@@ -170,7 +170,7 @@ and every joined member are the project for the guards that judge "outside
 the project": the vcs guard's and the safety guard's writes (and their
 deletions inside a root; removing a member's root itself stays refused), and
 the OS sandbox's writable roots, read from the disk with no git process.
-Editing a sibling the owner joined needs no `outside-write` grant. A listed
+Editing a sibling the owner joined runs with no outside note. A listed
 sibling that has not joined, a joined one the primary does not list, and
 any other repository stay outside, as before.
 
@@ -179,8 +179,8 @@ and commits through, and judges its PR with the primary's record. The
 member's branch names the change (its name, a slash a dash: `feat/c1` is
 `feat-c1`), and a PR whose diff alters behaviour in the member, by the
 member's own route, opens once the primary's change has its RED before GREEN
-in `jhon executions`, a passing light verify on the standard route, and its
-independent verification on the verified route. Linked delivery, the
+in `jhon executions` and, on the verified route, its independent
+verification (a missing light verify is a note). Linked delivery, the
 primary's own PR for a change with members, is below.
 
 The change lives in the primary; its tests may run in every member (T57

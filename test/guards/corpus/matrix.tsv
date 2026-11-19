@@ -19,8 +19,8 @@
 *	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/.git/config\"}"	dot-git-write
 *	none	*	Bash	"jhon grant push"	agent-jhon-grant
 *	none	*	Bash	"jhon mode yolo"	agent-jhon-mode
-*	none	*	Bash	"$x push"	unreadable
-*	none	*	Bash	"git frobnicate"	unknown
+*	none	*	Bash	"echo (pwd)"	unreadable
+*	none	*	Bash	"rm -f /tmp/$X"	unknown
 *	none	*	Bash	"gh pr create --title x --body y"	delivery-pr-without-red-green
 *	none	*	Bash	"git commit -q -m x"	delivery-commit
 *	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/src/app.py\"}"	code-write

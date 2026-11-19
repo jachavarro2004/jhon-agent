@@ -39,9 +39,11 @@ func TestT146gSmallChangeExemptInTheSameWords(t *testing.T) {
 func TestT146gDeliveryOrderIsRunCommitCheck(t *testing.T) {
 	t.Parallel()
 	order := "after the GREEN run, commit the tree it tested, then `jhon deliver check"
+	// T156 (L1394): the orchestrator no longer repeats delivery.md's order; it
+	// reads `contracts/delivery.md` before delivering.
 	for _, rel := range []string{"prose/orchestrator.md", "prose/contracts/delivery.md"} {
 		s := flat(support.Read(t, filepath.Join(repoRoot, rel)))
-		if !strings.Contains(s, order) {
+		if rel == "prose/contracts/delivery.md" && !strings.Contains(s, order) {
 			t.Errorf("%s does not order a delivery %q", rel, order)
 		}
 		if strings.Contains(s, "on the clean tree at HEAD") {

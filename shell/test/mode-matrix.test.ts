@@ -30,7 +30,7 @@ type Place = "ldd" | "repo" | "folder";
 type Mode = "normal" | "yolo" | "super-yolo";
 type Caller = "interactive" | "non-interactive" | "child";
 type Fixture = { place: Place; dir: string; fw: string };
-type Row = { name: string; kind: "ask" | "refuse" | "allow" | "delivery" | "commit" | "code"; cls?: string; passes?: Mode[]; inRepo?: boolean; call: (f: Fixture) => [string, Record<string, unknown>] };
+type Row = { name: string; kind: "ask" | "refuse" | "allow" | "delivery" | "commit" | "code" | "code-bash" | "outside"; cls?: string; passes?: Mode[]; call: (f: Fixture) => [string, Record<string, unknown>] };
 
 const yoloUp: Mode[] = ["yolo", "super-yolo"];
 const superOnly: Mode[] = ["super-yolo"];
@@ -42,36 +42,47 @@ const TABLE: Row[] = [
   { name: "destroy-ask", kind: "ask", cls: "destroy", passes: superOnly, call: bash("git reset --hard") },
   { name: "destroy-deny-force-push", kind: "refuse", call: bash("git push --force") },
   { name: "destroy-deny-clean-fdx", kind: "refuse", call: bash("git clean -fdx") },
-  { name: "outside-write-tool", kind: "ask", cls: "outside-write", passes: yoloUp, call: write(() => "/etc/jhon.conf") },
+  { name: "outside-write-tool", kind: "outside", call: write(() => "/etc/jhon.conf") },
   { name: "outside-write-bash", kind: "allow", call: bash("echo x > /etc/jhon.conf") },
   { name: "push", kind: "ask", cls: "push", passes: yoloUp, call: bash("git push origin main") },
   { name: "gh-write", kind: "ask", cls: "gh-write", passes: yoloUp, call: bash("gh pr merge 1 --squash") },
   { name: "remote", kind: "ask", cls: "remote", passes: yoloUp, call: bash("ssh host") },
   { name: "publish", kind: "ask", cls: "publish", passes: yoloUp, call: bash("npm publish") },
   { name: "deploy", kind: "ask", cls: "deploy", passes: yoloUp, call: bash("kubectl apply -f x.yaml") },
-  { name: "credentials-read", kind: "refuse", call: (f) => ["read", { path: join(f.dir, ".env") }] },
+  { name: "credentials-read", kind: "allow", call: (f) => ["read", { path: join(f.dir, ".env") }] },
   { name: "credentials-bash", kind: "allow", call: bash("cat .env") },
-  { name: "settings-write", kind: "ask", cls: "settings", inRepo: true, call: write((f) => join(f.dir, ".claude", "settings.json")) },
+  { name: "settings-write", kind: "ask", cls: "settings", call: write((f) => join(f.dir, ".claude", "settings.json")) },
   { name: "git-config", kind: "ask", cls: "git-config", call: bash("git config core.hooksPath /tmp/h") },
   { name: "framework-write", kind: "refuse", call: write((f) => join(f.fw, "orchestrator.md")) },
   { name: "dot-git-write", kind: "refuse", call: write((f) => join(f.dir, ".git", "config")) },
   { name: "agent-jhon-grant", kind: "refuse", call: bash("jhon grant push") },
   { name: "agent-jhon-mode", kind: "refuse", call: bash("jhon mode yolo") },
-  { name: "unreadable", kind: "ask", cls: "unreadable", passes: superOnly, call: bash("$x push") },
-  { name: "unknown", kind: "ask", cls: "unknown", passes: superOnly, call: bash("git frobnicate") },
+  { name: "unreadable", kind: "ask", cls: "unreadable", passes: superOnly, call: bash("echo (pwd)") },
+  { name: "unknown", kind: "ask", cls: "unknown", passes: superOnly, call: bash("rm -f /tmp/$X") },
   { name: "delivery-pr-without-red-green", kind: "delivery", call: bash("gh pr create --title x --body y") },
   { name: "delivery-commit", kind: "commit", call: bash("git commit -q -m x") },
-  { name: "code-write", kind: "code", cls: "outside-write", passes: yoloUp, call: write((f) => join(f.dir, "src", "app.py")) },
-  { name: "code-edit", kind: "code", cls: "outside-write", passes: yoloUp, call: (f) => ["edit", { path: join(f.dir, "src", "app.py"), edits: [{ oldText: "2", newText: "3" }] }] },
-  { name: "code-bash-write", kind: "code", cls: "outside-write", passes: yoloUp, call: bash("printf 'X = 3\\n' > src/app.py") },
+  { name: "code-write", kind: "code", call: write((f) => join(f.dir, "src", "app.py")) },
+  { name: "code-edit", kind: "code", call: (f) => ["edit", { path: join(f.dir, "src", "app.py"), edits: [{ oldText: "2", newText: "3" }] }] },
+  { name: "code-bash-write", kind: "code-bash", call: bash("printf 'X = 3\\n' > src/app.py") },
 ];
 
-function want(row: Row, place: Place, mode: Mode, caller: Caller): "pass" | "allow" | "ask" | "refuse" {
+/** route-guard's note on a code edit in a repository with no layout (T89, T153). */
+const SET_UP_NOTE = "note (not a refusal; the call ran): LDD is not set up in this project yet: set it up by following `" + join(REPO, "prose/skills/ldd/references/init.md") +
+  "` (ask how to deliver and test with your ask tool, or use the recommended values), and before you finish, start this edit's change (tasks.md) and record a run (`jhon executions run`)";
+/** vcs-guard's note on a file tool's write outside the project and the scratch roots (T153). */
+const OUTSIDE_NOTE = /^note \(not a refusal; the call ran\): (Write|Edit) of .* lands outside the project \(.*\) and the scratch roots; check that the task means this file$/;
+
+function want(row: Row, place: Place, mode: Mode, caller: Caller): "pass" | "allow" | "set-up" | "outside" | "ask" | "refuse" {
   if (place === "folder") mode = "normal";
   // T72 (L557): a repository without LDD delivers nothing until LDD is set up;
-  // T89 (L646): nor is any file in it written, outside .git and the layout's directory.
-  if (row.kind === "refuse" || (row.kind === "delivery" && place !== "folder") || ((row.kind === "commit" || row.kind === "code" || row.inRepo) && place === "repo")) return "refuse";
-  if (row.kind === "allow" || row.kind === "delivery" || row.kind === "commit" || (row.kind === "code" && place !== "repo")) return "allow";
+  // T89 (L646): any file written in it, outside .git and the layout's directory,
+  // runs with route-guard's set-up note (refused until T153, L957).
+  if (row.kind === "refuse" || (row.kind === "delivery" && place !== "folder") || (row.kind === "commit" && place === "repo")) return "refuse";
+  if ((row.kind === "code" || row.kind === "code-bash") && place === "repo") return "set-up";
+  // T153: a file tool's write outside the project runs with vcs-guard's note (pi's
+  // folder is under the scratch roots, so its code writes are allowed with none).
+  if (row.kind === "outside") return "outside";
+  if (row.kind === "allow" || row.kind === "delivery" || row.kind === "commit" || row.kind === "code" || row.kind === "code-bash") return "allow";
   if (row.passes?.includes(mode)) return "pass";
   return caller === "interactive" ? "ask" : "refuse";
 }
@@ -134,12 +145,20 @@ for (const place of ["ldd", "repo", "folder"] as Place[]) {
               case "allow":
                 assert.equal(got, null, `${cell}: ${JSON.stringify(got)}`);
                 break;
+              case "set-up":
+                assert.equal(got, null, `${cell}: ${JSON.stringify(got)}`);
+                assert.equal(note, SET_UP_NOTE, cell);
+                break;
+              case "outside":
+                assert.equal(got, null, `${cell}: ${JSON.stringify(got)}`);
+                assert.match(note ?? "", OUTSIDE_NOTE, cell);
+                break;
               case "ask":
                 assert.ok(got && "ask" in got && got.ask.startsWith(`${row.cls}: `), `${cell}: ${JSON.stringify(got)}`);
                 break;
               case "refuse":
                 assert.ok(got && "block" in got, `${cell}: ${JSON.stringify(got)}`);
-                if (row.kind === "delivery" || row.kind === "commit" || (row.kind === "code" && place === "repo")) assert.match(got.reason, /route-guard: /, cell);
+                if (row.kind === "delivery" || row.kind === "commit") assert.match(got.reason, /route-guard: /, cell);
                 break;
             }
           });
