@@ -1,16 +1,20 @@
 import "./isolated-env.ts";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { recordEvent, telemetryLine } from "../lib/telemetry.ts";
 import { subagentAttributes, type AgentDef } from "../lib/agents.ts";
 import { OWNER_SETTINGS, useMemorySettings } from "./fake-jhon-settings.ts";
 
+const temps: string[] = [];
+after(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
+const tempHome = () => { const d = mkdtempSync(join(tmpdir(), "jhon-telemetry-")); temps.push(d); return d; };
+
 test("an event is one line in the engine's format, in its UTC day's file", (t) => {
 	useMemorySettings(t, OWNER_SETTINGS);
-	const home = mkdtempSync(join(tmpdir(), "jhon-telemetry-"));
+	const home = tempHome();
 	const at = new Date("2026-10-30T23:59:59.500Z");
 	recordEvent("jhon.compaction", { "jhon.context.percent": 61, "jhon.compact_at": 60 }, "INFO", { HOME: home }, at);
 	recordEvent("jhon.subagent", { "jhon.outcome": "context-cap" }, "WARN", { HOME: home }, at);
@@ -26,7 +30,7 @@ test("an event is one line in the engine's format, in its UTC day's file", (t) =
 
 test("JHON_TELEMETRY=off records nothing, and an unwritable home fails nothing", (t) => {
 	useMemorySettings(t, OWNER_SETTINGS);
-	const home = mkdtempSync(join(tmpdir(), "jhon-telemetry-"));
+	const home = tempHome();
 	recordEvent("jhon.x", {}, "INFO", { HOME: home, JHON_TELEMETRY: "off" });
 	assert.throws(() => readFileSync(join(home, ".local/share/jhon/telemetry", `${new Date().toISOString().slice(0, 10)}.jsonl`)));
 	recordEvent("jhon.x", {}, "INFO", { HOME: "/proc/no-such-home" });
@@ -35,7 +39,7 @@ test("JHON_TELEMETRY=off records nothing, and an unwritable home fails nothing",
 test("telemetry is opt-in (T55): with integrations.telemetry off, the default, nothing is recorded", (t) => {
 	for (const file of [{}, { ...OWNER_SETTINGS, "integrations.telemetry": false }]) {
 		useMemorySettings(t, file);
-		const home = mkdtempSync(join(tmpdir(), "jhon-telemetry-"));
+		const home = tempHome();
 		recordEvent("jhon.compaction", { "jhon.context.percent": 61 }, "INFO", { HOME: home });
 		assert.equal(existsSync(join(home, ".local")), false, JSON.stringify(file));
 	}
