@@ -1,7 +1,7 @@
 # Asked operations
 
-- Ambient SSH agents, sockets, credentials, and authenticated sessions are not
-  permission to use them.
+- Ambient credentials and sessions are not permission; an owner-approved
+  operation uses them unasked.
 - No wrapper, interpreter, library, or delegate widens the authorized scope.
 - The safety guard asks before remote access; where it cannot ask, the owner
   authorizes a class for a while with `jhon grant remote` (or `push`,

@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
+	"io/fs"
 	"os"
 	"os/exec"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/contract"
@@ -42,7 +45,9 @@ import (
 // non-passive reasons), and `decisions`, the ids, types, and titles of the
 // decisions and architecture Engram holds for the change and the areas its
 // diff touches (`engram search`, or JHON_ENGRAM). Engram unavailable leaves
-// `decisions` null with a `decisions_note`; the packet still prints.
+// `decisions` null with a `decisions_note` that names why (T163): not found,
+// its exit code and first stderr line, a timeout, or too much output; the
+// packet still prints. An Engram that finds nothing is no failure.
 //
 // `change` is the name given, or nil; it is never selected on the context's
 // behalf, and it need not exist yet (explore runs before its directory
@@ -230,33 +235,65 @@ const (
 // DecisionsFor is the decisions and architecture Engram holds for query;
 // ok is false when Engram cannot be asked.
 func DecisionsFor(root, query string) (decisions []Decision, ok bool) {
-	return decisionsWithin(context.Background(), root, query)
+	d, why := decisionsWithin(context.Background(), root, query)
+	return d, why == ""
 }
 
-// decisionsWithin is DecisionsFor, ended by parent too.
-func decisionsWithin(parent context.Context, root, query string) (decisions []Decision, ok bool) {
+// decisionsWithin is DecisionsFor, ended by parent too; why is the reason
+// Engram could not be asked, or "".
+func decisionsWithin(parent context.Context, root, query string) (decisions []Decision, why string) {
 	bin := os.Getenv("JHON_ENGRAM")
 	if bin == "" {
 		bin = "engram"
 	}
 	ctx, cancel := context.WithTimeout(parent, engramTimeout)
 	defer cancel()
-	return decisionsFor(ctx, bin, root, query)
+	return decisionsWhy(ctx, bin, root, query)
 }
 
 // decisionsFor is DecisionsFor through bin, both searches within ctx: eight
 // results of each of the two types at most.
 func decisionsFor(ctx context.Context, bin, root, query string) (decisions []Decision, ok bool) {
+	d, why := decisionsWhy(ctx, bin, root, query)
+	return d, why == ""
+}
+
+// engramStderrMax is how much of a failed search's stderr is kept, and
+// engramWhyMax the length of the stderr line a reason quotes.
+const (
+	engramStderrMax = 64 * 1024
+	engramWhyMax    = 200
+)
+
+// capped keeps the first n bytes written to it and accepts the rest.
+type capped struct {
+	bytes.Buffer
+	n int
+}
+
+func (c *capped) Write(p []byte) (int, error) {
+	if room := c.n - c.Len(); room > 0 {
+		c.Buffer.Write(p[:min(len(p), room)])
+	}
+	return len(p), nil
+}
+
+// decisionsWhy is decisionsFor with the reason Engram could not be asked
+// (T163): "" when it answered.
+func decisionsWhy(ctx context.Context, bin, root, query string) (decisions []Decision, why string) {
 	out := []Decision{}
 	for _, kind := range []string{"decision", "architecture"} {
 		cmd := exec.CommandContext(ctx, bin, "search", query, "--type", kind, "--limit", "8", "--match", "any")
 		cmd.Dir = root
 		cmd.WaitDelay = time.Second
 		var stdout bytes.Buffer
-		cmd.Stdout = &stdout
-		err := cmd.Run()
-		if err != nil || stdout.Len() > engramMaxBuffer {
-			return nil, false
+		stderr := &capped{n: engramStderrMax}
+		cmd.Stdout, cmd.Stderr = &stdout, stderr
+		if err := cmd.Run(); err != nil {
+			return nil, engramFailure(ctx, err, stderr.String())
+		}
+		if stdout.Len() > engramMaxBuffer {
+			return nil, "engram output over 1 MiB"
 		}
 		for _, line := range lineBreak.Split(stdout.String(), -1) {
 			m := engramRow.FindStringSubmatch(line)
@@ -269,7 +306,31 @@ func decisionsFor(ctx context.Context, bin, root, query string) (decisions []Dec
 			}
 		}
 	}
-	return out, true
+	return out, ""
+}
+
+// engramFailure is why a search that failed with err, having written
+// stderr, could not ask Engram.
+func engramFailure(ctx context.Context, err error, stderr string) string {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Sprintf("engram timed out after %s", engramTimeout)
+	}
+	if exit, ok := errors.AsType[*exec.ExitError](err); ok {
+		why := fmt.Sprintf("engram exited %d", exit.ExitCode())
+		for _, line := range lineBreak.Split(stderr, -1) {
+			if line = strings.TrimSpace(line); line != "" {
+				if r := []rune(line); len(r) > engramWhyMax {
+					line = string(r[:engramWhyMax])
+				}
+				return why + ": " + line
+			}
+		}
+		return why
+	}
+	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+		return "engram not found"
+	}
+	return "engram could not run: " + err.Error()
 }
 
 // HandoffContext is the handoff packet: the context plus the change's risk
@@ -306,12 +367,12 @@ func handoffContext(ctx context.Context, c Context) (Context, error) {
 		}
 	}
 	out := c.with(Field{"risk", Risk{Tier: risk.Tier, Base: risk.Base, Reasons: reasons}})
-	decisions, ok := []Decision{}, true
+	decisions, why := []Decision{}, ""
 	if query != "" {
-		decisions, ok = decisionsWithin(ctx, c.ProjectRoot, query)
+		decisions, why = decisionsWithin(ctx, c.ProjectRoot, query)
 	}
-	if !ok {
-		return out.with(Field{"decisions", nil}, Field{"decisions_note", "engram unavailable: search Engram for the change's decisions before handing off"}), nil
+	if why != "" {
+		return out.with(Field{"decisions", nil}, Field{"decisions_note", "engram unavailable (" + why + "): search Engram for the change's decisions before handing off"}), nil
 	}
 	return out.with(Field{"decisions", decisions}), nil
 }

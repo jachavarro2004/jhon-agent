@@ -39,6 +39,7 @@ All notable changes to Jhon are recorded here. The format follows
 
 ### Fixed
 
+- `jhon context --handoff`: decisions_note now names why Engram could not be asked (not found, exit code with its first stderr line, timeout, or output over 1 MiB); an Engram that finds nothing still gives an empty list. asked-operations: ambient credentials and sessions are still not permission, and an owner-approved operation now uses them without asking again (T163, L1421, L1430).
 - `jhon audit` and `jhon audit --all` no longer panic with 'index out of range' on a session whose Bash command assigns an empty quoted string (`out=""`), which broke `--since 14d` and longer; the safety guard no longer crashes (exit 2, blocking the command) on such a line either.
 - Test runs leave no temp folders: the shell tests remove every one they create, and go's telemetry is off in the per-call config directory (0f3790e, 994cf61).
 - Sandbox docs: `--die-with-parent` ends bubblewrap and its command, not a child the command detached (`setsid`, `nohup`): with no PID namespace that child outlives the sandbox, an accepted residual risk (T128g, L1262).
