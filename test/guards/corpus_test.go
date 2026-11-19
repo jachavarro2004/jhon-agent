@@ -20,6 +20,9 @@
 //     (the call runs in the project), framework-cwd (it runs in <FW>).
 //   - source: where the case comes from (audit-session, L230, L265, …).
 //   - known: `known` for a documented hole, `-` otherwise.
+//
+// The 6-column files beside them (guarddiffLines) hold no decision: they are
+// lines only tools/guarddiff runs (its README), with the two above.
 
 package guards
 
@@ -44,6 +47,7 @@ var (
 	corpusGuards    = map[string]bool{"safety-guard": true, "secrets-guard": true, "framework-guard": true}
 	corpusDecisions = map[string]bool{"allow": true, "ask": true, "refuse": true}
 	corpusFixtures  = map[string]bool{"none": true, "cred-near": true, "cred-far": true, "framework": true, "framework-cwd": true}
+	guarddiffLines  = map[string]bool{"fuzz.tsv": true, "matrix.tsv": true, "rows.tsv": true}
 )
 
 func readCorpus(t *testing.T) []corpusCase {
@@ -54,6 +58,9 @@ func readCorpus(t *testing.T) []corpusCase {
 	}
 	var out []corpusCase
 	for _, f := range files {
+		if guarddiffLines[filepath.Base(f)] {
+			continue
+		}
 		fh, err := os.Open(f)
 		if err != nil {
 			t.Fatal(err)

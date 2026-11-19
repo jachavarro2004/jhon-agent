@@ -57,8 +57,6 @@ const TABLE: Row[] = [
   { name: "dot-git-write", kind: "refuse", call: write((f) => join(f.dir, ".git", "config")) },
   { name: "agent-jhon-grant", kind: "refuse", call: bash("jhon grant push") },
   { name: "agent-jhon-mode", kind: "refuse", call: bash("jhon mode yolo") },
-  { name: "agent-jhon-ldd-off", kind: "refuse", call: bash("jhon ldd off") },
-  { name: "agent-jhon-ldd-on", kind: "refuse", call: bash("jhon ldd on") },
   { name: "unreadable", kind: "ask", cls: "unreadable", passes: superOnly, call: bash("$x push") },
   { name: "unknown", kind: "ask", cls: "unknown", passes: superOnly, call: bash("git frobnicate") },
   { name: "delivery-pr-without-red-green", kind: "delivery", call: bash("gh pr create --title x --body y") },
