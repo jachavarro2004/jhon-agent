@@ -35,7 +35,7 @@ safety-guard	Bash	"git archive HEAD -- ':(glob)**/cred*'"	refuse	cred-near	L233	
 safety-guard	Bash	"git add ':/*id_*'"	refuse	cred-near	L233	-	git pathspec magic
 safety-guard	Bash	"git add ':(top)*id_*'"	refuse	cred-near	L233	-	git pathspec magic
 safety-guard	Bash	"git grep -- ':(icase)**/ID_*'"	refuse	cred-near	L233	-	git pathspec magic
-safety-guard	Bash	"builtin cd <OTHER> && find . -name 'id_*' -exec cat {} \\;"	refuse	cred-far	L242	-	search paths from a file, a pipe or an unfollowed cd
+safety-guard	Bash	"builtin cd <OTHER> && find . -name 'id_*' -exec cat {} \\;"	allow	cred-far	L242	-	search paths from a file, a pipe or an unfollowed cd; T128f: the credentials file is outside the project, the sandbox's
 safety-guard	Bash	"xargs -a dirs.txt grep -r --include='id_*' k"	refuse	cred-far	L242	-	search paths from a file, a pipe or an unfollowed cd
 safety-guard	Bash	"xargs -a dirs.txt rg -uu -g 'id_*' k"	refuse	cred-far	L242	-	search paths from a file, a pipe or an unfollowed cd
 safety-guard	Bash	"cat dirs.txt | xargs -I{} rg -g 'cred*' k {}"	refuse	cred-far	L242	-	search paths from a file, a pipe or an unfollowed cd
@@ -54,18 +54,18 @@ safety-guard	Bash	"jq . snapshots/*.json"	allow	none	L265	-	the owner's client-p
 safety-guard	Bash	"jq . snapshots/*.json"	refuse	cred-near	L265	-	the owner's client-project read beside a credentials file
 safety-guard	Bash	"wc -c i18n/**.json"	allow	none	L265	-	the owner's client-project read, no credentials file
 safety-guard	Bash	"wc -c i18n/**.json"	refuse	cred-near	L265	-	the owner's client-project read beside a credentials file
-safety-guard	Bash	"builtin source far.sh"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	"builtin . far.sh"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	"true && builtin source far.sh"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	"eval source far.sh"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	"bash -c 'source far.sh'"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	"source far2.sh"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	"source deploy/far.sh"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	". deploy/far.sh"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	"bash deploy/far.sh"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	"command source far.sh"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	"eval \"source far.sh\""	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
-safety-guard	Bash	"bash -lc 'source far.sh'"	refuse	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere
+safety-guard	Bash	"builtin source far.sh"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"builtin . far.sh"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"true && builtin source far.sh"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"eval source far.sh"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"bash -c 'source far.sh'"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"source far2.sh"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"source deploy/far.sh"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	". deploy/far.sh"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"bash deploy/far.sh"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"command source far.sh"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"eval \"source far.sh\""	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"bash -lc 'source far.sh'"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
 safety-guard	Bash	"bash -c 'go test ./...'"	allow	none	L270	-	must pass: ordinary sourcing and inline code
 safety-guard	Bash	"source .venv/bin/activate"	allow	none	L270	-	must pass: ordinary sourcing and inline code
 safety-guard	Bash	". .venv/bin/activate"	allow	none	L270	-	must pass: ordinary sourcing and inline code
@@ -123,8 +123,8 @@ safety-guard	Bash	"node --env-file=cfg.txt deploy/ok.mjs"	ask	cred-far	L294	-	an
 safety-guard	Bash	"node --import tsx script.ts"	ask	none	L294	-	any preload asks, tsx too
 safety-guard	Bash	"node --test deploy/ok.mjs"	allow	none	L294	-	must pass: no preload
 safety-guard	Bash	"bun run build"	allow	none	L294	-	must pass: no preload
-safety-guard	Bash	"bash -c 'source \"$0\"' far.sh"	refuse	cred-far	L294	-	a -c string's $0 names the script: it is read
-safety-guard	Bash	"bash -c 'bash \"$1\"' x far.sh"	refuse	cred-far	L294	-	a -c string's $1 names the script: it is read
+safety-guard	Bash	"bash -c 'source \"$0\"' far.sh"	allow	cred-far	L294	-	a -c string's $0 names the script: it is read; T128f: the credentials file is outside the project, the sandbox's
+safety-guard	Bash	"bash -c 'bash \"$1\"' x far.sh"	allow	cred-far	L294	-	a -c string's $1 names the script: it is read; T128f: the credentials file is outside the project, the sandbox's
 safety-guard	Bash	"bash /dev/fd/3 3< far.sh"	ask	cred-far	L294	-	a script read through a descriptor
 safety-guard	Bash	"source ${X:-far.sh}"	ask	cred-far	L294	-	a script named by a parameter the guard cannot resolve
 safety-guard	Bash	". <(cat far.sh) arg"	ask	cred-far	L294	-	sourcing a substitution: a program the guard cannot read

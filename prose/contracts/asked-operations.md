@@ -19,8 +19,8 @@
   tell (a URL, a configuration that maps or mirrors it, `GIT_DIR`); `gh pr
   merge`, `close`, `review`, releases, repository, secret and workflow
   writes, every other `gh api` write; and deploy, destroy, publish, remote
-  and outside-write, a report in the home's Documents and a sibling project such
-  as a frontend included. One command that needs several classes asks one
+  and an Edit or Write outside the project (outside-write; a shell write there
+  is the sandbox's). One command that needs several classes asks one
   question that names them all.
 - A grant and a mode are the owner's act alone. The safety guard refuses
   `mode <a mode>` and `grant <a class>` (or `grant --revoke`) in any

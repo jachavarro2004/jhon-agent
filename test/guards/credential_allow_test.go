@@ -26,9 +26,9 @@ var elsewhereForms = []string{`find <OTHER> -name 'id_*' -exec cat {} \;`, `find
 var magicForms = []string{`git grep k -- ':(glob)**/id_*'`, `git add ':(glob)**/id_*'`, `git ls-files ':(glob)**/id_*'`,
 	`git archive HEAD -- ':(glob)**/cred*'`, `git add ':/*id_*'`, `git add ':(top)*id_*'`, `git grep -- ':(icase)**/ID_*'`}
 
-// hiddenForms take their search paths from a file, a pipe, or a cd the
-// guard does not follow (L242).
-var hiddenForms = []string{`builtin cd <OTHER> && find . -name 'id_*' -exec cat {} \;`, `xargs -a dirs.txt grep -r --include='id_*' k`,
+// hiddenForms take their search paths from a file or a pipe (L242); a
+// cd to outside the project is the sandbox's (T128f).
+var hiddenForms = []string{`xargs -a dirs.txt grep -r --include='id_*' k`,
 	`xargs -a dirs.txt rg -uu -g 'id_*' k`, `cat dirs.txt | xargs -I{} rg -g 'cred*' k {}`, `tar -T dirs.txt --wildcards 'id_*' -cf -`}
 
 // shapeForms break one of the allow-list's conditions on an allowed reader.
@@ -114,9 +114,9 @@ func TestCredentialGlobInAScriptOutsideTheAllowList(t *testing.T) {
 		"up.mjs": scriptGlobbing("i18n/**.json", "const x = '../';\n"), "env.mjs": scriptGlobbing("i18n/**.json", "process.env.HOME;\n"),
 		"dir.mjs": scriptGlobbing("i18n/**.json", "const d = __dirname;\n"), "cwd.mjs": scriptGlobbing("i18n/**.json", "fg.sync('x', { cwd: 'sub' });\n"),
 		"local.mjs": scriptGlobbing("i18n/**.json", "import h from './helper.mjs';\n"), "cd.mjs": scriptGlobbing("i18n/**.json", "execSync('cd sub');\n"),
-		"find.mjs": scriptGlobbing("i18n/**.json", "execSync('find sub');\n"), "tilde.mjs": scriptGlobbing("~/i18n/**.json", ""),
-		"var.mjs": scriptGlobbing("${d}/i18n/**.json", ""), "argv.mjs": scriptGlobbing("i18n/**.json", "process.argv;\n"),
-		"home.py": "import subprocess, glob\nsubprocess.run(['cat', 'i18n/**.json'])\nglob.glob('~/x')\n",
+		"find.mjs": scriptGlobbing("i18n/**.json", "execSync('find sub');\n"), "var.mjs": scriptGlobbing("${d}/i18n/**.json", ""),
+		"argv.mjs": scriptGlobbing("i18n/**.json", "process.argv;\n"),
+		"home.py":  "import subprocess, glob\nsubprocess.run(['cat', 'i18n/**.json'])\nglob.glob('~/x')\n",
 	}
 	for f, text := range bad {
 		support.Write(t, s.p, map[string]string{"deploy/" + f: text})

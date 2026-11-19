@@ -78,11 +78,10 @@ func TestCredentialGlobFailsClosed(t *testing.T) {
 	s := credTree(t)
 	// Outside the project the glob is read by its name: `*.json` can match credentials.json.
 	// T87b (L631): an extension glob outside the project is walked; it is
-	// refused once the walk meets a credentials file. ~ stays unresolvable.
+	// refused once the walk meets a credentials file. A glob under home is the sandbox's (T128f).
 	s.code(t, s.expand("cat <SCRATCH>/*.json"), sgOpts{}, 0, "a glob outside the project, no credentials file")
 	s.code(t, "cat ../*.json", sgOpts{}, 0, "a glob that climbs out of the project, no credentials file")
 	s.code(t, "cat proj/*.json", sgOpts{cwd: s.scratch}, 0, "a glob run outside any project, no credentials file")
-	s.code(t, "cat ~/*.json", sgOpts{}, 2, "a glob under home")
 	support.Write(t, s.other, map[string]string{"credentials.json": "{}\n"})
 	s.code(t, s.expand("cat <SCRATCH>/*.json"), sgOpts{}, 2, "a glob outside the project beside a credentials file")
 	s.code(t, "cat ../*.json", sgOpts{}, 2, "a glob that climbs out of the project beside a credentials file")
@@ -187,8 +186,7 @@ func TestExtensionGlobUnresolvableOrHomeStaysRefused(t *testing.T) {
 	t.Parallel()
 	s := extTree(t)
 	support.Write(t, s.p, map[string]string{"dirs.txt": "x\n"})
-	for _, c := range []string{"cat ~/*.json", "cat ~/.config/gcloud/*.json", "cat " + sgHome + "/.config/gcloud/*.json", "cat " + sgHome + "/.aws/*.json",
-		"cat $PWD/*.json", "cat :*.json", "cat @*.json", "git add ':(glob)**/*.json'", "cat {a,b}/*.json", "rg -g '*.json' x <OTHER> /srv",
+	for _, c := range []string{"cat $PWD/*.json", "cat :*.json", "cat @*.json", "git add ':(glob)**/*.json'", "cat {a,b}/*.json", "rg -g '*.json' x <OTHER> /srv",
 		"grep -r --include=*.json x ~", "xargs -a dirs.txt grep -r --include=*.json k", "cat dirs.txt | xargs grep -r --include=*.json k",
 		"git -C <OTHER> ls-files '*.json'", "find -L . -name '*.json'", "tar -T dirs.txt --wildcards '*.json' -cf -", "rg -g '*.json' x $HOME",
 		"find . -name '*.json' -exec cat {} +", "cp a.json b.json; cat *.json", "yq -i . *.json", "node x.mjs; cat *.json", "ln -s <OTHER> l; cat l/*.json"} {

@@ -53,7 +53,9 @@ var matrixCallers = []string{"top-default", "top-bypass", "subagent"}
 //     elsewhere allowed;
 //   - code: an edit of the project's code, route-guard's refusal in a
 //     repository without LDD (T89); allowed in the LDD place; in a folder
-//     an outside-write ask, as any write there.
+//     an outside-write ask, as any write there; code-bash, the same by the
+//     shell, allowed in a folder: the sandbox's (T128f);
+//   - sandbox: a shell write outside the project, allowed: the sandbox's (T128f).
 //
 // inRepo marks a row that writes a file in the repository: in a repository
 // without LDD route-guard refuses it before anything is asked (T89).
@@ -93,7 +95,7 @@ var (
 		{name: "destroy-deny-force-push", kind: "refuse", call: bashRow("git push --force")},
 		{name: "destroy-deny-clean-fdx", kind: "refuse", call: bashRow("git clean -fdx")},
 		{name: "outside-write-tool", kind: "ask", cls: "outside-write", passes: yoloUp, call: writeRow(func(matrixFixture) string { return "/etc/jhon.conf" })},
-		{name: "outside-write-bash", kind: "ask", cls: "outside-write", passes: yoloUp, call: bashRow(askSiteCommand("outside-write"))},
+		{name: "outside-write-bash", kind: "sandbox", call: bashRow("echo x > /etc/jhon.conf")},
 		{name: "push", kind: "ask", cls: "push", passes: yoloUp, call: bashRow(askSiteCommand("push"))},
 		{name: "gh-write", kind: "ask", cls: "gh-write", passes: yoloUp, call: bashRow(askSiteCommand("gh-write"))},
 		{name: "remote", kind: "ask", cls: "remote", passes: yoloUp, call: bashRow(askSiteCommand("remote"))},
@@ -117,7 +119,7 @@ var (
 		{name: "code-edit", kind: "code", cls: "outside-write", passes: yoloUp, call: func(f matrixFixture) (string, map[string]any) {
 			return "Edit", map[string]any{"file_path": filepath.Join(f.dir, "src", "app.py"), "old_string": "2", "new_string": "3"}
 		}},
-		{name: "code-bash-write", kind: "code", cls: "outside-write", passes: yoloUp, call: bashRow("printf 'X = 3\\n' > src/app.py")},
+		{name: "code-bash-write", kind: "code-bash", call: bashRow("printf 'X = 3\\n' > src/app.py")},
 	}
 )
 
@@ -235,9 +237,9 @@ func matrixWant(row matrixRow, place, mode, caller string) string {
 		mode = "normal"
 	}
 	switch {
-	case row.kind == "refuse", row.kind == "delivery" && place != "folder", (row.kind == "commit" || row.kind == "code" || row.inRepo) && place == "repo":
+	case row.kind == "refuse", row.kind == "delivery" && place != "folder", (row.kind == "commit" || row.kind == "code" || row.kind == "code-bash" || row.inRepo) && place == "repo":
 		return "refuse"
-	case row.kind == "delivery", row.kind == "commit", row.kind == "code" && place == "ldd":
+	case row.kind == "delivery", row.kind == "commit", row.kind == "code" && place == "ldd", row.kind == "code-bash", row.kind == "sandbox":
 		return "allow"
 	}
 	switch {
@@ -296,7 +298,7 @@ func checkMatrixCell(t *testing.T, cell string, r support.Result, want string, r
 	case "refuse":
 		code(t, r, 2, cell)
 		noDecision(t, r.Stdout, cell)
-		if (row.kind == "delivery" || row.kind == "commit" || row.kind == "code" && strings.HasPrefix(cell, "repo/")) && !strings.Contains(r.Stderr, "route-guard: ") {
+		if (row.kind == "delivery" || row.kind == "commit" || (row.kind == "code" || row.kind == "code-bash") && strings.HasPrefix(cell, "repo/")) && !strings.Contains(r.Stderr, "route-guard: ") {
 			t.Errorf("%s: not route-guard's refusal: %q", cell, r.Stderr)
 		}
 	}

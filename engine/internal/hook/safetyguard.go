@@ -54,11 +54,6 @@ func SafetyGuard(args []string, io IO) int {
 		cwd, _ = os.Getwd()
 	}
 	ctx := guard.ContextOf(cwd)
-	// The owner's yes to writes in a folder that is no project lasts the
-	// session (grant.SessionGranted): its writes pass, nothing else does.
-	if f := grant.SessionGranted(cwd, p.Str("session_id")); f != "" {
-		ctx.Granted = []string{f}
-	}
 	findings := guard.Classify(command, ctx)
 
 	var lines, alts []string

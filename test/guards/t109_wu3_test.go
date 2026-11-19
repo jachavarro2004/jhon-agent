@@ -87,17 +87,15 @@ func TestCodeNamingTheWordCredentialsInProse(t *testing.T) {
 			}
 		}
 	}
-	// Credential reads stay refused: real paths (L671), home credential
-	// directories, a whole-string name, and prose beside a credential home.
+	// Credential reads stay refused: built home credential paths, a
+	// whole-string name, and prose beside a credential home. A whole path
+	// outside the project is the sandbox's (T128f).
 	for _, c := range []string{
-		`python3 -c "open('/srv/jwt-keys/access-token-signing.pem').read()"`,
-		`python3 -c "import os; open(os.path.expanduser('~/.aws/credentials')).read()"`,
 		`node -e "require('fs').readFileSync(require('os').homedir()+'/.aws/credentials')"`,
 		`python3 -c "import os; open(os.path.join(os.path.expanduser('~'), '.aws', 'credentials')).read()"`,
 		`python3 -c "import os,subprocess; subprocess.run('cat the credentials', shell=True, cwd=os.path.expanduser('~/.aws'))"`,
 		`python3 -c "import os; print(os.path.expanduser('~'), 'see credentials.json now')"`,
 		`python3 -c "import os; print(os.path.expanduser('~'), 'see ~/credentials')"`,
-		"cat ~/.aws/credentials",
 		// L808 (c) pins: built home credential paths.
 		`python3 -c "from pathlib import Path; print(open(Path.home()/'.aws'/'credentials').read())"`,
 		`python3 -c "import os; h=os.path.expanduser('~'); print(open(f'{h}/.aws/credentials').read())"`,

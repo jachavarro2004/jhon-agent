@@ -22,10 +22,7 @@ import (
 type Ctx struct {
 	Cwd, Home, Root                                     string
 	Projects, Roots, Worktrees, Tmp, Scratch, Deletable []string
-	// Granted are the folders a session grant lets this session write in
-	// (grant.SessionGranted): writes only, never a deletion.
-	Granted []string
-	roots   map[string]string
+	roots                                               map[string]string
 	// globsProven says the allow-list proved every credentials glob of the
 	// line safe (proveGlobs): a glob is no longer read by its name.
 	globsProven bool
@@ -436,20 +433,27 @@ var credentialNamers = set("echo", "printf", "ls", "test", "[", "stat")
 // where it can reach a credentials file (extensionGlobRefused), on a line
 // that writes nothing (Ctx.extLine), run from the line's known directory by
 // a program none of whose words takes paths from elsewhere (localSearch).
-func judgeCredentials(name string, args []string, redirects []*sh.Redirect, ctx *Ctx, sub bool, dir string, via []string) []Finding {
+// A path outside the project is the sandbox's, which hides the home
+// credentials (T128f): only a word inside it, or one the guard cannot
+// place, is refused (projectPath).
+func judgeCredentials(name string, args []string, redirects []*sh.Redirect, ctx *Ctx, sub bool, dir string, via []string, vars map[string]string) []Finding {
 	var out []Finding
 	local := ctx.extLine && localSearch(name, args, via)
+	outside := func(w string) bool {
+		a := pathOf(w, dir, ctx, vars)
+		return a != "" && !projectPath(a, ctx)
+	}
 	// A glob into a home credentials directory is refused for every program, a namer's too (T87c).
 	for _, w := range args {
 		if _, v, ok := strings.Cut(w, "="); ok && strings.HasPrefix(w, "-") {
 			w = v
 		}
-		if homeCredentialGlob(w, dir, ctx.Home) {
+		if homeCredentialGlob(w, dir, ctx.Home) && !outside(w) {
 			out = append(out, denyCredentials(w, CredentialsWhy(w)))
 		}
 	}
 	for _, r := range redirects {
-		if homeCredentialGlob(r.Target, dir, ctx.Home) {
+		if homeCredentialGlob(r.Target, dir, ctx.Home) && !outside(r.Target) {
 			out = append(out, denyCredentials(r.Target, CredentialsWhy(r.Target)))
 		}
 	}
@@ -461,6 +465,9 @@ func judgeCredentials(name string, args []string, redirects []*sh.Redirect, ctx 
 		// a credentials name or glob there is refused by its name (T94, L636).
 		if p, ok := revPath(w); ok && name == "git" && (CredentialFile(p) || CredentialGlob(p)) {
 			out = append(out, denyCredentials(w, CredentialsWhy(w)))
+			return
+		}
+		if outside(w) {
 			return
 		}
 		if ctx.globsProven && isGlob(w) {
@@ -584,7 +591,7 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	for i, v := range p.Via {
 		via[i] = sh.Base(v)
 	}
-	out = append(out, judgeCredentials(name, args, redirects, ctx, len(p.Scope) > 0, credentialDir(dir, st), via)...)
+	out = append(out, judgeCredentials(name, args, redirects, ctx, len(p.Scope) > 0, credentialDir(dir, st), via, vars)...)
 	if i := slices.IndexFunc(via, func(v string) bool { return escalate[v] }); i >= 0 && !rootReads[name] &&
 		!(name == "systemctl" && slices.Contains([]string{"status", "is-active", "show", "list-units"}, at(args, 0))) {
 		out = append(out, deny(via[i]+" "+name, "it runs a program as root, which may write anywhere"))
@@ -620,7 +627,7 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 		out = append(out, judgeScriptFile(name, argv, ctx, vars, st, depth, p)...)
 	}
 	if p.Code != nil {
-		for _, c := range CredentialsIn(*p.Code) {
+		for _, c := range codeCredentials(*p.Code, dir, ctx, vars) {
 			out = append(out, denyCredentials(name+" code naming "+c, CredentialsWhy(c)))
 		}
 		out = append(out, judgeCode(p, ctx, vars, dir, st.Lost, depth)...)
@@ -789,7 +796,7 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 		for _, o := range ops {
 			why := "its target cannot be resolved"
 			if a := pathAt(o); a != "" {
-				why = outsideWhy(a, ctx, true)
+				why = writeWhy(a, ctx)
 			}
 			if why != "" {
 				out = append(out, deny(name+" -R "+o, why))
@@ -808,7 +815,7 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 			} else {
 				why := protectedWhy(t, ctx)
 				if why == "" {
-					why = outsideWhy(t, ctx, true)
+					why = writeWhy(t, ctx)
 				}
 				if why != "" {
 					out = append(out, deny("dd of="+of, why))
@@ -820,7 +827,7 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 		out = append(out, deny(name, "it overwrites a disk or a filesystem"))
 	}
 
-	// Shell writes: protected paths are refused; outside the project, asked.
+	// Shell writes: a device or a protected path is refused (judgeWrite).
 	// A link is judged where it is created, and only later writes go through it.
 	targets, links := writeTargets(name, args, ctx, vars, st)
 	for _, t := range targets {
@@ -1176,7 +1183,7 @@ func judgeCode(p sh.Program, ctx *Ctx, vars map[string]string, dir string, lost 
 	if sh.CodeWrites(targets, isProtected) {
 		out = append(out, deny(p.Name+" code", "it writes or deletes a VCS directory, the grants directory, or a Claude Code settings file"))
 	}
-	out = append(out, codeCredentialsElsewhere(p.Name, code)...)
+	out = append(out, codeCredentialsElsewhere(p.Name, code, dir, ctx, vars)...)
 	// A call that runs a program with the literals `mode` and a mode, or
 	// `grant` and a class, in a row (`run(["x", "mode", "yolo"])`).
 	if sh.CodeExec.MatchString(code) {

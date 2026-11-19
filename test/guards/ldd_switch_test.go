@@ -157,34 +157,21 @@ func TestBenignRunnersStayAllowed(t *testing.T) {
 }
 
 // A variable spelling of a path outside jhon's state gets the decision its
-// absolute spelling gets (L479): outside-write, asked in normal, passed by
-// yolo and super-yolo, for every caller.
+// absolute spelling gets (L479): allowed, for every mode and caller; a
+// shell write outside the project is the sandbox's (T128f).
 func TestStateVariableOtherAppPinned(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"normal", "yolo", "super-yolo"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			repo, state, env := ownerFixture(t, mode)
-			// Under /tmp the state directory is a scratch root, where every
-			// write passes, so the pin holds only for a state outside it.
-			if strings.HasPrefix(filepath.Clean(state)+"/", "/tmp/") {
-				t.Skip("the fixture's state is under /tmp, a scratch root; run with TMPDIR outside /tmp")
-			}
 			for _, base := range []string{state, "$XDG_STATE_HOME", "${XDG_STATE_HOME}", "${XDG_STATE_HOME:-/nope}"} {
 				c := "cp x " + base + "/other-app/k.json"
 				for _, caller := range []string{"top-default", "top-bypass", "subagent"} {
 					r := ownerCall(t, env, repo, caller, c)
 					label := mode + "/" + caller + ": " + c
-					switch {
-					case mode != "normal":
-						code(t, r, 0, label)
-						matches(t, modeNote(t, r.Stdout), `allowed by the owner's `+mode+` mode: outside-write: `, label)
-					case caller == "top-default":
-						code(t, r, 0, label)
-						matches(t, askedWhy(t, r.Stdout, label), `(^|\n)outside-write: `, label)
-					default:
-						code(t, r, 2, label)
-					}
+					code(t, r, 0, label)
+					noDecision(t, r.Stdout, label)
 				}
 			}
 		})

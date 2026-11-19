@@ -110,7 +110,6 @@ var askSites = []askSite{
 	safetySite("publish", "npm publish"),
 	safetySite("remote", "ssh host"),
 	safetySite("deploy", "kubectl apply -f x.yaml"),
-	safetySite("outside-write", "echo x > /etc/jhon.conf"),
 	safetySite("destroy", "git reset --hard"),
 	safetySite("unreadable", "$x push"),
 	safetySite("unknown", "git frobnicate"),

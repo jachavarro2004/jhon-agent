@@ -171,18 +171,14 @@ func TestNormalGhWritesAsk(t *testing.T) {
 	}
 }
 
-// Rule 5: deploy, destroy, publish, remote and outside-write are unchanged:
-// a report in ~/Documents and a change in a sibling frontend still ask.
+// Rule 5: deploy, destroy, publish and remote are unchanged. A shell write
+// outside the project is the sandbox's (T128f).
 func TestNormalOtherClassesStillAsk(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
 	feat := normalRepo(t, s, "work", "main", "feat")
-	// The scratch lives under a temporary root, where writes pass: the
-	// frontend is a sibling project under the home, as it is for the owner.
-	frontend := sgHome + "/code/frontend"
 	for _, c := range []struct{ command, cls string }{
 		{"kubectl apply -f k.yaml", "deploy"}, {"git reset --hard", "destroy"}, {"npm publish", "publish"}, {"ssh host", "remote"},
-		{"echo x > " + sgHome + "/Documents/report.md", "outside-write"}, {"echo x > " + frontend + "/src.ts", "outside-write"},
 	} {
 		s.asks(t, c.command, feat, c.cls, "unchanged")
 	}

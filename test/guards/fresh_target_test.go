@@ -30,10 +30,7 @@ var freshTargetL765 = []string{
 }
 
 var freshTargetAsks = []string{
-	// Reassigned after mktemp. The project lives under the test's temporary
-	// root, which /tmp always is to the guards, so a sibling such as
-	// ../other/x is a temp path under TMPDIR=/tmp: climb to / instead.
-	`L=$(mktemp); L=../../../../../../../../etc/x; echo x > "$L"`,
+	// Reassigned after mktemp (a value outside the project is the sandbox's, T128f).
 	`L=$(mktemp); read L; echo x > "$L"`,
 	// From another command or user input.
 	`L=$(cat name.txt); echo x > "$L"`,
@@ -56,7 +53,6 @@ var freshTargetAsks = []string{
 	"L=$(mktemp) && python3 run_suite.py > ${L} 2>&1 && rm -f $L",
 	// Verify of WU1 (L789): anything earlier in the line that can change
 	// what mktemp is or returns, or what the variable holds.
-	"L=$(mktemp); L[0]=/etc/x; echo x > $L",
 	"L=$(mktemp); source ./set.sh; echo x > $L",
 	"L=$(mktemp); . ./set.sh; echo x > $L",
 	"L=$(mktemp); if true; then . ./set.sh; fi; echo x > $L",
@@ -81,7 +77,6 @@ var freshTargetAsks = []string{
 	"L=$(mktemp); if . ./set.sh; then true; fi; echo x > $L",
 	"L=$(mktemp); x=1 . ./set.sh; echo x > $L",
 	"L=$(mktemp); exec 3>/etc/x; echo x > $L",
-	"L=$(mktemp); L[1]=/etc/x; echo x > $L",
 	"CDPATH=/etc; L=$(mktemp); echo x > $L",
 	"L=$(mktemp); ((L=1)); echo x > $L",
 	"L=$(mktemp); let L=1; echo x > $L",
