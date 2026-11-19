@@ -226,6 +226,9 @@ type Record struct {
 	// TurnedGreen is the tests turned green by editing only their test
 	// (MarkTurnedGreen), kept from run to run (TurnedGreenOf).
 	TurnedGreen []TurnedGreen `json:"turned_green,omitempty"`
+	// Repos is each workspace member's run of the change (RepoRun, T57
+	// slice 6), by member name; absent with none.
+	Repos map[string]RepoRun `json:"repos,omitempty"`
 }
 
 // RecordPath is the record's path, relative to root, for one change in its

@@ -57,6 +57,9 @@ type Layout interface {
 	// SliceHeading matches a slice's heading in the tasks artifact, its
 	// name the first group.
 	SliceHeading() *lazyre.Regexp
+	// SliceRepo matches a slice's `Repo: <name>` line, the workspace
+	// member it is in, its name the first group.
+	SliceRepo() *lazyre.Regexp
 	// Scenarios are the requirements of the spec src, each with its
 	// scenarios, its requirement headings at depth (0: a delta's fixed
 	// depth). The error is a delta grammar that cannot be read.
@@ -168,6 +171,7 @@ func (l shaped) Tasks() string                { return "tasks.md" }
 func (l shaped) DeltaSpecs() string           { return "specs" }
 func (l shaped) MainSpec(delta string) string { return path.Join(l.SpecsDir(), delta) }
 func (l shaped) SliceHeading() *lazyre.Regexp { return sliceHeading }
+func (l shaped) SliceRepo() *lazyre.Regexp    { return sliceRepo }
 func (l shaped) Scenarios(src string, depth int) ([]Requirement, error) {
 	return shapedScenarios(src, depth)
 }

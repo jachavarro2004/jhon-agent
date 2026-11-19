@@ -16,13 +16,18 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/telemetry"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // `jhon deliver check <change> [--action merge|deploy|release]
 // [--artifact <digest|commit>] [--json] [--root <project>]`: whether
 // HEAD is the change's tested revision (internal/ldd, deliver.go). A ready
 // check records what it saw in the change's delivery.json, replacing the
-// previous one; a check that is not ready writes nothing. Consent is not this
+// previous one; a check that is not ready writes nothing. In a workspace
+// member, a change of the primary's is checked against the member's run in
+// the primary's record (ldd.CheckMemberDelivery), and a ready check's
+// delivery.json goes under the member's git common dir, as a change with
+// no folder keeps its record, so neither tree changes. Consent is not this
 // command's business: the safety guard asks before a push or a deploy runs.
 // Exit 0 ready, 1 not ready, 2 usage.
 func init() { register("deliver", runDeliver) }
@@ -73,7 +78,14 @@ func runDeliver(argv []string) (int, error) {
 		root = discover.FindRoot(cwd())
 	}
 	change := pos[0]
+	// In a workspace member, a change of the primary's is checked against
+	// the member's entry in the primary's record (T57 slice 6).
+	var ws workspace.Info
 	if !activeChange(root, change) {
+		ws = workspace.Of(root)
+	}
+	member := ws.Role == workspace.Member && activeChange(ws.Primary, change)
+	if !activeChange(root, change) && !member {
 		fmt.Fprintf(os.Stderr, "jhon deliver: %s/ does not exist or is not an active change under %s\n", filepath.Join(execution.ChangesOf(root), change), root)
 		return 2, nil
 	}
@@ -107,7 +119,13 @@ func runDeliver(argv []string) (int, error) {
 		}
 	}
 
-	c, err := ldd.CheckDelivery(root, change, action, artifact)
+	check := ldd.CheckDelivery
+	if member {
+		check = func(root, change, action string, artifact *string) (ldd.DeliverCheck, error) {
+			return ldd.CheckMemberDelivery(root, ws.Primary, ws.Name, change, action, artifact)
+		}
+	}
+	c, err := check(root, change, action, artifact)
 	if err != nil {
 		return 1, err
 	}

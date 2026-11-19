@@ -136,12 +136,53 @@ const deliverOrder = "; order: a passing run (`jhon executions run`), commit the
 // error is a record, a risk config, or a judgments/ that exists and cannot be
 // read.
 func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck, error) {
-	exempt := execution.ChangeRecordPaths(root, change)
-	now := vcs.CandidateOf(root, exempt)
 	run, err := execution.ReadLastRun(root, change)
 	if err != nil {
 		return DeliverCheck{}, err
 	}
+	return checkDelivery(deliverTarget{root: root, home: root, change: change, run: run,
+		rerun: "jhon executions run " + change, shown: execution.RecordShown(root, change)}, action, artifact)
+}
+
+// CheckMemberDelivery is CheckDelivery in root, workspace member name of
+// primary (T57 slice 6): the run it reads is the member's entry in the
+// primary's record of change (execution.RepoRunOf), with the same
+// tested-tree rules: passed, complete, its working tree unchanged to its
+// end, and that tree HEAD's, the tree clean. The change's verification is
+// read from the primary; its scenarios and its delivery unit are the
+// primary's check's.
+func CheckMemberDelivery(root, primary, name, change, action string, artifact *string) (DeliverCheck, error) {
+	var run *execution.LastRun
+	if r, ok := execution.RepoRunOf(primary, change, name); ok {
+		failed := []string{}
+		for _, e := range r.Executions {
+			if e.Status != execution.Pass {
+				failed = append(failed, strings.TrimSuffix(e.Project+" ("+e.Kind+")", " ()"))
+			}
+		}
+		run = &execution.LastRun{Passed: r.Complete && len(r.Executions) > 0 && len(failed) == 0, Failed: failed,
+			Scope: execution.Full, Complete: r.Complete, Dirty: r.Dirty(), Tree: r.WorkingTree,
+			WorkingTree: r.WorkingTree, AfterWorkingTree: r.AfterWorkingTree}
+	}
+	return checkDelivery(deliverTarget{root: root, home: primary, change: change, run: run, member: true,
+		rerun: "jhon executions run " + change + " --repo " + name, shown: execution.RecordFile(primary, change) + ", repos." + name}, action, artifact)
+}
+
+// deliverTarget is what a check reads: root, the repository delivered;
+// home, the one holding the change's folder (root, but for a member);
+// the run; the command that runs it again and the record as a message
+// names it; and whether root is a workspace member.
+type deliverTarget struct {
+	root, home, change string
+	run                *execution.LastRun
+	rerun, shown       string
+	member             bool
+}
+
+func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverCheck, error) {
+	root, change, run := t.root, t.change, t.run
+	exempt := execution.ChangeRecordPaths(root, change)
+	now := vcs.CandidateOf(root, exempt)
 	reasons, notes := []string{}, []string{}
 	// The last run passed on the working tree as it is now, uncommitted: its
 	// commit is what is left, with no re-run (T146g G2).
@@ -155,7 +196,7 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 		reasons = append(reasons, "the working tree is not clean (commit or remove the uncommitted changes)"+deliverOrder)
 	}
 	if run == nil {
-		reasons = append(reasons, fmt.Sprintf("no recorded test run: run jhon executions run %s (%s)", change, execution.RecordShown(root, change)))
+		reasons = append(reasons, fmt.Sprintf("no recorded test run: run %s (%s)", t.rerun, t.shown))
 	} else {
 		before := len(reasons)
 		if !run.Complete {
@@ -163,7 +204,7 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 		} else if !run.Passed {
 			// An affected run of nothing is what wrote an empty record:
 			// only the full run clears it.
-			why := fmt.Sprintf(": it ran no project; run `jhon executions run %s` (the full run), then `jhon deliver check`", change)
+			why := fmt.Sprintf(": it ran no project; run `%s` (the full run), then `jhon deliver check`", t.rerun)
 			if len(run.Failed) > 0 {
 				why = ": " + strings.Join(run.Failed, ", ")
 			}
@@ -204,7 +245,9 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 				run.Tree = run.WorkingTree
 			}
 		}
-		if !run.Clean && !committed && !testedHere {
+		// A member's run is of its working tree always: the tree comparison
+		// below says what differs.
+		if !run.Clean && !committed && !testedHere && !t.member {
 			reasons = append(reasons, "the last test run started on a working tree that was not clean"+deliverOrder)
 		}
 		if committed || testedHere {
@@ -224,7 +267,7 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 			reasons = append(reasons, fmt.Sprintf("the last test run was a unit's (`--affected` with no base), which runs only what changed since the change's last passing run: run `jhon executions run %s --affected <base>` for the whole change, then `jhon deliver check`", change))
 		}
 		// The note is for a run delivery accepts: none refused it (T146e).
-		if committed && len(reasons) == before {
+		if committed && len(reasons) == before && !t.member {
 			notes = append(notes, "the last test run tested this tree before its commit: its run is the delivery evidence, with no re-run")
 		}
 		if run.Scope != execution.Full {
@@ -256,7 +299,7 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 	}
 	var verified *string
 	if risk.Tier == High {
-		v, err := IndependentVerification(root, change, judgment.VerdictOf)
+		v, err := IndependentVerification(t.home, change, judgment.VerdictOf)
 		if err != nil {
 			return DeliverCheck{}, err
 		}
@@ -274,8 +317,8 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 				high = append(high, r.Why)
 			}
 		}
-		folder := filepath.Join(execution.ChangesOf(root), change)
-		if st, err := os.Stat(filepath.Join(root, folder)); verified == nil && (err != nil || !st.IsDir()) {
+		folder := filepath.Join(execution.ChangesOf(t.home), change)
+		if st, err := os.Stat(filepath.Join(t.home, folder)); verified == nil && (err != nil || !st.IsDir()) {
 			// A change with no folder: risk high needs tasks.md, and so one.
 			reasons = append(reasons, fmt.Sprintf("the change is high risk (%s) and has no folder: risk high needs its tasks.md, so write it under %s/ and record there a verify-report.md stating verdict: pass (the verify agent), or a Judgment Day under %s/ closed APPROVED",
 				listed(high), folder, filepath.Join(folder, "judgments")))
@@ -283,7 +326,7 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 			notes = append(notes, "high risk, independently verified by "+*verified)
 		} else {
 			reasons = append(reasons, fmt.Sprintf("the change is high risk (%s) and has no independent verification: a verify-report.md stating verdict: pass (the verify agent), or a Judgment Day record under %s/ closed APPROVED",
-				listed(high), filepath.Join(execution.ChangesOf(root), change, "judgments")))
+				listed(high), filepath.Join(execution.ChangesOf(t.home), change, "judgments")))
 		}
 	}
 	// Each scenario of the change's delta specs is named by a test, as status counts them.
@@ -292,7 +335,7 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 	if err != nil {
 		return DeliverCheck{}, err
 	}
-	if len(specFileList) > 0 {
+	if len(specFileList) > 0 && !t.member {
 		specs := make([]string, len(specFileList))
 		for i, f := range specFileList {
 			specs[i] = f[1]
@@ -310,7 +353,7 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 		}
 	}
 	// delivery: change delivers the change in one merge, after its last slice.
-	if action == Merge() && DeliveryUnit(root) == "change" {
+	if action == Merge() && DeliveryUnit(root) == "change" && !t.member {
 		var src *string
 		if b, err := os.ReadFile(filepath.Join(root, execution.ChangesOf(root), change, lay.Tasks())); err == nil {
 			text := string(b)

@@ -167,8 +167,38 @@ member's branch names the change (its name, a slash a dash: `feat/c1` is
 `feat-c1`), and a PR whose diff alters behaviour in the member, by the
 member's own route, opens once the primary's change has its RED before GREEN
 in `jhon executions`, a passing light verify on the standard route, and its
-independent verification on the verified route. Executions per repository
-and linked delivery are not here yet.
+independent verification on the verified route. Linked delivery is not here
+yet.
+
+The change lives in the primary; its tests may run in every member (T57
+slice 6). `jhon executions run <change> --repo <name>`, in the primary or in
+any member, runs member `name`'s own projects (each testable one's resolved
+test command, then its code checks) in the member, whole and one after
+another, and records the run in the primary's record of the change under
+`repos.<name>`: `{working_tree, after_working_tree, executions, passed,
+complete}`, the member's working tree read before the first command and
+again after the last. Without `--repo` a run is the current repository's,
+as before; the primary's own run keeps every member's entry. `--affected`,
+`--dry-run` and `--jobs` are not taken with `--repo`; a repository in no
+workspace, a name the primary does not list, a member that has not joined
+and a change the primary does not have are refused (exit 2), with nothing
+written. A record with no member's run has no `repos` key.
+
+A slice of tasks.md names the repository it is in with a `Repo: <name>`
+line under its heading, written as a `Delivers:` line is; `jhon status`
+shows it in the slices line (`next Slice 2: lib (0/1 checked, repo lib)`)
+and as the slice's `repo` with `--json`.
+
+`jhon deliver check <change>` in a member, for a change of the primary's,
+reads the member's entry with the same tested-tree rules as a change's own
+run: it passed and finished, its working tree was the same at its end, the
+member's tree is clean, and HEAD's tree is the tree it tested (before the
+commit, it says to commit with no re-run). The member's risk is its own
+diff's; a high one needs the change's independent verification in the
+primary. The scenarios and `delivery: change` stay the primary's check's. A
+ready check writes the member's `delivery.json` under its git common dir
+(`jhon/changes/<change>/`), as a change with no folder keeps its record, so
+neither tree changes.
 
 ## The change's state in Engram
 

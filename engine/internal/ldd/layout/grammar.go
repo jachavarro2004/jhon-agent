@@ -2,7 +2,7 @@ package layout
 
 // This file is the grammar the shaped layouts (OpenSpec, Native) share:
 // the `## Slice <n>: <name>` heading of tasks.md (contracts/ldd.md,
-// "Slices") and the requirement, scenario and delta operation (ADDED,
+// "Slices") with its `Repo: <name>` line, and the requirement, scenario and delta operation (ADDED,
 // MODIFIED, ...) headings of a spec (contracts/spec-delta.md).
 
 import (
@@ -45,6 +45,11 @@ const (
 // is spelled as classes: Go's (?i) also folds ſ to s, JavaScript's i flag
 // without u does not.
 var sliceHeading = lazyre.New(`^#{2,4}` + jsSpace + `+([sS][lL][iI][cC][eE]` + jsSpace + `+\d+\b` + jsDot + `*?)` + jsSpace + `*$`)
+
+// sliceRepo is a slice's `Repo: <name>` line in tasks.md (T57 slice 6):
+// the workspace member, a name as the primary's config spells it, the
+// slice is in; written as a Delivers: line is, in a list item or in bold.
+var sliceRepo = lazyre.New(`^\s*(?:[-*]\s+)?(?:\*\*)?Repo:(?:\*\*)?\s*([a-z0-9-]+)\s*$`)
 
 // specReader reads a spec with the delta grammar of contracts/spec-delta.md
 // as package requirements parses it; package ldd sets it (ReadSpecsWith),

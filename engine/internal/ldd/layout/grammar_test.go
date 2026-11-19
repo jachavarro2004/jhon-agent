@@ -53,6 +53,34 @@ func TestGrammarOfBothLayouts(t *testing.T) {
 	}
 }
 
+// A slice of a workspace's change names the repository it is in with a
+// `Repo: <name>` line (T57 slice 6, E2), a member name as the primary's
+// config spells it ([a-z0-9-]+), written as a Delivers: line is.
+func TestSliceRepoLine(t *testing.T) {
+	for _, l := range []Layout{OpenSpec, Native} {
+		for line, want := range map[string]string{
+			"Repo: lib":           "lib",
+			"  Repo:  web-2  ":    "web-2",
+			"- Repo: lib":         "lib",
+			"**Repo:** lib":       "lib",
+			"Repo: Lib":           "",
+			"Repo: lib and web":   "",
+			"Repo:":               "",
+			"repo: lib":           "",
+			"- [ ] Repo: lib":     "",
+			"Delivers: Repo: lib": "",
+		} {
+			got := ""
+			if m := l.SliceRepo().FindStringSubmatch(line); m != nil {
+				got = m[1]
+			}
+			if got != want {
+				t.Errorf("%s: SliceRepo(%q) = %q, want %q", l.Name(), line, got, want)
+			}
+		}
+	}
+}
+
 // The slice heading spells JavaScript's \s and . as package js does (G1).
 func TestSliceGrammarIsJavaScripts(t *testing.T) {
 	if jsSpace != js.Space || jsDot != js.Dot {
