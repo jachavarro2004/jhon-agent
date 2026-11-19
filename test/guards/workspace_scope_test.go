@@ -73,10 +73,17 @@ func TestWorkspaceJoinedMembersAreTheProject(t *testing.T) {
 			{"Bash", cmd("sed -i s/1/2/ " + filepath.Join(target, "src", "a.py"))},
 		}
 	}
+	// Outside: Write and Edit are refused by the guards; a shell write there
+	// is the sandbox's (T128f slice 5): the guards let it through and the
+	// sandbox keeps the folder read-only (test/sandbox/workspace_test.go).
 	outside := func(cwd, target, label string) {
 		t.Helper()
 		for _, c := range writes(cwd, target) {
-			code(t, w.guard(t, cwd, c.tool, c.input), 2, label+": "+c.tool+" "+js(t, c.input))
+			want := 2
+			if c.tool == "Bash" {
+				want = 0
+			}
+			code(t, w.guard(t, cwd, c.tool, c.input), want, label+": "+c.tool+" "+js(t, c.input))
 		}
 	}
 	inside := func(cwd, target, label string) {
