@@ -99,6 +99,9 @@ type DeliverCheck struct {
 	VerifiedBy   *string     `json:"verified_by"`
 	Reasons      []string    `json:"reasons"`
 	Notes        []string    `json:"notes"`
+	// Members are a workspace primary's change's members' deliveries
+	// (WithMembers); absent for a change with none.
+	Members []MemberDelivery `json:"members,omitempty"`
 }
 
 // listed is the first five paths, and how many more there are.

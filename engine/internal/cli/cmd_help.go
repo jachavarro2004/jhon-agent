@@ -368,7 +368,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            HEAD commit), recorded in delivery.json; exit 0 ready,
                            1 not, 2 usage; in a workspace member, a change of
                            the primary's is checked against the member's run
-                           in the primary's record (repos.<name>)
+                           in the primary's record (repos.<name>); in the
+                           primary, a change's members (Repo: slices,
+                           repos.<name>) are judged there too and each must
+                           be ready (members[] in --json)
   jhon compose <main-spec> <delta-spec>
                            apply a delta spec to a main spec, atomically
   jhon archive <change-name> <YYYY-MM-DD>

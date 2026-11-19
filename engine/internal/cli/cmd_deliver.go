@@ -27,7 +27,10 @@ import (
 // member, a change of the primary's is checked against the member's run in
 // the primary's record (ldd.CheckMemberDelivery), and a ready check's
 // delivery.json goes under the member's git common dir, as a change with
-// no folder keeps its record, so neither tree changes. Consent is not this
+// no folder keeps its record, so neither tree changes. In a primary, a
+// change whose slices or record name members (ldd.ChangeMembers) lists each
+// member's delivery, judged there, and is not ready while one is not (T57
+// slice 7): one PR per repository, the primary's last. Consent is not this
 // command's business: the safety guard asks before a push or a deploy runs.
 // Exit 0 ready, 1 not ready, 2 usage.
 func init() { register("deliver", runDeliver) }
@@ -129,6 +132,10 @@ func runDeliver(argv []string) (int, error) {
 	if err != nil {
 		return 1, err
 	}
+	// In a workspace's primary, the change's members deliver first (T57 slice 7).
+	if !member {
+		c = ldd.WithMembers(c, root, change, workspace.Of(root))
+	}
 	for i := range c.Reasons {
 		c.Reasons[i] = layout.Words(root, c.Reasons[i])
 	}
@@ -176,6 +183,16 @@ func runDeliver(argv []string) (int, error) {
 		}
 		for _, r := range c.Reasons {
 			lines = append(lines, "  - "+r)
+		}
+		for _, m := range c.Members {
+			ready := "ready"
+			if !m.Ready {
+				ready = "not ready"
+			}
+			lines = append(lines, "member  "+m.Name+"  "+ready)
+			for _, r := range m.Reasons {
+				lines = append(lines, "    - "+r)
+			}
 		}
 		for _, n := range c.Notes {
 			lines = append(lines, "note  "+n)
