@@ -672,6 +672,9 @@ type Status struct {
 	// Workspace is the project's multi-repository workspace (T57 W2), which
 	// `jhon status` sets; nil, outside one, leaves it out.
 	Workspace *workspace.Info
+	// Members are the selected change's members' deliveries in a workspace
+	// (MemberDeliveries), which `jhon status` sets; none leaves them out.
+	Members []MemberDelivery
 }
 
 // LddState is LDD's state for the project: always on, from the default
@@ -704,6 +707,9 @@ func (s Status) object() object {
 	}
 	if s.Workspace != nil {
 		o = append(o, member{"workspace", s.Workspace})
+	}
+	if len(s.Members) > 0 {
+		o = append(o, member{"members", s.Members})
 	}
 	return o
 }
@@ -1553,7 +1559,11 @@ func Human(s Status) string {
 			out = append(out, "review      "+v.Line())
 		}
 	}
-	out = append(out, "", "tests       "+testsLine(s.Tests), "", tdd, "")
+	out = append(out, "", "tests       "+testsLine(s.Tests))
+	if len(s.Members) > 0 {
+		out = append(out, MembersLine(*s.Change, s.Members))
+	}
+	out = append(out, "", tdd, "")
 	out = append(append(out, projects...), "", "next        "+s.Next+"  (suggestion)")
 	if s.Command != "" {
 		out = append(out, "command     "+s.Command)

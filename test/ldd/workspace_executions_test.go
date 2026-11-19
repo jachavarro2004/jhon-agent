@@ -253,3 +253,32 @@ func TestWorkspaceDeliverCheckInAMember(t *testing.T) {
 	equal(t, r.Code, 1, r.Out())
 	match(t, reasonsOf(object(t, r.Stdout)), regexp.QuoteMeta("no recorded test run: run jhon executions run c (ldd/changes/c/execution-record.json)"))
 }
+
+// E3 (L1323): a member's run whose test command edits the tree it tests is
+// no delivery evidence, even once that edit is committed; nor is a run that
+// saw an untracked file that is gone.
+func TestMemberDeliverRefusesMidRunEditAndVanishedFile(t *testing.T) {
+	t.Parallel()
+	f := workspaceFixture(t)
+	notReady := func(why string) {
+		t.Helper()
+		r := f.run(t, f.lib, "deliver", "check", "c")
+		equal(t, r.Code, 1, r.Out())
+		match(t, r.Stdout, regexp.QuoteMeta(why))
+	}
+	support.Write(t, f.lib, map[string]string{"ldd/config.yaml": "test_command_override:\n  a: \"grep -q good a.go && echo 'package a // good, edited' > a.go\"\n"})
+	commit(t, f.lib, "editing test")
+	equal(t, f.run(t, f.lib, "executions", "run", "c", "--repo", "lib").Code, 0)
+	notReady("the candidate changed during the last test run")
+	commit(t, f.lib, "the edit")
+	notReady("the candidate changed during the last test run")
+
+	support.Write(t, f.lib, map[string]string{"ldd/config.yaml": "test_command_override:\n  a: \"grep -q good a.go\"\n"})
+	commit(t, f.lib, "plain test")
+	support.Write(t, f.lib, map[string]string{"a/u.txt": "untracked\n"})
+	equal(t, f.run(t, f.lib, "executions", "run", "c", "--repo", "lib").Code, 0)
+	if err := os.Remove(filepath.Join(f.lib, "a", "u.txt")); err != nil {
+		t.Fatal(err)
+	}
+	notReady("HEAD's tree is not the tested tree")
+}

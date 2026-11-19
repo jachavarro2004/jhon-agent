@@ -169,3 +169,20 @@ func TestRouteGuardMemberPRUsesThePrimarysRecord(t *testing.T) {
 		t.Error("an unlisted sibling is judged as a member")
 	}
 }
+
+// S1 (L1323): a config entry that reaches a folder through a symlink, a
+// `..` or the parent folder is no member: writes there stay outside, from
+// the primary and from a joined member.
+func TestWorkspaceConfigPathsThroughLinksStayOutside(t *testing.T) {
+	t.Parallel()
+	w := newWorkspace(t, "ldd/config.yaml")
+	parent := filepath.Dir(w.app)
+	symlink(t, w.other, filepath.Join(parent, "lnk"))
+	support.Write(t, w.app, map[string]string{"ldd/config.yaml": "workspace:\n  lib: ../lib\n  sl: ../lnk\n  dd: ../lib/../other\n  up: ..\n"})
+	w.join(t, w.lib)
+	for _, cwd := range []string{w.app, w.lib} {
+		for _, target := range []string{filepath.Join(w.other, "src", "b.py"), filepath.Join(parent, "lnk", "src", "b.py"), filepath.Join(parent, "top.txt")} {
+			code(t, w.guard(t, cwd, "Write", map[string]any{"file_path": target, "content": "X = 2\n"}), 2, "from "+cwd+": Write "+target)
+		}
+	}
+}

@@ -78,6 +78,10 @@ func runStatus(argv []string) (int, error) {
 		if ws.Role != workspace.None {
 			s.Workspace = &ws
 		}
+		// A primary's change shows its members' deliveries (T57 slice 7).
+		if s.Change != nil {
+			s.Members = ldd.MemberDeliveries(root, *s.Change, ws)
+		}
 	}
 	switch {
 	case json:

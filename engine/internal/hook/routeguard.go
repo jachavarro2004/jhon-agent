@@ -70,7 +70,9 @@ import (
 //     own: its edits and commits pass as in a project under LDD, and its PR
 //     is judged with the primary's record, the change its branch names
 //     (memberRefusal, T57 slice 5). A listed sibling that has not joined is
-//     a repository like any other.
+//     a repository like any other. The primary's PR for a change with
+//     members waits for each member's delivery and names each member's PR
+//     (membersRefusal, T57 slice 7).
 //   - While the branch carries an active change, a whole test suite run by
 //     hand passes with a one-line note: `jhon executions` runs the change's
 //     tests and records them; a focused TDD run passes silently.
@@ -190,8 +192,8 @@ func RouteGuard(args []string, io IO) int {
 			why := ""
 			if primary := memberPrimary(root); primary != "" {
 				why = memberRefusal(root, primary, command, r)
-			} else {
-				why = deliveryRefusal(root, command, r, v)
+			} else if why = deliveryRefusal(root, command, r, v); why == "" {
+				why = membersRefusal(root, cwd, command)
 			}
 			if why != "" {
 				return block(layout.Words(root, why))
