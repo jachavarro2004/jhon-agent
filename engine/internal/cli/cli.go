@@ -155,7 +155,7 @@ func hookRecorder() hook.Recorder {
 
 // recordedCommands are the commands that act or decide, each recorded as a
 // jhon.command event; the reads a status bar runs every few seconds (status,
-// audit, sessions) are not.
+// audit) are not.
 var recordedCommands = []string{"archive", "deliver", "executions", "grant", "init", "judgment", "mutate", "profile", "publish", "release", "review", "risk", "start", "sync", "testsuite"}
 
 // recordCommand records one command's run: its verb (the first operand that

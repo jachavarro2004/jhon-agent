@@ -196,7 +196,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            fails when the record of the
                            rendered agents or the main agent's definition
                            is missing from ~/.claude/agents, or the
-                           definition cannot be read or is empty
+                           definition cannot be read or is empty; warns of
+                           each live orchestrator session that started
+                           before the last install (resume it with
+                           jhon start --resume <id>)
   jhon doctor --runtime <name>
                            one runtime's guarantee level per behavioural rule
                            and the verification state of each primitive, with
@@ -356,10 +359,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            record a light verify (the verify agent's, when a
                            slice of a code change closes) in the change's
                            record, beside its runs, with HEAD's tree; on the
-                           standard route a PR needs a passing one of the
-                           tree its last run tested; a pass is refused (exit
-                           2) for any change whose runs show no RED before
-                           GREEN, whatever its route
+                           standard route a PR with none passing on the tree
+                           its last run tested runs with a note; a pass is
+                           refused (exit 2) for any change whose runs show no
+                           RED before GREEN, whatever its route
   jhon deliver check <change> [--action <merge|deploy|release>] [--artifact <name@sha256:digest|commit>]
                            advisory: ready when the tree is clean and HEAD's
                            tree is the last passing test run's; deploy and
@@ -381,11 +384,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            validate one judgment event and append it, atomically
   jhon judgment status <record> [--json]
                            derived state and next action of a judgment record
-  jhon sessions [--json]   live orchestrator sessions that started before the
-                           last install, which should be resumed (read-only)
   jhon grant <class>… [--for <n>{s|m|h|d}] [--root <path>]
                            authorize one or more outward-facing classes (push,
-                           gh-write, publish, remote, deploy, outside-write),
+                           gh-write, publish, remote, deploy),
                            or destroy (a deletion that loses work:
                            a forced branch delete, reset --hard, docker rm -f),
                            for this project and its worktrees; push is a push
@@ -399,14 +400,6 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            an agent
   jhon grant --list | --revoke <class>… [--root <path>]
                            list the grants, or revoke some
-  jhon grant [--revoke] outside-write --session <id> [--root <folder>]
-                           in a folder that is no git repository (no project:
-                           no mode and no grant for a while), let one
-                           session's Edit and Write calls under it pass until
-                           the session ends (12h at most); never HOME or /, and nothing
-                           but outside-write. pi offers it when it asks
-                           about a write there and revokes it at the end;
-                           in Claude Code a yes covers that one call
   jhon mode [normal|yolo|super-yolo] [--root <path>] [--json]
                            the owner's permission mode for this project and its
                            worktrees, until you set another: yolo passes every
