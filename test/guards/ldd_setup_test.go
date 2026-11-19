@@ -1,7 +1,8 @@
 // Jhon always works under LDD (T72, L554, L555, L557, T89, L646): in a
-// repository with no layout a commit or a PR, and the first code edit, are
-// refused by route-guard until LDD is set up, naming the init steps by their
-// absolute path (L534); writes that set LDD up and read-only work are not.
+// repository with no layout a commit or a PR is refused by route-guard until
+// LDD is set up, and a code edit runs with a note to set it up (T153), each
+// naming the init steps by their absolute path (L534); writes that set LDD
+// up and read-only work are neither.
 // Once a layout's config exists, delivery follows LDD's rules and edits pass.
 
 package guards
@@ -160,17 +161,49 @@ func TestNoLayoutDeliverySpellings(t *testing.T) {
 	}
 }
 
-// The first code edit in a repository with no layout is refused, naming the
-// init steps (T89, L646), by every tool that writes a file and by a Bash
-// command the safety guard reads as writing one; pi's edit and write reach
-// the hook as Edit and Write (shell/lib/guards.ts claudeCall). Writes that
-// set LDD up, read-only work, and every edit once the config exists pass.
-func TestNoLayoutRefusesTheFirstCodeEdit(t *testing.T) {
+// notePrefix opens a guard's advisory: the call ran, and was not refused.
+const notePrefix = "note (not a refusal; the call ran): "
+
+// setUpNote is route-guard's advisory on a code edit in a repository with
+// no layout (T89, T153).
+func setUpNote() string {
+	steps := filepath.Join(support.Root(), "prose", "skills", "ldd", "references", "init.md")
+	return notePrefix + "LDD is not set up in this project yet: set it up by following `" + steps +
+		"` (ask how to deliver and test with your ask tool, or use the recommended values), and before you finish, start this edit's change (tasks.md) and record a run (`jhon executions run`)"
+}
+
+// adviceOf is the note a hook's stdout allows the call with, "" for none;
+// stdout that is not JSON, or that decides the call, fails the test.
+func adviceOf(t *testing.T, out string) string {
+	t.Helper()
+	if strings.TrimSpace(out) == "" {
+		return ""
+	}
+	var j struct {
+		HookSpecificOutput map[string]any `json:"hookSpecificOutput"`
+	}
+	if err := json.Unmarshal([]byte(out), &j); err != nil {
+		t.Errorf("stdout is not a hook answer: %q", out)
+		return ""
+	}
+	if d, ok := j.HookSpecificOutput["permissionDecision"]; ok {
+		t.Errorf("stdout decides the call (%v), not only a note: %q", d, out)
+	}
+	note, _ := j.HookSpecificOutput["additionalContext"].(string)
+	return note
+}
+
+// A code edit in a repository with no layout runs, and route-guard tells the
+// agent to set LDD up, naming the init steps (T89, L646; an advisory since
+// T153, L957: nothing destructive is refused), for every tool that writes a
+// file and a Bash command the safety guard reads as writing one; pi's edit
+// and write reach the hook as Edit and Write (shell/lib/guards.ts
+// claudeCall). Writes that set LDD up, read-only work, and every edit once
+// the config exists pass with no note.
+func TestNoLayoutFirstCodeEditIsAnAdvisory(t *testing.T) {
 	t.Parallel()
 	repo, env := noLayoutRepo(t)
-	steps := filepath.Join(support.Root(), "prose", "skills", "ldd", "references", "init.md")
-	want := "route-guard: refused: LDD is not set up in this project yet; set it up first by following `" + steps +
-		"` (ask how to deliver and test with your ask tool, or use the recommended values), then make this edit and, before you finish, start its change (tasks.md) and record a run (`jhon executions run`)\n"
+	want := setUpNote()
 	src := filepath.Join(repo, "src", "x.py")
 	type call struct {
 		label, tool string
@@ -191,9 +224,9 @@ func TestNoLayoutRefusesTheFirstCodeEdit(t *testing.T) {
 	}
 	for _, c := range edits {
 		r := preToolCall(t, env, repo, c.tool, c.input, c.pi)
-		code(t, r, 2, c.label)
-		if r.Stderr != want {
-			t.Errorf("%s: stderr %q", c.label, r.Stderr)
+		code(t, r, 0, c.label)
+		if got := adviceOf(t, r.Stdout); got != want || r.Stderr != "" {
+			t.Errorf("%s: note %q, stderr %q; want the note %q", c.label, got, r.Stderr, want)
 		}
 	}
 	// Setting LDD up, reading, and writing outside the repository pass.

@@ -17,16 +17,14 @@ import (
 	"github.com/jachavarro2004/jhon-agent/test/support"
 )
 
-func setUpRefusal() string {
-	steps := filepath.Join(support.Root(), "prose", "skills", "ldd", "references", "init.md")
-	return "route-guard: refused: LDD is not set up in this project yet; set it up first by following `" + steps +
-		"` (ask how to deliver and test with your ask tool, or use the recommended values), then make this edit and, before you finish, start its change (tasks.md) and record a run (`jhon executions run`)\n"
-}
+// unresolvedNote is scope-guard's advisory on a bounded writer's shell write
+// whose target it cannot resolve (T153, L957: it ran, and is not refused).
+const unresolvedNote = `^note \(not a refusal; the call ran\): the command writes .*a target the guard cannot resolve.*, which the guard cannot hold to the allowed edit surfaces`
 
 // Rule 1 (L656) and rule 6 (L652): a write the parser cannot name a file
-// for, in the repository, is refused as the first code edit; a write it
-// resolves outside the repository, or code that writes only to standard
-// output, is not.
+// for, in the repository, counts as the first code edit, which runs with
+// route-guard's set-up note since T153 (L957); a write it resolves outside
+// the repository, or code that writes only to standard output, has none.
 func TestNoLayoutUnresolvedWritesRefused(t *testing.T) {
 	t.Parallel()
 	repo, env := noLayoutRepo(t)
@@ -48,10 +46,16 @@ func TestNoLayoutUnresolvedWritesRefused(t *testing.T) {
 	for _, c := range refused {
 		for _, pi := range []bool{false, true} {
 			r := preToolCall(t, env, repo, "Bash", cmd(c), pi)
-			code(t, r, 2, c)
 			// A pi child's safety-guard may refuse the unresolvable target first.
-			if !pi && r.Stderr != setUpRefusal() {
-				t.Errorf("%s: stderr %q", c, r.Stderr)
+			if pi && r.Code == 2 {
+				if strings.Contains(r.Stderr, "route-guard") {
+					t.Errorf("pi child: %s: route-guard refused it: %q", c, r.Stderr)
+				}
+				continue
+			}
+			code(t, r, 0, c)
+			if got := adviceOf(t, r.Stdout); got != setUpNote() {
+				t.Errorf("%s (pi %v): note %q, want the set-up note", c, pi, got)
 			}
 		}
 	}
@@ -75,15 +79,16 @@ func TestNoLayoutUnresolvedWritesRefused(t *testing.T) {
 }
 
 // Rule 6 for scope-guard: a bounded writer's write whose target the guard
-// cannot resolve is outside its surfaces; one that resolves into them passes.
+// cannot resolve runs with a note that it cannot be held to the surfaces
+// (T153, L957); one that resolves into them passes with none.
 func TestScopeGuardUnresolvedWrites(t *testing.T) {
 	t.Parallel()
 	p := scopePrompt
 	s := newScope(t, &p)
 	for _, c := range []string{"echo x > $OUT", "git apply fix.patch", "patch -p1 < fix.patch", `node -e "require('fs').writeFileSync(process.argv[1],'x')" docs/x.md`} {
 		r := s.guard(t, "Bash", map[string]any{"command": c})
-		code(t, r, 2, c)
-		matches(t, r.Stderr, `^scope-guard: the command writes .*a target the guard cannot resolve.*, outside the allowed edit surfaces`, c)
+		code(t, r, 0, c)
+		matches(t, adviceOf(t, r.Stdout), unresolvedNote, c)
 	}
 	for _, c := range []string{"f=src/a.ts; echo x > $f", "git apply --check fix.patch", `python3 -c "open('src/a.ts','w').write('x')"`, "echo x > /dev/null"} {
 		code(t, s.guard(t, "Bash", map[string]any{"command": c}), 0, c)
@@ -170,9 +175,9 @@ func TestMultiEditRoutedLikeEdit(t *testing.T) {
 	repo, env := noLayoutRepo(t)
 	in := map[string]any{"file_path": filepath.Join(repo, "src", "app.py"), "edits": []any{map[string]any{"old_string": "2", "new_string": "3"}}}
 	m := preToolCall(t, env, repo, "MultiEdit", in, false)
-	code(t, m, 2, "MultiEdit in a repository with no layout")
-	if m.Stderr != setUpRefusal() {
-		t.Errorf("MultiEdit: stderr %q", m.Stderr)
+	code(t, m, 0, "MultiEdit in a repository with no layout")
+	if got := adviceOf(t, m.Stdout); got != setUpNote() {
+		t.Errorf("MultiEdit: note %q, want the set-up note", got)
 	}
 	p := scopePrompt
 	s := newScope(t, &p)
@@ -224,6 +229,9 @@ func TestT94bCommonCommandsAllowed(t *testing.T) {
 	code(t, s.guard(t, "Bash", map[string]any{"command": c}), 0, "scope-guard: "+c)
 }
 
+// The verifier's gaps are still read as code writes: route-guard's set-up
+// note and scope-guard's unresolved-target note (each a refusal until T153,
+// L957); a target it resolves out of scope stays refused.
 func TestT94bGapsRefused(t *testing.T) {
 	t.Parallel()
 	repo, env := noLayoutRepo(t)
@@ -242,13 +250,19 @@ func TestT94bGapsRefused(t *testing.T) {
 	}
 	for _, c := range refused {
 		r := preToolCall(t, env, repo, "Bash", cmd(c), false)
-		code(t, r, 2, c)
+		code(t, r, 0, c)
+		if got := adviceOf(t, r.Stdout); got != setUpNote() {
+			t.Errorf("%s: note %q, want the set-up note", c, got)
+		}
 	}
 	p := scopePrompt
 	s := newScope(t, &p)
 	for _, c := range []string{`perl -e 'open(F, ">$ARGV[0]"); print F 1' docs/x.md`, "git -C . apply fix.patch",
-		`python3 -c "import sys; open(sys.argv[1],'w').write('x')" docs/x.md`,
-		`python3 -c "m='w'; open('docs/x.md', m).write('x')"`} {
-		code(t, s.guard(t, "Bash", map[string]any{"command": c}), 2, "scope-guard: "+c)
+		`python3 -c "import sys; open(sys.argv[1],'w').write('x')" docs/x.md`} {
+		r := s.guard(t, "Bash", map[string]any{"command": c})
+		code(t, r, 0, "scope-guard: "+c)
+		matches(t, adviceOf(t, r.Stdout), unresolvedNote, "scope-guard: "+c)
 	}
+	c := `python3 -c "m='w'; open('docs/x.md', m).write('x')"`
+	code(t, s.guard(t, "Bash", map[string]any{"command": c}), 2, "scope-guard: "+c)
 }

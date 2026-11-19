@@ -26,11 +26,13 @@ import (
 )
 
 // Classes are the ASK classes a grant may name.
-var Classes = []string{"push", "gh-write", "publish", "remote", "deploy", "outside-write", "destroy"}
+var Classes = []string{"push", "gh-write", "publish", "remote", "deploy", "destroy"}
 
 // Retired are classes no longer granted (L19): a record of one is not
-// listed, and --revoke removes it (L48).
-var Retired = []string{"review", "verified"}
+// listed, grants nothing, and --revoke removes it (L48). Nothing asks under
+// outside-write since a write outside the project runs with a note (T153,
+// T113 L1402).
+var Retired = []string{"review", "verified", "outside-write"}
 
 // Dir is where grants live.
 func Dir() string {
@@ -47,6 +49,8 @@ func Dir() string {
 // elsewhere is a common project path, never matched by name (L1307).
 func WorkspaceDir() string { return filepath.Join(filepath.Dir(Dir()), "workspace") }
 
+// session-grants held the outside-write session grants (T57a, removed in
+// T113): an old folder of them stays the owner's.
 var grantsPath = lazyre.New(`[\\/]jhon[\\/](?:grants|modes|ldd-switch|session-grants)(?:[\\/]|$)|[\\/]\.local[\\/]state[\\/]jhon[\\/]?$`)
 
 // InGrants is whether abs is in the grants directory or the modes or

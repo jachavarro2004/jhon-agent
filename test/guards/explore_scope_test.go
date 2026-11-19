@@ -1,8 +1,10 @@
 // The explore agent writes only a change's exploration.md or research.md
 // (prose/agents.yaml; T123, L762 F3: an explore wrote tasks.md and a spec
-// delta). vcs-guard, which every writer carries in both runtimes, refuses
-// any other write of explore's: Claude Code names the agent with `--agent
-// explore` (and agent_type), pi's child with JHON_PI_AGENT under `--agent *`.
+// delta). vcs-guard, which every writer carries in both runtimes, lets any
+// other write of explore's run with a note (a refusal until T153, L957: it
+// is not destructive); a write into .git stays refused. Claude Code names
+// the agent with `--agent explore` (and agent_type), pi's child with
+// JHON_PI_AGENT under `--agent *`.
 
 package guards
 
@@ -32,7 +34,10 @@ func exploreCall(t *testing.T, runtime, agent, tool, repo, rel string) support.R
 	return hook(t, support.Env("JHON_PI_CHILD=", "JHON_PI_AGENT="), "vcs-guard", append([]string{"--agent", agent}, vcsDirs(t)...), payload)
 }
 
-const exploreRefusal = `^vcs-guard: explore writes only its change's exploration.md or research.md \(<layout>/changes/<change>/exploration.md or research.md, openspec/ or ldd/\); `
+const exploreNote = `^note \(not a refusal; the call ran\): explore writes only its change's exploration.md or research.md \(<layout>/changes/<change>/exploration.md or research.md, openspec/ or ldd/\); `
+
+// exploreNoteEnd closes the note, after the written file.
+const exploreNoteEnd = ` is outside it: return what you found to the orchestrator instead of writing it\.$`
 
 func TestExploreWritesOnlyItsRecord(t *testing.T) {
 	t.Parallel()
@@ -44,7 +49,7 @@ func TestExploreWritesOnlyItsRecord(t *testing.T) {
 		"ldd/changes/pagination/exploration.md",
 		"ldd/changes/pagination/research.md",
 	}
-	refused := []string{
+	noted := []string{
 		"openspec/changes/example-change/tasks.md",
 		"openspec/changes/example-change/specs/example/area/spec.md",
 		"openspec/changes/example-change/proposal.md",
@@ -66,18 +71,27 @@ func TestExploreWritesOnlyItsRecord(t *testing.T) {
 					code(t, exploreCall(t, rt, "explore", tool, repo, rel), 0, rel)
 				})
 			}
-			for _, rel := range refused {
-				t.Run(rt+" "+tool+" may not write "+rel, func(t *testing.T) {
+			for _, rel := range noted {
+				t.Run(rt+" "+tool+" writes "+rel+" with a note", func(t *testing.T) {
 					t.Parallel()
 					r := exploreCall(t, rt, "explore", tool, repo, rel)
-					code(t, r, 2, rel)
-					matches(t, r.Stderr, exploreRefusal+tool+` of `+regexp.QuoteMeta(filepath.Join(repo, rel))+` is refused`, rel)
+					code(t, r, 0, rel)
+					matches(t, adviceOf(t, r.Stdout), exploreNote+tool+` of `+regexp.QuoteMeta(filepath.Join(repo, rel))+exploreNoteEnd, rel)
 				})
 			}
 		}
-		t.Run(rt+" NotebookEdit may not write a notebook", func(t *testing.T) {
+		t.Run(rt+" NotebookEdit writes a notebook with a note", func(t *testing.T) {
 			t.Parallel()
-			code(t, exploreCall(t, rt, "explore", "NotebookEdit", repo, "nb/a.ipynb"), 2, "notebook")
+			r := exploreCall(t, rt, "explore", "NotebookEdit", repo, "nb/a.ipynb")
+			code(t, r, 0, "notebook")
+			matches(t, adviceOf(t, r.Stdout), exploreNote+`NotebookEdit of `, "notebook")
+		})
+		// A write into .git stays refused, for explore as for anyone.
+		t.Run(rt+" .git stays refused", func(t *testing.T) {
+			t.Parallel()
+			r := exploreCall(t, rt, "explore", "Write", repo, ".git/config")
+			code(t, r, 2, ".git")
+			matches(t, r.Stderr, `^vcs-guard: .*inside a VCS directory`, ".git")
 		})
 	}
 }
@@ -104,7 +118,7 @@ func TestExploreScopeLeavesOtherAgents(t *testing.T) {
 	code(t, vcsCall(t, "explore", filepath.Join(repo, "src/app.go"), ptr("worker"), "Write", repo), 0, "another agent's call")
 }
 
-// pre-tool, as both runtimes call it, gives the refusal unchanged.
+// pre-tool, as both runtimes call it, gives the note unchanged.
 func TestExploreScopeThroughPreTool(t *testing.T) {
 	t.Parallel()
 	repo := realTemp(t)
@@ -113,8 +127,8 @@ func TestExploreScopeThroughPreTool(t *testing.T) {
 	env := support.Env("JHON_PI_CHILD=1", "JHON_PI_AGENT=explore")
 	args := append(append([]string{"--agent", "*", "safety-guard", "vcs-guard"}, vcsDirs(t)...), "secrets-guard")
 	r := hook(t, env, "pre-tool", args, payload)
-	code(t, r, 2, "pi pre-tool")
-	matches(t, r.Stderr, exploreRefusal, "pi pre-tool")
+	code(t, r, 0, "pi pre-tool")
+	matches(t, adviceOf(t, r.Stdout), exploreNote, "pi pre-tool")
 }
 
 // The guard judges the real path too: a symlink never carries explore's
@@ -141,7 +155,7 @@ func TestExploreScopeSymlinks(t *testing.T) {
 	link(outside, "openspec/changes/lnk")
 	link("../src", "ldd/changes/d/sub")
 	link(filepath.Join(repo, "openspec/changes"), "x/openspec/changes")
-	refused := []string{
+	noted := []string{
 		"openspec/changes/c/research.md",
 		"openspec/changes/lnk/exploration.md",
 		"x/openspec/changes/c/exploration.md",
@@ -149,18 +163,22 @@ func TestExploreScopeSymlinks(t *testing.T) {
 	}
 	allowed := []string{"openspec/changes/c/exploration.md", "openspec/changes/../changes/c/exploration.md", "ldd/changes/d/research.md"}
 	for _, rt := range []string{"claude-code", "pi"} {
-		for _, rel := range refused {
-			t.Run(rt+" may not write "+rel, func(t *testing.T) {
+		for _, rel := range noted {
+			t.Run(rt+" writes "+rel+" with a note", func(t *testing.T) {
 				t.Parallel()
 				r := exploreCall(t, rt, "explore", "Write", repo, rel)
-				code(t, r, 2, rel)
-				matches(t, r.Stderr, exploreRefusal+`Write of `+regexp.QuoteMeta(filepath.Join(repo, rel))+` is refused`, rel)
+				code(t, r, 0, rel)
+				matches(t, adviceOf(t, r.Stdout), exploreNote+`Write of `+regexp.QuoteMeta(filepath.Join(repo, rel))+exploreNoteEnd, rel)
 			})
 		}
 		for _, rel := range allowed {
 			t.Run(rt+" may write "+rel, func(t *testing.T) {
 				t.Parallel()
-				code(t, exploreCall(t, rt, "explore", "Write", repo, rel), 0, rel)
+				r := exploreCall(t, rt, "explore", "Write", repo, rel)
+				code(t, r, 0, rel)
+				if r.Stdout != "" {
+					t.Errorf("%s: a note on explore's own record: %q", rel, r.Stdout)
+				}
 			})
 		}
 		// A relative path, as the agent may give it.
@@ -169,7 +187,9 @@ func TestExploreScopeSymlinks(t *testing.T) {
 			payload := map[string]any{"tool_name": "Write", "cwd": repo, "tool_input": map[string]any{"file_path": "openspec/changes/c/exploration.md"}}
 			code(t, exploreHook(t, rt, payload), 0, "relative record")
 			payload = map[string]any{"tool_name": "Write", "cwd": repo, "tool_input": map[string]any{"file_path": "openspec/changes/c/research.md"}}
-			code(t, exploreHook(t, rt, payload), 2, "relative symlink")
+			r := exploreHook(t, rt, payload)
+			code(t, r, 0, "relative symlink")
+			matches(t, adviceOf(t, r.Stdout), exploreNote, "relative symlink")
 		})
 	}
 }

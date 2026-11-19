@@ -113,7 +113,10 @@ func promptText(content any) (string, bool) {
 }
 
 // ScopeGuard keeps a bounded writer to the files its handoff names
-// (scope-guard, contracts/efficiency.md "Writer scope").
+// (scope-guard, contracts/efficiency.md "Writer scope"). A Bash write whose
+// file the guard cannot resolve runs with a note naming the surfaces (a
+// refusal until T153, L1364 b: it is not destructive); one it resolves
+// outside them is refused.
 func ScopeGuard(args []string, io IO) int {
 	scoped, name, _ := owner(args)
 	var p Payload
@@ -162,15 +165,19 @@ func ScopeGuard(args []string, io IO) int {
 		}
 	case "Bash":
 		if command, isStr := input["command"].(string); isStr {
-			outside := guard.WritesOutside(command, cwd, surfaces)
-			// A write whose file is unknown is outside, unless a file its code names is in scope (T94, L652).
+			if outside := guard.WritesOutside(command, cwd, surfaces); len(outside) > 0 {
+				return block("the command writes " + strings.Join(outside, ", ") + ", " + rule)
+			}
+			// A write whose file is unknown may be outside, unless a file its code
+			// names is in scope (T94, L652): it runs, and the writer is told.
+			var unknown []string
 			for _, u := range guard.UnresolvedWrites(command, cwd) {
 				if !slices.ContainsFunc(u.Targets, func(f string) bool { return guard.InSurfaces(f, surfaces) }) {
-					outside = append(outside, u.Label)
+					unknown = append(unknown, u.Label)
 				}
 			}
-			if len(outside) > 0 {
-				return block("the command writes " + strings.Join(outside, ", ") + ", " + rule)
+			if len(unknown) > 0 {
+				fmt.Fprint(io.Out, noteJSON(modeNotePrefix+"the command writes "+strings.Join(unknown, ", ")+", which the guard cannot hold to the allowed edit surfaces ("+listed+"): write only inside them, or stop and return status: blocked naming the file and why the change needs it (contracts/efficiency.md, \"Writer scope\")"))
 			}
 		}
 	}

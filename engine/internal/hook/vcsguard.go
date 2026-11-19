@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -14,11 +15,12 @@ import (
 
 // VCSGuard is the PreToolUse guard for the file-writing tools (Edit, Write,
 // NotebookEdit):
-// no one writes a VCS directory or the grants directory, no agent writes
-// Claude Code settings, and a write outside the project (with a workspace's
-// primary and joined members, workspace.ProjectRoots) is the
-// outside-write ASK class, which the owner's yolo or super-yolo mode passes
-// with a note. Fail closed.
+// no one writes a VCS directory or the grants directory, and no agent writes
+// Claude Code settings. A write outside the project (with a workspace's
+// primary and joined members, workspace.ProjectRoots) and the scratch roots
+// runs with a note, and so does an explore agent's write beyond its record
+// (each a refusal or an ask until T153, L957: neither is destructive). Fail
+// closed.
 func VCSGuard(args []string, io IO) int {
 	scoped, name, rest := owner(args)
 	var names []string
@@ -52,11 +54,13 @@ func VCSGuard(args []string, io IO) int {
 	if len(paths) == 0 {
 		return block(fmt.Sprintf("%s call names no file", tool))
 	}
-	// The explore agent writes only its change's record (T123).
+	var notes []string
+	// The explore agent writes only its change's record (T123); another
+	// write runs with a note.
 	if caller(name, p) == guard.ExploreAgent {
 		for _, raw := range paths {
 			if abs := project.Resolve(p.Cwd(), raw); !exploreMayWrite(p.Cwd(), abs) {
-				return block(fmt.Sprintf("%s; %s of %s is refused. Return what you found to the orchestrator instead.", guard.ExploreScope, tool, abs))
+				notes = append(notes, fmt.Sprintf("%s; %s of %s is outside it: return what you found to the orchestrator instead of writing it.", guard.ExploreScope, tool, abs))
 			}
 		}
 	}
@@ -70,13 +74,24 @@ func VCSGuard(args []string, io IO) int {
 			asks = append(asks, why)
 		case vcsMode:
 			passed = append(passed, pass)
+		case vcsNote:
+			notes = append(notes, why)
 		}
 	}
 	if len(asks) > 0 {
 		fmt.Fprintln(io.Out, askJSON(strings.Join(asks, "; ")))
 		return 0
 	}
-	passByMode(io, p, "vcs-guard", passed)
+	// The mode's note and the advisories are one answer, opened once by
+	// modeNotePrefix.
+	var byMode bytes.Buffer
+	passByMode(IO{io.In, &byMode, io.Err}, p, "vcs-guard", passed)
+	if note, ok := noteOf(byMode.Bytes()); ok {
+		notes = append([]string{strings.TrimPrefix(note, modeNotePrefix)}, notes...)
+	}
+	if len(notes) > 0 {
+		fmt.Fprint(io.Out, noteJSON(modeNotePrefix+strings.Join(notes, "; ")))
+	}
 	return 0
 }
 
@@ -88,11 +103,13 @@ const (
 	vcsRefuse
 	// vcsMode is an ask the owner's mode passes.
 	vcsMode
+	// vcsNote allows the write with a note for the agent.
+	vcsNote
 )
 
 // vcsJudge is vcs-guard's verdict on one written path, and its reason: the
-// ask's text or the refusal's; or what the owner's mode passed, with that
-// mode and its class.
+// ask's text, the refusal's or the note's; or what the owner's mode passed,
+// with that mode and its class.
 func vcsJudge(p Payload, tool, raw string, names []string) (vcsVerdict, string, modePass) {
 	var none modePass
 	cwd := p.Cwd()
@@ -135,28 +152,12 @@ func vcsJudge(p Payload, tool, raw string, names []string) (vcsVerdict, string, 
 		}
 	}
 	root := project.Root(cwd)
-	if grant.Live(root, "outside-write") {
-		return vcsAllow, "", none
-	}
-	// A folder that is no project: the owner's yes for this session covers it.
-	if f := grant.SessionGranted(cwd, p.Str("session_id")); root == "" && grant.CoversWrite(f, abs) {
-		return vcsAllow, "", none
-	}
 	shown := root
 	if shown == "" {
 		shown = "no project root: " + project.Realish(cwd) + " is not a git repository"
 	}
-	what := fmt.Sprintf("%s of %s lands outside the project (%s) and the scratch roots", tool, raw, shown)
-	if m, ok := modeFor(root, "", "outside-write"); ok {
-		return vcsMode, "", modePass{m, "outside-write", what}
-	}
-	if canAsk(p) {
-		return vcsAsk, "outside-write: " + what, none
-	}
-	if root == "" {
-		return vcsRefuse, what + ". outside-write needs the owner's authorization, and a folder that is no git repository takes no grant for a while: ask the owner, who runs the write, or answers yes for the session when pi asks at the top level.", none
-	}
-	return vcsRefuse, what + ". " + grantHint("outside-write"), none
+	// Not destructive: the write runs, and the agent is told (T153, L957).
+	return vcsNote, fmt.Sprintf("%s of %s lands outside the project (%s) and the scratch roots; check that the task means this file", tool, raw, shown), none
 }
 
 // exploreMayWrite is whether explore, working in cwd, may write abs: both

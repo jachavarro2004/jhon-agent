@@ -579,6 +579,57 @@ func SurfacesOf(prompt string) (out []string, ok bool) {
 	return out, true
 }
 
+// SurfaceParent is the folder a surface must have for a writer to create
+// what it names: a path's parent folder (a folder's, its trailing slash
+// cut), or, for a glob, the folder before its first wildcard, under which
+// every match lies; "." is the root itself.
+func SurfaceParent(s string) string {
+	s = strings.TrimSuffix(s, "/")
+	if i := strings.IndexAny(s, "*?"); i >= 0 {
+		return path.Dir(s[:i])
+	}
+	return path.Dir(s)
+}
+
+// MissingSurfaces is each surface that matches nothing in any of roots, in
+// the order listed (L1364 b: a brief named a path that does not exist, and
+// scope-guard then refused the real file). A relative surface is read
+// against each root, an absolute one or a ~/ one as it is. A surface
+// matches when a file or folder exists at its path, or a glob matches an
+// existing file or folder; a writer may also create a new file, so a path
+// whose parent folder exists matches too (SurfaceParent: for a glob, the
+// folder before its first wildcard, which holds any match it has). A test
+// file and the change's record match always: scope-guard allows them
+// unlisted.
+func MissingSurfaces(surfaces, roots []string) []string {
+	var missing []string
+	for _, listed := range surfaces {
+		s, bases := listed, roots
+		switch {
+		case strings.HasPrefix(s, "~/") && project.Home() != "":
+			s, bases = filepath.Join(project.Home(), s[2:]), []string{""}
+		case filepath.IsAbs(s):
+			bases = []string{""}
+		}
+		found := slices.ContainsFunc(bases, func(base string) bool {
+			// A test file and the change's record are in scope wherever they lie (InSurfacesOf).
+			if base != "" && (TestFile.MatchString(s) || strings.HasPrefix(s, layout.For(base).ChangesDir()+"/")) {
+				return true
+			}
+			at := func(rel string) string { return filepath.Join(base, filepath.FromSlash(rel)) }
+			if !strings.ContainsAny(s, "*?") && project.Exists(at(s)) {
+				return true
+			}
+			info, err := os.Stat(at(SurfaceParent(s)))
+			return err == nil && info.IsDir()
+		})
+		if !found {
+			missing = append(missing, listed)
+		}
+	}
+	return missing
+}
+
 // matches is whether root-relative path rel is under a surface: a file, a
 // directory (and everything under it), or a glob.
 func matches(surface, rel string) bool {
