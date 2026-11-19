@@ -347,29 +347,45 @@ export function askClasses(ask: string): string[] {
 export const ANSWER_ONCE = "Yes, just this once (recorded in the session)";
 export const ANSWER_GRANT = "Yes, and grant it for 30 min (recorded in the grants' history)";
 export const ANSWER_NO = "No";
+export const ANSWER_SESSION = "Yes, and allow writes in this folder for this session (recorded in the grants' history)";
 
 /** Whether cwd is in a git repository: a folder that is in none is no project, and takes no grant for a while (T57a). */
 function inRepo(cwd: string): boolean {
   return spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8", env: gitReadEnv() }).status === 0;
 }
 
+/** Whether `jhon grant --session` could take cwd as its folder: never /, HOME or a folder above it, nor jhon's state or a folder in or above it (grant.SessionFolder). */
+function sessionGrantable(cwd: string): boolean {
+  const real = (p: string) => { try { return realpathSync(p); } catch { return p; } };
+  const within = (p: string, r: string) => p === r || p.startsWith(r.endsWith("/") ? r : `${r}/`);
+  const xdg = process.env.XDG_STATE_HOME;
+  const state = real(join(xdg && xdg.startsWith("/") ? xdg : join(homedir(), ".local", "state"), "jhon"));
+  const dir = real(cwd), home = real(homedir());
+  return dir !== "/" && !within(home, dir) && !within(state, dir) && !within(dir, state);
+}
+
 /**
  * The owner's answer to a guard's question, always on record: once (the
  * session records it), a 30-minute grant of the classes (jhon grant, the
- * grants' history), or no. In a folder that is no project nothing is
- * granted for a while (a write outside the scratch roots runs with a note,
- * T153, so it is never asked).
+ * grants' history), or no. In a folder that is no project, a write outside
+ * the scratch roots is granted for the session instead (`jhon grant
+ * outside-write --session`, revoked when the session ends), and nothing
+ * else is granted for a while.
  */
-async function ownerAnswer(ctx: any, ask: string, bin: string): Promise<{ allowed: boolean; scope?: "once" | "grant"; classes: string[]; error?: string }> {
+async function ownerAnswer(ctx: any, ask: string, bin: string, session: string): Promise<{ allowed: boolean; scope?: "once" | "grant" | "session"; classes: string[]; error?: string }> {
   const classes = askClasses(ask);
   const cwd = ctx?.cwd ?? process.cwd();
-  const options = inRepo(cwd) ? [ANSWER_ONCE, ANSWER_GRANT, ANSWER_NO] : [ANSWER_ONCE, ANSWER_NO];
+  const folder = !inRepo(cwd);
+  const options = !folder ? [ANSWER_ONCE, ANSWER_GRANT, ANSWER_NO]
+    : session && sessionGrantable(cwd) && classes.length === 1 && classes[0] === "outside-write" ? [ANSWER_ONCE, ANSWER_SESSION, ANSWER_NO] : [ANSWER_ONCE, ANSWER_NO];
   const choice = await ctx.ui.select(`Jhon safety guard · ${ask}`, options);
   if (choice === ANSWER_ONCE) return { allowed: true, scope: "once", classes };
-  if (!options.includes(choice) || choice !== ANSWER_GRANT) return { allowed: false, classes };
-  const r = spawnSync(bin, ["grant", ...classes, "--for", "30m"], { cwd, encoding: "utf8" });
+  if (!options.includes(choice) || (choice !== ANSWER_GRANT && choice !== ANSWER_SESSION)) return { allowed: false, classes };
+  const r = choice === ANSWER_SESSION
+    ? spawnSync(bin, ["grant", "outside-write", "--session", session], { cwd, encoding: "utf8" })
+    : spawnSync(bin, ["grant", ...classes, "--for", "30m"], { cwd, encoding: "utf8" });
   if (r.status !== 0) return { allowed: false, classes, error: `${r.stderr || r.stdout || r.error?.message || "exit " + r.status}`.trim() };
-  return { allowed: true, scope: "grant", classes };
+  return { allowed: true, scope: choice === ANSWER_SESSION ? "session" : "grant", classes };
 }
 
 /**
@@ -1015,6 +1031,14 @@ export default function jhon(pi: any): void {
     return undefined;
   });
 
+  // The sessions whose owner granted a folder's writes; each grant ends with the session.
+  const grantedSessions = new Set<string>();
+  pi.on("session_shutdown", async (_event: any, ctx: any) => {
+    for (const id of grantedSessions) spawnSync(bin, ["grant", "--revoke", "outside-write", "--session", id], { cwd: ctx?.cwd ?? process.cwd(), encoding: "utf8" });
+    grantedSessions.clear();
+    return undefined;
+  });
+
   const guardCall = async (event: any, ctx: any): Promise<any> => {
     const input = (event.input ?? {}) as Record<string, unknown>;
     if (!config) {
@@ -1036,7 +1060,8 @@ export default function jhon(pi: any): void {
     if ("block" in d) return d;
     if (!child && ctx.hasUI) {
       // The short label (L87): the class, not its detail, so a multiplexer's row stays readable.
-      const answer = await waitingForOwner(pi.events, `permission: ${askClasses(d.ask).join(", ")}`, () => ownerAnswer(ctx, d.ask, bin));
+      const answer = await waitingForOwner(pi.events, `permission: ${askClasses(d.ask).join(", ")}`, () => ownerAnswer(ctx, d.ask, bin, sessionId));
+      if (answer.scope === "session") grantedSessions.add(sessionId);
       if (answer.allowed) {
         // The owner's answer is on record: in the session, and a grant in the grants' history.
         pi.appendEntry?.(AUTHORIZATION_ENTRY, { ask: d.ask, classes: answer.classes, tool: event.toolName, scope: answer.scope, at: new Date().toISOString() });

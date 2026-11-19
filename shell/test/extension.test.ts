@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { OWNER_WAIT_EVENT } from "../lib/attention.ts";
-import jhon, { claudeCall, inspect, judge, loadConfig, CONFIG_FILE, SESSION_ENTRY, AUTHORIZATION_ENTRY, ANSWER_ONCE, ANSWER_GRANT, ANSWER_NO, askClasses, type JhonPiConfig } from "../extensions/jhon.ts";
+import jhon, { claudeCall, inspect, judge, loadConfig, CONFIG_FILE, SESSION_ENTRY, AUTHORIZATION_ENTRY, ANSWER_ONCE, ANSWER_GRANT, ANSWER_NO, ANSWER_SESSION, askClasses, type JhonPiConfig } from "../extensions/jhon.ts";
 import { createServer } from "node:net";
 import { memoryDir } from "../lib/memory.ts";
 import { continuedScope } from "../lib/agents.ts";
@@ -158,16 +158,14 @@ test("in a repository with no LDD layout pi's first code edit runs with a note n
   assert.equal(await judge("edit", { path: join(d, "a.txt"), edits: [{ oldText: "b", newText: "c" }] }, child(d)), null, "once set up");
 });
 
-// T151 (L1394): secrets-guard no longer refuses reading a credentials file; a write, an edit or a deletion still is.
-test("no file tool edits or writes a credentials file, nor a command deletes one; a read, a grep or a command may read it; its template is any file", async () => {
+test("no file tool reads or edits a credentials file, nor a command deletes one; a command may read it; its template is any file", async () => {
   const d = lddProject();
-  for (const [tool, input] of [["edit", { path: join(d, ".env.production") }], ["write", { path: join(d, ".env"), content: "x" }],
-    ["bash", { command: "rm .env.local" }]] as const) {
+  for (const [tool, input] of [["read", { path: join(d, ".env") }], ["edit", { path: join(d, ".env.production") }], ["write", { path: join(d, ".env"), content: "x" }],
+    ["grep", { pattern: "KEY", path: join(d, ".env") }], ["bash", { command: "rm .env.local" }]] as const) {
     const r = await judge(tool, input, child(d));
     assert.ok(r && "block" in r && /holds credentials/.test(r.reason), `${tool} ${JSON.stringify(input)}: ${JSON.stringify(r)}`);
   }
-  for (const [tool, input] of [["read", { path: join(d, ".env") }], ["grep", { pattern: "KEY", path: join(d, ".env") }],
-    ["read", { path: join(d, ".env.example") }], ["edit", { path: join(d, ".env.example") }], ["bash", { command: "cat .env.sample" }],
+  for (const [tool, input] of [["read", { path: join(d, ".env.example") }], ["edit", { path: join(d, ".env.example") }], ["bash", { command: "cat .env.sample" }],
     ["bash", { command: "cat .env" }], ["bash", { command: "docker compose --env-file .env up -d" }]] as const) {
     assert.equal(await judge(tool, input, child(d)), null, `${tool} ${JSON.stringify(input)}`);
   }
@@ -801,7 +799,7 @@ test("the owner's yes is always on record: once, in the session; for 30 minutes,
   assert.deepEqual(askClasses("push: git push; gh-write: gh pr create; push: git push --tags"), ["push", "gh-write"]);
 });
 
-test("in a folder that is no project, a write outside it runs with a note, never asked, and no grant is offered (T57a, T153, T113)", async () => {
+test("in a folder that is no project, the owner's yes to a write lasts the session, and ends with it (T57a)", async () => {
   const folder = tempDir("jhon-pi-folder-");
   const dir = agentDir();
   const bin = join(dir, "jhon-fake");
@@ -812,15 +810,20 @@ test("in a folder that is no project, a write outside it runs with a note, never
   const call = handlers.get("tool_call")!;
   const seen: string[][] = [];
   const ctx = (answer: string, id = "sess-1") => ({ cwd: folder, hasUI: true, sessionManager: { getSessionId: () => id }, ui: { select: async (_title: string, options: string[]) => { seen.push(options); return answer; } } });
-  assert.equal(await call({ toolName: "write", input: { path: "/etc/jhon.conf", content: "x" } }, ctx(ANSWER_NO)), undefined);
-  assert.deepEqual(seen, [], "a write outside is not asked");
+  assert.equal(await call({ toolName: "write", input: { path: "/etc/jhon.conf", content: "x" } }, ctx(ANSWER_SESSION)), undefined);
+  assert.deepEqual(seen.at(-1), [ANSWER_ONCE, ANSWER_SESSION, ANSWER_NO]);
+  assert.equal(readFileSync(log, "utf8").trim(), "grant outside-write --session sess-1");
   // Another class there takes no grant for a while: a folder has no project to hold it.
   await call({ toolName: "bash", input: { command: "ssh host" } }, ctx(ANSWER_NO));
   assert.deepEqual(seen.at(-1), [ANSWER_ONCE, ANSWER_NO]);
-  assert.equal(existsSync(log), false, "no jhon grant ran");
+  // A session without an id is offered no session grant.
+  await call({ toolName: "write", input: { path: "/etc/jhon.conf", content: "x" } }, ctx(ANSWER_NO, ""));
+  assert.deepEqual(seen.at(-1), [ANSWER_ONCE, ANSWER_NO]);
+  await handlers.get("session_shutdown")!({}, { cwd: folder });
+  assert.deepEqual(readFileSync(log, "utf8").trim().split("\n"), ["grant outside-write --session sess-1", "grant --revoke outside-write --session sess-1"]);
 });
 
-test("pi asks no write outside the project in HOME, the folders above it, or jhon's state, and offers no grant there (T57a, T113)", async () => {
+test("pi offers no session grant where jhon grant would refuse it: HOME and the folders above it, and jhon's state (T57a)", async () => {
   const home = tempDir("jhon-pi-home-");
   const state = tempDir("jhon-pi-state-");
   mkdirSync(join(state, "jhon", "session-grants"), { recursive: true });
@@ -836,9 +839,7 @@ test("pi asks no write outside the project in HOME, the folders above it, or jho
     for (const cwd of [home, dirname(home), state, join(state, "jhon"), join(state, "jhon", "session-grants")]) {
       const seen: string[][] = [];
       const ctx = { cwd, hasUI: true, sessionManager: { getSessionId: () => "sess-1" }, ui: { select: async (_title: string, options: string[]) => { seen.push(options); return ANSWER_NO; } } };
-      assert.equal(await call({ toolName: "write", input: { path: "/etc/jhon.conf", content: "x" } }, ctx), undefined, cwd);
-      assert.deepEqual(seen, [], cwd);
-      await call({ toolName: "bash", input: { command: "ssh host" } }, ctx);
+      await call({ toolName: "write", input: { path: "/etc/jhon.conf", content: "x" } }, ctx);
       assert.deepEqual(seen.at(-1), [ANSWER_ONCE, ANSWER_NO], cwd);
     }
   } finally {

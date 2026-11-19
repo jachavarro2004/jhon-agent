@@ -248,9 +248,8 @@ func TestModeLostDirInAnotherProjectNeedsBothModes(t *testing.T) {
 	}
 }
 
-// vcs-guard: a write outside the project from a worktree runs with the
-// note naming the worktree, in a normal project and a super-yolo one alike
-// (asked, or passed by the mode, until T153 and T113, L957, L1402).
+// vcs-guard: a write outside the project from a worktree of a super-yolo
+// project passes with the project's mode; from a normal one it asks.
 func TestModeVcsGuardFromASessionWorktree(t *testing.T) {
 	t.Parallel()
 	w := newWriteEnv(t)
@@ -263,13 +262,11 @@ func TestModeVcsGuardFromASessionWorktree(t *testing.T) {
 	}
 	r := call()
 	code(t, r, 0, "normal")
-	matches(t, modeNote(t, r.Stdout), outsideNote, "normal")
-	matches(t, modeNote(t, r.Stdout), `\(`+regexp.QuoteMeta(wt)+`\)`, "normal")
+	matches(t, askedWhy(t, r.Stdout, "normal"), `^outside-write: `, "normal")
 	code(t, support.Jhon(t, w.project, w.env, "mode", "super-yolo"), 0, "jhon mode super-yolo")
 	r = call()
 	code(t, r, 0, "super-yolo")
-	matches(t, modeNote(t, r.Stdout), outsideNote, "super-yolo")
-	matches(t, modeNote(t, r.Stdout), `\(`+regexp.QuoteMeta(wt)+`\)`, "super-yolo")
+	matches(t, modeNote(t, r.Stdout), `^note \(not a refusal; the call ran\): allowed by the owner's super-yolo mode: outside-write: `, "super-yolo")
 }
 
 // route-guard: a reviewer nobody asked for, from a worktree of a yolo

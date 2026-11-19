@@ -26,10 +26,7 @@ func TestSourcedScriptIsJudged(t *testing.T) {
 	s.code(t, "source deploy/ok.sh", sgOpts{}, 0, "a harmless sourced script")
 }
 
-// The Glob tool reaches the guards as Grep's glob does (Claude Code's Glob,
-// pi's find), and neither refuses a read: a glob that names credentials,
-// outside the project or beside a credentials file, is left to the prose
-// since T151 (L1366, L1369; refused before).
+// The Glob tool is guarded as Grep's glob is (Claude Code's Glob, pi's find).
 func TestGlobToolIsGuarded(t *testing.T) {
 	t.Parallel()
 	p := realTemp(t)
@@ -42,20 +39,20 @@ func TestGlobToolIsGuarded(t *testing.T) {
 	}
 	for _, in := range []map[string]any{{"pattern": "/srv/**/id_*"}, {"pattern": "id_*", "path": "~/keys"}, {"pattern": "*.json", "path": "~"},
 		{"pattern": "{a,b}/*.json"}, {"pattern": "**/id_*", "path": "~"}} {
-		if got := toolCall(t, p, "Glob", in); got != 0 {
-			t.Errorf("Glob %v outside the project: exit %d, want 0", in, got)
+		if got := toolCall(t, p, "Glob", in); got != 2 {
+			t.Errorf("Glob %v outside the project: exit %d, want 2", in, got)
 		}
 	}
 	support.Write(t, p, map[string]string{"deep/sub/id_rsa": "k\n"})
 	for _, in := range []map[string]any{{"pattern": "**/id_*"}, {"pattern": "deep/**/id_*"}} {
-		if got := toolCall(t, p, "Glob", in); got != 0 {
-			t.Errorf("Glob %v beside a credentials file: exit %d, want 0", in, got)
+		if got := toolCall(t, p, "Glob", in); got != 2 {
+			t.Errorf("Glob %v beside a credentials file: exit %d, want 2", in, got)
 		}
 	}
 }
 
-// Grep's path `~` is the home directory, outside the project; a read there,
-// of credentials too, is not judged since T151 (L1366; refused before).
+// Grep's path `~` is the home directory, outside the project: its glob is
+// read by its name.
 func TestGrepHomePathIsTheHome(t *testing.T) {
 	t.Parallel()
 	p := realTemp(t)
@@ -63,8 +60,8 @@ func TestGrepHomePathIsTheHome(t *testing.T) {
 	support.Write(t, p, map[string]string{"~/keys/a.json": "{}\n"})
 	for _, in := range []map[string]any{{"path": "~/keys", "glob": "*.json"}, {"path": "~", "glob": "id_*"}, {"path": "~/keys/id_rsa"}} {
 		in["pattern"] = "x"
-		if got := toolCall(t, p, "Grep", in); got != 0 {
-			t.Errorf("Grep %v: exit %d, want 0", in, got)
+		if got := toolCall(t, p, "Grep", in); got != 2 {
+			t.Errorf("Grep %v: exit %d, want 2", in, got)
 		}
 	}
 }

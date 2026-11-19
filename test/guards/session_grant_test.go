@@ -1,9 +1,7 @@
-// A folder that is no project (no git repository) is judged as normal mode
-// (T57a). A file tool's write there, or anywhere outside the project and the
-// scratch roots, runs with vcs-guard's note (T153, L957), so nothing asks
-// under outside-write and its grant is gone (T113, L1402): `jhon grant
-// outside-write`, for a while or `--session <id>`, is a usage error, and a
-// grant or session-grant record left from before lends nothing.
+// A folder that is no project (no git repository) is judged as normal mode,
+// and the owner's yes to a write there lasts the session (T57a, L460:
+// "Preguntar y recordar"): `jhon grant outside-write --session <id>` in
+// the folder lets that session's writes under it pass, and nothing else.
 
 package guards
 
@@ -71,15 +69,6 @@ func (f sessionFixture) write(t *testing.T, cwd, session, path string) support.R
 	return f.call(t, cwd, session, "Write", map[string]any{"file_path": path, "content": "x"})
 }
 
-func (f sessionFixture) state() string {
-	for _, kv := range f.env {
-		if v, ok := strings.CutPrefix(kv, "XDG_STATE_HOME="); ok {
-			return v
-		}
-	}
-	return ""
-}
-
 func wantAsked(t *testing.T, r support.Result, cls, label string) {
 	t.Helper()
 	code(t, r, 0, label)
@@ -92,46 +81,39 @@ func wantAllowed(t *testing.T, r support.Result, label string) {
 	noDecision(t, r.Stdout, label)
 }
 
-// wantNoted is a write that runs with vcs-guard's outside note, and no other.
-func wantNoted(t *testing.T, r support.Result, label string) {
-	t.Helper()
-	code(t, r, 0, label)
-	matches(t, adviceOf(t, r.Stdout), outsideNote, label)
-}
-
 func TestSessionGrantFolder(t *testing.T) {
 	t.Parallel()
 	f := newSessionFixture(t)
 	in := filepath.Join(f.folder, "sub", "a.txt")
 
-	// The write runs with the note, as in normal mode; no mode is set there.
-	wantNoted(t, f.write(t, f.folder, "s1", in), "a write in the folder")
+	// The first write asks, as normal mode does; no mode is set there.
+	wantAsked(t, f.write(t, f.folder, "s1", in), "outside-write", "before the grant")
 	r := support.Jhon(t, f.folder, f.env, "mode", "yolo")
 	code(t, r, 2, "jhon mode in a folder")
 	matches(t, r.Stderr, `not a git repository`, "jhon mode in a folder")
 
-	// The owner's session grant is no more (T113, L1402).
 	r = support.Jhon(t, f.folder, f.env, "grant", "outside-write", "--session", "s1")
-	code(t, r, 2, "the owner's session grant")
-	matches(t, r.Stderr, `^jhon grant: unknown option: --session\n`, "grant")
+	code(t, r, 0, "the owner's session grant")
+	matches(t, r.Stdout, `granted outside-write for `+f.folder+` for session s1`, "grant")
 
-	// A shell write is the sandbox's; from below, to another folder, from
-	// another session or none, a file tool's write runs with the note.
-	wantAllowed(t, f.call(t, f.folder, "s1", "Bash", cmd("echo x > sub/b.txt")), "folder, bash")
-	wantNoted(t, f.write(t, filepath.Join(f.folder, "sub"), "s1", in), "the folder from below")
-	wantNoted(t, f.write(t, f.folder, "s1", filepath.Join(f.other, "a.txt")), "another folder")
-	wantNoted(t, f.write(t, f.other, "s1", filepath.Join(f.other, "a.txt")), "another folder as cwd")
-	wantNoted(t, f.write(t, f.folder, "s2", in), "another session")
-	wantNoted(t, f.write(t, f.folder, "", in), "no session")
+	// The granted folder passes, by a tool and by the shell, below it too.
+	wantAllowed(t, f.write(t, f.folder, "s1", in), "granted folder")
+	wantAllowed(t, f.call(t, f.folder, "s1", "Bash", cmd("echo x > sub/b.txt")), "granted folder, bash")
+	wantAllowed(t, f.write(t, filepath.Join(f.folder, "sub"), "s1", in), "granted folder from below")
 
-	// What is refused, or asked as its own class, stays so; a read of
-	// credentials is not judged (T151, L1366), an edit of them is.
+	// Another folder, and another session, ask.
+	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(f.other, "a.txt")), "outside-write", "another folder")
+	wantAsked(t, f.write(t, f.other, "s1", filepath.Join(f.other, "a.txt")), "outside-write", "another folder as cwd")
+	wantAsked(t, f.write(t, f.folder, "s2", in), "outside-write", "another session")
+	wantAsked(t, f.write(t, f.folder, "", in), "outside-write", "no session")
+
+	// What is refused, or asked as its own class, stays so.
 	for _, c := range []struct {
 		tool  string
 		input map[string]any
 	}{
 		{"Write", map[string]any{"file_path": filepath.Join(f.folder, ".git", "config"), "content": "x"}},
-		{"Edit", map[string]any{"file_path": filepath.Join(f.folder, ".env"), "old_string": "x", "new_string": "y"}},
+		{"Read", map[string]any{"file_path": filepath.Join(f.folder, ".env")}},
 		{"Bash", cmd("rm .env")},
 		{"Bash", cmd("git clean -fdx")},
 		{"Bash", cmd("git push --force")},
@@ -143,15 +125,16 @@ func TestSessionGrantFolder(t *testing.T) {
 	}
 	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, ".claude", "settings.json")), "settings", "settings")
 	if r := f.call(t, f.folder, "s1", "Bash", cmd("rm notes.txt")); r.Code == 0 && !strings.Contains(r.Stdout, `"ask"`) {
-		t.Errorf("a deletion passed: %s", r.Stdout)
+		t.Errorf("a deletion passed by a write grant: %s", r.Stdout)
 	}
+
+	// The session's end revokes it.
 	r = support.Jhon(t, f.folder, f.env, "grant", "--revoke", "outside-write", "--session", "s1")
-	code(t, r, 2, "revoke a session grant")
-	matches(t, r.Stderr, `^jhon grant: unknown option: --session\n`, "revoke a session grant")
+	code(t, r, 0, "revoke")
+	matches(t, r.Stdout, `revoked outside-write for `+f.folder, "revoke")
+	wantAsked(t, f.write(t, f.folder, "s1", in), "outside-write", "after the session")
 }
 
-// No form of an outside-write grant is made, for a session or a while, of
-// a folder, HOME, / or a project.
 func TestSessionGrantNeverWidens(t *testing.T) {
 	t.Parallel()
 	f := newSessionFixture(t)
@@ -159,37 +142,34 @@ func TestSessionGrantNeverWidens(t *testing.T) {
 	env := append(append([]string{}, f.env...), "HOME="+home)
 	repo := realTemp(t)
 	support.GitRepo(t, repo)
-	for _, dir := range []string{home, "/", filepath.Dir(home), repo} {
-		code(t, support.Jhon(t, f.folder, env, "grant", "outside-write", "--session", "s1", "--root", dir), 2, dir)
-	}
-	for _, c := range []struct {
-		dir  string
-		args []string
-		why  string
-	}{
-		{f.folder, []string{"grant", "push", "--session", "s1"}, "unknown option: --session"},
-		{f.folder, []string{"grant", "outside-write", "push", "--session", "s1"}, "unknown option: --session"},
-		{f.folder, []string{"grant", "outside-write", "--session", "s1", "--for", "1d"}, "unknown option: --session"},
-		{repo, []string{"grant", "outside-write"}, "unknown class 'outside-write'"},
-		{repo, []string{"grant", "outside-write", "--for", "30m"}, "unknown class 'outside-write'"},
+	for _, c := range []struct{ name, dir, why string }{
+		{"HOME", home, "home directory or /"},
+		{"/", "/", "home directory or /"},
+		{"above HOME", filepath.Dir(home), "home directory or /"},
+		{"a project", repo, "inside a project"},
 	} {
-		r := support.Jhon(t, c.dir, env, c.args...)
-		code(t, r, 2, strings.Join(c.args, " "))
-		matches(t, r.Stderr, `^jhon grant: `+regexp.QuoteMeta(c.why)+`\n`, strings.Join(c.args, " "))
+		r := support.Jhon(t, f.folder, env, "grant", "outside-write", "--session", "s1", "--root", c.dir)
+		code(t, r, 2, c.name)
+		matches(t, r.Stderr, c.why, c.name)
 	}
-	r := support.Jhon(t, repo, env, "grant", "--list", "--json")
-	code(t, r, 0, "grant --list --json")
-	if strings.Contains(r.Stdout, "outside-write") {
-		t.Errorf("outside-write is still a class: %s", r.Stdout)
+	for _, args := range [][]string{
+		{"grant", "push", "--session", "s1"},
+		{"grant", "outside-write", "push", "--session", "s1"},
+		{"grant", "outside-write", "--session", "s1", "--for", "1d"},
+	} {
+		code(t, support.Jhon(t, f.folder, env, args...), 2, strings.Join(args, " "))
 	}
 }
 
-// An agent may not make itself a grant, nor write the session-grants
-// folder an older jhon kept, in a folder or in a repository in any mode.
 func TestSessionGrantNotAnAgents(t *testing.T) {
 	t.Parallel()
 	f := newSessionFixture(t)
-	state := f.state()
+	state := ""
+	for _, kv := range f.env {
+		if v, ok := strings.CutPrefix(kv, "XDG_STATE_HOME="); ok {
+			state = v
+		}
+	}
 	for _, c := range []string{
 		"jhon grant outside-write --session s1",
 		"jhon grant outside-write --session s1 --root " + f.folder,
@@ -219,44 +199,28 @@ func TestSessionGrantNotAnAgents(t *testing.T) {
 	}
 	r := f.write(t, f.folder, "s1", filepath.Join(state, "jhon", "session-grants", "k.json"))
 	code(t, r, 2, "a write into the session grants")
-	wantNoted(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, "a.txt")), "no grant made")
+	// None of it granted anything.
+	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, "a.txt")), "outside-write", "no grant made")
 }
 
-// Grants left from before T113: an outside-write record in the grants and a
-// session grant of the folder load without error and lend nothing. The
-// write still runs with the note, the list leaves the record out, and
-// --revoke removes it.
-func TestSessionGrantOldRecordsLendNothing(t *testing.T) {
-	t.Parallel()
-	f := newSessionFixture(t)
-	repo := realTemp(t)
-	support.GitRepo(t, repo)
-	root := strings.TrimSpace(support.Git(t, repo, "rev-parse", "--show-toplevel"))
-	live := "2999-01-01T00:00:00.000Z"
-	sum := sha256.Sum256([]byte(root))
-	grants := filepath.Join(f.state(), "jhon", "grants", hex.EncodeToString(sum[:]))
-	support.Write(t, grants, map[string]string{"outside-write.json": `{"class":"outside-write","root":"` + root + `","granted_at":"2026-01-01T00:00:00.000Z","expires_at":"` + live + `"}`})
-	ssum := sha256.Sum256([]byte(f.folder + "\ns1"))
-	support.Write(t, filepath.Join(f.state(), "jhon", "session-grants"), map[string]string{
-		hex.EncodeToString(ssum[:]) + ".json": `{"class":"outside-write","root":"` + f.folder + `","granted_at":"2026-01-01T00:00:00.000Z","expires_at":"` + live + `","session":"s1"}`,
-	})
-	wantNoted(t, f.write(t, repo, "s1", "/etc/jhon.conf"), "an old timed grant")
-	wantNoted(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, "a.txt")), "an old session grant")
-	r := support.Jhon(t, repo, f.env, "grant", "--list")
-	code(t, r, 0, "grant --list")
-	if r.Stdout != "no grants\n" {
-		t.Errorf("grant --list: %q", r.Stdout)
-	}
-	r = support.Jhon(t, repo, f.env, "grant", "--revoke", "outside-write")
-	code(t, r, 0, "revoke the old grant")
-	matches(t, r.Stdout, `^revoked outside-write for `+regexp.QuoteMeta(root)+`\n$`, "revoke the old grant")
-	if _, err := os.Stat(filepath.Join(grants, "outside-write.json")); !os.IsNotExist(err) {
-		t.Errorf("the old grant's file is still there: %v", err)
-	}
+// grantFolder is f's folder granted to session s1 by the owner.
+func (f sessionFixture) grantFolder(t *testing.T) {
+	t.Helper()
+	code(t, support.Jhon(t, f.folder, f.env, "grant", "outside-write", "--session", "s1"), 0, "grant")
 }
 
-// A link inside the folder to one outside it: the write's resolved path is
-// outside, and it runs with the note. A shell write is the sandbox's (T128f).
+func (f sessionFixture) state() string {
+	for _, kv := range f.env {
+		if v, ok := strings.CutPrefix(kv, "XDG_STATE_HOME="); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+// A link inside the granted folder to one outside it lends the outside
+// folder nothing: the write's resolved path decides. A shell write is the
+// sandbox's (T128f).
 func TestSessionGrantSymlinkOut(t *testing.T) {
 	t.Parallel()
 	f := newSessionFixture(t)
@@ -265,8 +229,10 @@ func TestSessionGrantSymlinkOut(t *testing.T) {
 	}
 	support.Write(t, f.folder, map[string]string{"a.txt": "a\n"})
 	support.Write(t, f.other, map[string]string{"e.txt": "a\n"})
-	wantNoted(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, "link", "y.txt")), "Write through the link")
-	wantNoted(t, f.call(t, f.folder, "s1", "Edit", map[string]any{"file_path": filepath.Join(f.folder, "link", "e.txt"), "old_string": "a", "new_string": "b"}), "Edit through the link")
+	f.grantFolder(t)
+	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, "link", "y.txt")), "outside-write", "Write through the link")
+	wantAsked(t, f.call(t, f.folder, "s1", "Edit", map[string]any{"file_path": filepath.Join(f.folder, "link", "e.txt"), "old_string": "a", "new_string": "b"}), "outside-write", "Edit through the link")
+	// The folder itself still passes.
 	wantAllowed(t, f.call(t, f.folder, "s1", "Bash", cmd("echo x > in.txt")), "a write in the folder")
 }
 
@@ -282,22 +248,68 @@ func TestRepoSymlinkOutPinned(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantAllowed(t, f.call(t, repo, "s1", "Bash", cmd("echo x > link/y.txt")), "repo: bash through the link")
-	wantNoted(t, f.write(t, repo, "s1", filepath.Join(repo, "link", "y.txt")), "repo: Write through the link")
+	wantAsked(t, f.write(t, repo, "s1", filepath.Join(repo, "link", "y.txt")), "outside-write", "repo: Write through the link")
 }
 
-// A git repository under the folder is a project of its own: a write into
-// it from the folder, of a new file or an existing one, runs with the note
-// (L475).
+// A git repository under the granted folder is a project of its own: the
+// folder's grant does not cover it.
 func TestSessionGrantNestedRepo(t *testing.T) {
 	t.Parallel()
 	f := newSessionFixture(t)
 	nested := mkdir(t, filepath.Join(f.folder, "nested"))
 	support.GitRepo(t, nested)
-	support.Write(t, nested, map[string]string{"e.txt": "a\n", "src/main.go": "package main\n"})
-	wantNoted(t, f.write(t, f.folder, "s1", filepath.Join(nested, "a.txt")), "Write into the nested repo")
-	wantNoted(t, f.write(t, f.folder, "s1", filepath.Join(nested, "e.txt")), "Write an existing file")
-	wantNoted(t, f.write(t, f.folder, "s1", filepath.Join(nested, "src", "main.go")), "Write an existing deep file")
-	wantNoted(t, f.call(t, f.folder, "s1", "Edit", map[string]any{"file_path": filepath.Join(nested, "e.txt"), "old_string": "a", "new_string": "b"}), "Edit")
+	f.grantFolder(t)
+	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(nested, "a.txt")), "outside-write", "Write into the nested repo")
+}
+
+// Whatever the session id, its record is one hashed file in the session-grants directory.
+func TestSessionGrantIdStaysInDir(t *testing.T) {
+	t.Parallel()
+	f := newSessionFixture(t)
+	dir := filepath.Join(f.state(), "jhon", "session-grants")
+	for _, id := range []string{"../../x", "a/b", "/etc/x"} {
+		code(t, support.Jhon(t, f.folder, f.env, "grant", "outside-write", "--session", id), 0, id)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("%d records, want 3", len(entries))
+	}
+	for _, e := range entries {
+		matches(t, e.Name(), `^[0-9a-f]{64}\.json$`, "record name")
+	}
+}
+
+func TestSessionGrantRefusesBadIds(t *testing.T) {
+	t.Parallel()
+	f := newSessionFixture(t)
+	for _, id := range []string{"a\nb", "a\rb", "a\tb", "\x1b[31m"} {
+		r := support.Jhon(t, f.folder, f.env, "grant", "outside-write", "--session", id)
+		code(t, r, 2, "id "+fmt.Sprintf("%q", id))
+	}
+}
+
+func TestSessionGrantExpired(t *testing.T) {
+	t.Parallel()
+	f := newSessionFixture(t)
+	f.grantFolder(t)
+	dir := filepath.Join(f.state(), "jhon", "session-grants")
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Fatalf("%d records", len(entries))
+	}
+	file := filepath.Join(dir, entries[0].Name())
+	b, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = regexp.MustCompile(`"expires_at": "[^"]*"`).ReplaceAll(b, []byte(`"expires_at": "2020-01-01T00:00:00.000Z"`))
+	if err := os.WriteFile(file, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, "a.txt")), "outside-write", "an expired grant")
 }
 
 // A mode recorded for the folder before it stopped being a project lends nothing.
@@ -308,6 +320,29 @@ func TestSessionGrantOldFolderMode(t *testing.T) {
 	support.Write(t, filepath.Join(f.state(), "jhon", "modes"), map[string]string{
 		hex.EncodeToString(sum[:]) + ".json": `{"mode":"super-yolo","root":"` + f.folder + `","since":"2026-01-01T00:00:00.000Z"}`,
 	})
-	wantNoted(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, "a.txt")), "an old folder mode")
-	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, ".claude", "settings.json")), "settings", "an old folder mode: settings")
+	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(f.folder, "a.txt")), "outside-write", "an old folder mode")
+}
+
+// A folder that holds jhon's state is never a grant's.
+func TestSessionGrantRefusesStateHolder(t *testing.T) {
+	t.Parallel()
+	f := newSessionFixture(t)
+	env := append(append([]string{}, f.env...), "XDG_STATE_HOME="+filepath.Join(f.folder, "state"))
+	r := support.Jhon(t, f.folder, env, "grant", "outside-write", "--session", "s1")
+	code(t, r, 2, "a folder holding the state")
+	matches(t, r.Stderr, `jhon's state`, "a folder holding the state")
+}
+
+// Existing files of a repository nested in the granted folder are that
+// repository's: the folder's grant does not cover them (L475).
+func TestSessionGrantNestedRepoExistingFiles(t *testing.T) {
+	t.Parallel()
+	f := newSessionFixture(t)
+	nested := mkdir(t, filepath.Join(f.folder, "nested"))
+	support.GitRepo(t, nested)
+	support.Write(t, nested, map[string]string{"e.txt": "a\n", "src/main.go": "package main\n"})
+	f.grantFolder(t)
+	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(nested, "e.txt")), "outside-write", "Write an existing file")
+	wantAsked(t, f.write(t, f.folder, "s1", filepath.Join(nested, "src", "main.go")), "outside-write", "Write an existing deep file")
+	wantAsked(t, f.call(t, f.folder, "s1", "Edit", map[string]any{"file_path": filepath.Join(nested, "e.txt"), "old_string": "a", "new_string": "b"}), "outside-write", "Edit")
 }

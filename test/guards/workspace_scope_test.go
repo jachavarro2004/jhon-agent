@@ -2,8 +2,7 @@
 // members the owner joined are one project for the guards that judge
 // "outside the project" (S1), and route-guard judges a member's PR with the
 // primary's record, the change its branch names (S2). A listed sibling that
-// has not joined, and any other repository, stay outside as before: a
-// write there runs with a note (T153).
+// has not joined, and any other repository, stay outside as before.
 
 package guards
 
@@ -55,8 +54,7 @@ func (w wsFixture) guard(t *testing.T, cwd, tool string, input map[string]any) s
 
 // S1: a joined sibling's files are the project's, from the primary and
 // from the member; a listed sibling that has not joined, and another
-// repository, are outside: a sub-agent's Write or Edit there runs with the
-// outside note (a refusal until T153).
+// repository, are outside, refused to a sub-agent as before.
 func TestWorkspaceJoinedMembersAreTheProject(t *testing.T) {
 	t.Parallel()
 	w := newWorkspace(t, "ldd/config.yaml")
@@ -75,17 +73,17 @@ func TestWorkspaceJoinedMembersAreTheProject(t *testing.T) {
 			{"Bash", cmd("sed -i s/1/2/ " + filepath.Join(target, "src", "a.py"))},
 		}
 	}
-	// Outside: Write and Edit run with the outside note; a shell write there
+	// Outside: Write and Edit are refused by the guards; a shell write there
 	// is the sandbox's (T128f slice 5): the guards let it through and the
 	// sandbox keeps the folder read-only (test/sandbox/workspace_test.go).
 	outside := func(cwd, target, label string) {
 		t.Helper()
 		for _, c := range writes(cwd, target) {
-			r := w.guard(t, cwd, c.tool, c.input)
-			code(t, r, 0, label+": "+c.tool+" "+js(t, c.input))
-			if c.tool != "Bash" {
-				matches(t, adviceOf(t, r.Stdout), outsideNote, label+": "+c.tool)
+			want := 2
+			if c.tool == "Bash" {
+				want = 0
 			}
+			code(t, w.guard(t, cwd, c.tool, c.input), want, label+": "+c.tool+" "+js(t, c.input))
 		}
 	}
 	inside := func(cwd, target, label string) {
@@ -195,7 +193,7 @@ func TestRouteGuardMemberPRUsesThePrimarysRecord(t *testing.T) {
 
 // S1 (L1323): a config entry that reaches a folder through a symlink, a
 // `..` or the parent folder is no member: writes there stay outside, from
-// the primary and from a joined member, and run with the outside note.
+// the primary and from a joined member.
 func TestWorkspaceConfigPathsThroughLinksStayOutside(t *testing.T) {
 	t.Parallel()
 	w := newWorkspace(t, "ldd/config.yaml")
@@ -205,9 +203,7 @@ func TestWorkspaceConfigPathsThroughLinksStayOutside(t *testing.T) {
 	w.join(t, w.lib)
 	for _, cwd := range []string{w.app, w.lib} {
 		for _, target := range []string{filepath.Join(w.other, "src", "b.py"), filepath.Join(parent, "lnk", "src", "b.py"), filepath.Join(parent, "top.txt")} {
-			r := w.guard(t, cwd, "Write", map[string]any{"file_path": target, "content": "X = 2\n"})
-			code(t, r, 0, "from "+cwd+": Write "+target)
-			matches(t, adviceOf(t, r.Stdout), outsideNote, "from "+cwd+": Write "+target)
+			code(t, w.guard(t, cwd, "Write", map[string]any{"file_path": target, "content": "X = 2\n"}), 2, "from "+cwd+": Write "+target)
 		}
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -108,40 +107,10 @@ func TestRetiredClasses(t *testing.T) {
 	}
 }
 
-// An outside-write grant left from before T113 (L1402) loads without error,
-// is not listed, grants nothing, and --revoke removes it.
-func TestRetiredOutsideWrite(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	root := t.TempDir()
-	live := isodate.Format(time.Now().Add(time.Hour))
-	if err := Write(Record{"outside-write", root, isodate.Format(time.Now()), live}); err != nil {
-		t.Fatal(err)
-	}
-	Write(Record{"push", root, isodate.Format(time.Now()), live})
-	if got := List(); len(got) != 1 || !strings.HasPrefix(got[0], "push ") {
-		t.Errorf("List() = %v, want push alone", got)
-	}
-	if r := Records(); len(r) != 1 || r[0].Class != "push" {
-		t.Errorf("Records() = %v, want push alone", r)
-	}
-	if Live(root, "outside-write") {
-		t.Error("an old outside-write grant is live")
-	}
-	if !slices.Contains(Retired, "outside-write") || slices.Contains(Classes, "outside-write") {
-		t.Errorf("Classes %v, Retired %v", Classes, Retired)
-	}
-	if err := Revoke(root, "outside-write"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(File(root, "outside-write")); !os.IsNotExist(err) {
-		t.Errorf("the retired grant's file is still there: %v", err)
-	}
-}
-
 // bypass-session is no class (S31): a session started without prompts is
 // judged by whether Jhon's guards run in it, never granted.
 func TestClasses(t *testing.T) {
-	if got := strings.Join(Classes, " "); got != "push gh-write publish remote deploy destroy" {
+	if got := strings.Join(Classes, " "); got != "push gh-write publish remote deploy outside-write destroy" {
 		t.Errorf("Classes = %s", got)
 	}
 }

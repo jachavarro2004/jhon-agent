@@ -29,17 +29,18 @@ import (
 // grant.Questions (unreadable and unknown may hide a destroy; settings and
 // git-config could switch the guards off).
 var modePasses = map[string][]string{
-	"push":       {"yolo", "super-yolo"},
-	"gh-write":   {"yolo", "super-yolo"},
-	"publish":    {"yolo", "super-yolo"},
-	"remote":     {"yolo", "super-yolo"},
-	"deploy":     {"yolo", "super-yolo"},
-	"destroy":    {"super-yolo"},
-	"review":     {"yolo", "super-yolo"},
-	"unreadable": {"super-yolo"},
-	"unknown":    {"super-yolo"},
-	"settings":   nil,
-	"git-config": nil,
+	"push":          {"yolo", "super-yolo"},
+	"gh-write":      {"yolo", "super-yolo"},
+	"publish":       {"yolo", "super-yolo"},
+	"remote":        {"yolo", "super-yolo"},
+	"deploy":        {"yolo", "super-yolo"},
+	"outside-write": {"yolo", "super-yolo"},
+	"destroy":       {"super-yolo"},
+	"review":        {"yolo", "super-yolo"},
+	"unreadable":    {"super-yolo"},
+	"unknown":       {"super-yolo"},
+	"settings":      nil,
+	"git-config":    nil,
 }
 
 // askSite is one place a guard asks the owner: its guard, the class it
@@ -97,11 +98,12 @@ var askSites = []askSite{
 	routeSite("a Judgment Day judge nobody asked for", "jd-judge-a", nil),
 	// route-guard: a 4R lens the diff does not call for.
 	routeSite("a 4R lens that is not pertinent", "review-readability", func(t *testing.T, r rgEnv) {
-		support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n",
+		support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n",
 			"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/verify-report.md": "verdict: pass\n"})
 	}),
 	// vcs-guard (vcsJudge).
 	vcsSite("settings", "a write to the Claude Code settings", func(p string) string { return filepath.Join(p, ".claude", "settings.json") }),
+	vcsSite("outside-write", "a write outside the project", func(string) string { return "/etc/jhon.conf" }),
 	// safety-guard (guard.Classify), one command per class.
 	safetySite("push", "git push origin main"),
 	safetySite("gh-write", "gh pr merge 1 --squash"),

@@ -1,8 +1,6 @@
-// T87c (L636), T151 (L1366): secrets-guard with a scratch HOME that holds
-// fake key and cloud credential files. A file tool's read or search of a
-// home credentials directory is not judged; an edit tool's write into one is
-// refused (L638, guard_gaps_t94_test.go). A shell command is not read for
-// credentials (T128f, L1366).
+// T87c (L636): secrets-guard's file-tool refusals, pinned with a scratch
+// HOME that holds fake key and cloud credential files. A shell command is
+// not read for credentials (T128f, L1366).
 
 package guards
 
@@ -36,41 +34,79 @@ func homeToolCall(t *testing.T, s sgEnv, tool string, input map[string]any) int 
 	return hook(t, s.env, "secrets-guard", []string{"--agent", "*"}, payload).Code
 }
 
+func TestToolPayloadsReachingCredentialsRefused(t *testing.T) {
+	t.Parallel()
+	s, home := homeSG(t)
+	for _, n := range []string{".env", "server.pem", "a.key", "id_ed25519", "credentials.json", ".netrc", "creds.json"} {
+		if err := os.Remove(filepath.Join(s.p, n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	support.Write(t, s.p, map[string]string{"sub/deep/credentials.json": "{}\n", "i18n/en.json": "{}\n"})
+	support.Write(t, s.scratch, map[string]string{"keys/credentials.json": "{}\n"})
+	symlink(t, filepath.Join(s.scratch, "keys"), filepath.Join(s.p, "lnd"))
+	for _, c := range []struct {
+		tool string
+		in   map[string]any
+	}{
+		{"Glob", map[string]any{"pattern": "**/*.json", "path": "."}},
+		{"Grep", map[string]any{"pattern": "x", "glob": "*.json", "path": "lnd"}},
+		{"Glob", map[string]any{"pattern": "*.json", "path": "~/.config/gcloud"}},
+		{"Glob", map[string]any{"pattern": "*.json", "path": filepath.Join(home, ".config/gcloud")}},
+		{"Grep", map[string]any{"pattern": "x", "glob": "*", "path": "~/.ssh"}},
+	} {
+		if got := homeToolCall(t, s, c.tool, c.in); got != 2 {
+			t.Errorf("%s %v: exit %d, want 2", c.tool, c.in, got)
+		}
+	}
+	if got := homeToolCall(t, s, "Glob", map[string]any{"pattern": "*.json", "path": "i18n"}); got != 0 {
+		t.Errorf("Glob *.json in i18n with no credentials file: exit %d, want 0", got)
+	}
+}
+
 // kd is the home key directory's name.
 const kd = "." + "s" + "sh"
 
-// T151: a Read, Grep or Glob whose path or glob is in, at or above a home
-// credentials directory is allowed; an edit tool's write there is refused.
-func TestToolReadsOfHomeCredentialsAllowed(t *testing.T) {
+// T87d (L637): a Read, Grep or Glob tool call whose path is in a home
+// credentials directory, or (a recursive search) rooted at or above one,
+// is refused with no glob needed.
+func TestToolPathIntoHomeCredentialsRefused(t *testing.T) {
 	t.Parallel()
 	s, home := homeSG(t)
+	support.Write(t, home, map[string]string{"notes/a.md": "x\n"})
 	symlink(t, filepath.Join(home, kd), filepath.Join(s.p, "lnk"))
 	cases := []struct {
 		tool string
 		in   map[string]any
 		want int
 	}{
-		{"Grep", map[string]any{"pattern": "x", "path": "~/" + kd}, 0},
-		{"Grep", map[string]any{"pattern": "x", "path": "$HOME/" + kd}, 0},
-		{"Grep", map[string]any{"pattern": "x", "path": "${HOME}/.aws"}, 0},
-		{"Grep", map[string]any{"pattern": "x", "path": "lnk"}, 0},
-		{"Grep", map[string]any{"pattern": "x", "path": "~"}, 0},
-		{"Grep", map[string]any{"pattern": "x", "glob": "*", "path": "~/" + kd}, 0},
-		{"Glob", map[string]any{"pattern": "*.json", "path": "~/.config/gcloud"}, 0},
-		{"Glob", map[string]any{"pattern": "*", "path": "lnk"}, 0},
-		{"Read", map[string]any{"file_path": "~/" + kd + "/id_rsa"}, 0},
-		{"Read", map[string]any{"file_path": filepath.Join(home, ".aws/credentials")}, 0},
-		{"Read", map[string]any{"file_path": filepath.Join(s.p, "lnk/config.json")}, 0},
-		{"Write", map[string]any{"file_path": filepath.Join(home, ".aws/new.txt"), "content": "x"}, 2},
-		{"Edit", map[string]any{"file_path": filepath.Join(s.p, "lnk/config.json"), "old_string": "{", "new_string": "["}, 2},
+		{"Grep", map[string]any{"pattern": "x", "path": "~/" + kd}, 2},
+		{"Grep", map[string]any{"pattern": "x", "path": filepath.Join(home, kd)}, 2},
+		{"Grep", map[string]any{"pattern": "x", "path": "$HOME/" + kd}, 2},
+		{"Grep", map[string]any{"pattern": "x", "path": "${HOME}/.aws"}, 2},
+		{"Grep", map[string]any{"pattern": "x", "path": "lnk"}, 2},
+		{"Grep", map[string]any{"pattern": "x", "path": "~/.config/gcloud"}, 2},
+		{"Grep", map[string]any{"pattern": "x", "path": "~/.config"}, 2},
+		{"Grep", map[string]any{"pattern": "x", "path": "~"}, 2},
+		{"Grep", map[string]any{"pattern": "x", "path": home}, 2},
+		{"Grep", map[string]any{"pattern": "x", "path": "~", "glob": "*.md"}, 2},
+		{"Glob", map[string]any{"pattern": "notes/*.md", "path": "~"}, 2},
+		{"Glob", map[string]any{"pattern": "*", "path": "lnk"}, 2},
+		{"Read", map[string]any{"file_path": "~/" + kd + "/config"}, 2},
+		{"Read", map[string]any{"file_path": filepath.Join(home, ".aws/config")}, 2},
+		{"Read", map[string]any{"file_path": filepath.Join(s.p, "lnk/config")}, 2},
+		{"Read", map[string]any{"file_path": "~/notes/a.md"}, 0},
+		{"Read", map[string]any{"file_path": filepath.Join(home, "notes/a.md")}, 0},
+		{"Read", map[string]any{"file_path": filepath.Join(home, "settings.json")}, 0},
+		{"Grep", map[string]any{"pattern": "x", "path": "~/notes"}, 0},
+		{"Grep", map[string]any{"pattern": "x", "path": "."}, 0},
+		{"Grep", map[string]any{"pattern": "x"}, 0},
+		{"Glob", map[string]any{"pattern": "src/*.go"}, 0},
 	}
 	for _, c := range cases {
 		if got := homeToolCall(t, s, c.tool, c.in); got != c.want {
 			t.Errorf("%s %v: exit %d, want %d", c.tool, c.in, got, c.want)
 		}
-	}
-	if b, _ := os.ReadFile(filepath.Join(home, kd, "config.json")); string(b) != "{}\n" {
-		t.Errorf("%s/config.json changed: %q", kd, b)
 	}
 }
 

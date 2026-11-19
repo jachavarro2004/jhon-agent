@@ -187,7 +187,7 @@ func TestRouteGuardVerifiedRoute(t *testing.T) {
 	t.Parallel()
 	r := newRG(t, "delivery: change\n")
 	// A migration is high risk: the change is verified.
-	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n"})
+	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	code(t, r.write(t, "openspec/changes/c1/tasks.md"), 0, "tasks.md on the verified route")
 	code(t, r.write(t, "openspec/changes/c1/specs/a/spec.md"), 0, "a spec on the verified route")
 	code(t, r.write(t, "openspec/changes/c1/proposal.md"), 0, "a proposal for a one-project change")
@@ -223,7 +223,7 @@ func TestRouteGuardVerifyOfALaneChange(t *testing.T) {
 	lane := filepath.Join(filepath.Dir(r.p), "proj-worktrees", "lane")
 	support.Git(t, r.p, "worktree", "add", "-q", "-b", "chore/lane", lane)
 	support.Write(t, lane, map[string]string{"openspec/changes/fix-lane/tasks.md": "## Slice 1: a\nDelivers: CA-01\n- [ ] 1.1 a\n",
-		"src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n"})
+		"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	support.Git(t, lane, "add", "-A")
 	support.Git(t, lane, "commit", "-q", "-m", "a migration")
 	verify := func(prompt string) support.Result {
@@ -245,7 +245,7 @@ func TestRouteGuardDesignSpans(t *testing.T) {
 	support.Git(t, r.p, "commit", "-q", "-m", "projects")
 	lines := func(n int) string { return strings.Repeat("X = 1\n", n) }
 	support.Write(t, r.p, map[string]string{
-		"svc_a/migrations/0001_add.sql": "create table a (id int);\n", "svc_a/src/a.py": lines(150),
+		"svc_a/migrations/0001_add.sql": "alter table a drop column b;\n", "svc_a/src/a.py": lines(150),
 		"svc_b/src/seed.py": lines(5), "svc_b/tests/test_seed.py": lines(300),
 	})
 	code(t, r.write(t, "openspec/changes/c1/design.md"), 0, "a design for a change that only touches its second project")
@@ -428,7 +428,7 @@ func TestRouteGuardVerifyDueBeforeThePR(t *testing.T) {
 	// Each record carries its RED before GREEN (T31): the PR needs it.
 	record := map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/execution-record.json": redGreenRecord}
 	r := newRG(t, "")
-	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n"})
+	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	support.Write(t, r.p, record)
 	res := r.call(t, "Bash", pr, true)
 	code(t, res, 2, "a verified route without a verification")
@@ -442,7 +442,7 @@ func TestRouteGuardVerifyDueBeforeThePR(t *testing.T) {
 	code(t, r.call(t, "Bash", pr, true), 0, "a passing verify-report.md")
 
 	jd := newRG(t, "")
-	support.Write(t, jd.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "create table a (id int);\n"})
+	support.Write(t, jd.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "alter table a drop column b;\n"})
 	support.Write(t, jd.p, record)
 	support.Write(t, jd.p, map[string]string{"openspec/changes/c1/judgments/2026-11-03.md": "## CLOSE\n\n```json\n{\"verdict\":\"APPROVED\"}\n```\n"})
 	code(t, jd.call(t, "Bash", pr, true), 0, "a Judgment Day closed APPROVED")
@@ -467,7 +467,7 @@ func TestRouteGuardSliceCommitNoticeOnVerifiedRoute(t *testing.T) {
 	}
 	r := newRG(t, "")
 	closing(r)
-	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "create table a (id int);\n"})
+	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "alter table a drop column b;\n"})
 	res := r.call(t, "Bash", commit, false)
 	code(t, res, 0, "the slice commit is never refused for verify")
 	matches(t, res.Stdout, `"hookEventName":"PreToolUse"`, "a PreToolUse note")
@@ -633,7 +633,7 @@ func TestRouteGuardSliceCommitOverTheAdvisorySize(t *testing.T) {
 	}
 
 	both := newRG(t, "")
-	closing(both, map[string]string{"src/big.py": big, "src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_big.py": "def test_a(): pass\n"})
+	closing(both, map[string]string{"src/big.py": big, "src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_big.py": "def test_a(): pass\n"})
 	res = both.call(t, "Bash", commit, false)
 	code(t, res, 0, "verify due and over the advisory size")
 	if n := strings.Count(res.Stdout, "hookSpecificOutput"); n != 1 {
@@ -662,7 +662,7 @@ func TestRouteGuardFourRByRisk(t *testing.T) {
 	// Each record carries its RED before GREEN (T31): the PR needs it.
 	record := map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/execution-record.json": redGreenRecord}
 	r := newRG(t, "")
-	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n"})
+	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	support.Write(t, r.p, record)
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
 	res := r.call(t, "Bash", pr, true)
@@ -777,7 +777,7 @@ func TestRouteGuardFixAgentWhenFourRDue(t *testing.T) {
 	t.Parallel()
 	fix := map[string]any{"subagent_type": "jd-fix-agent", "prompt": "Fix it.\n\n## Allowed edit surfaces\n\n- src/app.py\n"}
 	r := newRG(t, "")
-	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n"})
+	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	res := r.call(t, "Agent", fix, true)
 	code(t, res, 0, "the fix agent on a risk-high route")
 	if d, why, ok := decision(t, res.Stdout); !ok || d != "ask" || !strings.HasPrefix(why, "review") {
@@ -898,7 +898,7 @@ func TestRouteGuardVerifyConfirmsFourR(t *testing.T) {
 func TestRouteGuardFourROnlyPertinentLenses(t *testing.T) {
 	t.Parallel()
 	r := newRG(t, "")
-	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n"})
+	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/verify-report.md": "verdict: pass\n",
 		"openspec/changes/c1/execution-record.json": redGreenRecord})
 	res := r.call(t, "Bash", cmd("gh pr create --title x --body y"), true)
@@ -927,7 +927,7 @@ func TestRouteGuardFourROnlyPertinentLenses(t *testing.T) {
 func TestRouteGuardFourRNativeInClaudeCode(t *testing.T) {
 	t.Parallel()
 	r := newRG(t, "")
-	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n"})
+	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/verify-report.md": "verdict: pass\n",
 		"openspec/changes/c1/execution-record.json": redGreenRecord})
 	res := r.call(t, "Bash", cmd("gh pr create --title x --body y"), true)
@@ -1039,7 +1039,7 @@ func TestRouteGuardPRLightVerifyIsAnAdvisory(t *testing.T) {
 
 	// The verified route keeps its verify-report rule: no light verify asked.
 	high := newRG(t, "")
-	support.Write(t, high.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n", "openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n",
+	support.Write(t, high.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n", "openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n",
 		"openspec/changes/c1/specs/a/spec.md": "# a\n", rec: redGreenUnverified("")})
 	res = high.call(t, "Bash", pr, true)
 	code(t, res, 2, "verified route without its verify-report")
@@ -1067,7 +1067,7 @@ func TestRouteGuardFourRSubject(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
 	r := newRG(t, "")
-	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n",
+	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n",
 		"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n",
 		"openspec/changes/c1/execution-record.json": redGreenRecord, "openspec/changes/c1/verify-report.md": "verdict: pass\n"})
 	review := func(stdin string, args ...string) support.Result {
@@ -1091,7 +1091,7 @@ func TestRouteGuardFourRSubject(t *testing.T) {
 		"validator": map[string]any{"subject_hash": s.Subject, "results": []any{}}})
 	code(t, review(string(in), "record", "--subject", s.Subject), 0, "record")
 	code(t, r.call(t, "Bash", pr, true), 0, "a record whose subject is the fresh one")
-	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "create table a (id bigint);\n"})
+	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column c;\n"})
 	res := r.call(t, "Bash", pr, true)
 	code(t, res, 2, "a stale record")
 	matches(t, res.Stderr, `^route-guard: 4R is due before delivery`, "the stale record is no 4R")
@@ -1111,7 +1111,7 @@ func TestRouteGuardFourRSubjectEdges(t *testing.T) {
 	r := newRG(t, "")
 	tasks := "## Slice 1: a\n- [x] 1.1 a\n"
 	bin := "\x00\x01\x02binary\xff"
-	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n",
+	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n",
 		"openspec/changes/c1/tasks.md": tasks, "openspec/changes/c1/specs/a/spec.md": "# a\n", "src/data.bin": bin,
 		"openspec/changes/c1/execution-record.json": redGreenRecord, "openspec/changes/c1/verify-report.md": "verdict: pass\n"})
 	review := func(stdin string, args ...string) support.Result {

@@ -138,9 +138,9 @@ counts what each one costs).
 |---|---|---|
 | `inspect-guard` | Bash | a reviewer changing what it reviews: 4R and Judgment Day reviewers stay read-only |
 | `safety-guard` | Bash | a destructive or irreversible command (refused), a write or delete of a credentials file (refused), an outward-facing one without your consent (asked), a sub-agent's unbounded wait; a read, a write outside the project or one it cannot resolve is not limited (the sandbox bounds it) |
-| `vcs-guard` | Edit, Write | a write into `.git/` or the grants, an agent writing Claude Code's settings (asked at the top level); a write outside the project, or explore's beyond its record, runs with a note |
+| `vcs-guard` | Edit, Write | a write into `.git/` or the grants, an agent writing Claude Code's settings, a write outside the project (asked at the top level); explore's write beyond its record runs with a note |
 | `framework-guard` | Edit, Write, Bash | an agent editing Jhon or its installed release while it runs on it (Edit, Write), or running Jhon's own code by hand (Bash); a Bash write or git there is the sandbox's, where they are read-only |
-| `secrets-guard` | Edit, Write | an edit of a file that holds credentials (`.env`, keys) or of a file in a home credentials directory; reading is not judged; a template such as `.env.example` passes |
+| `secrets-guard` | Read, Grep, Glob, Edit, Write | a file that holds credentials (`.env`, keys) or a home credentials directory; a template such as `.env.example` passes |
 | `scope-guard` | Edit, Write, Bash | a writer editing outside the edit surfaces its handoff names; a shell write whose target it cannot resolve runs with a note |
 | `route-guard` | Edit, Write, Bash, Agent | LDD: a writer launched without its scope or with a surface that matches nothing, a change without its record, a slice commit of an untested tree, a PR without its docs, a merge without rebase; a code edit before LDD is set up runs with a note |
 
@@ -312,13 +312,15 @@ own terminal in pi).
 | `publish` | a package publish (`npm publish`, `cargo publish`, …) |
 | `remote` | a session on or a copy to another host (`ssh`, `scp`, `rsync`, …) |
 | `deploy` | a cloud or cluster write (`aws`, `gcloud`, `kubectl`, `terraform apply`, …) |
+| `outside-write` | an Edit or Write outside the project (a shell write there is the sandbox's) |
 | `destroy` | a deletion that loses work (a forced branch delete, `reset --hard`); the rest of the destructive operations are never grantable |
 
-**The hard lines, in every mode.** Refused: credentials (an edit by the file tools; by the shell, a write or delete), the
+**The hard lines, in every mode.** Refused: credentials (by the file tools; by the shell, a write or delete), the
 never-grantable destructive operations, writes into `.git/`, the grants
 and the modes, Jhon's own files. Asked: a write to Claude Code's settings,
 and a `git config` that changes what git runs. A folder that is not a git
-repository takes no mode and no grant. See
+repository takes no mode and no timed grant; pi can let one session write
+there (`jhon grant outside-write --session <id>`). See
 [docs/modes-and-grants.md](docs/modes-and-grants.md).
 
 **Settings** are one file, `.config/jhon/settings.toml` in the home:

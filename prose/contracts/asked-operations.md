@@ -18,18 +18,18 @@
   of tags (a tag can start a release), or one whose target the guard cannot
   tell (a URL, a configuration that maps or mirrors it, `GIT_DIR`); `gh pr
   merge`, `close`, `review`, releases, repository, secret and workflow
-  writes, every other `gh api` write; and deploy, destroy, publish and
-  remote. One command that needs several classes asks one question that
-  names them all.
+  writes, every other `gh api` write; deploy, destroy, publish, remote,
+  and an Edit or Write outside the project (outside-write). One command
+  that needs several classes asks one question that names them all.
 - A grant and a mode are the owner's act alone. The safety guard refuses
   `mode <a mode>` and `grant <a class>` (or `grant --revoke`) in any
   program's arguments, whatever the program is called (`go run`, a copied,
   built or linked binary, a subprocess's literal argv, concatenated
   literals included), and any write into the grants or the modes directory,
   through a glob or a link too. Its limit: a program that computes its
-  arguments or a path at run time can still write a file, and no reading of
-  the command's text can stop that. The modes' history records every change
-  with `by: "owner"`, and `jhon audit` reads it.
+  arguments or a path at run time can still write a file. The modes'
+  history records every change with `by: "owner"`, and `jhon audit` reads
+  it.
 - **Deletions the owner asks for.** A deletion that loses work or data (a
   forced branch delete or worktree removal, `reset --hard`, `clean -f`, a
   dropped stash, a destructive Docker command: `docker compose down -v`,

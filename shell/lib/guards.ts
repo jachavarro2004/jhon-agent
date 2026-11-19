@@ -218,7 +218,7 @@ export async function judge(toolName: string, input: Record<string, unknown>, ct
     hook_event_name: "PreToolUse", tool_name: call.tool_name, tool_input: call.tool_input, cwd: ctx.cwd,
     ...(ctx.child ? { agent_id: "pi-child" } : { permission_mode: ctx.interactive ? "default" : "dontAsk" }),
     ...(ctx.launchPrompt ? { launch_prompt: ctx.launchPrompt } : {}),
-    // The session the guards record the call under.
+    // The session a folder's session grant names (grant.SessionGranted).
     ...(ctx.sessionId ? { session_id: ctx.sessionId } : {}),
   };
   const { config } = ctx;

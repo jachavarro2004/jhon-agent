@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-// The files that hold credentials, which the edit tools (secrets-guard) and
-// a shell write or delete (safety-guard) never touch, and the home
+// The file tools' reading of credentials (secrets-guard) and the home
 // directories the sandbox hides (ProtectedHome). A template of one
-// (`.env.example`) holds none, and is read and edited like any file. A read
-// is not judged: guards limit only destructive acts (T128f, T151, L1366).
+// (`.env.example`) holds none, and is read and edited like any file. A shell
+// command is no longer read for them: guards limit only destructive acts
+// (T128f, L1366).
 
 var (
 	// credentialName is a file name that holds credentials: an env file
@@ -59,8 +59,34 @@ func CredentialGlob(pattern string) bool {
 	})
 }
 
+// extensionGlob is whether a credentials glob names a credentials file only
+// by its extension: every sample it matches is a name with a stem and an
+// extension (credentials.json), and the glob matches any name with that
+// extension too (data.json), which holds none (T87b, L630-L631). `*.json` is
+// one; `.env*`, `*.pem`, `id_*` and `cred*.json` name one by name. A glob
+// with pathspec magic is never one.
+func extensionGlob(pattern string) bool {
+	if globLead.MatchString(pattern) || !CredentialGlob(pattern) || CredentialFile(pattern) {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(pattern))
+	for _, s := range credentialSamples {
+		if ok, err := path.Match(base, s); err != nil || !ok || !CredentialFile(s) {
+			continue
+		}
+		if strings.HasPrefix(s, ".") || path.Ext(s) == "" {
+			return false
+		}
+		probe := "data" + path.Ext(s)
+		if ok, _ := path.Match(base, probe); !ok || CredentialFile(probe) {
+			return false
+		}
+	}
+	return true
+}
+
 // credentialHomes are the home directories that hold credentials under any
-// name: an edit tool's write in one is refused. They are the
+// name: an extension glob in one, or above one, is refused. They are the
 // credential half of protectedHome plus gcloud's: Jhon's own install
 // (.config/jhon, .local/share/jhon, .local/bin/jhon) is write-protected,
 // not secret, and its prose is read by every session (L641).
@@ -68,16 +94,98 @@ var credentialHomes = append(slices.DeleteFunc(slices.Clone(protectedHome), func
 	return p == ".config/jhon" || strings.HasPrefix(p, ".local/")
 }), ".config/gcloud")
 
-// HomeCredentialPath is whether an edit tool's path, from cwd, is in a home
-// credentials directory (credentialHomes), through symlinks (T94, L638). A
-// `~user` or other unresolved variable path is not.
-func HomeCredentialPath(p, cwd string) bool {
-	home := project.Home()
-	if home == "" || p == "" {
+// homeCredentialGlob is whether glob, run from dir, can expand into a home
+// credentials directory (credentialHomes) or name one: its leading `~`,
+// `$HOME` or `${HOME}`, or its absolute or dir-relative path, puts it under
+// home, and its parts match a credentials directory's as the shell would (a
+// leading dot only by a dot; `**` by anything). Those directories hold
+// credentials under any name, so even `*` there reads one (T87c, L636).
+func homeCredentialGlob(glob, dir, home string) bool {
+	if home == "" || !isGlob(glob) {
 		return false
 	}
 	var full string
 	switch {
+	case glob == "~":
+		full = home
+	case strings.HasPrefix(glob, "~/"):
+		full = filepath.Join(home, glob[2:])
+	case strings.HasPrefix(glob, "$HOME/"):
+		full = filepath.Join(home, glob[len("$HOME/"):])
+	case strings.HasPrefix(glob, "${HOME}/"):
+		full = filepath.Join(home, glob[len("${HOME}/"):])
+	case filepath.IsAbs(glob):
+		full = filepath.Clean(glob)
+	case dir != "" && !strings.HasPrefix(glob, "~") && !strings.HasPrefix(glob, "$"):
+		full = filepath.Join(dir, glob)
+	case varCredentialGlob(glob):
+		return true
+	default:
+		return false
+	}
+	rel, err := filepath.Rel(home, full)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+		return false
+	}
+	parts := strings.Split(rel, "/")
+	for _, r := range credentialHomes {
+		if homePartsMatch(parts, strings.Split(r, "/")) {
+			return true
+		}
+	}
+	return false
+}
+
+// varCredentialGlob is whether glob starts with a variable other than
+// HOME (`$H`, `${X}`, `"$D"`) whose path then names a home credentials
+// directory by its name sequence, at any depth: the variable may hold HOME
+// or a directory above it (T87d, L637).
+func varCredentialGlob(glob string) bool {
+	g := strings.NewReplacer(`"`, "", `'`, "").Replace(glob)
+	if !strings.HasPrefix(g, "$") {
+		return false
+	}
+	rest := g[1:]
+	if strings.HasPrefix(rest, "{") {
+		end := strings.IndexByte(rest, '}')
+		if end < 0 {
+			return false
+		}
+		rest = rest[end+1:]
+	} else {
+		rest = strings.TrimLeftFunc(rest, func(r rune) bool {
+			return r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9'
+		})
+	}
+	if !strings.HasPrefix(rest, "/") {
+		return false
+	}
+	parts := strings.Split(strings.Trim(path.Clean(rest), "/"), "/")
+	for off := range parts {
+		for _, r := range credentialHomes {
+			if homePartsMatch(parts[off:], strings.Split(r, "/")) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HomeCredentialPath is whether a tool's path, from cwd, is in a home
+// credentials directory (credentialHomes), through symlinks; when the tool
+// searches recursively (Grep, Glob), also whether it is at or above one —
+// home itself included — since the search descends into it whatever its
+// glob or type filter (T87d, L637). An empty path is cwd for a recursive
+// search. A `~user` or other unresolved variable path keeps today's reading.
+func HomeCredentialPath(p, cwd string, recursive bool) bool {
+	home := project.Home()
+	if home == "" || (p == "" && !recursive) {
+		return false
+	}
+	var full string
+	switch {
+	case p == "":
+		full = cwd
 	case p == "~" || p == "$HOME" || p == "${HOME}":
 		full = home
 	case strings.HasPrefix(p, "~/"):
@@ -97,7 +205,7 @@ func HomeCredentialPath(p, cwd string) bool {
 	for _, l := range []string{full, project.Realish(full)} {
 		for _, r := range credentialHomes {
 			for _, d := range []string{filepath.Join(home, r), project.Realish(filepath.Join(home, r))} {
-				if project.Within(l, d) {
+				if project.Within(l, d) || (recursive && project.Within(d, l)) {
 					return true
 				}
 			}
@@ -106,10 +214,58 @@ func HomeCredentialPath(p, cwd string) bool {
 	return false
 }
 
-// credentialGlobWord is a glob read as naming a credentials file: by
-// CredentialGlob, or by CredentialFile (`x*.pem`).
-func credentialGlobWord(w string) bool {
-	return isGlob(w) && (CredentialGlob(w) || CredentialFile(w))
+// homePartsMatch is whether glob parts can name the credentials directory
+// parts dir, or a path under or above it on its way.
+func homePartsMatch(parts, dir []string) bool {
+	for i := 0; i < len(parts) && i < len(dir); i++ {
+		g, d := parts[i], dir[i]
+		if g == "**" {
+			return true
+		}
+		if ok, err := path.Match(g, d); err != nil || !ok || (strings.HasPrefix(d, ".") && !strings.HasPrefix(g, ".")) {
+			return false
+		}
+	}
+	return true
+}
+
+// extensionGlobRefused is whether an extension glob, expanded from cwd,
+// can reach a credentials file: it is not plain (a `~`, `$`, brace, or
+// pathspec magic the guard cannot resolve), its directory is in or above a
+// home credentials directory, or a walk of its directory at any depth meets
+// a credentials file or cannot finish (credential_walk.go).
+func extensionGlobRefused(glob, cwd, home string) bool {
+	if cwd == "" || home == "" || !plainGlob.MatchString(glob) {
+		return true
+	}
+	start, rel := cwd, glob
+	if strings.HasPrefix(glob, "/") {
+		start, rel = "/", strings.TrimLeft(glob, "/")
+	}
+	lit, globbed := start, false
+	for _, seg := range strings.Split(rel, "/") {
+		switch {
+		case globbed && seg == "..":
+			return true // the walk reads names below, never above
+		case isGlob(seg):
+			globbed = true
+		case !globbed:
+			lit = filepath.Join(lit, seg)
+		}
+	}
+	if !globbed {
+		return true
+	}
+	for _, l := range []string{lit, project.Realish(lit)} {
+		for _, r := range credentialHomes {
+			d := filepath.Join(home, r)
+			if project.Within(l, d) || project.Within(d, l) {
+				return true
+			}
+		}
+	}
+	found, ok := globReachesFrom(start, rel)
+	return found || !ok
 }
 
 // CredentialsWhy is the refusal of touching a credentials file; a glob is
