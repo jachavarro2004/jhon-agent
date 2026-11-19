@@ -3,7 +3,9 @@ package ldd
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/execution"
@@ -27,11 +29,36 @@ type MemberDelivery struct {
 	Ready   bool     `json:"ready"`
 	Reasons []string `json:"reasons"`
 	Path    string   `json:"-"`
+	// unjoined is a listed member whose pointer does not name the primary.
+	unjoined bool
+}
+
+// Next is what makes m ready: the owner's join for a member that has not
+// joined, else the check in the member that says why it is not.
+func (m MemberDelivery) Next(change string) string {
+	if m.unjoined {
+		return m.Reasons[0]
+	}
+	return fmt.Sprintf("run `jhon deliver check %s` in %s", change, m.Path)
+}
+
+// ArchivedChange is change, archived as folder (<date>-<change>) under the
+// layout's archive, named relative to its changes directory
+// (archive/<date>-<change>), as ChangeMembers and the record read it.
+func ArchivedChange(root, folder string) string {
+	lay := layout.For(root)
+	rel, err := filepath.Rel(filepath.FromSlash(lay.ChangesDir()), filepath.FromSlash(path.Join(lay.ArchiveDir(), folder)))
+	if err != nil {
+		return filepath.Join("archive", folder)
+	}
+	return rel
 }
 
 // ChangeMembers are the members of ws, root's workspace, that change in
 // root delivers in, in the config's order; none unless root is a primary.
-// A name no member of ws has is none.
+// A name no member of ws has is none. An archived change is named by its
+// folder under the changes directory (ArchivedChange): its tasks.md and its
+// record are read there.
 func ChangeMembers(root, change string, ws workspace.Info) []workspace.Listed {
 	if ws.Role != workspace.Primary {
 		return nil
@@ -64,7 +91,7 @@ func ChangeMembers(root, change string, ws workspace.Info) []workspace.Listed {
 func MemberDeliveries(root, change string, ws workspace.Info) []MemberDelivery {
 	var out []MemberDelivery
 	for _, l := range ChangeMembers(root, change, ws) {
-		d := MemberDelivery{Name: l.Name, Reasons: []string{}, Path: l.Path}
+		d := MemberDelivery{Name: l.Name, Reasons: []string{}, Path: l.Path, unjoined: !l.Joined}
 		if !l.Joined {
 			d.Reasons = append(d.Reasons, fmt.Sprintf("%s has not joined the workspace: the owner runs `jhon workspace join %s` in it", l.Path, ws.Primary))
 		} else if c, err := CheckMemberDelivery(l.Path, root, l.Name, change, Merge(), nil); err != nil {
@@ -87,25 +114,34 @@ func WithMembers(c DeliverCheck, root, change string, ws workspace.Info) Deliver
 	for _, m := range c.Members {
 		if !m.Ready {
 			c.Ready = false
-			c.Reasons = append(c.Reasons, fmt.Sprintf("workspace member %s is not ready: run `jhon deliver check %s` in %s", m.Name, change, m.Path))
+			c.Reasons = append(c.Reasons, fmt.Sprintf("workspace member %s is not ready: %s", m.Name, m.Next(change)))
 		}
 	}
 	return c
 }
 
-// MembersLine is the members' deliveries in one line, as status prints it.
+// MembersLine is the members' deliveries in one line, as status prints it,
+// with what makes a member that is not ready ready.
 func MembersLine(change string, ms []MemberDelivery) string {
 	parts := make([]string, len(ms))
-	waiting := false
+	var hints []string
 	for i, m := range ms {
 		parts[i] = m.Name + " ready"
-		if !m.Ready {
-			parts[i], waiting = m.Name+" not ready", true
+		if m.Ready {
+			continue
+		}
+		parts[i] = m.Name + " not ready"
+		hint := "`jhon deliver check " + change + "` in a member says why"
+		if m.unjoined {
+			hint = m.Next(change)
+		}
+		if !slices.Contains(hints, hint) {
+			hints = append(hints, hint)
 		}
 	}
 	line := "members     " + strings.Join(parts, ", ")
-	if waiting {
-		line += "  (`jhon deliver check " + change + "` in a member says why)"
+	if len(hints) > 0 {
+		line += "  (" + strings.Join(hints, "; ") + ")"
 	}
 	return line
 }

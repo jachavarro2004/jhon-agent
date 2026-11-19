@@ -101,3 +101,34 @@ func statusOf2(t *testing.T, f wsFixture, change string) map[string]any {
 	t.Helper()
 	return object(t, f.run(t, f.app, "status", change, "--json").Stdout)
 }
+
+// D1, D2 (L1334): a member only the record names, whose run failed, holds
+// the primary's delivery.
+func TestWorkspaceRecordOnlyMemberNotReadyHoldsThePrimary(t *testing.T) {
+	t.Parallel()
+	f := workspaceFixture(t)
+	support.Write(t, f.app, map[string]string{"ldd/changes/d/tasks.md": "## Slice 1: core\n\n- [ ] core task\n"})
+	commit(t, f.app, "d")
+	equal(t, f.run(t, f.app, "executions", "run", "d").Code, 0)
+	support.Write(t, f.lib, map[string]string{"a/a.go": "package a // bad\n"})
+	commit(t, f.lib, "bad")
+	equal(t, f.run(t, f.lib, "executions", "run", "d", "--repo", "lib").Code, 1)
+	r := f.run(t, f.app, "deliver", "check", "d", "--json")
+	equal(t, r.Code, 1, r.Out())
+	c := object(t, r.Stdout)
+	equal(t, membersOf(c), []any{map[string]any{"name": "lib", "ready": false, "reasons": []any{"the last test run did not pass: a"}}})
+	equal(t, c["reasons"], []any{"workspace member lib is not ready: run `jhon deliver check d` in " + f.lib})
+}
+
+// D4 (L1334): a member that has not joined is named with the owner's join,
+// not with a check it cannot run.
+func TestWorkspaceUnjoinedMemberNamesTheJoin(t *testing.T) {
+	t.Parallel()
+	f := workspaceFixture(t)
+	equal(t, f.run(t, f.lib, "workspace", "leave").Code, 0)
+	join := f.lib + " has not joined the workspace: the owner runs `jhon workspace join " + f.app + "` in it"
+	r := f.run(t, f.app, "status", "c")
+	match(t, r.Stdout, `(?m)^members     lib not ready  \(`+regexp.QuoteMeta(join)+`\)$`)
+	r = f.run(t, f.app, "deliver", "check", "c", "--json")
+	equal(t, object(t, r.Stdout)["reasons"].([]any)[1], "workspace member lib is not ready: "+join)
+}

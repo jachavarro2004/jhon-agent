@@ -2,6 +2,7 @@ package hook
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
@@ -17,7 +19,8 @@ import (
 // membersRefusal is why command, a PR opened in top, a workspace's primary,
 // is refused, "" when it may open (T57 slice 7, L1324): one PR per
 // repository, the primary's last. For each change the branch carries whose
-// slices or record name members (ldd.ChangeMembers), every member's
+// slices or record name members (ldd.ChangeMembers), archived ones
+// included, every member's
 // delivery is ready (ldd.MemberDeliveries, as `jhon deliver check` judges
 // it there) and the PR's text names, for each member, a pull request of
 // the repository its origin remote names (<host>/<owner>/<repo>/pull/<n>),
@@ -32,17 +35,40 @@ func membersRefusal(top, cwd, command string) string {
 	if ws.Role != workspace.Primary {
 		return ""
 	}
-	changes, _ := ldd.BranchChanges(top)
-	if c := ldd.FolderlessChange(top); c != "" && !slices.Contains(changes, c) {
-		changes = append(changes, c)
+	// The branch's changes, active and archived, as deliveryRefusal reads
+	// them; an archived one by its folder under the archive.
+	type branchChange struct{ id, name, archive string }
+	var changes []branchChange
+	active, archived := ldd.BranchChanges(top)
+	if c := ldd.FolderlessChange(top); c != "" && !slices.Contains(active, c) {
+		active = append(active, c)
+	}
+	for _, c := range active {
+		changes = append(changes, branchChange{id: c, name: c})
+	}
+	lay := layout.For(top)
+	for _, folder := range archived {
+		name := folder
+		if m := datedFolder.FindStringSubmatch(folder); m != nil {
+			name = m[1]
+		}
+		changes = append(changes, branchChange{id: ldd.ArchivedChange(top, folder), name: name, archive: path.Join(lay.ArchiveDir(), folder) + "/"})
 	}
 	text := ""
-	for _, c := range changes {
+	for _, ch := range changes {
+		c := ch.name
 		lead := "the change " + c + " delivers in members of the workspace too, one PR per repository, the primary's last: "
-		ms := ldd.MemberDeliveries(top, c, ws)
+		if ch.archive != "" {
+			lead = "the change " + c + " (archived, " + ch.archive + ") delivers in members of the workspace too, one PR per repository, the primary's last: "
+		}
+		ms := ldd.MemberDeliveries(top, ch.id, ws)
 		for _, m := range ms {
-			if !m.Ready {
-				return lead + "member " + m.Name + " is not ready (" + strings.Join(m.Reasons, "; ") + "): run `jhon deliver check " + c + "` in " + m.Path + ", open its PR, then the primary's."
+			switch {
+			case m.Ready:
+			case ch.archive != "":
+				return lead + "member " + m.Name + " is not ready (" + strings.Join(m.Reasons, "; ") + "): a member's run is recorded while the change is active: move " + ch.archive + " back to " + lay.ChangeDir(c) + "/, run `jhon executions run " + c + " --repo " + m.Name + "`, open the member's PR, then the primary's."
+			default:
+				return lead + "member " + m.Name + " is not ready (" + strings.Join(m.Reasons, "; ") + "): " + m.Next(c) + ", open its PR, then the primary's."
 			}
 		}
 		for _, m := range ms {
@@ -60,6 +86,9 @@ func membersRefusal(top, cwd, command string) string {
 	}
 	return ""
 }
+
+// datedFolder is an archived change's folder, <date>-<change>.
+var datedFolder = lazyre.New(`^\d{4}-\d{2}-\d{2}-(.+)$`)
 
 // remoteURL is a hosted repository's URL, scp-like (git@host:owner/repo)
 // or with a scheme (https://, ssh://, git://), a user and a port optional.

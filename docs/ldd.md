@@ -210,11 +210,13 @@ the primary's record, and is not ready while a member is not ("workspace
 member lib is not ready: run `jhon deliver check c` in <path>"): it prints
 `member  lib  ready` or `member  lib  not ready` with that member's reasons,
 and `members: [{name, ready, reasons}]` with `--json`. A member that has not
-joined is not ready. `jhon status <change>` in the primary shows them in one
-line, `members     lib ready, web not ready  (`jhon deliver check c` in a
-member says why)`, and as `members` with `--json`.
+joined is not ready, and is named with the owner's `jhon workspace join
+<primary>` instead of the check. `jhon status <change>` in the primary shows
+them in one line, `members     lib ready, web not ready  (`jhon deliver check
+c` in a member says why)`, and as `members` with `--json`.
 
-Route-guard opens the primary's PR (`gh pr create`) for such a change only
+Route-guard opens the primary's PR (`gh pr create`) for such a change, an
+archived one included (its tasks.md and record read under the archive), only
 when every member is ready and the PR's body names, for each member, a pull
 request of the repository its `origin` remote names,
 `https://<host>/<owner>/<repo>/pull/<n>` (read from the member's git config,
@@ -222,7 +224,10 @@ with no network): the command line, a heredoc body included, or the file
 its `--body-file` names. A member with no hosted `origin` is refused with
 the command that shows it. A member's own PR keeps the rule above; a change
 with no member, a merge, and every repository outside a workspace are
-judged as before. Whether the members' PRs merged is not checked.
+judged as before. A member's run is recorded while the change is active: for
+an archived change whose member is not ready, route-guard says to move it
+back from the archive and run it. Whether the members' PRs merged is not
+checked.
 
 ## The change's state in Engram
 
