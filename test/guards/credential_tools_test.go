@@ -1,6 +1,6 @@
-// The secrets guard reads a tool's glob as the safety guard reads a
-// command's (T28): by its name, unless it is relative, searched inside the
-// project, and expands there to no real credentials file.
+// A file tool's glob (Grep's glob, Glob's pattern) is not read for
+// credentials: a search names files and reads them, and reading is not
+// limited by guard code (T151, L1366). The glob walk that served it is gone.
 
 package guards
 
@@ -18,63 +18,31 @@ func toolCall(t *testing.T, p, tool string, input map[string]any) int {
 	return hook(t, nil, "secrets-guard", []string{"--agent", "*"}, payload).Code
 }
 
-// T87b (L630-L631): an extension glob searched outside the project is
-// walked, as a Grep glob or path or a Glob pattern; refused once the walk
-// meets a credentials file.
-func TestToolExtensionGlobOutsideTheProjectIsWalked(t *testing.T) {
+// T151: globs that once walked into a credentials file, inside the project,
+// outside it, or through a link, are allowed.
+func TestToolGlobsReachingCredentialsAllowed(t *testing.T) {
 	t.Parallel()
 	parent := realTemp(t)
 	p := filepath.Join(parent, "proj")
-	support.Write(t, p, map[string]string{"i18n/en.json": "{}\n"})
+	support.Write(t, p, map[string]string{"i18n/en.json": "{}\n", "sub/credentials.json": "{}\n", "sub/.env": "X=fake\n"})
 	support.GitInit(t, p)
-	support.Write(t, parent, map[string]string{"srv/a.json": "{}\n"})
-	srv := filepath.Join(parent, "srv")
-	grep := []map[string]any{{"glob": "*.json", "path": parent}, {"glob": srv + "/*.json"}, {"glob": "../*.json"}}
-	glob := []map[string]any{{"pattern": "../*.json"}, {"pattern": "*.json", "path": srv}}
-	run := func(want int, why string) {
-		for _, in := range grep {
-			in["pattern"] = "x"
-			if got := toolCall(t, p, "Grep", in); got != want {
-				t.Errorf("Grep %v %s: exit %d, want %d", in, why, got, want)
-			}
-		}
-		for _, in := range glob {
-			if got := toolCall(t, p, "Glob", in); got != want {
-				t.Errorf("Glob %v %s: exit %d, want %d", in, why, got, want)
-			}
-		}
-	}
-	run(0, "with no credentials file")
 	support.Write(t, parent, map[string]string{"srv/credentials.json": "{}\n"})
-	run(2, "beside a credentials file")
-}
-
-func TestSecretsGuardGlobExpands(t *testing.T) {
-	t.Parallel()
-	p := realTemp(t)
-	support.GitInit(t, p)
-	support.Write(t, p, map[string]string{"i18n/en.json": "{}\n", ".env.example": "X=\n"})
-	for _, g := range []string{"**.json", "*.json", "i18n/*.json", "*.pem", ".env*"} {
-		if got := toolCall(t, p, "Grep", map[string]any{"pattern": "x", "glob": g}); got != 0 {
-			t.Errorf("Grep glob %s with no credentials file: exit %d, want 0", g, got)
+	symlink(t, filepath.Join(parent, "srv"), filepath.Join(p, "lnd"))
+	for _, c := range []struct {
+		tool string
+		in   map[string]any
+	}{
+		{"Grep", map[string]any{"pattern": "x", "glob": "*.json"}},
+		{"Grep", map[string]any{"pattern": "x", "glob": ".env*"}},
+		{"Grep", map[string]any{"pattern": "x", "glob": "*.json", "path": parent}},
+		{"Grep", map[string]any{"pattern": "x", "glob": "*.json", "path": "lnd"}},
+		{"Grep", map[string]any{"pattern": "x", "glob": "{a,b}/*.json"}},
+		{"Glob", map[string]any{"pattern": "../*.json"}},
+		{"Glob", map[string]any{"pattern": "**/credentials.json"}},
+		{"Glob", map[string]any{"pattern": "/srv/**/id_*"}},
+	} {
+		if got := toolCall(t, p, c.tool, c.in); got != 0 {
+			t.Errorf("%s %v: exit %d, want 0", c.tool, c.in, got)
 		}
-	}
-	for _, in := range []map[string]any{{"glob": "*.json", "path": "~/keys"}, {"glob": "id_*", "path": "~"}, {"glob": "{a,b}/*.json"}} {
-		in["pattern"] = "x"
-		if got := toolCall(t, p, "Grep", in); got != 2 {
-			t.Errorf("Grep %v searched outside the project: exit %d, want 2", in, got)
-		}
-	}
-	support.Write(t, p, map[string]string{"sub/credentials.json": "{}\n", "sub/.env": "X=1\n"})
-	for _, g := range []string{"*.json", ".env*"} {
-		if got := toolCall(t, p, "Grep", map[string]any{"pattern": "x", "glob": g}); got != 2 {
-			t.Errorf("Grep glob %s beside sub/: exit %d, want 2", g, got)
-		}
-	}
-	if got := toolCall(t, p, "Grep", map[string]any{"pattern": "x", "path": filepath.Join(p, "i18n"), "glob": "*.json"}); got != 0 {
-		t.Errorf("Grep glob *.json under i18n: exit %d, want 0", got)
-	}
-	if got := toolCall(t, p, "Grep", map[string]any{"pattern": "x", "path": "sub/.env"}); got != 2 {
-		t.Errorf("Grep of a literal credentials file: exit %d, want 2", got)
 	}
 }
