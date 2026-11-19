@@ -471,8 +471,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            runtimes' --profile unsandboxed runs <shell> -c
                            <line> with no sandbox when jhon sandbox profile
                            names the line unsandboxed and the shell, git,
-                           gh and ssh are not files a sandboxed command may
-                           write; anything else runs with the work
+                           gh, ssh, docker and docker-compose are not files
+                           a sandboxed command may write (the owner's
+                           environment kept: DOCKER_HOST, the docker
+                           context); anything else runs with the work
                            profile. Its git runs with the repository's
                            hooks, ssh command, fsmonitor and credential
                            helpers overridden (GIT_CONFIG_COUNT entries
@@ -511,11 +513,16 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            clone's new folder), or gh with a listed
                            subcommand (not auth, extension, alias, config
                            or a name gh does not know) that runs no git,
-                           reads no local file and downloads nothing, and
-                           the line redirects to no file; work for any
-                           other line, and for one it cannot read. git over
-                           SSH and gh cannot run inside the sandbox; the
-                           guards judge these lines as any other.
+                           reads no local file and downloads nothing, or
+                           docker or docker-compose (the owner's deployment
+                           tool, volume mounts not judged) but docker
+                           login, logout and context create, use, rm,
+                           update, import and export, and the line
+                           redirects to no file; work for any other line,
+                           and for one it cannot read. git over SSH, gh and
+                           the owner's docker cannot run inside the
+                           sandbox; the guards judge these lines as any
+                           other.
                            --project as for run. exit 0, 2 on a usage
                            error
   jhon sandbox status [--json] [--project <folder>]

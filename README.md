@@ -151,7 +151,11 @@ temporary folders, the caches and `sandbox.allow_write` are writable,
 everything else is read-only, and the home's credentials are not there. A
 line of git network commands (fetch, pull, push, ls-remote, clone, remote
 update) working inside the project, or gh, runs outside the sandbox, still
-judged by the guards: git over SSH and gh cannot run inside it. That git
+judged by the guards: git over SSH and gh cannot run inside it. So does a
+line of docker or docker-compose, the owner's deployment tool, with the
+owner's environment (`DOCKER_HOST`, the docker context) and its volume
+mounts not judged; `docker login`, `docker logout` and a change of docker
+contexts keep the sandbox. That git
 runs with the repository's hooks (configured hooks included), ssh command,
 fsmonitor and credential helpers overridden; `url.*.insteadOf` and `include.*` in the repository's
 configuration are not, an accepted residual risk. uv's tools go to a

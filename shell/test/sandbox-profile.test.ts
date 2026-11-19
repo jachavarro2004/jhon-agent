@@ -114,6 +114,12 @@ const LINES: [string, "unsandboxed" | "work"][] = [
 	["gh api x -F=b=@file", "work"],
 	["gh api x -iF=b=@file", "work"],
 	["GIT_SSH_COMMAND=x git fetch", "work"],
+	// T128h (L1332 K1): docker is the owner's deployment tool.
+	["docker compose up -d", "unsandboxed"],
+	["docker-compose logs", "unsandboxed"],
+	["docker login", "work"],
+	["docker context use rootless", "work"],
+	["docker ps && npm test", "work"],
 ];
 
 const AGENT = mkdtempSync(join(tmpdir(), "jhon-sbx-profile-agent-"));
