@@ -59,6 +59,8 @@ failure); "text" means the output is shown to the owner as it is.
 | `jhon grant --list --json` | `{"root": string, "classes": [string], "grants": [{"class", "root", "granted_at", "expires_at", "live": bool}]}`. |
 | `jhon grant <class…> --for <duration>` | Exit: the owner's grant, from the permission question (`30m`) or `/jhon:grants`. |
 | `jhon grant --revoke <class>` | Exit. |
+| `jhon grant outside-write --session <id>` | Exit: the owner's yes to writes in a folder that is no git repository, for this session (T57a). |
+| `jhon grant --revoke outside-write --session <id>` | Exit: the session's folder grants end with it (session_shutdown). |
 | `jhon profile json` | `{"active", "file", "profiles": [{"name", "provider"?, "delegation": "inline" or "writer", "agents": [{"agent", "runtime", "model", "source"}]}], "efforts"?: {"<runtime>": [string]}}`. |
 | `jhon profile use <name>` | Exit. |
 | `jhon profile new <name> --from <profile>` | Exit. |

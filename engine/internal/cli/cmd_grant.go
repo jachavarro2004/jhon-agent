@@ -23,7 +23,12 @@ import (
 //	jhon grant <class>… [--for <n>{s|m|h|d}] [--root <path>]
 //	jhon grant --list [--json]
 //	jhon grant --revoke <class>… [--root <path>]
+//	jhon grant outside-write --session <id> [--root <folder>]
+//	jhon grant --revoke outside-write --session <id>
 //
+// With --session, the grant is of a folder that is no project (no git
+// repository) for one session: writes under it pass until that session
+// ends (grant.GrantSession, T57a).
 // Several classes in one call share one expiry; an unknown or repeated class
 // writes nothing. The root defaults to the git toplevel of the cwd, and a
 // linked worktree resolves to its main checkout. Exit 0 on success, 2 on a
@@ -33,10 +38,16 @@ func init() { register("grant", runGrant) }
 var grantUsage = `usage: jhon grant <class>… [--for <n>{s|m|h|d}] [--root <path>]
        jhon grant --list [--json]
        jhon grant --revoke <class>… [--root <path>]
+       jhon grant [--revoke] outside-write --session <id> [--root <folder>]
 
   classes: ` + strings.Join(grant.Classes, ", ") + `
   --for      how long the grant lives (default 30m)
   --root     the project the grant covers (default: the git toplevel of the cwd)
+  --session  writes in a folder that is no git repository (the cwd, or
+             --root), and below it, pass for that session only; never HOME
+             or /, and only outside-write. It ends with the session (pi
+             revokes it), at the latest after 12h. --revoke with --session
+             revokes every folder of that session.
 `
 
 var grantUnit = map[string]float64{"s": 1000, "m": 60_000, "h": 3_600_000, "d": 86_400_000}
@@ -51,6 +62,8 @@ type grantArgs struct {
 	classes []string
 	ms      float64
 	root    *string
+	session *string
+	forSet  bool
 	json    bool
 }
 
@@ -66,7 +79,7 @@ func parseGrant(argv []string) (grantArgs, string) {
 			out.mode = "revoke"
 		case a == "--json":
 			out.json = true
-		case a == "--for" || a == "--root":
+		case a == "--for" || a == "--root" || a == "--session":
 			i++
 			if i >= len(argv) || strings.HasPrefix(argv[i], "-") {
 				return out, a + " requires a value"
@@ -76,6 +89,11 @@ func parseGrant(argv []string) (grantArgs, string) {
 				out.root = &v
 				continue
 			}
+			if a == "--session" {
+				out.session = &v
+				continue
+			}
+			out.forSet = true
 			m := grantFor.FindStringSubmatch(v)
 			if m == nil {
 				return out, fmt.Sprintf("--for must be a positive number with s, m, h, or d, not '%s'", v)
@@ -107,6 +125,18 @@ func parseGrant(argv []string) (grantArgs, string) {
 			return out, "--revoke needs a class"
 		}
 		return out, "a class is required"
+	}
+	if out.session != nil {
+		switch {
+		case len(out.classes) != 1 || out.classes[0] != grant.SessionClass:
+			return out, "--session grants outside-write alone"
+		case out.forSet:
+			return out, "--session lasts the session; it takes no --for"
+		case grant.SessionIDError(*out.session) != nil:
+			return out, grant.SessionIDError(*out.session).Error()
+		case out.mode == "revoke" && out.root != nil:
+			return out, "--revoke --session revokes every folder of the session; it takes no --root"
+		}
 	}
 	for _, c := range out.classes {
 		if !slices.Contains(grant.Classes, c) && (out.mode != "revoke" || !slices.Contains(grant.Retired, c)) {
@@ -154,6 +184,9 @@ func runGrant(argv []string) (int, error) {
 	if a.root != nil {
 		path = *a.root
 	}
+	if a.session != nil {
+		return runSessionGrant(a, project.Resolve(cwd(), path))
+	}
 	// The project a grant covers: its main checkout, so the grant covers
 	// every linked worktree too.
 	root := grant.Root(project.Root(project.Resolve(cwd(), path)))
@@ -189,3 +222,27 @@ func runGrant(argv []string) (int, error) {
 
 // noProject says which places are no project.
 const noProject = "a folder that is not a git repository is none, and HOME and / never are"
+
+// runSessionGrant grants, or revokes, a.session's outside-write in the folder dir.
+func runSessionGrant(a grantArgs, dir string) (int, error) {
+	if a.mode == "revoke" {
+		folders, err := grant.RevokeSession(*a.session)
+		if err != nil {
+			return 1, err
+		}
+		for _, f := range folders {
+			fmt.Printf("revoked %s for %s (session %s)\n", grant.SessionClass, f, *a.session)
+		}
+		if len(folders) == 0 {
+			fmt.Printf("no session grant for session %s\n", *a.session)
+		}
+		return 0, nil
+	}
+	rec, err := grant.GrantSession(dir, *a.session)
+	if err != nil {
+		return grantUsageError(err.Error())
+	}
+	telemetry.Note("jhon.grant.classes", []string{rec.Class})
+	fmt.Printf("granted %s for %s for session %s (at the latest until %s)\n", rec.Class, rec.Root, rec.Session, rec.ExpiresAt)
+	return 0, nil
+}

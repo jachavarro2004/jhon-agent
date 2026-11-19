@@ -40,10 +40,10 @@ safety-guard	Bash	"xargs -a dirs.txt grep -r --include='id_*' k"	allow	cred-far	
 safety-guard	Bash	"xargs -a dirs.txt rg -uu -g 'id_*' k"	allow	cred-far	L242	-	T128f slice 6 (L1366): a read, which no guard limits; was: search paths from a file, a pipe or an unfollowed cd
 safety-guard	Bash	"cat dirs.txt | xargs -I{} rg -g 'cred*' k {}"	allow	cred-far	L242	-	T128f slice 6 (L1366): a read, which no guard limits; was: search paths from a file, a pipe or an unfollowed cd
 safety-guard	Bash	"tar -T dirs.txt --wildcards 'id_*' -cf -"	allow	cred-far	L242	-	T128f slice 6 (L1366): a read, which no guard limits; was: search paths from a file, a pipe or an unfollowed cd
-secrets-guard	Grep	"{\"pattern\": \"x\", \"path\": \"~/keys\", \"glob\": \"*.json\"}"	allow	none	L242	-	T151 (L1366, L1369): a read, which secrets-guard no longer judges; was: Grep's ~ is the home, outside the project
-secrets-guard	Grep	"{\"pattern\": \"x\", \"path\": \"~\", \"glob\": \"id_*\"}"	allow	none	L242	-	T151 (L1366, L1369): a read, which secrets-guard no longer judges; was: Grep's ~ is the home
-secrets-guard	Glob	"{\"pattern\": \"id_*\", \"path\": \"~/keys\"}"	allow	none	L242	-	T151 (L1366, L1369): a read, which secrets-guard no longer judges; was: the Glob tool is guarded
-secrets-guard	Glob	"{\"pattern\": \"**/id_*\"}"	allow	cred-near	L242	-	T151 (L1366, L1369): a read, which secrets-guard no longer judges; was: Glob beside a credentials file
+secrets-guard	Grep	"{\"pattern\": \"x\", \"path\": \"~/keys\", \"glob\": \"*.json\"}"	refuse	none	L242	-	Grep's ~ is the home, outside the project
+secrets-guard	Grep	"{\"pattern\": \"x\", \"path\": \"~\", \"glob\": \"id_*\"}"	refuse	none	L242	-	Grep's ~ is the home
+secrets-guard	Glob	"{\"pattern\": \"id_*\", \"path\": \"~/keys\"}"	refuse	none	L242	-	the Glob tool is guarded
+secrets-guard	Glob	"{\"pattern\": \"**/id_*\"}"	refuse	cred-near	L242	-	Glob beside a credentials file
 secrets-guard	Glob	"{\"pattern\": \"**/*.json\"}"	allow	none	L242	-	Glob with no credentials file
 secrets-guard	Grep	"{\"pattern\": \"x\", \"glob\": \"*.json\"}"	allow	none	L242	-	Grep glob with no credentials file
 safety-guard	Bash	"cat i18n/**.json"	allow	none	L265	-	the owner's client-project read, no credentials file

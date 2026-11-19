@@ -1032,11 +1032,10 @@ verifiers.tsv:105	safety-guard	refuse	ask	read (T128f slice 6, L1366): the scrip
 verifiers.tsv:106	safety-guard	refuse	ask	read (T128f slice 6, L1366): the script reads a credentials file, no longer refused; the preload ask (L265) stays, so refuse turns ask
 verifiers.tsv:109	safety-guard	refuse	ask	read (T128f slice 6, L1366): the script reads a credentials file, no longer refused; the preload ask (L265) stays, so refuse turns ask
 verifiers.tsv:140	safety-guard	refuse	allow	read (T128f slice 6, L1366): reading a credentials file, which no guard limits
-# T113 wave 1 (L1394, L1402): T151 left reads of credentials to the prose (read); T152 judges a program the guard cannot see (stdin, a preload, a variable, a script, an alias) by its visible words (deliberate-construction), while xargs running a program that deletes or overwrites on unseen input is still asked as in v0.3.7, and xargs touch or mkdir on it passes (create only, L1366); T153 made non-destructive refusals notes (advisory: route-guard's set-up refusal, vcs-guard's outside write, scope-guard's unresolved target). T154 changed no verdict of the set.
+# T113 wave 1 (L1394, L1402): T152 judges a program the guard cannot see (stdin, a preload, a variable, a script, an alias) by its visible words (deliberate-construction), while xargs running a program that deletes or overwrites on unseen input is still asked as in v0.3.7, and xargs touch or mkdir on it passes (create only, L1366); T153 made non-destructive refusals notes (advisory: route-guard's set-up refusal, scope-guard's unresolved target). T154 changed no verdict of the set. T161 (L1420) restored v0.3.7's secrets-guard reads and vcs-guard outside-write: their rows left the list.
 fuzz.tsv:12@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:14@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:27@corpus/top-bypass	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
-fuzz.tsv:28@corpus/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:46@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:65@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:76@ldd/top-default	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
@@ -1052,40 +1051,24 @@ fuzz.tsv:107@repo/top-bypass	safety-guard	refuse	allow	deliberate-construction T
 fuzz.tsv:117@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:118@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:120@folder/top-bypass	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
-fuzz.tsv:124@repo/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:126@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:141@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:146@repo/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:152@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:163@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:178@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:183@repo/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-fuzz.tsv:192@corpus/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:201@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:214@repo/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:217@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:226@repo/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:228@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:232@ldd/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:244@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:257@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:262@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:270@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:277@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:288@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:293@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:295@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:296@repo/top-default	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
-fuzz.tsv:297@ldd/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:312@corpus/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
-fuzz.tsv:316@folder/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:319@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:321@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:332@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:333@corpus/top-default	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:343@ldd/top-default	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
-fuzz.tsv:346@repo/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:348@corpus/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:352@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:358@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:372@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1093,29 +1076,21 @@ fuzz.tsv:377@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): rou
 fuzz.tsv:385@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:388@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:389@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:396@repo/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:402@ldd/subagent	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:410@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:432@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:440@repo/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:442@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:443@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:448@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:459@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:468@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:470@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:487@corpus/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 fuzz.tsv:487@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:500@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:508@ldd/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:518@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:520@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:538@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:539@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:548@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:558@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:567@corpus/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:579@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:589@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:597@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:613@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1132,13 +1107,10 @@ fuzz.tsv:679@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): r
 fuzz.tsv:680@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:690@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:700@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:703@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:733@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:746@repo/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 fuzz.tsv:746@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:750@repo/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:753@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:764@folder/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:769@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:779@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:783@repo/subagent	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
@@ -1146,17 +1118,13 @@ fuzz.tsv:792@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): rou
 fuzz.tsv:799@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:807@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:808@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:811@ldd/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-fuzz.tsv:812@folder/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:822@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:842@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:850@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:859@repo/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:861@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:862@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:874@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:888@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:900@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:903@corpus/top-default	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
 fuzz.tsv:913@repo/top-default	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:919@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1168,28 +1136,21 @@ fuzz.tsv:988@repo/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shel
 fuzz.tsv:988@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:998@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1000@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1006@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1008@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1015@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1020@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1025@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1028@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1032@repo/subagent	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:1041@ldd/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 fuzz.tsv:1042@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1045@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1054@ldd/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1057@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1068@ldd/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1077@repo/top-default	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
-fuzz.tsv:1089@corpus/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1112@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1115@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1127@ldd/subagent	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:1129@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1134@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1148@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1151@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1170@corpus/top-default	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
 fuzz.tsv:1181@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1183@repo/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
@@ -1202,10 +1163,8 @@ fuzz.tsv:1246@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): 
 fuzz.tsv:1247@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1271@ldd/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 fuzz.tsv:1283@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1291@repo/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1296@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1302@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1308@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1314@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1319@folder/top-default	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:1322@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1217,28 +1176,21 @@ fuzz.tsv:1367@folder/subagent	scope-guard	refuse	allow	advisory T153 (L957): a s
 fuzz.tsv:1370@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1389@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1399@folder/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
-fuzz.tsv:1411@repo/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1428@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1439@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1461@ldd/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1466@ldd/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 fuzz.tsv:1474@corpus/top-bypass	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
 fuzz.tsv:1478@corpus/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 fuzz.tsv:1478@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1479@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1486@folder/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:1499@ldd/subagent	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
-fuzz.tsv:1501@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1519@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1523@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1525@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1529@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1538@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1552@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1555@corpus/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-fuzz.tsv:1572@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1573@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1585@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1596@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1601@repo/subagent	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:1604@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1248,61 +1200,43 @@ fuzz.tsv:1619@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route
 fuzz.tsv:1620@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1629@ldd/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 fuzz.tsv:1644@repo/top-bypass	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
-fuzz.tsv:1654@folder/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-fuzz.tsv:1666@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:1687@ldd/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:1693@repo/top-bypass	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
 fuzz.tsv:1694@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1706@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1719@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1720@ldd/top-bypass	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:1721@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1747@corpus/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 fuzz.tsv:1747@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1756@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1762@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1766@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1768@corpus/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 fuzz.tsv:1768@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1771@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1780@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1800@ldd/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1817@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1820@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1825@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1836@repo/top-default	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
-fuzz.tsv:1856@corpus/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1859@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1864@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1865@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1866@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1868@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1872@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1888@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1889@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1890@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1894@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1895@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1897@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1901@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1918@ldd/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:1933@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1946@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:1953@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1960@folder/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:1973@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:1979@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:1990@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2012@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2025@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2031@corpus/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-fuzz.tsv:2032@ldd/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2040@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2042@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2052@ldd/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:2057@corpus/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:2063@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2064@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2065@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2074@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2083@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1311,7 +1245,6 @@ fuzz.tsv:2091@repo/top-bypass	route-guard	refuse	allow	advisory T153: route/scop
 fuzz.tsv:2100@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2101@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2109@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2127@corpus/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2130@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2131@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2132@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1320,18 +1253,12 @@ fuzz.tsv:2140@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): 
 fuzz.tsv:2158@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2162@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2167@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2178@ldd/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:2179@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2181@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2186@corpus/subagent	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
-fuzz.tsv:2189@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2199@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2201@folder/top-bypass	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:2204@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2208@folder/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:2218@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2231@repo/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:2246@corpus/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2248@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2261@repo/top-default	route-guard	refuse	allow	T153: route-guard's set-up refusal caught it only by accident; same verdict as in an LDD repo in v0.3.7
 fuzz.tsv:2262@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1346,49 +1273,30 @@ fuzz.tsv:2315@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route
 fuzz.tsv:2343@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2347@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2353@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2361@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:2380@ldd/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-fuzz.tsv:2391@ldd/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:2412@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2421@folder/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
-fuzz.tsv:2444@ldd/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2461@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2469@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2495@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2499@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2514@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2524@ldd/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2535@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2536@ldd/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:2542@corpus/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2555@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2569@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2570@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2571@ldd/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2583@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2590@repo/subagent	route-guard	refuse	allow	T153: route-guard's set-up refusal caught it only by accident; same verdict as in an LDD repo in v0.3.7
 fuzz.tsv:2600@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2601@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2609@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2610@ldd/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:2615@repo/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:2622@corpus/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2624@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2653@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2659@folder/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:2671@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2673@repo/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:2679@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2704@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2709@ldd/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2715@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2718@corpus/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:2725@folder/top-default	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:2744@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2745@folder/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:2758@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2766@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2792@ldd/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:2794@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2806@repo/subagent	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
 fuzz.tsv:2811@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1396,7 +1304,6 @@ fuzz.tsv:2812@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): r
 fuzz.tsv:2823@repo/subagent	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:2839@corpus/top-default	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:2844@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2845@repo/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2847@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2850@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2852@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1410,11 +1317,7 @@ fuzz.tsv:2912@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): r
 fuzz.tsv:2913@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2914@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:2918@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2919@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:2921@ldd/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-fuzz.tsv:2924@folder/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:2939@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:2971@ldd/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:2978@repo/top-bypass	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:3011@corpus/top-default	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
 fuzz.tsv:3012@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1424,11 +1327,9 @@ fuzz.tsv:3032@corpus/top-default	safety-guard	ask	allow	deliberate-construction 
 fuzz.tsv:3041@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3045@corpus/subagent	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 fuzz.tsv:3056@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3059@corpus/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3060@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3067@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3070@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3081@folder/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:3090@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3091@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3097@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1438,100 +1339,47 @@ fuzz.tsv:3123@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): ro
 fuzz.tsv:3127@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3129@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3139@repo/top-bypass	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
-fuzz.tsv:3144@corpus/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3145@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3149@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3153@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3156@corpus/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3162@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3180@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3183@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3188@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3201@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3207@repo/top-default	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
-fuzz.tsv:3208@folder/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:3214@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3225@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3227@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3231@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3236@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:3245@corpus/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:3246@ldd/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:3266@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3272@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3277@repo/top-default	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
-fuzz.tsv:3283@ldd/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:3293@ldd/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
-fuzz.tsv:3306@repo/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3309@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3313@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3322@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3323@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3324@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3328@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3330@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3349@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3361@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3376@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3385@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3389@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3390@corpus/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3395@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3407@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3409@repo/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3422@corpus/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3448@ldd/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-fuzz.tsv:3460@repo/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 fuzz.tsv:3467@corpus/top-bypass	route-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
-fuzz.tsv:3470@ldd/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3472@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3475@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3476@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3477@corpus/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3479@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3498@ldd/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-fuzz.tsv:3505@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3521@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3526@repo/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 fuzz.tsv:3526@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3531@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3539@ldd/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3547@corpus/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3575@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-fuzz.tsv:3577@corpus/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 fuzz.tsv:3593@corpus/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 fuzz.tsv:3594@folder/subagent	safety-guard	refuse	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
-fuzz.tsv:3598@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:7@ldd/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:7@ldd/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:7@ldd/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:7@repo/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:7@repo/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:7@repo/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:7@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:7@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:7@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:14@ldd/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@ldd/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@ldd/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@ldd:yolo/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@ldd:yolo/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@ldd:yolo/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@ldd:super-yolo/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@ldd:super-yolo/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@ldd:super-yolo/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@repo/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@repo/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@repo/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@repo:yolo/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@repo:yolo/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@repo:yolo/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@repo:super-yolo/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@repo:super-yolo/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@repo:super-yolo/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@folder/top-default	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@folder/top-bypass	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-matrix.tsv:14@folder/subagent	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 matrix.tsv:16@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:16@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:16@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1541,15 +1389,6 @@ matrix.tsv:16@repo:yolo/subagent	route-guard	refuse	allow	advisory T153 (L957): 
 matrix.tsv:16@repo:super-yolo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:16@repo:super-yolo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:16@repo:super-yolo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-matrix.tsv:18@ldd/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:18@ldd/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:18@ldd/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:18@repo/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:18@repo/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:18@repo/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:18@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:18@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:18@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 matrix.tsv:23@ldd/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 matrix.tsv:23@ldd:yolo/subagent	scope-guard	refuse	allow	advisory T153 (L957): a shell write whose target scope-guard cannot resolve runs with a note
 matrix.tsv:23@ldd:super-yolo/subagent	scope-guard	refuse	allow	advisory T153: route/scope note; safety-guard's own verdict unchanged
@@ -1575,9 +1414,6 @@ matrix.tsv:26@repo:yolo/subagent	route-guard	refuse	allow	advisory T153 (L957): 
 matrix.tsv:26@repo:super-yolo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:26@repo:super-yolo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:26@repo:super-yolo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-matrix.tsv:26@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:26@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:26@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 matrix.tsv:27@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:27@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:27@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1587,9 +1423,6 @@ matrix.tsv:27@repo:yolo/subagent	route-guard	refuse	allow	advisory T153 (L957): 
 matrix.tsv:27@repo:super-yolo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:27@repo:super-yolo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:27@repo:super-yolo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-matrix.tsv:27@folder/top-default	vcs-guard	ask	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:27@folder/top-bypass	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
-matrix.tsv:27@folder/subagent	vcs-guard	refuse	allow	advisory T153 (L957): an Edit or Write outside the project runs with a note; the outside-write ask and grant are gone (T113, L1402); a credentials or framework target stays refused by its own guard
 matrix.tsv:28@repo/top-default	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:28@repo/top-bypass	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 matrix.tsv:28@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
@@ -1623,10 +1456,6 @@ rows.tsv:36@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-g
 rows.tsv:37@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 rows.tsv:38@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
 rows.tsv:39@repo/subagent	route-guard	refuse	allow	advisory T153 (L957): route-guard's set-up refusal of a first code edit is a note
-verifiers.tsv:43	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-verifiers.tsv:44	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-verifiers.tsv:45	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
-verifiers.tsv:46	secrets-guard	refuse	allow	read (T151, L1366, L1369): a Read, Grep or Glob of credentials is not judged; the always-on prose says no agent reads one
 verifiers.tsv:84	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 verifiers.tsv:88	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 verifiers.tsv:89	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words

@@ -386,7 +386,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            derived state and next action of a judgment record
   jhon grant <class>… [--for <n>{s|m|h|d}] [--root <path>]
                            authorize one or more outward-facing classes (push,
-                           gh-write, publish, remote, deploy),
+                           gh-write, publish, remote, deploy, outside-write),
                            or destroy (a deletion that loses work:
                            a forced branch delete, reset --hard, docker rm -f),
                            for this project and its worktrees; push is a push
@@ -400,6 +400,14 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            an agent
   jhon grant --list | --revoke <class>… [--root <path>]
                            list the grants, or revoke some
+  jhon grant [--revoke] outside-write --session <id> [--root <folder>]
+                           in a folder that is no git repository (no project:
+                           no mode and no grant for a while), let one
+                           session's Edit and Write calls under it pass until
+                           the session ends (12h at most); never HOME or /, and nothing
+                           but outside-write. pi offers it when it asks
+                           about a write there and revokes it at the end;
+                           in Claude Code a yes covers that one call
   jhon mode [normal|yolo|super-yolo] [--root <path>] [--json]
                            the owner's permission mode for this project and its
                            worktrees, until you set another: yolo passes every

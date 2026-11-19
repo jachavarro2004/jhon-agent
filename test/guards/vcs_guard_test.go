@@ -158,9 +158,8 @@ func TestVcsGuardOtherToolPasses(t *testing.T) {
 // agent that can write carries it. Writes into the grants directory are
 // refused for everyone; a write outside the project (the git toplevel of the
 // payload's cwd), its sibling `<root>-worktrees/`, /tmp, $TMPDIR, ~/.claude/,
-// and ~/.cache/ runs with a note (the outside-write ASK class until T153,
-// L957: it is not destructive). Paths are judged through `..` and through
-// the real path of their deepest existing ancestor.
+// and ~/.cache/ is the outside-write ASK class. Paths are judged through `..`
+// and through the real path of their deepest existing ancestor.
 //
 // Each case has its own scratch root, project, state, and TMPDIR.
 
@@ -190,9 +189,9 @@ type writeOpts struct {
 }
 
 type writeResult struct {
-	code      int
-	err, note string
-	ask       *string
+	code int
+	err  string
+	ask  *string
 }
 
 // write is a write by the top-level session (no agent_id) or by a
@@ -221,8 +220,6 @@ func (e writeEnv) write(t *testing.T, file string, o writeOpts) writeResult {
 	res := writeResult{code: r.Code, err: r.Stderr}
 	if d, why, ok := decision(t, r.Stdout); ok && d == "ask" {
 		res.ask = &why
-	} else {
-		res.note = adviceOf(t, r.Stdout)
 	}
 	return res
 }
@@ -261,28 +258,23 @@ func (e writeEnv) expand(name string) string {
 	return strings.NewReplacer("<rel>", rel, "<proj>", e.project, "<tmpdir>", e.tmp).Replace(name)
 }
 
-// outsideNote is the note on a write outside the project and the scratch roots.
-const outsideNote = `^note \(not a refusal; the call ran\): (Write|Edit|NotebookEdit) of .* lands outside the project \(.*\) and the scratch roots; check that the task means this file$`
-
-// A write outside the project runs with a note, at the top level and for a
-// sub-agent alike, and nobody is asked (T153).
 func TestVcsGuardOutsideWrite(t *testing.T) {
 	t.Parallel()
 	for _, name := range writeOutside {
-		t.Run("outside-write: "+name+" runs with a note at the top level and for a sub-agent", func(t *testing.T) {
+		t.Run("outside-write: "+name+" is asked at the top level and refused for a sub-agent", func(t *testing.T) {
 			t.Parallel()
 			e := newWriteEnv(t)
 			file := e.expand(name)
-			for _, top := range []bool{true, false} {
-				r := e.write(t, file, writeOpts{top: top})
-				if r.code != 0 || r.ask != nil || r.err != "" {
-					t.Errorf("top=%v: %d, ask %v: %s", top, r.code, r.ask, r.err)
-				}
-				matches(t, r.note, outsideNote, file)
-				if !strings.Contains(r.note, " of "+file+" lands") {
-					t.Errorf("top=%v: the note names another file: %q", top, r.note)
-				}
+			top := e.write(t, file, writeOpts{top: true})
+			if top.code != 0 {
+				t.Errorf("top: %d: %s", top.code, top.err)
 			}
+			matches(t, asked(top), `^outside-write: `, file+" asked")
+			sub := e.write(t, file, writeOpts{})
+			if sub.code != 2 {
+				t.Errorf("sub-agent: %d", sub.code)
+			}
+			matches(t, sub.err, "(?s)^vcs-guard: .*outside-write needs the owner's authorization.*`! jhon grant outside-write \\[--for 30m\\]`", file)
 		})
 	}
 }
@@ -296,43 +288,38 @@ func TestVcsGuardInsideWrite(t *testing.T) {
 			file := e.expand(name)
 			for _, top := range []bool{true, false} {
 				r := e.write(t, file, writeOpts{top: top})
-				if r.code != 0 || r.ask != nil || r.note != "" {
-					t.Errorf("%s top=%v: %d, ask %v, note %q: %s", file, top, r.code, r.ask, r.note, r.err)
+				if r.code != 0 || r.ask != nil {
+					t.Errorf("%s top=%v: %d, ask %v: %s", file, top, r.code, r.ask, r.err)
 				}
 			}
 		})
 	}
 }
 
-func TestVcsGuardOutsideWriteBypassAtTopNote(t *testing.T) {
+func TestVcsGuardOutsideWriteBypassAtTopRefused(t *testing.T) {
 	t.Parallel()
 	e := newWriteEnv(t)
-	r := e.write(t, "/etc/jhon.conf", writeOpts{top: true, mode: ptr("bypassPermissions")})
-	if r.code != 0 || r.ask != nil {
-		t.Errorf("code = %d, ask %v", r.code, r.ask)
+	if r := e.write(t, "/etc/jhon.conf", writeOpts{top: true, mode: ptr("bypassPermissions")}); r.code != 2 {
+		t.Errorf("code = %d", r.code)
 	}
-	matches(t, r.note, outsideNote, "bypassPermissions")
 }
 
-// An outside-write grant left from before T113 (L1402), live, expired, or
-// another root's, silences nothing: the note shows, and the grants still load.
 func TestVcsGuardOutsideWriteGrant(t *testing.T) {
 	t.Parallel()
 	e := newWriteEnv(t)
-	for _, g := range []struct {
-		label, root string
-		minutes     int
-	}{{"live grant", e.project, 30}, {"expired grant", e.project, -1}, {"another root's grant", "/home/u/other", 30}} {
-		e.clearGrants(t)
-		e.grant(t, "outside-write", g.root, g.minutes)
-		r := e.write(t, "/etc/jhon.conf", writeOpts{})
-		code(t, support.Result{Code: r.code, Stderr: r.err}, 0, g.label)
-		matches(t, r.note, outsideNote, g.label)
-		l := support.Jhon(t, e.project, e.env, "grant", "--list")
-		code(t, l, 0, g.label+": grant --list")
-		if l.Stdout != "no grants\n" {
-			t.Errorf("%s: grant --list: %q", g.label, l.Stdout)
-		}
+	e.grant(t, "outside-write", e.project, 30)
+	if c := e.write(t, "/etc/jhon.conf", writeOpts{}).code; c != 0 {
+		t.Errorf("live grant: %d", c)
+	}
+	e.clearGrants(t)
+	e.grant(t, "outside-write", e.project, -1)
+	if c := e.write(t, "/etc/jhon.conf", writeOpts{}).code; c != 2 {
+		t.Errorf("expired grant: %d", c)
+	}
+	e.clearGrants(t)
+	e.grant(t, "outside-write", "/home/u/other", 30)
+	if c := e.write(t, "/etc/jhon.conf", writeOpts{}).code; c != 2 {
+		t.Errorf("another root's grant: %d", c)
 	}
 }
 
@@ -340,12 +327,9 @@ func TestVcsGuardSymlinkLeadingOutside(t *testing.T) {
 	t.Parallel()
 	e := newWriteEnv(t)
 	symlink(t, "/usr/share", filepath.Join(e.project, "share-link"))
-	for _, top := range []bool{true, false} {
-		r := e.write(t, "share-link/jhon-x.txt", writeOpts{top: top})
-		if r.code != 0 {
-			t.Errorf("top=%v: %d", top, r.code)
-		}
-		matches(t, r.note, outsideNote, "through the link")
+	matches(t, asked(e.write(t, "share-link/jhon-x.txt", writeOpts{top: true})), `^outside-write: `, "top")
+	if c := e.write(t, "share-link/jhon-x.txt", writeOpts{}).code; c != 2 {
+		t.Errorf("sub-agent: %d", c)
 	}
 }
 
@@ -371,15 +355,13 @@ func TestVcsGuardNotebookEditAndEdit(t *testing.T) {
 	if c := e.write(t, ".git/x.ipynb", writeOpts{tool: "NotebookEdit"}).code; c != 2 {
 		t.Errorf("NotebookEdit .git: %d", c)
 	}
-	matches(t, e.write(t, "/etc/x.ipynb", writeOpts{tool: "NotebookEdit", top: true}).note, outsideNote, "NotebookEdit outside")
+	matches(t, asked(e.write(t, "/etc/x.ipynb", writeOpts{tool: "NotebookEdit", top: true})), `^outside-write: `, "NotebookEdit outside")
 	if c := e.write(t, "src/x.ipynb", writeOpts{tool: "NotebookEdit"}).code; c != 0 {
 		t.Errorf("NotebookEdit src: %d", c)
 	}
-	r := e.write(t, "/etc/jhon.conf", writeOpts{tool: "Edit"})
-	if r.code != 0 {
-		t.Errorf("Edit outside: %d", r.code)
+	if c := e.write(t, "/etc/jhon.conf", writeOpts{tool: "Edit"}).code; c != 2 {
+		t.Errorf("Edit outside: %d", c)
 	}
-	matches(t, r.note, outsideNote, "Edit outside")
 	if c := e.write(t, ".git/config", writeOpts{tool: "Edit", top: true}).code; c != 2 {
 		t.Errorf("Edit .git top: %d", c)
 	}
@@ -444,13 +426,14 @@ func TestVcsGuardOtherClaudeFilesOrdinary(t *testing.T) {
 func TestVcsGuardOutsideWriteModes(t *testing.T) {
 	t.Parallel()
 	e := newWriteEnv(t)
-	// Every permission mode gets the note; none is asked.
-	for _, mode := range []string{"auto", "weird", "", "acceptEdits", "default", "plan"} {
+	for _, mode := range []string{"auto", "weird", ""} {
 		r := e.write(t, "/etc/jhon.conf", writeOpts{top: true, mode: ptr(mode)})
-		if r.code != 0 || r.ask != nil {
+		if r.code != 2 || r.ask != nil {
 			t.Errorf("%q: %d, ask %v: %s", mode, r.code, r.ask, r.err)
 		}
-		matches(t, r.note, outsideNote, mode)
+	}
+	if e.write(t, "/etc/jhon.conf", writeOpts{top: true, mode: ptr("acceptEdits")}).ask == nil {
+		t.Error("acceptEdits is asked")
 	}
 }
 

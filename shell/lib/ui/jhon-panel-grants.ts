@@ -84,6 +84,7 @@ export const CLASS_WORDS: Record<string, string> = {
 	publish: "publish: jhon publish, packages, images",
 	remote: "remote access: ssh, scp, rsync, rclone, uploads with curl",
 	deploy: "deploy: aws, gsutil, docker on another host",
+	"outside-write": "write outside the project",
 	destroy: "delete what loses work: branches, worktrees, docker volumes",
 };
 

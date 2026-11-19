@@ -6,11 +6,8 @@
 //   - asks pass in yolo but destroy, and every ask passes in super-yolo;
 //   - an unreadable or unknown command passes only in super-yolo;
 //   - settings and git-config are asked in every mode;
-//   - deny-level destroy, framework, `.git` writes, and an agent's own
-//     `jhon grant` / `jhon mode` are refused in every mode; a file tool's
-//     read of credentials is not judged (T151, L1366);
-//   - a file tool's write outside the project and the scratch roots runs
-//     with vcs-guard's note in every mode, never asked (T153, L957);
+//   - deny-level destroy, a file tool on credentials, framework, `.git` writes, and an
+//     agent's own `jhon grant` / `jhon mode` are refused in every mode;
 //   - LDD's delivery refusal holds in every mode;
 //   - a repository without LDD has the modes of an LDD one, but its
 //     delivery, a commit or a PR, is refused in every mode until LDD is set
@@ -57,10 +54,8 @@ var matrixCallers = []string{"top-default", "top-bypass", "subagent"}
 //     elsewhere allowed;
 //   - code: an edit of the project's code, route-guard's set-up note in a
 //     repository without LDD (T89, T153); allowed in the LDD place; in a
-//     folder the outside note, as any file tool's write there; code-bash,
-//     the same by the shell, allowed in a folder: the sandbox's (T128f);
-//   - outside: a file tool's write outside the project, vcs-guard's note
-//     everywhere (T153; an outside-write ask until then, removed in T113);
+//     folder an outside-write ask, as any write there; code-bash, the same
+//     by the shell, allowed in a folder: the sandbox's (T128f);
 //   - sandbox: a shell write outside the project, allowed: the sandbox's (T128f).
 type matrixRow struct {
 	name, kind, cls string
@@ -96,14 +91,14 @@ var (
 		// From TestModeEveryModeStillRefuses' every-mode-refused set.
 		{name: "destroy-deny-force-push", kind: "refuse", call: bashRow("git push --force")},
 		{name: "destroy-deny-clean-fdx", kind: "refuse", call: bashRow("git clean -fdx")},
-		{name: "outside-write-tool", kind: "outside", call: writeRow(func(matrixFixture) string { return "/etc/jhon.conf" })},
+		{name: "outside-write-tool", kind: "ask", cls: "outside-write", passes: yoloUp, call: writeRow(func(matrixFixture) string { return "/etc/jhon.conf" })},
 		{name: "outside-write-bash", kind: "sandbox", call: bashRow("echo x > /etc/jhon.conf")},
 		{name: "push", kind: "ask", cls: "push", passes: yoloUp, call: bashRow(askSiteCommand("push"))},
 		{name: "gh-write", kind: "ask", cls: "gh-write", passes: yoloUp, call: bashRow(askSiteCommand("gh-write"))},
 		{name: "remote", kind: "ask", cls: "remote", passes: yoloUp, call: bashRow(askSiteCommand("remote"))},
 		{name: "publish", kind: "ask", cls: "publish", passes: yoloUp, call: bashRow(askSiteCommand("publish"))},
 		{name: "deploy", kind: "ask", cls: "deploy", passes: yoloUp, call: bashRow(askSiteCommand("deploy"))},
-		{name: "credentials-read", kind: "allow", call: func(f matrixFixture) (string, map[string]any) {
+		{name: "credentials-read", kind: "refuse", call: func(f matrixFixture) (string, map[string]any) {
 			return "Read", map[string]any{"file_path": filepath.Join(f.dir, ".env")}
 		}},
 		{name: "credentials-bash", kind: "allow", call: bashRow("cat .env")},
@@ -119,8 +114,8 @@ var (
 		{name: "unknown", kind: "ask", cls: "unknown", passes: superOnly, call: bashRow(askSiteCommand("unknown"))},
 		{name: "delivery-pr-without-red-green", kind: "delivery", call: bashRow("gh pr create --title x --body y")},
 		{name: "delivery-commit", kind: "commit", call: bashRow("git commit -q -m x")},
-		{name: "code-write", kind: "code", call: writeRow(func(f matrixFixture) string { return filepath.Join(f.dir, "src", "app.py") })},
-		{name: "code-edit", kind: "code", call: func(f matrixFixture) (string, map[string]any) {
+		{name: "code-write", kind: "code", cls: "outside-write", passes: yoloUp, call: writeRow(func(f matrixFixture) string { return filepath.Join(f.dir, "src", "app.py") })},
+		{name: "code-edit", kind: "code", cls: "outside-write", passes: yoloUp, call: func(f matrixFixture) (string, map[string]any) {
 			return "Edit", map[string]any{"file_path": filepath.Join(f.dir, "src", "app.py"), "old_string": "2", "new_string": "3"}
 		}},
 		{name: "code-bash-write", kind: "code-bash", call: bashRow("printf 'X = 3\\n' > src/app.py")},
@@ -236,7 +231,7 @@ func (f matrixFixture) preTool(t *testing.T, tool string, input map[string]any, 
 
 // matrixWant is a cell's expected outcome: "pass" (allowed with the mode's
 // note), "allow" (with no decision), "set-up" (with route-guard's set-up
-// note), "outside" (with vcs-guard's outside note), "ask", or "refuse".
+// note), "ask", or "refuse".
 func matrixWant(row matrixRow, place, mode, caller string) string {
 	if place == "folder" {
 		mode = "normal"
@@ -246,8 +241,6 @@ func matrixWant(row matrixRow, place, mode, caller string) string {
 		return "refuse"
 	case (row.kind == "code" || row.kind == "code-bash") && place == "repo":
 		return "set-up"
-	case row.kind == "outside", row.kind == "code" && place == "folder":
-		return "outside"
 	case row.kind == "delivery", row.kind == "commit", row.kind == "code" && place == "ldd", row.kind == "code-bash", row.kind == "sandbox", row.kind == "allow":
 		return "allow"
 	}
@@ -306,9 +299,6 @@ func checkMatrixCell(t *testing.T, cell string, r support.Result, want string, r
 		if got := adviceOf(t, r.Stdout); got != setUpNote() {
 			t.Errorf("%s: note %q, want the set-up note", cell, got)
 		}
-	case "outside":
-		code(t, r, 0, cell)
-		matches(t, adviceOf(t, r.Stdout), outsideNote, cell)
 	case "ask":
 		code(t, r, 0, cell)
 		matches(t, askedWhy(t, r.Stdout, cell), `(^|\n)`+regexp.QuoteMeta(row.cls)+`: `, cell)

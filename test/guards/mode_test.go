@@ -119,7 +119,8 @@ func TestModeEveryModeStillRefuses(t *testing.T) {
 				t.Errorf("%s: a write into .git/ is not refused: %+v", mode, r)
 			}
 		}
-		// A read of .env is not judged since T151 (L1366); an edit of it is refused.
+		read := map[string]any{"tool_name": "Read", "cwd": w.project, "tool_input": map[string]any{"file_path": filepath.Join(w.project, ".env")}}
+		code(t, hook(t, w.env, "secrets-guard", []string{"--agent", "*"}, read), 2, mode+": secrets-guard reads .env")
 		edit := map[string]any{"tool_name": "Edit", "cwd": w.project, "tool_input": map[string]any{"file_path": filepath.Join(w.project, ".env"), "old_string": "a", "new_string": "b"}}
 		code(t, hook(t, w.env, "secrets-guard", []string{"--agent", "*"}, edit), 2, mode+": secrets-guard edits .env")
 	}
@@ -330,26 +331,24 @@ func TestModeCoversWorktrees(t *testing.T) {
 	code(t, s.bash(t, "git push", sgOpts{cwd: s.other}), 2, "no other repository")
 }
 
-// A write outside the project runs with vcs-guard's note in every mode, top
-// level and sub-agent, never asked nor a mode's (an outside-write ask, a yolo
-// class, until T153 and T113, L957, L1402).
+// outside-write, vcs-guard's ask, is a yolo class.
 func TestModeVcsGuardOutsideWrite(t *testing.T) {
 	t.Parallel()
 	w := newWriteEnv(t)
 	out := "/etc/jhon.conf"
-	for _, mode := range []string{"normal", "yolo", "super-yolo"} {
-		code(t, support.Jhon(t, w.project, w.env, "mode", mode), 0, "jhon mode "+mode)
-		for _, o := range []writeOpts{{}, {top: true}} {
-			payload := map[string]any{"tool_name": "Write", "cwd": w.project, "permission_mode": "default", "tool_input": map[string]any{"file_path": out}}
-			if !o.top {
-				payload["agent_id"], payload["agent_type"], payload["permission_mode"] = "a1", "worker", "bypassPermissions"
-			}
-			r := hook(t, w.env, "vcs-guard", vcsDirs(t), payload)
-			code(t, r, 0, mode+": outside write")
-			matches(t, modeNote(t, r.Stdout), outsideNote, mode+": outside write")
-		}
+	if r := w.write(t, out, writeOpts{}); r.code != 2 {
+		t.Fatalf("normal: an outside write is not refused: %+v", r)
 	}
 	code(t, support.Jhon(t, w.project, w.env, "mode", "yolo"), 0, "jhon mode yolo")
+	for _, o := range []writeOpts{{}, {top: true}} {
+		payload := map[string]any{"tool_name": "Write", "cwd": w.project, "permission_mode": "default", "tool_input": map[string]any{"file_path": out}}
+		if !o.top {
+			payload["agent_id"], payload["agent_type"], payload["permission_mode"] = "a1", "worker", "bypassPermissions"
+		}
+		r := hook(t, w.env, "vcs-guard", vcsDirs(t), payload)
+		code(t, r, 0, "yolo outside write")
+		matches(t, modeNote(t, r.Stdout), `^note \(not a refusal; the call ran\): allowed by the owner's yolo mode: outside-write: `, "yolo outside write")
+	}
 	// A Claude Code settings file stays the owner's, asked or refused.
 	if r := w.write(t, filepath.Join(w.project, ".claude", "settings.json"), writeOpts{}); r.code != 2 {
 		t.Errorf("yolo: a sub-agent wrote the settings: %+v", r)
