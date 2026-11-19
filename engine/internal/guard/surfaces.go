@@ -579,11 +579,27 @@ func SurfacesOf(prompt string) (out []string, ok bool) {
 	return out, true
 }
 
-// SurfaceParent is the folder a surface must have for a writer to create
-// what it names: a path's parent folder (a folder's, its trailing slash
-// cut), or, for a glob, the folder before its first wildcard, under which
-// every match lies; "." is the root itself.
+// SurfaceParent is the folder a relative surface must have for a writer to
+// create what it names: the top-level folder of its path (of the folder
+// before a glob's first wildcard), since a writer may create new folders
+// under it (L1413: a brief that adds internal/cache/ lists
+// internal/cache/cache.go); "." is the root itself. An absolute or ~/
+// surface lies outside the roots: its own parent folder.
 func SurfaceParent(s string) string {
+	dir := surfaceDir(s)
+	if filepath.IsAbs(s) || strings.HasPrefix(s, "~/") {
+		return dir
+	}
+	if top, _, ok := strings.Cut(dir, "/"); ok {
+		return top
+	}
+	return dir
+}
+
+// surfaceDir is a surface's own parent folder: a path's (a folder's, its
+// trailing slash cut), or, for a glob, the folder before its first
+// wildcard, under which every match lies.
+func surfaceDir(s string) string {
 	s = strings.TrimSuffix(s, "/")
 	if i := strings.IndexAny(s, "*?"); i >= 0 {
 		return path.Dir(s[:i])
@@ -596,9 +612,9 @@ func SurfaceParent(s string) string {
 // scope-guard then refused the real file). A relative surface is read
 // against each root, an absolute one or a ~/ one as it is. A surface
 // matches when a file or folder exists at its path, or a glob matches an
-// existing file or folder; a writer may also create a new file, so a path
-// whose parent folder exists matches too (SurfaceParent: for a glob, the
-// folder before its first wildcard, which holds any match it has). A test
+// existing file or folder; a writer may also create new files and folders,
+// so a relative path whose top-level folder exists matches too
+// (SurfaceParent), and an absolute one whose parent folder exists. A test
 // file and the change's record match always: scope-guard allows them
 // unlisted.
 func MissingSurfaces(surfaces, roots []string) []string {

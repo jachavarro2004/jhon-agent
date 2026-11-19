@@ -296,6 +296,7 @@ func TestRouteGuardWriterSurfacesExist(t *testing.T) {
 	for label, surfaces := range map[string][]string{
 		"an existing file":                    {"src/app.py"},
 		"a new file in an existing folder":    {"src/new_module.py"},
+		"a file in a new folder (L1413)":      {"src/cache/cache.py", "src/cache/**"},
 		"a new top-level file":                {"Makefile"},
 		"an existing folder":                  {"src/"},
 		"a glob that matches":                 {"src/**"},
@@ -316,7 +317,7 @@ func TestRouteGuardWriterSurfacesExist(t *testing.T) {
 		surfaces []string
 		named    string
 	}{
-		"a file in a missing folder":         {[]string{"src/app.py", "srcs/parse/app.py"}, "srcs/parse/app.py (its folder srcs/parse does not exist)"},
+		"a file in a missing folder":         {[]string{"src/app.py", "srcs/parse/app.py"}, "srcs/parse/app.py (its folder srcs does not exist)"},
 		"a folder in a missing folder":       {[]string{"pkg/parse/"}, "pkg/parse/ (its folder pkg does not exist)"},
 		"a glob that matches nothing":        {[]string{"lib/**/*.py"}, "lib/**/*.py (its folder lib does not exist)"},
 		"an absolute path that is not there": {[]string{filepath.Join(outside, "gone", "a.md")}, filepath.Join(outside, "gone", "a.md") + " (its folder " + filepath.Join(outside, "gone") + " does not exist)"},
@@ -324,7 +325,7 @@ func TestRouteGuardWriterSurfacesExist(t *testing.T) {
 		res := launch(r.p, c.surfaces...)
 		code(t, res, 2, label)
 		want := "route-guard: a worker is launched with surfaces that exist: its `## Allowed edit surfaces` names " + c.named + ", which matches nothing in " + r.p +
-			". A path matches when a file or folder exists there, a glob when it matches one, and a new file's path when its parent folder exists. Fix the path in the brief before the launch: scope-guard holds the writer to the paths listed and refuses the real file a wrong one stands for (contracts/efficiency.md, \"Writer scope\").\n"
+			". A path matches when a file or folder exists there, a glob when it matches one, and a new path when its top-level folder exists. Fix the path in the brief before the launch: scope-guard holds the writer to the paths listed and refuses the real file a wrong one stands for (contracts/efficiency.md, \"Writer scope\").\n"
 		if res.Stderr != want {
 			t.Errorf("%s: stderr\n%q\nwant\n%q", label, res.Stderr, want)
 		}
