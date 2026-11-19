@@ -34,6 +34,7 @@ All notable changes to Jhon are recorded here. The format follows
 
 - `jhon deliver check` no longer asks for a re-run when only the change's own folder (tasks.md, proposal, design, spec deltas, under `openspec/changes/<change>/` or `ldd/changes/<change>/`) changed after the passing run and was committed: it is the change's record, as `--affected` reads it. An edit outside that folder, another change's folder included, still makes the check not ready (T150).
 - `jhon risk` reads a data migration as high (`migration or schema`, naming the file), so the change takes the verified route: a code file whose base name starts with `migrate` or `migration` (a root `migrate.py`, `migrations.ts`, `migrate_users.go`) and any file under a `migrate` folder at any depth, beside the migrations folders and SQL files it already read; documents and tests that only name a migration (`docs/migration-guide.md`, `test_migrate.py`) and vendored code keep their tier (T148).
+- `/jhon:usage` (alt+u) shows a ChatGPT subscription's usage: openai-codex's 5h and weekly windows, used % and reset, from the rate-limit data the Codex backend sends with each reply (the `x-codex-primary-*`/`x-codex-secondary-*` headers on SSE, the `codex.rate_limits` event on WebSocket; Codex CLI's names), with no extra request; before the first reply it says "usage arrives with the first reply". The panel's scope follows a session-scoped profile's sub-agent routes, so `jhon-nan (session)` shows NaN's quota (T149).
 
 ## [0.3.7] - 2026-11-18
 

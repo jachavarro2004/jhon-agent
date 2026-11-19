@@ -3001,6 +3001,26 @@ test("shellUi ignores incomplete Anthropic headers and retains the last real quo
 	}
 });
 
+// T149 (L1340 U1): a ChatGPT subscription's windows ride on its replies: the x-codex-* headers on
+// pi's SSE transport (after_provider_response), the codex.rate_limits event on its WebSocket one.
+test("T149: with provider openai-codex, the status line shows the windows of the Codex headers and of the codex.rate_limits event", async () => {
+	const now = 1_788_600_000_000;
+	const { pi, handlers } = fakePi();
+	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { fetch: fakeFetch({}, false).fetchFn, now: () => now });
+	const { ctx, ui } = fakeContext();
+	(ctx as unknown as { model: { provider: string } }).model.provider = "openai-codex";
+	await fire(handlers, "session_start", ctx);
+	const headers = { "x-codex-primary-used-percent": "75", "x-codex-primary-window-minutes": "300", "x-codex-secondary-used-percent": "62", "x-codex-secondary-window-minutes": "10080" };
+	for (const handler of handlers.get("after_provider_response") ?? []) handler({ status: 200, headers }, ctx);
+	assert.match(renderFooter(ui), /5h 75%/);
+	assert.match(renderFooter(ui), /week ▰▰▰▰▰▱▱▱ 62%/);
+	const event = { type: "provider_stream_event", provider: "openai-codex", api: "openai-codex-responses", model: "gpt-6.2-astra", data: { type: "codex.rate_limits", rate_limits: { primary: { used_percent: 10, window_minutes: 300 }, secondary: { used_percent: 25, window_minutes: 10080 } } } };
+	for (const handler of handlers.get("provider_stream_event") ?? []) handler(event, ctx);
+	assert.match(renderFooter(ui), /week ▰▰▱▱▱▱▱▱ 25%/);
+	for (const handler of handlers.get("provider_stream_event") ?? []) handler({ ...event, data: { type: "response.output_text.delta", delta: "hi" } }, ctx);
+	assert.match(renderFooter(ui), /week ▰▰▱▱▱▱▱▱ 25%/, "any other stream event leaves the windows as they were");
+});
+
 // L117 removed /jhon:usage and alt+u; L659 brings them back (T93): the status line still keeps the answering provider's windows.
 test("/jhon:stats stays gone; the status line keeps the answering provider's 5h and week windows, with no usage hint (L117, L659)", async () => {
 	const { pi, handlers, commands } = fakePi();
@@ -3292,6 +3312,42 @@ test("T120: the status bar shows the session's profile from its branch at the st
 		pi.events.emit(SESSION_PROFILE_CHANGED, { sessionId: "shell-session" });
 		assert.match(bar(), /claude-opus-5-5 · medium · team │ ctx/, "back on the default: no mark");
 	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
+});
+
+// T149 (L1339, L1340 U2): a session on a profile of its own (`jhon-nan (session)`) runs its sub-agents
+// on that profile's models, not the rendered files' (lib/session-profile.ts), so their providers are in scope.
+test("T149: /jhon:usage scopes the providers the session's own profile routes its sub-agents to, from its branch and after a switch", async (t) => {
+	const agentDir = mkdtempSync(join(tmpdir(), "jhon-ui-routing-"));
+	t.after(() => rmSync(agentDir, { recursive: true, force: true }));
+	mkdirSync(join(agentDir, "agents"));
+	writeFileSync(join(agentDir, "agents", "jhon-worker.md"), "---\nname: jhon-worker\ndescription: worker\nmodel: claude-bridge/claude-sonnet-5-5\n---\nbody\n");
+	const profilesJson = async () => ({ profiles: [{ name: "jhon-nan", agents: [{ agent: "jhon-worker", runtime: "pi", model: "nan/glm5.3-flash@high" }] }] });
+	const panel = async (branch: unknown[], switchTo?: string) => {
+		const { pi, handlers, commands } = fakePi();
+		shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off", PI_CODING_AGENT_DIR: agentDir }, { fetch: fakeFetch().fetchFn, now: () => 1_788_600_000_000, profilesJson });
+		const { ctx, ui } = fakeContext({ token: "nan-token" });
+		(ctx as unknown as { model: { provider: string } }).model.provider = "openai-codex";
+		Object.assign(ctx.sessionManager, { getBranch: () => branch });
+		await fire(handlers, "session_start", ctx);
+		if (switchTo) pi.events.emit(SESSION_PROFILE_CHANGED, { sessionId: "shell-session", profile: switchTo });
+		const pending = commands.get("jhon:usage")!.handler("", ctx);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		const text = ui.overlayView!.render(100).map(stripAnsi).join("\n");
+		ui.overlayView!.handleInput("\x1b");
+		await pending;
+		await fire(handlers, "session_shutdown", ctx);
+		return text;
+	};
+	const onDefault = await panel([]);
+	assert.match(onDefault, /力 openai-codex · usage arrives with the first reply/);
+	assert.match(onDefault, /claude-bridge · usage arrives with the first reply/, "on the default, the rendered file's model");
+	assert.doesNotMatch(onDefault, /\bnan · /);
+	for (const text of [await panel([{ type: "custom", customType: SESSION_PROFILE_ENTRY, data: { profile: "jhon-nan" } }]), await panel([], "jhon-nan")]) {
+		assert.match(text, /力 openai-codex · usage arrives with the first reply/);
+		assert.match(text, /\bnan · updated just now/, "the session profile routes the worker to nan");
+		assert.match(text, /glm5\.3/);
+		assert.doesNotMatch(text, /claude-bridge/, "the rendered file's model is not the session's route");
+	}
 });
 
 test("the bar counts the running background tasks lib/background-tasks-tools.ts reports for this session", async () => {

@@ -31,7 +31,7 @@ import { DOUBLE_ESC_CANCEL_HINT, PANEL_BUTTON, floatPromptRow, framePromptLines,
 import { createApiWait } from "../lib/ui/api-wait.ts";
 import { createStallRecovery, stallContinueText, stallNotice, stallSeconds, stallThreshold, type Schedule } from "../lib/ui/stall-recovery.ts";
 import { activeProfileName } from "../lib/profiles.ts";
-import { SESSION_PROFILE_CHANGED, sessionMark, sessionProfileOnBranch } from "../lib/session-profile.ts";
+import { SESSION_PROFILE_CHANGED, SessionProfile, sessionMark, sessionProfileOnBranch, type ProfilesJson } from "../lib/session-profile.ts";
 import { knownAgents, resolveAgent } from "../lib/agents.ts";
 import { OPEN_TASKS_EVENT, TASKS_EVENT } from "../lib/events.ts";
 import { retiredNotice, shellSettings, type ShellSettings } from "../lib/settings.ts";
@@ -41,7 +41,7 @@ import {
 	resolveDoubleEscCancelPolicy,
 	type DoubleEscCancelPolicy,
 } from "../lib/ui/double-esc-cancel-policy.ts";
-import { NAN_PROVIDER, NAN_QUOTA_URL, parseNanQuota, parseProviderUsage, parseUsageHeaders, parseUsageSource, usageScopeProviders, UsageSourceRegistry, UsageStore, USAGE_SOURCE_EVENT, type ProviderUsage, type UsageSource } from "../lib/ui/shell-usage.ts";
+import { NAN_PROVIDER, NAN_QUOTA_URL, parseCodexRateLimitEvent, parseNanQuota, parseProviderUsage, parseUsageHeaders, parseUsageSource, usageScopeProviders, UsageSourceRegistry, UsageStore, USAGE_SOURCE_EVENT, type ProviderUsage, type UsageSource } from "../lib/ui/shell-usage.ts";
 import { UsageView } from "../lib/ui/shell-usage-view.ts";
 import { setSidebarHover, sidebarHeader, sidebarPart, sidebarSlot, sidebarState, VISUAL_SETTINGS_CHANGED, type SidebarRail } from "../lib/ui/shell-sidebar.ts";
 import { installSidebar, invalidateSidebar, railSheetKey, SIDEBAR_BREAKPOINT } from "../lib/ui/shell-sidebar-layout.ts";
@@ -97,6 +97,17 @@ export interface ShellDeps {
 	watch?: typeof watch;
 	/** The stall recovery's one-shot timer (lib/ui/stall-recovery.ts); returns its cancel. */
 	schedule?: Schedule;
+	/** `jhon profile json`, parsed: a session profile's sub-agent models, for the usage scope (T149). */
+	profilesJson?(cwd: string): Promise<ProfilesJson>;
+}
+
+/** `jhon profile json`, read without blocking pi, as extensions/jhon.ts reads it for the session's profile. */
+function readProfilesJson(cwd: string): Promise<ProfilesJson> {
+	return new Promise((resolve, reject) =>
+		execFile(process.env.JHON_BIN || "jhon", ["profile", "json"], { cwd, encoding: "utf8", maxBuffer: 8 << 20, timeout: 10_000 }, (error, stdout) => {
+			if (error) return reject(error);
+			try { resolve(JSON.parse(stdout) as ProfilesJson); } catch (cause) { reject(cause); }
+		}));
 }
 
 export type ActiveProfileReader = (() => string | undefined) & {
@@ -124,7 +135,7 @@ export function createActiveProfileReader(read: () => string = activeProfileName
 	return reader;
 }
 
-const defaultShellDeps: Omit<ShellDeps, "activeProfile"> = { fetch: (input, init) => globalThis.fetch(input, init), now: () => Date.now(), resolveWorktree: resolveSessionWorktree, gitRunner: (cwd, maxBuffer) => shellGitRunner(cwd, process.env, execFile, maxBuffer), rootExists: (root) => existsSync(join(root, ".git")), lddStatus: (cwd) => readLddStatus(cwd), permissionMode };
+const defaultShellDeps: Omit<ShellDeps, "activeProfile"> = { fetch: (input, init) => globalThis.fetch(input, init), now: () => Date.now(), resolveWorktree: resolveSessionWorktree, gitRunner: (cwd, maxBuffer) => shellGitRunner(cwd, process.env, execFile, maxBuffer), rootExists: (root) => existsSync(join(root, ".git")), lddStatus: (cwd) => readLddStatus(cwd), permissionMode, profilesJson: readProfilesJson };
 
 interface AssistantUsageEntry {
 	type: string;
@@ -981,8 +992,18 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	// `jhon start pi` sets), so their providers' usage shows beside the
 	// session's own. Without that dir there are no Jhon sub-agents to read.
 	const agentDir = env.PI_CODING_AGENT_DIR;
+	// T149 (L1339): a session on a profile of its own runs its sub-agents on that
+	// profile's models, not the rendered files' (lib/session-profile.ts), so the
+	// scope reads them the way extensions/jhon.ts launches them. The rows are read
+	// when the session's profile is known; a refresh waits for that read.
+	const routingProfile = new SessionProfile((cwd) => (deps.profilesJson ?? readProfilesJson)(cwd));
+	let routingRead: Promise<unknown> = Promise.resolve();
+	const followRoutingProfile = (name: string | undefined, cwd: string) => {
+		routingProfile.start(name);
+		routingRead = agentDir && name ? routingProfile.refresh(cwd).catch(() => undefined) : Promise.resolve();
+	};
 	const activeRoutingModels = (): Array<string | undefined> => agentDir ? knownAgents(agentDir).map((name) => {
-		try { return resolveAgent(agentDir, name).model; } catch { return undefined; }
+		try { return routingProfile.agent(resolveAgent(agentDir, name)).model; } catch { return undefined; }
 	}) : [];
 	// A bare model id names a provider only when exactly one provider in the
 	// registry carries that id; anything else stays untargeted rather than guessed.
@@ -1071,6 +1092,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		return true;
 	};
 	const refreshUsage = async (ctx: ExtensionContext, force: boolean, only?: string) => {
+		await routingRead;
 		const scope = resolveUsageScope(ctx);
 		const now = deps.now();
 		// Concurrent per provider; each settle notifies the shell (and repaints
@@ -1098,6 +1120,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		try { current = currentContext?.sessionManager.getSessionId(); } catch { current = undefined; }
 		if (!said || current === undefined || said.sessionId !== current) return;
 		sessionProfile = typeof said.profile === "string" && said.profile ? said.profile : undefined;
+		followRoutingProfile(sessionProfile, currentContext?.cwd ?? process.cwd());
 		if (!profileReader.refresh()) return;
 		renderHost?.invalidateSidebar?.();
 		renderHost?.requestRender();
@@ -1116,13 +1139,21 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	// anthropic itself, or claude-bridge re-emitting the same headers. Keyed
 	// any other way, the bar and the panel (which look the session's provider
 	// up) never find it.
-	pi.on("after_provider_response", (event, ctx) => {
-		const parsed = parseUsageHeaders(event.headers, deps.now(), ctx?.model?.provider);
+	const recordReplyUsage = (parsed: ProviderUsage | undefined) => {
 		if (!parsed) return;
 		usage.record(parsed);
 		usageFailures.delete(parsed.provider);
 		renderHost?.invalidateSidebar?.();
 		renderHost?.requestRender();
+	};
+	pi.on("after_provider_response", (event, ctx) => {
+		recordReplyUsage(parseUsageHeaders(event.headers, deps.now(), ctx?.model?.provider));
+	});
+	// T149: Codex's WebSocket transport (pi's default) sends no reply headers to
+	// after_provider_response; its windows come as a `codex.rate_limits` stream
+	// event, which names its provider. Every other event is one type check.
+	pi.on("provider_stream_event", (event, ctx) => {
+		recordReplyUsage(parseCodexRateLimitEvent(event.data, deps.now(), event.provider ?? ctx?.model?.provider));
 	});
 	// /jhon:usage and alt+u (T93, L659): every configured provider's windows and
 	// resets, the session's provider first with 力; it opens at once on what the
@@ -1130,14 +1161,19 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	const openUsage = (ctx: ExtensionContext) =>
 		ctx.ui.custom<null>(
 			(tui, theme, _keybindings, done) => {
-				const scope = resolveUsageScope(ctx);
+				let scope = resolveUsageScope(ctx);
 				const view = new UsageView(usage, {
 					theme,
 					now: () => deps.now(),
 					active: () => (ctx.model ? { provider: ctx.model.provider } : undefined),
 					registry: () => usageSources,
 					scope: () => ({ providers: scope, failed: new Set(usageFailures) }),
-					onRefresh: () => refreshUsage(ctx, true),
+					// The session profile's routes may still be reading: the scope follows them.
+					onRefresh: async () => {
+						await routingRead;
+						scope = resolveUsageScope(ctx);
+						await refreshUsage(ctx, true);
+					},
 					onClose: () => withOverlayRepaint(tui, done)(null),
 					requestRender: () => tui.requestRender(),
 					ascii: shellSettings().ascii(),
@@ -1453,6 +1489,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		applyAppearance();
 		if (!overrides.activeProfile) {
 			try { sessionProfile = sessionProfileOnBranch((ctx.sessionManager as { getBranch?(): unknown[] }).getBranch?.()); } catch { sessionProfile = undefined; }
+			followRoutingProfile(sessionProfile, ctx.cwd);
 			profileReader.bind(ctx.cwd, deps.resolveWorktree, ctx.sessionManager.getSessionId());
 			const sessionId = ctx.sessionManager.getSessionId();
 			profilePoll = setInterval(() => {

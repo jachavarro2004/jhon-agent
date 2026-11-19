@@ -3,8 +3,8 @@ import { paintGauge } from "./shell-gauge.ts";
 import { glyph } from "./primitives/index.ts";
 
 // jhon-shell subscription usage: the rate-limit windows each connected
-// provider reports. Anthropic sends them as response headers and NaN through
-// its quota endpoint; both land in the same model. Parsing is pure and never
+// provider reports. Anthropic and Codex send them with each reply and NaN
+// through its quota endpoint; all land in the same model. Parsing is pure and never
 // keeps account details beyond the plan name.
 
 export interface UsageWindow {
@@ -59,7 +59,17 @@ export const ANTHROPIC_PROVIDER = "anthropic";
 // same unified headers (src/rate-limit.ts), so its usage rides on replies too.
 export const CLAUDE_BRIDGE_PROVIDER = "claude-bridge";
 export const NAN_PROVIDER = "nan";
+// A ChatGPT subscription, as pi-ai's openai-codex provider signs in to it.
+export const OPENAI_CODEX_PROVIDER = "openai-codex";
 const ANTHROPIC_MAIN_LIMIT = "claude";
+// Codex CLI's own names (openai/codex, codex-rs/codex-api/src/rate_limits.rs):
+// the default `codex` family's primary and secondary windows, used percent,
+// window length in minutes and reset in Unix seconds, as SSE reply headers or
+// as the WebSocket transport's `codex.rate_limits` event.
+const CODEX_LIMIT = "codex";
+const CODEX_HEADER_PREFIX = "x-codex-";
+const CODEX_WINDOW_NAMES = ["primary", "secondary"] as const;
+export const CODEX_RATE_LIMITS_EVENT = "codex.rate_limits";
 const ANTHROPIC_PREFIX = "anthropic-ratelimit-unified-";
 const ANTHROPIC_WINDOWS: ReadonlyArray<[key: string, seconds: number]> = [
 	["5h", 18_000],
@@ -102,6 +112,7 @@ const PENDING_NOTE: Record<string, string> = {
 	[NAN_PROVIDER]: DEFAULT_PENDING_NOTE,
 	[ANTHROPIC_PROVIDER]: REPLY_PENDING_NOTE,
 	[CLAUDE_BRIDGE_PROVIDER]: REPLY_PENDING_NOTE,
+	[OPENAI_CODEX_PROVIDER]: REPLY_PENDING_NOTE,
 };
 const UNSUPPORTED_NOTE = "this provider does not report subscription usage";
 // What a targeted provider with no snapshot says after a refresh actually ran
@@ -271,9 +282,60 @@ export function parseAnthropicHeaders(headers: Record<string, string>, now: numb
 	return { provider, plan: undefined, limits, fetchedAt: now };
 }
 
+// A number as Codex sends it: a JSON number, or a header's decimal text.
+// Anything else is absent, never 0.
+function codexNumber(value: unknown): number | undefined {
+	const parsed = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+	return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : undefined;
+}
+
+// A window needs its used percent and its length: without either there is no
+// number to show and no label to give it, so none is guessed.
+function codexWindow(usedPercent: unknown, windowMinutes: unknown, resetAt: unknown): UsageWindow | undefined {
+	const used = codexNumber(usedPercent);
+	const minutes = codexNumber(windowMinutes);
+	if (used === undefined || minutes === undefined || minutes <= 0) return undefined;
+	const reset = codexNumber(resetAt);
+	const seconds = minutes * MINUTE;
+	return { label: windowLabel(seconds), usedPercent: used, windowSeconds: seconds, resetAt: reset !== undefined && reset > 0 ? reset * 1000 : null };
+}
+
+function codexUsage(windows: Array<UsageWindow | undefined>, plan: unknown, now: number, provider: string): ProviderUsage | undefined {
+	const present = windows.filter((window): window is UsageWindow => window !== undefined);
+	if (present.length === 0) return undefined;
+	const limitReached = present.some((window) => window.usedPercent >= 100);
+	return { provider, plan: typeof plan === "string" && plan ? plan : undefined, limits: [{ name: CODEX_LIMIT, windows: present, limitReached }], fetchedAt: now };
+}
+
+/** A ChatGPT subscription's windows from the x-codex-* headers of a Codex SSE reply; undefined when none is whole. */
+export function parseCodexHeaders(headers: Record<string, string>, now: number, provider: string = OPENAI_CODEX_PROVIDER): ProviderUsage | undefined {
+	const windows = CODEX_WINDOW_NAMES.map((name) => {
+		const key = `${CODEX_HEADER_PREFIX}${name}`;
+		return codexWindow(headers[`${key}-used-percent`], headers[`${key}-window-minutes`], headers[`${key}-reset-at`]);
+	});
+	return codexUsage(windows, undefined, now, provider);
+}
+
+/** The same windows from the Codex WebSocket transport's `codex.rate_limits` event; any other event, or another limit family's, is undefined. */
+export function parseCodexRateLimitEvent(data: unknown, now: number, provider: string = OPENAI_CODEX_PROVIDER): ProviderUsage | undefined {
+	if (!data || typeof data !== "object") return undefined;
+	const event = data as { type?: unknown; plan_type?: unknown; rate_limits?: unknown; metered_limit_name?: unknown; limit_name?: unknown };
+	if (event.type !== CODEX_RATE_LIMITS_EVENT) return undefined;
+	const family = event.metered_limit_name ?? event.limit_name;
+	if (family !== undefined && family !== null && family !== CODEX_LIMIT) return undefined;
+	const limits = (event.rate_limits && typeof event.rate_limits === "object" ? event.rate_limits : {}) as Record<string, unknown>;
+	const windows = CODEX_WINDOW_NAMES.map((name) => {
+		const raw = limits[name];
+		if (!raw || typeof raw !== "object") return undefined;
+		const window = raw as { used_percent?: unknown; window_minutes?: unknown; reset_at?: unknown };
+		return codexWindow(window.used_percent, window.window_minutes, window.reset_at);
+	});
+	return codexUsage(windows, event.plan_type, now, provider);
+}
+
 /** The snapshot belongs to the provider that answered: pi's event does not name it, the session's model does. */
 export function parseUsageHeaders(headers: Record<string, string>, now: number, provider?: string): ProviderUsage | undefined {
-	return parseAnthropicHeaders(headers, now, provider ?? ANTHROPIC_PROVIDER);
+	return parseAnthropicHeaders(headers, now, provider ?? ANTHROPIC_PROVIDER) ?? parseCodexHeaders(headers, now, provider ?? OPENAI_CODEX_PROVIDER);
 }
 
 // NaN Cloud reports one allowance per model for the billing period, plus the

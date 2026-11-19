@@ -285,7 +285,7 @@ Its commands:
 | `/jhon:jobs` | | background commands and monitors |
 | `/jhon:changes` | `alt+g` | what the session's agents changed, per worktree |
 | `/jhon:panel` | `alt+r` | the rail's sections full width: LDD, todos, jobs, agents, stats, changes, integrations |
-| `/jhon:usage` | `alt+u` | each provider's usage windows and resets |
+| `/jhon:usage` | `alt+u` | each provider's usage windows and resets: the session's provider and every provider its profile (the session's own included) routes sub-agents to; Claude and ChatGPT (openai-codex: 5h and week) from each reply, NaN from its quota |
 | `/jhon:profile` | | the model profiles |
 | `/jhon:grants` | | the project's grants |
 | `/jhon:customize` | | the shell's settings, and the permission mode |
