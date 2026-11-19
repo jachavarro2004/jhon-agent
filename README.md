@@ -155,7 +155,7 @@ judged by the guards: git over SSH and gh cannot run inside it. That git
 runs with the repository's hooks (configured hooks included), ssh command,
 fsmonitor and credential helpers overridden; `url.*.insteadOf` and `include.*` in the repository's
 configuration are not, an accepted residual risk. uv's tools go to a
-sandbox-only folder under the cache, and `~/.local/share/uv` stays
+sandbox-only folder under the cache, and uv's own tool folder in the home stays
 read-only. A command that fails on a read-only
 path ends with a note telling the agent to stop and name the path
 (`jhon settings sandbox.allow_write`), and each run records a `jhon.sandbox`
