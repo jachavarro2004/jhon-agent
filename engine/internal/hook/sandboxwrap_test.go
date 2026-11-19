@@ -33,13 +33,21 @@ func TestSandboxWrapOffLinux(t *testing.T) {
 			t.Errorf("%q: updated %v, refusal %q; want none and %q", c.file, updated, refusal, c.refusal)
 		}
 	}
-	// On Linux the default is on: the same call with no settings is the wrap's.
+	// On Linux the default is on only where the sandbox can run (T128f slice
+	// 8, L1375): with no bwrap on PATH and no settings the wrap takes no
+	// call; the owner's explicit on refuses with the probe's fix.
 	sandboxHost = func() sandbox.Host { return sandbox.Host{OS: "linux", ReadFile: os.ReadFile, Stat: os.Stat} }
 	t.Setenv("PATH", dir)
-	if err := os.WriteFile(file, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if updated, refusal := sandboxWrap("worker", payload); updated != nil || !strings.Contains(refusal, "bubblewrap (bwrap) is not on PATH") {
-		t.Errorf("linux, no settings, no bwrap: updated %v, refusal %q; want the probe's refusal", updated, refusal)
+	for _, c := range []struct{ file, refusal string }{
+		{"", ""},
+		{"[sandbox]\nmode = \"on\"\n", "bubblewrap (bwrap) is not on PATH"},
+	} {
+		if err := os.WriteFile(file, []byte(c.file), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		updated, refusal := sandboxWrap("worker", payload)
+		if updated != nil || (c.refusal == "") != (refusal == "") || !strings.Contains(refusal, c.refusal) {
+			t.Errorf("linux, %q, no bwrap: updated %v, refusal %q; want none and a refusal naming %q", c.file, updated, refusal, c.refusal)
+		}
 	}
 }

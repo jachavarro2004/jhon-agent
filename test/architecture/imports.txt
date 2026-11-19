@@ -148,6 +148,7 @@ internal/requirements -> internal/contract
 internal/requirements -> internal/js
 internal/sandbox -> internal/guard
 internal/sandbox -> internal/project
+internal/sandbox -> internal/settings
 internal/sandbox -> internal/sh
 internal/session -> internal/isodate
 internal/session -> internal/js

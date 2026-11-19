@@ -37,7 +37,8 @@ const sandboxAllowReason = "Jhon's guards allow the command; it runs in Jhon's s
 
 // sandboxWrap is the tool input Claude Code runs in place of the payload's
 // when sandbox.mode is on as sandbox.Mode reads it, by default on Linux
-// (T128c, L894, design section 3; T128f): the same input
+// where the sandbox can run (T128c, L894, design section 3; T128f, L1375):
+// the same input
 // with only its command replaced by
 //
 //	<jhon> sandbox run --project '<folder>' --profile work -- <shell> -c '<command>'
@@ -80,20 +81,33 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 		_ = json.Unmarshal(top["tool_input"], &input)
 	}
 	raw, has := input["command"]
-	if mode, _ := sandbox.Mode(sandboxHost()); (!has && tool == "Monitor") || mode != "on" {
+	if !has && tool == "Monitor" {
+		return nil, ""
+	}
+	// The sandbox of the call, built once and only when needed: by the mode,
+	// for Check where no owner value decides it, then by the probe.
+	folder, pinned := sandbox.ProjectFolder(os.Getenv(sandbox.ProjectEnv))
+	cwd := p.Cwd()
+	var built *sandbox.Input
+	current := func() sandbox.Input {
+		if built == nil {
+			in := SandboxInput(cwd, folder)
+			built = &in
+		}
+		return *built
+	}
+	if mode, _, _ := sandbox.Mode(sandboxHost(), current); mode != "on" {
 		return nil, ""
 	}
 	var command string
 	if !has || json.Unmarshal(raw, &command) != nil || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || strings.ContainsRune(command, 0) {
 		return nil, "sandbox: sandbox.mode is on and the " + tool + " call's command is not a text a shell can take; the call is refused"
 	}
-	folder, ok := sandbox.ProjectFolder(os.Getenv(sandbox.ProjectEnv))
-	if !ok {
+	if !pinned {
 		return nil, "sandbox: sandbox.mode is on and " + sandbox.ProjectEnv + " names no project folder (" + pinnedAs(os.Getenv(sandbox.ProjectEnv)) +
 			"), so the command would run in no pinned project; the call is refused; fix: start the session with `jhon start` from inside the project (a git repository)"
 	}
-	cwd := p.Cwd()
-	in := SandboxInput(cwd, folder)
+	in := current()
 	if problem := sandbox.Probe(sandboxHost(), in); problem != nil {
 		return nil, "sandbox: sandbox.mode is on and the sandbox cannot run here: " + problem.Reason + "; the call is refused; fix: " + problem.Fix
 	}

@@ -63,8 +63,8 @@ within safety limits**, and **nothing is delivered without evidence**.
   directories stay yours too: Jhon's pi lives in `.pi/jhon` in the home.
 - **Not process or network isolation.** Each enforced rule holds on the
   surface its hook reads; a program that acts on its own is outside it. The
-  OS sandbox (Linux, on by default there) narrows what a command can write
-  and see, with no network isolation.
+  OS sandbox (Linux, on by default there where it can run) narrows what a
+  command can write and see, with no network isolation.
 - **Not CI.** It records and checks evidence on your machine; your CI still
   runs on the pull request.
 
@@ -145,7 +145,10 @@ counts what each one costs).
 | `route-guard` | Edit, Write, Bash, Agent | LDD: a writer launched without its scope, a change without its record, a slice commit of an untested tree, a PR without its docs, a merge without rebase |
 
 A file an agent writes is then formatted by its project's own formatter
-(`jhon hook format-edit`). On Linux `sandbox.mode` is on by default: an
+(`jhon hook format-edit`). On Linux `sandbox.mode` is on by default where
+the sandbox can run; with no usable bubblewrap or with user namespaces off
+the default is off, commands run unsandboxed and `jhon doctor` warns with
+the fix (an explicit `on` there refuses every command). With it on, an
 allowed command runs inside `jhon sandbox run` (bubblewrap): the project, the
 temporary folders, the caches and `sandbox.allow_write` are writable,
 everything else is read-only, and the home's credentials are not there.
@@ -326,7 +329,7 @@ after a backup. The main groups:
 |---|---|
 | `[runtimes]` | `claude_code`, `pi`: which runtimes are installed (both by default, at least one) |
 | `[integrations]` | `engram` and `codegraph` (always on), `context7` (hosted documentation for explore and worker, on by default), telemetry (opt-in), the palette |
-| `[sandbox]` | `mode` (`on` or `off`, on by default on Linux, off elsewhere), `allow_write` |
+| `[sandbox]` | `mode` (`on` or `off`, on by default on Linux where the sandbox can run, off elsewhere), `allow_write` |
 | `[agents]` | `act_on_announce`: a turn that announces an action and takes none is sent back once |
 | `[pi]`, `[shell.*]` | the active profile, and the shell's appearance, behaviour, keys and notifications |
 
