@@ -158,7 +158,7 @@ configuration are not, an accepted residual risk. uv's tools go to a
 sandbox-only folder under the cache, and uv's own tool folder in the home stays
 read-only. A command that fails on a read-only
 path ends with a note telling the agent to stop and name the path
-(`jhon settings sandbox.allow_write`), and each run records a `jhon.sandbox`
+(the `sandbox.allow_write` setting), and each run records a `jhon.sandbox`
 telemetry event. There is no PID namespace: a child a command detaches
 (`setsid`, `nohup`) outlives the sandbox's bubblewrap. See
 `jhon sandbox --help`.
