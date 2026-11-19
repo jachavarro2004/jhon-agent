@@ -60,8 +60,8 @@ func TestTheDefaultModeIsOffWhereTheSandboxCannotRun(t *testing.T) {
 	// No owner value: off by default, with the reason.
 	for _, text := range []string{"", "schema = 1\n"} {
 		support.Write(t, m.home, map[string]string{"settings.toml": text})
-		if s := status(); s.Mode != "off" || s.Source != "default" || s.Why != reason || s.CanRun || s.Reason != reason || s.Fix != fix {
-			t.Errorf("%q: status --json %+v; want off from the default, with the reason %q", text, s, reason)
+		if s := status(); s.Mode != "off" || s.Source != "default" || s.Why != reason+"; fix: "+fix || s.CanRun || s.Reason != reason || s.Fix != fix {
+			t.Errorf("%q: status --json %+v; want off from the default, with the reason and fix", text, s)
 		}
 		want := "sandbox off by default; it cannot run here: " + reason + "; fix: " + fix + " to turn the sandbox on; project " + m.proj + "\n"
 		if r := support.Jhon(t, m.proj, env, "sandbox", "status"); r.Code != 0 || r.Stdout != want {

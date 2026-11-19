@@ -146,9 +146,10 @@ counts what each one costs).
 
 A file an agent writes is then formatted by its project's own formatter
 (`jhon hook format-edit`). On Linux `sandbox.mode` is on by default where
-the sandbox can run; with no usable bubblewrap or with user namespaces off
-the default is off, commands run unsandboxed and `jhon doctor` warns with
-the fix (an explicit `on` there refuses every command). With it on, an
+the sandbox can run (one empty sandbox starts); where it cannot (no
+bubblewrap, user namespaces off or blocked by AppArmor, a bubblewrap too
+old) the default is off, commands run unsandboxed and `jhon doctor` warns
+with the fix (an explicit `on` there refuses every command). With it on, an
 allowed command runs inside `jhon sandbox run` (bubblewrap): the project, the
 temporary folders, the caches and `sandbox.allow_write` are writable,
 everything else is read-only, and the home's credentials are not there.

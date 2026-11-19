@@ -184,15 +184,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            the version Jhon pins, and where the OS sandbox
                            cannot run with sandbox.mode off (the model's
                            commands run unsandboxed: macOS and Windows by
-                           default, and Linux by default with no usable
-                           bubblewrap or user namespaces off, with the fix
-                           that turns the sandbox on), or on Linux the owner
-                           set it off (the shell's writes outside the
-                           project then run unguarded); fails where it
-                           cannot run with the mode on (set, or by default
-                           on Linux where bubblewrap is there but cannot
-                           start: every command is refused), with the fix;
-                           fails when the record of the
+                           default, and Linux by default where no empty
+                           sandbox starts, with the fix that turns the
+                           sandbox on), or on Linux the owner set it off
+                           (the shell's writes outside the project then run
+                           unguarded); fails where it cannot run with the
+                           mode set on (every command is refused), with the
+                           fix; fails when the record of the
                            rendered agents or the main agent's definition
                            is missing from ~/.claude/agents, or the
                            definition cannot be read or is empty
@@ -254,11 +252,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            names (ryoku, its older name, still works);
                            sandbox.mode is on or off: whether the
                            runtimes run each command of the model in the
-                           OS sandbox, on by default on Linux where the
-                           sandbox can run (elsewhere, and on Linux with no
-                           usable bubblewrap or user namespaces off, off:
-                           the commands run unsandboxed, and jhon doctor
-                           warns with the fix); sandbox.allow_write is
+                           OS sandbox, on by default where the sandbox can
+                           run (Linux, where one empty sandbox starts;
+                           elsewhere off: the commands run unsandboxed, and
+                           jhon doctor warns with the fix);
+                           sandbox.allow_write is
                            the folders such a command may write besides the
                            project's, separated by commas, each absolute or
                            under ~/, never /, the home folder or one above
@@ -548,9 +546,8 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
   jhon sandbox status [--json] [--project <folder>]
                            sandbox.mode (on or off: whether the runtimes
                            sandbox the model's commands; on by default on
-                           Linux where the sandbox can run, off elsewhere
-                           and on Linux with no usable bubblewrap or user
-                           namespaces off), whether the sandbox
+                           Linux where one empty sandbox starts, off
+                           elsewhere), whether the sandbox
                            can run here (one empty sandbox is started with
                            the bubblewrap and the options run uses, so one
                            older than 0.5.0 cannot, as for jhon doctor), and
@@ -559,7 +556,8 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            holds .git, or none in no repository; with
                            --project, that folder); --json: mode,
                            mode_source (default or settings), mode_reason
-                           (why the default is off on Linux, else ""),
+                           (why the default is off on Linux: the reason
+                           and the fix, else ""),
                            can_run, reason, fix, project ("" for none);
                            --project as for run; exit 0, 2 on a usage
                            error. With

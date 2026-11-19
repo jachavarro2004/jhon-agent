@@ -85,7 +85,7 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 		return nil, ""
 	}
 	// The sandbox of the call, built once and only when needed: by the mode,
-	// for Check where no owner value decides it, then by the probe.
+	// which probes it where no owner value decides, else by the probe below.
 	folder, pinned := sandbox.ProjectFolder(os.Getenv(sandbox.ProjectEnv))
 	cwd := p.Cwd()
 	var built *sandbox.Input
@@ -96,7 +96,8 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 		}
 		return *built
 	}
-	if mode, _, _ := sandbox.Mode(sandboxHost(), current); mode != "on" {
+	effective := sandbox.Mode(sandboxHost(), current)
+	if effective.Mode != "on" {
 		return nil, ""
 	}
 	var command string
@@ -108,7 +109,13 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 			"), so the command would run in no pinned project; the call is refused; fix: start the session with `jhon start` from inside the project (a git repository)"
 	}
 	in := current()
-	if problem := sandbox.Probe(sandboxHost(), in); problem != nil {
+	// bubblewrap starts at most once a call: the mode's probe is the verdict
+	// when it probed.
+	problem := effective.Problem
+	if !effective.Probed {
+		problem = sandbox.Probe(sandboxHost(), in)
+	}
+	if problem != nil {
 		return nil, "sandbox: sandbox.mode is on and the sandbox cannot run here: " + problem.Reason + "; the call is refused; fix: " + problem.Fix
 	}
 	jhon, err := os.Executable()
