@@ -18,10 +18,9 @@
   of tags (a tag can start a release), or one whose target the guard cannot
   tell (a URL, a configuration that maps or mirrors it, `GIT_DIR`); `gh pr
   merge`, `close`, `review`, releases, repository, secret and workflow
-  writes, every other `gh api` write; and deploy, destroy, publish, remote
-  and an Edit or Write outside the project (outside-write; a shell write there
-  is the sandbox's). One command that needs several classes asks one
-  question that names them all.
+  writes, every other `gh api` write; and deploy, destroy, publish and
+  remote. One command that needs several classes asks one question that
+  names them all.
 - A grant and a mode are the owner's act alone. The safety guard refuses
   `mode <a mode>` and `grant <a class>` (or `grant --revoke`) in any
   program's arguments, whatever the program is called (`go run`, a copied,

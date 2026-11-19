@@ -160,10 +160,10 @@ guarantees:
   # verify-wrote reads any other write (T56).
   ldd/independent-verify: { claude-code: behavioural, pi: behavioural }
   # explore writes only its change's exploration.md or research.md: jhon hook
-  # vcs-guard refuses any other Edit/Write of explore's (Claude Code by
+  # vcs-guard notes any other Edit/Write of explore's (Claude Code by
   # `--agent explore`, pi by the child's JHON_PI_AGENT); explore holds no
-  # Bash. jhon audit's explore-wrote reads a write that ran anyway (T123).
-  ldd/explore-scope: { by: blocking-hook-agent, claude-code: enforced, pi: enforced }
+  # Bash. jhon audit's explore-wrote reads such a write (T123, T153).
+  ldd/explore-scope: { claude-code: behavioural, pi: behavioural }
   # A failing test is made to pass by the code, never skipped or removed;
   # jhon audit's test-weakened reads the edit between a RED and its pass (T56).
   tdd/no-weaken: { claude-code: behavioural, pi: behavioural }
