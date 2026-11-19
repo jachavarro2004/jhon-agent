@@ -175,10 +175,10 @@ read-only. A command that fails on a read-only
 path ends with a note telling the agent to stop and name the path
 (the `sandbox.allow_write` setting), and each run records a `jhon.sandbox`
 telemetry event. There is no PID namespace: a child a command detaches
-(`setsid`, `nohup`) outlives the sandbox's bubblewrap. Where the sandbox
-cannot run (no bubblewrap, user namespaces off) every command is refused
-with the fix and `jhon doctor` fails, never run unsandboxed in silence;
-`sandbox.mode = "off"` turns it off. Off, nothing guards a shell command's
+(`setsid`, `nohup`) outlives the sandbox's bubblewrap. With
+`sandbox.mode = "on"` set and a sandbox that cannot run (no bubblewrap,
+user namespaces off) every command is refused with the fix and `jhon
+doctor` fails; `sandbox.mode = "off"` turns it off. Off, nothing guards a shell command's
 writes outside the project: the guards leave them to the sandbox, so a
 redirect, `dd`, a recursive `chmod` or a write to Jhon's installed files or
 source there runs, and on Linux `jhon doctor` warns. macOS and Windows run

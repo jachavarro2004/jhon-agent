@@ -150,8 +150,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            (allow or ask) and updatedInput: the same input
                            with its command as <jhon> sandbox run --project
                            '<folder>' --profile work -- <shell> -c
-                           '<command>'; without the variable, or where the
-                           sandbox cannot run, the call is refused with the
+                           '<command>'; without the variable, or where an
+                           explicit on cannot run (a probe that only timed
+                           out still wraps), the call is refused with the
                            fix; pi wraps its own commands. In Claude Code's
                            plan mode an allowed command carries no decision,
                            so plan mode's rules decide. A foreground Bash
