@@ -61,7 +61,7 @@ import (
 // says so in a note.
 func init() { register("executions", runExecutions) }
 
-const executionsUsage = "usage: jhon executions run [<change>] [--affected [<base-ref>]] [--timeout <minutes>] [--jobs <n>] [--force] [--dry-run] [--json] [--root <project>]"
+const executionsUsage = "usage: jhon executions run [<change>] [--affected [<base-ref>]] [--timeout <minutes>] [--jobs <n>] [--force] [--dry-run] [--json] [--root <project>] [--repo <name>]"
 
 var changeSep = lazyre.New(`[\\/]`)
 
@@ -211,7 +211,7 @@ func runExecutions(argv []string) (int, error) {
 	}
 	// unit is `--affected` with no base: the last argument, or before an option.
 	json, dry, force, unit := false, false, false, false
-	var rootArg, base, timeoutArg, jobsArg *string
+	var rootArg, base, timeoutArg, jobsArg, repoArg *string
 	var rest []string
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
@@ -222,7 +222,7 @@ func runExecutions(argv []string) (int, error) {
 			dry = true
 		case "--force":
 			force = true
-		case "--root", "--affected", "--timeout", "--jobs":
+		case "--root", "--affected", "--timeout", "--jobs", "--repo":
 			if a == "--affected" && (i+1 >= len(argv) || strings.HasPrefix(argv[i+1], "-")) {
 				unit = true
 				continue
@@ -240,6 +240,8 @@ func runExecutions(argv []string) (int, error) {
 				base = &v
 			case "--jobs":
 				jobsArg = &v
+			case "--repo":
+				repoArg = &v
 			default:
 				timeoutArg = &v
 			}
@@ -263,6 +265,18 @@ func runExecutions(argv []string) (int, error) {
 	root := discover.FindRoot(cwd())
 	if rootArg != nil {
 		root = project.Resolve(cwd(), *rootArg)
+	}
+	// A workspace member's run, recorded in the primary's record (T57 slice 6).
+	if repoArg != nil {
+		switch {
+		case !named:
+			fmt.Fprintln(os.Stderr, "jhon executions: --repo needs the change named: jhon executions run <change> --repo <name>")
+			return 2, nil
+		case base != nil || unit || dry || jobsArg != nil:
+			fmt.Fprintln(os.Stderr, "jhon executions: --repo runs the member's whole test command: --affected, --dry-run and --jobs are not taken with it")
+			return 2, nil
+		}
+		return runRepoExecutions(root, rest[1], *repoArg, minutes, json)
 	}
 	// How many projects run at once: --jobs, else the project's
 	// executions_jobs (projects that share state, a test database, set 1),
@@ -737,6 +751,7 @@ func runExecutions(argv []string) (int, error) {
 	write := func() error {
 		record.Executions = slices.Concat(done...)
 		record.Timestamp = now()
+		record.Repos = execution.ReposOf(root, change)
 		if keep {
 			return nil
 		}
@@ -939,6 +954,7 @@ func runExecutions(argv []string) (int, error) {
 	for _, m := range execution.MarkTurnedGreen(root, record, all, inert) {
 		notes = append(notes, fmt.Sprintf("%s: %s turned green by editing only its test (%s): failed in run %s, passed in run %s; verify and the 4R lenses judge whether it was weakened", m.Project, m.Test, m.File, m.RedRun, m.GreenRun))
 	}
+	record.Repos = execution.ReposOf(root, change)
 	if !keep {
 		if err := execution.WriteRecord(abs, record); err != nil {
 			return 1, err

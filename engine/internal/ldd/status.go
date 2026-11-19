@@ -345,6 +345,9 @@ type SliceProgress struct {
 	Completed int    `json:"completed"`
 	// Delivers is the slice's `Delivers:` line, the value it integrates; "" without one.
 	Delivers string `json:"delivers,omitempty"`
+	// Repo is the slice's `Repo: <name>` line, the workspace member it is
+	// in (T57 slice 6); "" without one.
+	Repo string `json:"repo,omitempty"`
 	// Outline is a slice with no checkbox task yet: its heading and
 	// Delivers: line, planned when its turn comes; it is not done.
 	Outline bool `json:"outline"`
@@ -404,10 +407,14 @@ func (x SliceProgress) done() bool { return x.Total > 0 && x.Completed == x.Tota
 
 // sliceState is a slice's progress in the slices line.
 func sliceState(x SliceProgress) string {
-	if x.Outline {
-		return x.Name + " (outline)"
+	repo := ""
+	if x.Repo != "" {
+		repo = ", repo " + x.Repo
 	}
-	return fmt.Sprintf("%s (%d/%d checked)", x.Name, x.Completed, x.Total)
+	if x.Outline {
+		return x.Name + " (outline" + repo + ")"
+	}
+	return fmt.Sprintf("%s (%d/%d checked%s)", x.Name, x.Completed, x.Total, repo)
 }
 
 // ProgressOf is the task progress of tasks.md (src nil: no file), fenced
@@ -426,6 +433,11 @@ func ProgressOf(lay layout.Layout, src *string) TaskProgress {
 		if h := lay.SliceHeading().FindStringSubmatch(l.Text); h != nil {
 			t.Slices = append(t.Slices, SliceProgress{Name: h[1], Tasks: []SliceTask{}})
 			current = len(t.Slices) - 1
+			continuing = false
+			continue
+		}
+		if r := lay.SliceRepo().FindStringSubmatch(l.Text); r != nil && current >= 0 && t.Slices[current].Repo == "" {
+			t.Slices[current].Repo = r[1]
 			continuing = false
 			continue
 		}

@@ -339,6 +339,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            executions_exclusive group never run together; a
                            command that passed in the last run on the same
                            working tree is reused unless --force
+  jhon executions run <change> --repo <name> [--timeout <minutes>] [--json]
+                           in a multi-repository workspace, from the primary
+                           or any member: run member name's projects whole
+                           in it and record the run in the primary's record
+                           of change under repos.<name> (working_tree,
+                           after_working_tree, executions, passed, complete);
+                           no --affected, --dry-run or --jobs
   jhon executions prime [--timeout <minutes>]
                            build the pytest-testmon record of each uv-run
                            pytest project that has none: its whole test
@@ -359,7 +366,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            release need an immutable artifact digest (only
                            deploy, for infrastructure, may name the full
                            HEAD commit), recorded in delivery.json; exit 0 ready,
-                           1 not, 2 usage
+                           1 not, 2 usage; in a workspace member, a change of
+                           the primary's is checked against the member's run
+                           in the primary's record (repos.<name>)
   jhon compose <main-spec> <delta-spec>
                            apply a delta spec to a main spec, atomically
   jhon archive <change-name> <YYYY-MM-DD>

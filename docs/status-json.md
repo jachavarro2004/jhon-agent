@@ -29,7 +29,7 @@ with: `git switch -c <name>`, then `jhon executions run` (T146g).
 | `rankedChanges` | array of string | only when no change is selected: the candidates that are not umbrellas, by pending work — pending tasks first, then the latest movement of `tasks.md` or the execution record, then name |
 | `umbrellas` | array of string | always (after `route` for a selected change): the active umbrella changes, never selected by default (an `exploration.md` and nothing else, or `kind: umbrella` in `openspec/changes/<change>/.openspec.yaml`); an umbrella's `next` is `start-change`: split it into changes |
 | `artifacts[]` | `{artifact, state, path}` | every artifact and its state; the human view lists only those written or owed; `[]` for a change with no folder |
-| `tasks` | object | `total`, `completed`, `pending`, `allComplete`, `unchecked[]`, `slices[]` (each `name`, `total`, `completed`, `delivers`, `tasks[]`, and `outline`: true for a slice with no checkbox task yet), `slice` (the first slice with an unchecked task; null when none is open), `slicesDone` (slices with every task checked; an outline is not done), `current` (the first slice not done, an outline included; null when every slice is done), `next` (the slice after `current`, or null) |
+| `tasks` | object | `total`, `completed`, `pending`, `allComplete`, `unchecked[]`, `slices[]` (each `name`, `total`, `completed`, `delivers`, `repo` (only for a slice with a `Repo: <name>` line, the workspace member it is in; see docs/ldd.md), `tasks[]`, and `outline`: true for a slice with no checkbox task yet), `slice` (the first slice with an unchecked task; null when none is open), `slicesDone` (slices with every task checked; an outline is not done), `current` (the first slice not done, an outline included; null when every slice is done), `next` (the slice after `current`, or null) |
 | `next` | string | the suggested next phase; `merge` ends a change with no folder, which has nothing to archive; a change with a folder that alters behaviour on the standard route is at `verify` until a passing light verify of the tree its last run tested is on record; a change that alters no behaviour counts as applied only once a file outside its record differs from the base or is new, so one with nothing applied yet is at `apply`, never `archive` |
 | `notes[]` | string | notes, never refusals |
 | `strict_tdd` | object | `value` (bool), `source`, `evidence`, `reason`, `notes[]` |
@@ -90,6 +90,14 @@ taken either: the refusal says to run the tests again (T146e). Nor does a
 later run reuse its passes, a unit's run measure from it (or from the
 `last_pass` it kept), or a slice's close take its tree as tested: each needs
 `after_working_tree` equal to `working_tree` (T146f).
+
+In a multi-repository workspace the primary's record of a change also
+keeps `repos`, each member's last run by name (`jhon executions run
+<change> --repo <name>`, T57): `{working_tree, after_working_tree,
+executions[], passed, complete}`. The primary's own run keeps it; `tests`
+here is the primary's own run only. A record whose first run is a
+member's holds `executions: null` and reads as no run. `jhon deliver check`
+in the member reads its entry (docs/ldd.md). Absent with no member's run.
 
 A uv-run pytest project is narrowed by pytest-testmon, whose record lives
 in `~/.cache/jhon/testmon/`, one file per checkout and project. With no
