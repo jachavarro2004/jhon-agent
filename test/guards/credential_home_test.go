@@ -1,7 +1,6 @@
-// T87c (L636): the refusals the T87b verifier could not probe, pinned with a
-// scratch HOME that holds fake key and cloud credential files: read globs
-// into the home credential directories, credential name globs, and the
-// Grep/Glob tool payloads; plus the verifier's own regression cases.
+// T87c (L636): secrets-guard's file-tool refusals, pinned with a scratch
+// HOME that holds fake key and cloud credential files. A shell command is
+// not read for credentials (T128f, L1366).
 
 package guards
 
@@ -27,25 +26,6 @@ func homeSG(t *testing.T) (sgEnv, string) {
 		"credentials.json": "{}\n", ".netrc": "fake\n", "creds.json": "{}\n"})
 	s.env = support.Env("HOME="+home, "XDG_STATE_HOME="+s.state, "TMPDIR="+s.tmp)
 	return s, home
-}
-
-// A glob under the home is outside the project: the sandbox hides the home
-// credential directories (T128f).
-func TestHomeGlobOutsideTheCredentialDirectoriesPasses(t *testing.T) {
-	t.Parallel()
-	s, _ := homeSG(t)
-	support.Write(t, filepath.Join(s.scratch, "home"), map[string]string{"notes/a.md": "x\n"})
-	for _, c := range []string{"cat ~/notes/*.md", "ls ~/*", "cat src/*.go"} {
-		s.code(t, c, sgOpts{}, 0, "a glob outside the home credential directories")
-	}
-}
-
-func TestCredentialNameGlobsRefused(t *testing.T) {
-	t.Parallel()
-	s, _ := homeSG(t)
-	for _, c := range []string{"cat .env*", "cat *.pem", "cat *.key", "cat id_*", "cat credentials*", "cat .netrc", "cat cred*.json"} {
-		s.code(t, c, sgOpts{}, 2, "a credential name glob")
-	}
 }
 
 func homeToolCall(t *testing.T, s sgEnv, tool string, input map[string]any) int {
@@ -84,30 +64,12 @@ func TestToolPayloadsReachingCredentialsRefused(t *testing.T) {
 	}
 }
 
-// The T87b verifier's regression cases (L636).
-func TestNestedCredentialsVerifierForms(t *testing.T) {
-	t.Parallel()
-	s := credTree(t)
-	support.Write(t, s.p, map[string]string{"sub/deep/credentials.json": "{}\n"})
-	for _, c := range []string{"env cat *.json", "cat $(echo *.json)", "git add . && cat */*/*.json", "cd sub/deep && cat *.json"} {
-		s.code(t, c, sgOpts{}, 2, "a credentials file reachable by the glob")
-	}
-	l := credTree(t)
-	support.Write(t, l.scratch, map[string]string{"keys/credentials.json": "{}\n"})
-	symlink(t, filepath.Join(l.scratch, "keys"), filepath.Join(l.p, "lnd"))
-	for _, c := range []string{"cat */*.json", "cd lnd && cat *.json"} {
-		l.code(t, c, sgOpts{}, 2, "a credentials file behind a symlinked directory")
-	}
-}
-
 // kd is the home key directory's name.
 const kd = "." + "s" + "sh"
 
 // T87d (L637): a Read, Grep or Glob tool call whose path is in a home
 // credentials directory, or (a recursive search) rooted at or above one,
-// is refused with no glob needed; a glob through any variable that then
-// names a home credentials directory is refused, since the variable may
-// hold HOME.
+// is refused with no glob needed.
 func TestToolPathIntoHomeCredentialsRefused(t *testing.T) {
 	t.Parallel()
 	s, home := homeSG(t)
@@ -170,22 +132,4 @@ func TestFrameworkInstallStaysReadable(t *testing.T) {
 		}
 	}
 	s.code(t, "cat ~/.local/share/jhon/current/prose/skills/ldd/references/*.md", sgOpts{}, 0, "reading Jhon's own prose")
-}
-
-func TestVariableGlobNamingHomeCredentialsRefused(t *testing.T) {
-	t.Parallel()
-	s, _ := homeSG(t)
-	for _, c := range []string{"cat $H/" + kd + "/*", "cat ${X}/.aws/*", `cat "$D"/.config/gcloud/*.json`, "ls $H/" + kd + "/*",
-		`cat "${D}/` + kd + `/"*`, "cat $D/sub/.aws/*"} {
-		s.code(t, c, sgOpts{}, 2, "a glob naming a home credentials directory after a variable")
-		s.code(t, c, top(), 2, "a glob naming a home credentials directory after a variable (top level)")
-	}
-}
-
-func TestVariableGlobWithoutCredentialDirsUnchanged(t *testing.T) {
-	t.Parallel()
-	s, _ := homeSG(t)
-	for _, c := range []string{"ls $TMP/x/*", "echo $H/notes/*.md"} {
-		s.code(t, c, sgOpts{}, 0, "a variable glob naming no credentials directory")
-	}
 }

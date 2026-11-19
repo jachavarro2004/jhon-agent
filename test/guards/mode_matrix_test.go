@@ -6,7 +6,7 @@
 //   - asks pass in yolo but destroy, and every ask passes in super-yolo;
 //   - an unreadable or unknown command passes only in super-yolo;
 //   - settings and git-config are asked in every mode;
-//   - deny-level destroy, credentials, framework, `.git` writes, and an
+//   - deny-level destroy, a file tool on credentials, framework, `.git` writes, and an
 //     agent's own `jhon grant` / `jhon mode` are refused in every mode;
 //   - LDD's delivery refusal holds in every mode;
 //   - a repository without LDD has the modes of an LDD one, but its
@@ -104,7 +104,7 @@ var (
 		{name: "credentials-read", kind: "refuse", call: func(f matrixFixture) (string, map[string]any) {
 			return "Read", map[string]any{"file_path": filepath.Join(f.dir, ".env")}
 		}},
-		{name: "credentials-bash", kind: "refuse", call: bashRow("cat .env")},
+		{name: "credentials-bash", kind: "allow", call: bashRow("cat .env")},
 		{name: "settings-write", kind: "ask", cls: "settings", inRepo: true, call: writeRow(func(f matrixFixture) string { return filepath.Join(f.dir, ".claude", "settings.json") })},
 		{name: "git-config", kind: "ask", cls: "git-config", call: bashRow(askSiteCommand("git-config"))},
 		{name: "framework-write", kind: "refuse", call: writeRow(func(f matrixFixture) string { return filepath.Join(f.fw, "orchestrator.md") })},
@@ -239,7 +239,7 @@ func matrixWant(row matrixRow, place, mode, caller string) string {
 	switch {
 	case row.kind == "refuse", row.kind == "delivery" && place != "folder", (row.kind == "commit" || row.kind == "code" || row.kind == "code-bash" || row.inRepo) && place == "repo":
 		return "refuse"
-	case row.kind == "delivery", row.kind == "commit", row.kind == "code" && place == "ldd", row.kind == "code-bash", row.kind == "sandbox":
+	case row.kind == "delivery", row.kind == "commit", row.kind == "code" && place == "ldd", row.kind == "code-bash", row.kind == "sandbox", row.kind == "allow":
 		return "allow"
 	}
 	switch {

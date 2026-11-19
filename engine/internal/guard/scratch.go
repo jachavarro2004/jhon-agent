@@ -9,7 +9,6 @@ import (
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
-	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
 )
 
 // A directory a command line makes with `mktemp -d` is the agent's own
@@ -43,13 +42,6 @@ import (
 // `$d`, `"$d"` or `${d}` (L514): `$d/x`, `$d/`, a glob or a brace stays
 // unresolvable, and so does every other program's use. A whole line `rm [-flags] $(mktemp -d)`
 // removes the directory it makes.
-//
-// A redirect into the directory, `> $d/<name>` with one plain name, reads as
-// the file under it only when it is the first command of the line, after
-// the assignment, to name the variable, at the top level and in no
-// subshell (T94, L635): the directory mktemp just made is empty, so nothing
-// in it can be a link elsewhere yet. Any later write there, or one to a
-// sub-path, a glob or `..`, stays unresolvable.
 
 // scratchSeg is one part of a line at its top level and the operators
 // around it.
@@ -323,49 +315,6 @@ func maskDouble(bare string) string {
 		b.WriteByte(bare[i])
 	}
 	return b.String()
-}
-
-// scratchFile is a redirect target `$d/<name>` or `${d}/<name>`: the
-// variable and the one plain name under it.
-var scratchFile = lazyre.New(`^\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})/([A-Za-z0-9_][A-Za-z0-9_.+-]*)$`)
-
-// scratchRedirects is c's redirects with each write into a fresh scratch
-// directory read as the file it makes, and marks every scratch variable c
-// names as used from here on.
-func scratchRedirects(c *sh.Command, ctx *Ctx, depth int) []*sh.Redirect {
-	if len(ctx.scratch) == 0 {
-		return c.Redirects
-	}
-	if ctx.scratchUsed == nil {
-		ctx.scratchUsed = map[string]bool{}
-	}
-	out := c.Redirects
-	if depth == 0 && len(c.Scope) == 0 {
-		out = nil
-		for _, r := range c.Redirects {
-			m := scratchFile.FindStringSubmatch(r.Target)
-			if m != nil && (r.Op == ">" || r.Op == ">>") && r.N == "" && r.Body == nil {
-				if v := m[1] + m[2]; ctx.scratch[v] != "" && ctx.fresh[v] != "" && !ctx.scratchUsed[v] {
-					q := *r
-					q.Target = ctx.scratch[v] + "/" + m[3]
-					r = &q
-				}
-			}
-			out = append(out, r)
-		}
-	}
-	words := slices.Clone(c.Words)
-	for _, r := range c.Redirects {
-		words = append(words, r.Target)
-	}
-	for _, w := range words {
-		for _, m := range varRef.FindAllStringSubmatch(w, -1) {
-			if ctx.scratch[m[1]] != "" {
-				ctx.scratchUsed[m[1]] = true
-			}
-		}
-	}
-	return out
 }
 
 // mktempRm is whether the whole line removes the directory mktemp -d makes in it.

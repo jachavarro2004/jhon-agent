@@ -1,7 +1,7 @@
 // T128f slice 5: what lies outside the project is the sandbox's. A shell
-// write there, and a credentials file there, pass safety-guard; a secret
-// inside the project (L1354), a protected path and a target the guard
-// cannot resolve keep today's verdicts.
+// write there, and a credentials file there, pass safety-guard. Slice 6
+// (L1366, L1368): a read and an unresolved write pass in the project too;
+// a write or delete of a credentials file and a protected path stay refused.
 
 package guards
 
@@ -20,14 +20,13 @@ func TestOutsideTheProjectIsTheSandboxs(t *testing.T) {
 			noDecision(t, r.Stdout, c)
 		}
 	}
-	for _, c := range []string{"cat .env", "cat <P>/.env", "cat ./i18n/../.env", "cat $PWD/.env", "cat .env* | head", "head -n 1 config/.env.local",
-		"git show HEAD:.env", "cat $X/.ssh/*", `python3 -c "open('<P>/.env').read()"`, `python3 -c "open('.env').read()"`,
-		`node -e "require('fs').readFileSync(process.cwd() + '/.env')"`, `python3 -c "import os; open(os.path.join(os.getcwd(), '/.env'))"`,
-		"echo x > .git/config", "cp i18n/en.json .claude/settings.json", "echo x | tee ~/.ssh/authorized_keys", "chmod -R 755 ..",
+	// Reads and unresolved writes pass inside the project too (L1366).
+	for _, c := range []string{"cat .env", "cat $PWD/.env", "git show HEAD:.env", `python3 -c "open('.env').read()"`,
+		`echo x > "$(printf .git)/config"`, `echo x > "$OUT"`} {
+		s.code(t, s.expand(c), sgOpts{}, 0, "passes: "+c)
+	}
+	for _, c := range []string{"rm .env", "echo x > .env", "echo x > .git/config", "cp i18n/en.json .claude/settings.json", "echo x | tee ~/.ssh/authorized_keys", "chmod -R 755 ..",
 		"dd if=i18n/en.json of=.git/config"} {
 		s.code(t, s.expand(c), sgOpts{}, 2, "still refused: "+c)
-	}
-	for _, c := range []string{`echo x > "$(printf .git)/config"`, `echo x > "$OUT"`} {
-		askedWhy(t, s.bash(t, c, top()).Stdout, "still asked: "+c)
 	}
 }

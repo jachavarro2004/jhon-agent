@@ -40,11 +40,6 @@ const (
 
 func deny(what, why string) Finding { return Finding{Level: "deny", What: what, Why: why} }
 
-// denyCredentials is a deny finding of the credentials class: a file only the owner handles.
-func denyCredentials(what, why string) Finding {
-	return Finding{Level: "deny", What: what, Why: why, Cls: Credentials}
-}
-
 // ask is an ask finding whose repository is the directory it runs in.
 func ask(cls, what string) Finding { return Finding{Level: "ask", Cls: cls, What: what} }
 
@@ -486,26 +481,20 @@ func followLinks(abs string, st *State) string {
 }
 
 // judgeWrite is the findings of one shell write of the word w: a device,
-// a path no agent writes (protectedWhy), or a target the guard cannot
-// resolve, which may be one (`$(printf .git)/config`). Where else a write
-// lands, inside the project or outside it, is the sandbox's (T128f).
+// a path no agent writes (protectedWhy), or a credentials file
+// (credentialWhy). Any other target, one the guard cannot resolve too,
+// passes: the sandbox bounds where it lands (T128f, L1366).
 func judgeWrite(w, label string, ctx *Ctx, vars map[string]string, st *State) []Finding {
-	if w == "(…)" {
-		return nil // a process substitution, not a file
-	}
 	a := pathOf(w, st.Dir, ctx, vars)
-	if a == "" {
-		// A file whose name alone is a value (`/tmp/run_$$.log`, `/tmp/$1.log`),
-		// written into a named scratch directory outside any repository, stays
-		// there, whatever the value.
-		if dir := filepath.Dir(w); strings.Contains(w, "/") && !strings.ContainsAny(dir, "$`") {
-			if d := pathOf(dir, st.Dir, ctx, vars); d != "" && !inRepo(d) && slices.ContainsFunc(ctx.Scratch, func(r string) bool { return project.Within(d, r) }) {
-				return nil
-			}
-		}
-		return []Finding{writeAsk(unknown, label+": its target cannot be resolved")}
+	if a != "" {
+		a = followLinks(a, st)
 	}
-	a = followLinks(a, st)
+	if why := credentialWhy(w, a); why != "" {
+		return []Finding{deny(label, why)}
+	}
+	if a == "" {
+		return nil
+	}
 	if strings.HasPrefix(a, "/dev/") {
 		if deviceWriteOK.MatchString(a) {
 			return nil
@@ -516,6 +505,17 @@ func judgeWrite(w, label string, ctx *Ctx, vars map[string]string, st *State) []
 		return []Finding{deny(label, why)}
 	}
 	return nil
+}
+
+// credentialWhy is why a shell write or delete of the word w, resolved
+// to abs ("" when it cannot be), is refused: it overwrites or removes a
+// credentials file, often in no history, by its name or a glob naming one
+// (L1368). Reading one is not limited.
+func credentialWhy(w, abs string) string {
+	if CredentialFile(w) || credentialGlobWord(w) || (abs != "" && CredentialFile(abs)) {
+		return CredentialsWhy(w)
+	}
+	return ""
 }
 
 func isDirAt(w string, st *State, ctx *Ctx, vars map[string]string) bool {

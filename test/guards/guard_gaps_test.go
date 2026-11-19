@@ -1,6 +1,7 @@
 // Guard gaps the T15.20 verifiers found on the base (T21 G2, T28): a
-// sourced script, inline code globbing outside the project, the Glob tool,
-// Grep's `~`.
+// sourced script, the Glob tool, Grep's `~`. A script's text is judged as a
+// command line is; the probe is a destructive line, since reading a
+// credentials file is not limited (L1366).
 
 package guards
 
@@ -18,31 +19,11 @@ import (
 func TestSourcedScriptIsJudged(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
-	support.Write(t, s.p, map[string]string{"deploy/far.sh": "cat .env\n", "deploy/ok.sh": "echo hi\n"})
+	support.Write(t, s.p, map[string]string{"deploy/far.sh": "git push --force\n", "deploy/ok.sh": "echo hi\n"})
 	for _, c := range []string{"bash deploy/far.sh", "source deploy/far.sh", ". deploy/far.sh", "source ./deploy/far.sh"} {
-		s.code(t, c, sgOpts{}, 2, "a script that reads a credentials file in the project")
+		s.code(t, c, sgOpts{}, 2, "a script that runs a destructive command")
 	}
 	s.code(t, "source deploy/ok.sh", sgOpts{}, 0, "a harmless sourced script")
-}
-
-// Inline code whose strings glob or name a credentials file under a home
-// it asks for, or a path joined to another part, is refused by the name
-// rule; a whole path outside the project is the sandbox's (T128f).
-func TestInlineCodeGlobbingElsewhereIsRefused(t *testing.T) {
-	t.Parallel()
-	s := credTree(t)
-	for _, c := range []string{
-		`python3 -c "import glob, os; print(glob.glob(os.path.expanduser('~') + '/x/credentials.json'))"`,
-		`python3 -c "import glob, os; print(glob.glob(os.path.join(os.path.expanduser('~'), 'keys', 'id_*')))"`,
-		`node -e "const os = require('os'); require('fs').globSync(os.homedir() + '/x/' + 'cred*')"`,
-		`python3 -c "from pathlib import Path; print(list(Path.home().glob('**/id_*')))"`,
-	} {
-		s.code(t, c, sgOpts{}, 2, "inline code globbing a credentials name elsewhere")
-	}
-	for _, c := range []string{`node -e "require('fs').globSync('src/*.ts')"`, `python3 -c "print(open('/etc/hostname').read())"`,
-		`python3 -c "import glob; print(glob.glob('/srv/*.go'))"`} {
-		s.code(t, c, sgOpts{}, 0, "inline code that names no credentials file")
-	}
 }
 
 // The Glob tool is guarded as Grep's glob is (Claude Code's Glob, pi's find).
@@ -90,22 +71,10 @@ func TestGrepHomePathIsTheHome(t *testing.T) {
 func TestSourcedScriptEveryForm(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
-	support.Write(t, s.p, map[string]string{"far.sh": "cat .env\n", "far2.sh": "source far.sh\n"})
+	support.Write(t, s.p, map[string]string{"far.sh": "git push --force\n", "far2.sh": "source far.sh\n"})
 	for _, c := range []string{"builtin source far.sh", "builtin . far.sh", "true && builtin source far.sh",
 		"eval source far.sh", "bash -c 'source far.sh'", "source far2.sh"} {
-		s.code(t, c, sgOpts{}, 2, "a sourced script that reads a credentials file in the project")
-	}
-}
-
-// Inline code whose strings glob a credentials name through a `..` part
-// reaches outside the project, as an absolute path does.
-func TestInlineCodeGlobbingUpwardIsRefused(t *testing.T) {
-	t.Parallel()
-	s := credTree(t)
-	support.Write(t, s.scratch, map[string]string{"id_rsa": "k\n"})
-	for _, c := range []string{`node -e "require('fs').globSync('../id_*')"`, `python3 -c "import glob; print(glob.glob('../id_*'))"`,
-		`python3 -c "import glob; print(glob.glob('src/../../id_*'))"`} {
-		s.code(t, c, sgOpts{}, 2, "inline code globbing a credentials name above the project")
+		s.code(t, c, sgOpts{}, 2, "a sourced script that runs a destructive command")
 	}
 }
 
@@ -156,7 +125,7 @@ func TestSourcedSubstitutionAsks(t *testing.T) {
 func TestNodePreloadAsks(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
-	support.Write(t, s.p, map[string]string{"ok.cjs": "module.exports = {};\n", "far.mjs": "import { execSync } from 'node:child_process';\nexecSync('cat ../id_rsa');\n", "ok.mjs": "console.log(1);\n"})
+	support.Write(t, s.p, map[string]string{"ok.cjs": "module.exports = {};\n", "far.mjs": "import { execSync } from 'node:child_process';\nexecSync('git push --force');\n", "ok.mjs": "console.log(1);\n"})
 	for _, c := range []string{"node -r ./far.mjs ok.mjs", "node --require ./far.mjs ok.mjs", "node --import ./far.mjs ok.mjs", "node --loader ./far.mjs ok.mjs",
 		"bun --preload ./far.mjs ok.mjs", "NODE_OPTIONS='--require ./far.mjs' node ok.mjs", "export NODE_OPTIONS='--import ./far.mjs'; node ok.mjs"} {
 		r := s.bash(t, c, top())
@@ -177,7 +146,7 @@ func TestNodePreloadAsks(t *testing.T) {
 func TestNodePreloadAnywhereAsks(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
-	support.Write(t, s.p, map[string]string{"far.mjs": "import { execSync } from 'node:child_process';\nexecSync('cat ../id_rsa');\n", "ok.mjs": "console.log(1);\n", "ok.cjs": "module.exports = {};\n",
+	support.Write(t, s.p, map[string]string{"far.mjs": "import { execSync } from 'node:child_process';\nexecSync('git push --force');\n", "ok.mjs": "console.log(1);\n", "ok.cjs": "module.exports = {};\n",
 		"cfg.txt": "NODE_OPTIONS=--require ./far.mjs\n"})
 	for _, c := range []string{"bun run --preload ./ok.cjs ok.mjs", "bun test --preload ./ok.cjs", "bun x -r ./ok.cjs tsc", "bun -r ./ok.cjs ok.mjs",
 		"node -C dev -r ./ok.cjs ok.mjs", "node --conditions dev --require ./ok.cjs ok.mjs", "node --title x -r ./ok.cjs ok.mjs",
@@ -203,7 +172,7 @@ func TestNodePreloadAnywhereAsks(t *testing.T) {
 func TestUnresolvedScriptNameAsks(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
-	support.Write(t, s.p, map[string]string{"far.sh": "cat .env\n", ".venv/bin/activate": "export VIRTUAL_ENV=.venv\n"})
+	support.Write(t, s.p, map[string]string{"far.sh": "git push --force\n", ".venv/bin/activate": "export VIRTUAL_ENV=.venv\n"})
 	for _, c := range []string{`bash -c 'source "$1"' far.sh`, `bash -c 'bash $2' x far.sh`, "bash /dev/fd/3 3< far.sh", "source ${X:-far.sh}",
 		". $X", `bash -c 'bash -c "source \$0"' far.sh`} {
 		r := s.bash(t, c, top())

@@ -131,3 +131,29 @@ func with(m map[string]any, kv ...any) map[string]any {
 	}
 	return out
 }
+
+// credTree is a project with JSON files and no credentials file.
+func credTree(t *testing.T) sgEnv {
+	t.Helper()
+	s := newSG(t)
+	support.Write(t, s.p, map[string]string{"i18n/en.json": "{}\n", "i18n/es/app.json": "{}\n", "snapshots/a.json": "{}\n"})
+	return s
+}
+
+// scriptGlobbing is a node script that globs glob, the corpus fixture's.
+func scriptGlobbing(glob, extra string) string {
+	return "import { execSync } from 'node:child_process';\nimport fg from 'fast-glob';\n" + extra +
+		"const files = fg.sync('" + glob + "');\nexecSync('echo ' + files.length);\n"
+}
+
+// piCall is the payload pi's judge() sends, through `jhon hook pre-tool`.
+func (s sgEnv) piCall(t *testing.T, command string, child bool) support.Result {
+	t.Helper()
+	payload := map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": cmd(command), "cwd": s.p}
+	if child {
+		payload["agent_id"] = "pi-child"
+	} else {
+		payload["permission_mode"] = "default"
+	}
+	return hook(t, s.env, "pre-tool", []string{"--agent", "*", "safety-guard", "vcs-guard", ".git", "secrets-guard", "route-guard"}, payload)
+}

@@ -99,7 +99,7 @@ func TestModeEveryModeStillRefuses(t *testing.T) {
 	for _, mode := range []string{"normal", "yolo", "super-yolo"} {
 		s := newSG(t)
 		s.setMode(t, s.p, mode)
-		for _, c := range []string{"cat .env", "git push --force", "git push --no-verify", "git commit --no-verify -m x", "git clean -fdx",
+		for _, c := range []string{"rm .env", "git push --force", "git push --no-verify", "git commit --no-verify -m x", "git clean -fdx",
 			"echo x > .git/config", "jhon grant push", "jhon mode yolo", "rm -rf /", "rm -rf .git"} {
 			for _, o := range []sgOpts{{}, top()} {
 				r := s.bash(t, c, o)
