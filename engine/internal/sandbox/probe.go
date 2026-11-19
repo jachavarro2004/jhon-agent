@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,8 +15,15 @@ import (
 // Program is bubblewrap's command, as PATH's folders name it.
 const Program = "bwrap"
 
-// A Problem is why the sandbox cannot run here, and what fixes it.
-type Problem struct{ Reason, Fix string }
+// A Problem is why the sandbox cannot run here, and what fixes it. TimedOut
+// is a probe whose bubblewrap did not end within its bound: no verdict on
+// whether the sandbox runs (T128f slice 8c, L1382), so the default mode
+// stays on and a command is wrapped as usual, and `jhon sandbox run` fails
+// visibly if bubblewrap really cannot start.
+type Problem struct {
+	Reason, Fix string
+	TimedOut    bool
+}
 
 // Line is the problem on one line: the reason, then the fix.
 func (p *Problem) Line() string { return p.Reason + "; fix: " + p.Fix }
@@ -84,14 +92,14 @@ func find(h Host, in Input) (path, refused string) {
 // nothing.
 func Check(h Host, in Input) (bwrap string, problem *Problem) {
 	if h.OS != "linux" {
-		return "", &Problem{"the sandbox does not run on this system (" + h.OS + ")", "none on this system: it needs Linux and bubblewrap"}
+		return "", &Problem{"the sandbox does not run on this system (" + h.OS + ")", "none on this system: it needs Linux and bubblewrap", false}
 	}
 	bwrap, refused := find(h, in)
 	if bwrap == "" && refused != "" {
-		return "", &Problem{"bubblewrap (" + Program + ") is on PATH only in a folder a sandboxed command may write (" + refused + ")", trustedFix}
+		return "", &Problem{"bubblewrap (" + Program + ") is on PATH only in a folder a sandboxed command may write (" + refused + ")", trustedFix, false}
 	}
 	if bwrap == "" {
-		return "", &Problem{"bubblewrap (" + Program + ") is not on PATH", installFix}
+		return "", &Problem{"bubblewrap (" + Program + ") is not on PATH", installFix, false}
 	}
 	if fi, err := h.Stat(bwrap); err == nil && fi.Mode()&os.ModeSetuid != 0 {
 		return bwrap, nil
@@ -99,7 +107,7 @@ func Check(h Host, in Input) (bwrap string, problem *Problem) {
 	for _, file := range userNamespaceSwitches {
 		if b, err := h.ReadFile(file); err == nil && strings.TrimSpace(string(b)) == "0" {
 			name := strings.ReplaceAll(strings.TrimPrefix(file, "/proc/sys/"), "/", ".")
-			return "", &Problem{"unprivileged user namespaces are off (" + name + " = 0)", usernsFix}
+			return "", &Problem{"unprivileged user namespaces are off (" + name + " = 0)", usernsFix, false}
 		}
 	}
 	return bwrap, nil
@@ -119,10 +127,13 @@ func Probe(h Host, in Input) *Problem {
 	return started(bwrap)
 }
 
+// probeBound is how long Probe waits for its empty sandbox.
+const probeBound = 5 * time.Second
+
 // started is Probe's start of one empty sandbox with bwrap: nil when it ran,
 // else why it did not and the fix. A test gives its own.
 var started = func(bwrap string) *Problem {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), probeBound)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bwrap, append(slices.Clone(probeArgs), "true")...)
 	cmd.WaitDelay = time.Second
@@ -130,12 +141,15 @@ var started = func(bwrap string) *Problem {
 	if err == nil {
 		return nil
 	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return &Problem{"bubblewrap did not start a sandbox within " + probeBound.String() + ", which says nothing on whether it can", "run jhon sandbox status again; a sandboxed command fails with bubblewrap's own message if it cannot start", true}
+	}
 	said, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
 	if said == "" {
 		said = err.Error()
 	}
 	if strings.Contains(said, "Unknown option") {
-		return &Problem{"bubblewrap is too old for the sandbox (" + said + ")", oldFix}
+		return &Problem{"bubblewrap is too old for the sandbox (" + said + ")", oldFix, false}
 	}
-	return &Problem{"bubblewrap cannot start a sandbox (" + said + ")", usernsFix}
+	return &Problem{"bubblewrap cannot start a sandbox (" + said + ")", usernsFix, false}
 }

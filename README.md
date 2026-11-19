@@ -149,7 +149,10 @@ A file an agent writes is then formatted by its project's own formatter
 the sandbox can run (one empty sandbox starts); where it cannot (no
 bubblewrap, user namespaces off or blocked by AppArmor, a bubblewrap too
 old) the default is off, commands run unsandboxed and `jhon doctor` warns
-with the fix (an explicit `on` there refuses every command). With it on, an
+with the fix (an explicit `on` there refuses every command). A probe that
+does not end within 5 seconds is no verdict: the mode stays on, commands are
+wrapped as usual and fail with bubblewrap's own message if it cannot start,
+and `jhon doctor` warns. With it on, an
 allowed command runs inside `jhon sandbox run` (bubblewrap): the project, the
 temporary folders, the caches and `sandbox.allow_write` are writable,
 everything else is read-only, and the home's credentials are not there.

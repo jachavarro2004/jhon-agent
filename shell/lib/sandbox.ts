@@ -28,7 +28,8 @@
  *
  * The command is one argument of that argv: no shell reads it before the one
  * inside the sandbox. With the mode on where the sandbox cannot run, or with
- * no answer to pin, the call is refused and nothing runs. With the mode off
+ * no answer to pin, the call is refused and nothing runs; a probe that timed
+ * out (`timed_out`) is no verdict, and the command is wrapped as usual. With the mode off
  * nothing here touches a command: `bash` stays pi's built-in tool.
  *
  * The guards judge the original command first (extensions/jhon.ts); this
@@ -56,7 +57,7 @@ import { BASH_BACKGROUND_TOOL, MONITOR_TOOL } from "./ui/background-jobs.ts";
 
 /** `jhon sandbox status --json`, as the session keeps it; `unread` when it gave no answer. */
 export type SandboxPin =
-	| { mode: "on" | "off"; canRun: boolean; reason: string; fix: string; project: string | undefined }
+	| { mode: "on" | "off"; canRun: boolean; reason: string; fix: string; project: string | undefined; timedOut?: true }
 	| { unread: string };
 
 /** What the pinned answer means for one command: run it as before, run it in the sandbox, or refuse it. */
@@ -81,7 +82,7 @@ export async function readSandboxStatus(config: { jhon: string }, cwd: string, t
 	try { s = JSON.parse(r.stdout); } catch { return { unread: "its output is not JSON" }; }
 	if ((s?.mode !== "on" && s?.mode !== "off") || typeof s.can_run !== "boolean") return { unread: "its output carries no mode or can_run" };
 	const line = (v: unknown) => (typeof v === "string" ? v : "");
-	return { mode: s.mode, canRun: s.can_run, reason: line(s.reason), fix: line(s.fix), project: typeof s.project === "string" ? s.project : undefined };
+	return { mode: s.mode, canRun: s.can_run, reason: line(s.reason), fix: line(s.fix), project: typeof s.project === "string" ? s.project : undefined, ...(s.timed_out === true ? { timedOut: true as const } : {}) };
 }
 
 export function sandboxVerdict(pin: SandboxPin): SandboxVerdict {
@@ -89,7 +90,10 @@ export function sandboxVerdict(pin: SandboxPin): SandboxVerdict {
 		return { refuse: `jhon: \`jhon sandbox status --json\` gave no answer (${pin.unread}), so whether this command runs in the sandbox is unknown; the command is refused, never run unsandboxed in silence; run \`jhon doctor\`` };
 	}
 	if (pin.mode === "off") return { run: "plain" };
-	if (!pin.canRun) {
+	// A probe that timed out is no verdict (T128f slice 8c, L1382, L1383): the
+	// command runs through `jhon sandbox run` as usual, which fails with
+	// bubblewrap's own message if it cannot start.
+	if (!pin.canRun && !pin.timedOut) {
 		return { refuse: `jhon: sandbox.mode is on and the sandbox cannot run here: ${pin.reason || "no reason given"}; the command is refused, never run unsandboxed in silence. Fix: ${pin.fix || "run `jhon doctor`"}` };
 	}
 	if (pin.project === undefined) {

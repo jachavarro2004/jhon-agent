@@ -244,6 +244,10 @@ type sandboxState struct {
 	Reason     string `json:"reason"`
 	Fix        string `json:"fix"`
 	Project    string `json:"project"`
+	// TimedOut is a probe that did not end in time: no verdict (L1382).
+	// CanRun stays false, truthfully, and pi wraps the command as usual,
+	// as the Claude Code wrap does (L1383).
+	TimedOut bool `json:"timed_out"`
 	// BashRules is set with the mode on only: with it off the rules apply.
 	BashRules *claudeBashRules `json:"claude_bash_rules,omitempty"`
 }
@@ -373,7 +377,7 @@ func sandboxNow(pinned string) sandboxState {
 		p = sandbox.Probe(sandboxHost(), in)
 	}
 	if p != nil {
-		s.CanRun, s.Reason, s.Fix = false, p.Reason, p.Fix
+		s.CanRun, s.Reason, s.Fix, s.TimedOut = false, p.Reason, p.Fix, p.TimedOut
 	}
 	if s.Mode == "on" {
 		top := s.Project
@@ -419,6 +423,8 @@ func (d doctor) sandbox() {
 		d.o.Warn(s.line() + "; " + sandboxOffUnguarded)
 	case s.CanRun:
 		d.o.OK(s.line())
+	case s.Mode == "on" && s.TimedOut:
+		d.o.Warn(s.line() + "; the model's commands are wrapped as usual, and fail with bubblewrap's message if it cannot start")
 	case s.Mode == "on":
 		d.o.Bad(s.line() + "; until then every command of the model is refused")
 	default:

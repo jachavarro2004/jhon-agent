@@ -16,7 +16,8 @@ const (
 // Effective is sandbox.mode as it applies on a host, and where it comes
 // from (ModeDefault or ModeSettings). Probed is whether Mode probed the
 // sandbox to decide it, the default on Linux: Problem is then the probe's
-// verdict, nil where one empty sandbox started, and a caller that probes
+// verdict, nil where one empty sandbox started (TimedOut where it did not
+// end in time, the mode then on), and a caller that probes
 // the same sandbox takes it instead of starting bubblewrap again.
 type Effective struct {
 	Mode, Source string
@@ -35,7 +36,9 @@ type Effective struct {
 // model's commands then run unsandboxed and `jhon doctor` warns with the
 // fix. An explicit on where the sandbox cannot run keeps refusing every
 // command with the probe's fix. Settings that cannot be read leave the
-// default. in is called only for that probe, once; with the owner's value
+// default. A probe that times out is no verdict (slice 8c, L1382): the
+// default stays on, with the probe's problem, and the command is wrapped as
+// usual. in is called only for that probe, once; with the owner's value
 // or off Linux nothing is built, read or started. The Claude Code wrap and
 // `jhon sandbox status`, which pi asks, read this one.
 func Mode(h Host, in func() Input) Effective {
@@ -48,8 +51,9 @@ func Mode(h Host, in func() Input) Effective {
 	if h.OS != "linux" {
 		return Effective{Mode: "off", Source: ModeDefault}
 	}
-	if p := Probe(h, in()); p != nil {
+	p := Probe(h, in())
+	if p != nil && !p.TimedOut {
 		return Effective{Mode: "off", Source: ModeDefault, Probed: true, Problem: p}
 	}
-	return Effective{Mode: "on", Source: ModeDefault, Probed: true}
+	return Effective{Mode: "on", Source: ModeDefault, Probed: true, Problem: p}
 }

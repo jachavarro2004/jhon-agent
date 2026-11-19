@@ -190,7 +190,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            (the shell's writes outside the project then run
                            unguarded); fails where it cannot run with the
                            mode set on (every command is refused), with the
-                           fix; fails when the record of the
+                           fix; warns, never fails, when the probe does not
+                           end in time (commands are wrapped as usual);
+                           fails when the record of the
                            rendered agents or the main agent's definition
                            is missing from ~/.claude/agents, or the
                            definition cannot be read or is empty
@@ -551,14 +553,19 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            can run here (one empty sandbox is started with
                            the bubblewrap and the options run uses, so one
                            older than 0.5.0 cannot, as for jhon doctor), and
-                           the reason and the fix when it cannot, and the
+                           the reason and the fix when it cannot; a probe
+                           that does not end within 5 s is no verdict: the
+                           mode stays on and commands are wrapped as usual,
+                           failing with bubblewrap's message if it cannot
+                           start; and the
                            project a run from here gets (the folder that
                            holds .git, or none in no repository; with
                            --project, that folder); --json: mode,
                            mode_source (default or settings), mode_reason
                            (why the default is off on Linux: the reason
-                           and the fix, else ""),
-                           can_run, reason, fix, project ("" for none);
+                           and the fix, else ""), can_run, reason, fix,
+                           timed_out (the probe did not end in time;
+                           can_run stays false), project ("" for none);
                            --project as for run; exit 0, 2 on a usage
                            error. With
                            sandbox.mode on it also counts the Bash deny and

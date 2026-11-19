@@ -17,7 +17,8 @@ func TestModeIsOnByDefaultWhereTheSandboxCanRun(t *testing.T) {
 	t.Cleanup(func() { started = was })
 	starts := 0
 	started = func(string) *Problem { starts++; return nil }
-	blocked := &Problem{"bubblewrap cannot start a sandbox (bwrap: setting up uid map: Permission denied)", usernsFix}
+	blocked := &Problem{"bubblewrap cannot start a sandbox (bwrap: setting up uid map: Permission denied)", usernsFix, false}
+	hung := &Problem{"bubblewrap did not start a sandbox within 5s, which says nothing on whether it can", "run jhon sandbox status again", true}
 	installed := with(machine, disk{"/usr/bin": "dir", "/usr/bin/bwrap": "file"})
 	userns := map[string]string{"/proc/sys/user/max_user_namespaces": "0\n"}
 	input := func(d disk) Input {
@@ -41,6 +42,7 @@ func TestModeIsOnByDefaultWhereTheSandboxCanRun(t *testing.T) {
 		{"linux, bubblewrap only where a command may write", "", host("linux", planted, nil), inPlanted, nil, "off", ModeDefault, "bubblewrap (bwrap) is on PATH only in a folder a sandboxed command may write (/home/u/project/bin)"},
 		{"linux, user namespaces off", "", host("linux", installed, userns), input(installed), nil, "off", ModeDefault, "unprivileged user namespaces are off (user.max_user_namespaces = 0)"},
 		{"linux, bubblewrap cannot start", "", host("linux", installed, nil), input(installed), blocked, "off", ModeDefault, blocked.Reason},
+		{"linux, the probe times out: no verdict, the default stays on", "", host("linux", installed, nil), input(installed), hung, "on", ModeDefault, hung.Reason},
 		{"linux, owner on, bubblewrap cannot start", "[sandbox]\nmode = \"on\"\n", host("linux", installed, nil), input(installed), blocked, "on", ModeSettings, ""},
 		{"darwin", "", Host{OS: "darwin"}, Input{}, nil, "off", ModeDefault, ""},
 		{"windows", "", Host{OS: "windows"}, Input{}, nil, "off", ModeDefault, ""},

@@ -24,10 +24,12 @@ import { useMemorySettings } from "./fake-jhon-settings.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-type Status = { mode: "on" | "off"; can_run: boolean; reason: string; fix: string; project?: string };
+type Status = { mode: "on" | "off"; can_run: boolean; reason: string; fix: string; project?: string; timed_out?: boolean };
 const ON: Status = { mode: "on", can_run: true, reason: "", fix: "", project: "@cwd" };
 const OFF: Status = { mode: "off", can_run: true, reason: "", fix: "", project: "@cwd" };
 const CANNOT: Status = { mode: "on", can_run: false, reason: "bubblewrap is not installed", fix: "install bubblewrap (pacman -S bubblewrap)", project: "@cwd" };
+/** The engine's probe did not end in time (T128f slice 8c, L1382, L1383): no verdict, so the mode stays on and can_run stays false. */
+const TIMED_OUT: Status = { mode: "on", can_run: false, reason: "bubblewrap did not start a sandbox within 5s, which says nothing on whether it can", fix: "run jhon sandbox status again; a sandboxed command fails with bubblewrap's own message if it cannot start", project: "@cwd", timed_out: true };
 
 const FAKE = `#!/usr/bin/env node
 const fs = require("node:fs"), path = require("node:path"), cp = require("node:child_process");
@@ -239,6 +241,30 @@ function suite(): void {
 		assert.equal(existsSync(join(d, "ran.txt")), false);
 		assert.deepEqual(fake.runs(), []);
 		assert.equal(tools.has("bash"), false, "no sandboxed bash is registered where the sandbox cannot run");
+	});
+
+	test("rule 4b (L1383): a probe that timed out is no verdict: the three tools run their command through `jhon sandbox run`; without timed_out the same answer refuses", { skip: !bash && "needs /bin/bash" }, async (t) => {
+		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), TIMED_OUT);
+		const d = project(t);
+		assert.deepEqual(await readSandboxStatus({ jhon: fake.bin }, d), { mode: "on", canRun: false, reason: TIMED_OUT.reason, fix: TIMED_OUT.fix, project: d, timedOut: true });
+		const { pi, tools, fire } = fakePi();
+		const sandbox = wireSandbox(pi, { jhon: fake.bin });
+		await fire("session_start", {}, ctxAt(d));
+		for (const tool of ["bash", "bash_background", "monitor"]) assert.equal(await sandbox.gate(tool, d), undefined, tool);
+		assert.ok(tools.has("bash"), "the sandboxed bash is registered");
+		const result = await tools.get("bash").execute("c1", { command: TRICKY }, undefined, undefined, ctxAt(d));
+		assert.equal(textOf(result), `it's|a "b"|$HOME|done\n`);
+		assert.deepEqual(fake.runs(), [{ args: wrapped(fake.bin, d, TRICKY).args, cwd: d }]);
+		// The same answer without timed_out (or with it false) still refuses, and nothing runs.
+		for (const status of [{ ...TIMED_OUT, timed_out: undefined }, { ...TIMED_OUT, timed_out: false }]) {
+			const other = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), status);
+			const host = fakePi();
+			const refused = wireSandbox(host.pi, { jhon: other.bin });
+			await host.fire("session_start", {}, ctxAt(d));
+			assert.match((await refused.gate("bash", d)) ?? "", /^jhon: sandbox\.mode is on and the sandbox cannot run here: bubblewrap did not start a sandbox within 5s/);
+			assert.equal(host.tools.has("bash"), false);
+			assert.deepEqual(other.runs(), []);
+		}
 	});
 
 	test("rule 4: no answer, no project field, or no repository refuses too; a session with no jhon to ask is left to the guards", async (t) => {
