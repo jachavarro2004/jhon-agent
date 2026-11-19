@@ -538,7 +538,8 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            redirects to no file; work for any other line,
                            and for one it cannot read or whose words the
                            shell would still rewrite (a $, a backtick, an
-                           unquoted glob or brace; a single-quoted word,
+                           unquoted glob or brace, an unquoted ~ that names
+                           a home folder; a single-quoted word,
                            or a double-quoted one with no $ or backtick, is
                            literal: --format '{{.Names}}'). git over SSH,
                            gh and the owner's docker cannot run inside the
