@@ -204,6 +204,8 @@ func TestMissingSurfaces(t *testing.T) {
 		"src/a.ts", "src/new.ts", "src/parse/", "src/parse/deep/", "src/**", "src/*.go", "**/*.go", "Makefile",
 		"svc/x.py", filepath.Join(r, "src", "b.ts"), "tests/unit/test_new.py", "openspec/changes/c9/tasks.md",
 		"srcs/a.ts", "pkg/parse/", "lib/**/*.py", "a/*/b.go", filepath.Join(r, "gone", "a.md"),
+		// A new folder under an existing top-level one (L1413): its file, a glob in it, a folder in it.
+		"src/cache/cache.go", "src/cache/**", "src/cache/*.go", "src/cache/deep/",
 	}
 	want := []string{"srcs/a.ts", "pkg/parse/", "lib/**/*.py", "a/*/b.go", filepath.Join(r, "gone", "a.md")}
 	if got := MissingSurfaces(listed, []string{r, other}); !slices.Equal(got, want) {
@@ -213,7 +215,7 @@ func TestMissingSurfaces(t *testing.T) {
 		t.Errorf("a path only another root holds, with that root not given: %q", got)
 	}
 	for s, want := range map[string]string{"src/a.ts": "src", "src/parse/": "src", "src/**": "src", "lib/*.py": "lib",
-		"a/b*/c.go": "a", "**/*.go": ".", "Makefile": "."} {
+		"a/b*/c.go": "a", "**/*.go": ".", "Makefile": ".", "src/cache/cache.go": "src", "src/a/b/c/": "src"} {
 		if got := SurfaceParent(s); got != want {
 			t.Errorf("SurfaceParent(%q) = %q, want %q", s, got, want)
 		}

@@ -293,7 +293,7 @@ func missingSurfaces(kind, cwd string, surfaces []string) string {
 		verb = "match"
 	}
 	return "a " + kind + " is launched with surfaces that exist: its `## Allowed edit surfaces` names " + strings.Join(named, ", ") + ", which " + verb + " nothing in " + roots[0] +
-		". A path matches when a file or folder exists there, a glob when it matches one, and a new file's path when its parent folder exists. Fix the path in the brief before the launch: scope-guard holds the writer to the paths listed and refuses the real file a wrong one stands for (contracts/efficiency.md, \"Writer scope\")."
+		". A path matches when a file or folder exists there, a glob when it matches one, and a new path when its top-level folder exists. Fix the path in the brief before the launch: scope-guard holds the writer to the paths listed and refuses the real file a wrong one stands for (contracts/efficiency.md, \"Writer scope\")."
 }
 
 // memberPrimary is the primary whose record judges root, a joined member of

@@ -7,7 +7,7 @@ writer: the worker and the Judgment Day fix actor.
 
 - Change only what the task needs, inside the files the prompt lists under
   `## Allowed edit surfaces` (test files and the change's LDD record are
-  always in scope). Each path listed exists, or a new file's parent folder
+  always in scope). Each path listed exists, or its top-level folder
   does; route-guard refuses a launch that names one matching nothing. A
   file outside them is a question for the parent, not an edit: return
   `blocked` naming it and why. In Claude Code, scope-guard refuses such a
