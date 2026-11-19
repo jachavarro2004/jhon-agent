@@ -150,8 +150,25 @@ the primary, `workspace   member lib  (primary <path>)` in a member, and
 `workspace` with `--json` (docs/status-json.md); nothing outside a workspace.
 Its notes name a listed sibling that has not joined, a path that is no git
 repository's top, an ignored name or absolute path, and, in a sibling, a
-pointer whose primary does not list it. The workspace is reported only: the
-guards, the sessions' roots, executions and delivery do not read it yet.
+pointer whose primary does not list it.
+
+In a session whose project is the primary or a joined member, the primary
+and every joined member are the project for the guards that judge "outside
+the project": the vcs guard's and the safety guard's writes (and their
+deletions inside a root; removing a member's root itself stays refused), and
+the OS sandbox's writable roots, read from the disk with no git process.
+Editing a sibling the owner joined needs no `outside-write` grant. A listed
+sibling that has not joined, a joined one the primary does not list, and
+any other repository stay outside, as before.
+
+A joined member needs no LDD layout of its own: route-guard lets its edits
+and commits through, and judges its PR with the primary's record. The
+member's branch names the change (its name, a slash a dash: `feat/c1` is
+`feat-c1`), and a PR whose diff alters behaviour in the member, by the
+member's own route, opens once the primary's change has its RED before GREEN
+in `jhon executions`, a passing light verify on the standard route, and its
+independent verification on the verified route. Executions per repository
+and linked delivery are not here yet.
 
 ## The change's state in Engram
 

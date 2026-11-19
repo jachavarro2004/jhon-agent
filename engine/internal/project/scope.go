@@ -119,6 +119,19 @@ func mainOf(common string) string {
 	return Realish(filepath.Dir(common))
 }
 
+// RepoMain is r's main worktree, read from the disk as r is: the folder
+// that holds its common dir when that is a .git, else its top; "" for no
+// project.
+func RepoMain(r Repo) string {
+	if r.Top == "" {
+		return ""
+	}
+	if main := mainOf(r.Common); main != "" {
+		return main
+	}
+	return r.Top
+}
+
 // Roots are the project roots of dir: the root, the main worktree when the
 // root is a linked one, and each one's sibling <root>-worktrees/.
 func Roots(dir string) []string {

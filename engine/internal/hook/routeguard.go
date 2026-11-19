@@ -13,6 +13,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/guard"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // RouteGuard holds every agent to LDD and the route its change takes
@@ -65,6 +66,11 @@ import (
 //     pushd, env -C or git -C to another worktree moves it there from the
 //     session's root (deliveryRoots, T140); one the guard cannot place is
 //     judged at the session's root.
+//   - A joined member of a workspace (workspace.Of) needs no layout of its
+//     own: its edits and commits pass as in a project under LDD, and its PR
+//     is judged with the primary's record, the change its branch names
+//     (memberRefusal, T57 slice 5). A listed sibling that has not joined is
+//     a repository like any other.
 //   - While the branch carries an active change, a whole test suite run by
 //     hand passes with a one-line note: `jhon executions` runs the change's
 //     tests and records them; a focused TDD run passes silently.
@@ -90,7 +96,7 @@ func RouteGuard(args []string, io IO) int {
 	}
 	cwd := p.Cwd()
 	top := project.Root(cwd)
-	if !project.UsesLdd(top) {
+	if !project.UsesLdd(top) && memberPrimary(top) == "" {
 		// Jhon always works under LDD (T72, L557): in a repository with no
 		// layout nothing is refused but delivery, a commit or a PR, until LDD
 		// is set up; a folder in no repository delivers nothing.
@@ -174,14 +180,20 @@ func RouteGuard(args []string, io IO) int {
 		// A repository without LDD's layout answers as a session rooted
 		// there does: nothing is delivered until LDD is set up (T72).
 		notSetUp := func(roots []string) bool {
-			return slices.ContainsFunc(roots, func(r string) bool { return !project.UsesLdd(r) })
+			return slices.ContainsFunc(roots, func(r string) bool { return !project.UsesLdd(r) && memberPrimary(r) == "" })
 		}
 		if notSetUp(prRoots) {
 			return block(ldd.SetUpRefusal())
 		}
 		for _, root := range prRoots {
 			r, v := judgedAt(root)
-			if why := deliveryRefusal(root, command, r, v); why != "" {
+			why := ""
+			if primary := memberPrimary(root); primary != "" {
+				why = memberRefusal(root, primary, command, r)
+			} else {
+				why = deliveryRefusal(root, command, r, v)
+			}
+			if why != "" {
 				return block(layout.Words(root, why))
 			}
 		}
@@ -231,6 +243,56 @@ func RouteGuard(args []string, io IO) int {
 	default:
 		return 0
 	}
+}
+
+// memberPrimary is the primary whose record judges root, a joined member of
+// its workspace (workspace.Of) when the primary uses LDD; "" for any other
+// root.
+func memberPrimary(root string) string {
+	if root == "" {
+		return ""
+	}
+	if ws := workspace.Of(root); ws.Role == workspace.Member && project.UsesLdd(ws.Primary) {
+		return ws.Primary
+	}
+	return ""
+}
+
+// memberRefusal is why a PR command in member, a joined member of primary's
+// workspace, is refused, "" when it may run (T57 slice 5, L1314). Its
+// change is the primary's change its branch names (the branch's name, a
+// slash a dash, as for a change with no folder), and the primary's record
+// judges it: a change that alters behaviour in the member, by the member's
+// route, opens its PR with that change's RED before GREEN, on the standard
+// route its passing light verify, and on the verified route its independent
+// verification; `delivery: change` in the primary merges with rebase.
+func memberRefusal(member, primary, command string, routeOf func() ldd.Route) string {
+	if prMerge.MatchString(command) && ldd.DeliveryUnit(primary) == "change" && !rebase.MatchString(command) {
+		return "delivery: change merges with rebase, so each slice stays its own commit: run `gh pr merge <n> --rebase --delete-branch`."
+	}
+	r := routeOf()
+	if !deliveryOf(command).pr || !r.Behaviour {
+		return ""
+	}
+	branch, _ := project.ReadGit(member, "branch", "--show-current")
+	change := strings.ReplaceAll(branch, "/", "-")
+	lead := "this change alters behaviour in " + member + ", a member of the workspace of " + primary + ", and "
+	route := " Route: " + r.String() + "."
+	if change == "" {
+		return lead + "the member is on no branch, so it names no change of the primary: check out the branch named after the primary's change before the PR." + route
+	}
+	lead += "the primary's change " + change + ", which the member's branch names, "
+	switch {
+	case !execution.RedBeforeGreen(primary, change):
+		return lead + "has no RED before GREEN on record (LDD, contracts/ldd.md, TDD always): " + ldd.RedGreenHint(change) + " in " + primary + ", before the PR." + route
+	case r.Level == ldd.RouteStandard && !execution.LightVerified(primary, change):
+		return lead + "has no passing light verify of the tree its last run tested on record (LDD, contracts/ldd.md, \"Light verify\"): launch the `verify` agent in light mode; it records `jhon executions verify " + change + " --verdict pass` in " + primary + ", before the PR." + route
+	case r.Level == ldd.RouteVerified:
+		if v, _ := ldd.IndependentVerification(primary, change, nil); v == nil {
+			return lead + "has no independent verification on record: the route is verified (" + strings.Join(r.Reasons, "; ") + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) for " + change + " in " + primary + " before the PR (contracts/ldd.md, \"Delivery\")." + route
+		}
+	}
+	return ""
 }
 
 // judged is the route and the reviews of the branch in the repository at

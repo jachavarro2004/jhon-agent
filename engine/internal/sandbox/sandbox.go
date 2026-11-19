@@ -24,6 +24,7 @@ import (
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/guard"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // The profiles (design section 4, D4).
@@ -41,7 +42,8 @@ type Input struct {
 	// Cwd is where the program starts.
 	Cwd string
 	// Roots are the project's roots (project.Repo's): the top folder, the
-	// main worktree of a linked one, and each one's <root>-worktrees.
+	// main worktree of a linked one, and each one's <root>-worktrees; in a
+	// workspace, the primary's and the joined members' (workspace.DiskRoots).
 	Roots []string
 	// CommonDir is the git common dir: a linked worktree commits through
 	// it, and it is outside the worktree's root.
@@ -495,7 +497,8 @@ func remembered(stat func(string) (string, bool, bool)) func(string) (string, bo
 // and socket folders. The project is the folder the caller pinned
 // (project.RepoAt), or with pinned "" the one found by walking up from cwd
 // (project.ReadRepo): a command may remove its project's `.git` entry, and
-// the walk would then take an enclosing repository. The caller adds what the
+// the walk would then take an enclosing repository. In a workspace the
+// primary and the joined members are roots too (workspace.DiskRoots). The caller adds what the
 // settings and the integrations know: AllowWrite, Protected, Telemetry.
 func Current(cwd, pinned, profile string) Input {
 	repo := project.ReadRepo(cwd)
@@ -504,7 +507,7 @@ func Current(cwd, pinned, profile string) Input {
 	}
 	uid := strconv.Itoa(os.Getuid())
 	in := Input{
-		Profile: profile, Cwd: cwd, Roots: repo.Roots(), CommonDir: repo.Common, Worktrees: repo.Worktrees(),
+		Profile: profile, Cwd: cwd, Roots: append(repo.Roots(), workspace.DiskRoots(repo)...), CommonDir: repo.Common, Worktrees: repo.Worktrees(),
 		Tmp: project.TmpRoots(), Home: project.Realish(project.Home()), Env: map[string]string{},
 		Path:          filepath.SplitList(os.Getenv("PATH")),
 		RuntimeDir:    "/run/user/" + uid,

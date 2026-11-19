@@ -10,8 +10,10 @@
 // <sha256 of the sibling's main worktree>.json, so its own files never
 // change. The guards keep that folder from every agent (grant.InGrants).
 // A member counts only when its pointer names a primary whose config lists a
-// path resolving to it. This slice only reports: no guard, root or delivery
-// reads it yet.
+// path resolving to it. The guards that judge "outside the project" count
+// the primary and the joined members as the project (ProjectRoots, the
+// sandbox's DiskRoots), and route-guard judges a member's PR with the
+// primary's record (T57 slice 5, L1314).
 package workspace
 
 import (
@@ -24,6 +26,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/discover"
@@ -148,6 +151,12 @@ func Pointers() []Pointer {
 // config has no `workspace:` key. A path is followed only to a git
 // repository's top, never up from it.
 func Members(primary string) (members []Listed, notes []string, ok bool) {
+	return membersOf(primary, Main)
+}
+
+// membersOf is Members with mainOf giving each listed repository's main
+// worktree.
+func membersOf(primary string, mainOf func(string) string) (members []Listed, notes []string, ok bool) {
 	text, err := project.ReadLddConfig(primary)
 	if err != nil {
 		return nil, nil, false
@@ -169,7 +178,7 @@ func Members(primary string) (members []Listed, notes []string, ok bool) {
 		}
 		l := Listed{Name: name, Path: project.Realish(filepath.Join(primary, rel))}
 		if repo := project.ReadRepo(l.Path); repo.Top != "" && repo.Top == l.Path {
-			l.top = Main(l.Path)
+			l.top = mainOf(l.Path)
 			p, has := PointerOf(l.top)
 			l.Joined = has && p.Primary == primary
 		}
@@ -182,12 +191,15 @@ func Members(primary string) (members []Listed, notes []string, ok bool) {
 // worktree's LDD config has `workspace:`, member when its pointer names a
 // primary that lists it, none otherwise (with the reason, and a note when a
 // pointer names a primary that does not list it).
-func Of(root string) Info {
-	main := Main(root)
+func Of(root string) Info { return of(Main(root), Main) }
+
+// of is Of for the repository whose main worktree is main, with mainOf
+// giving a repository's main worktree.
+func of(main string, mainOf func(string) string) Info {
 	if main == "" {
 		return Info{Role: None, Reason: "no git repository"}
 	}
-	if members, notes, ok := Members(main); ok {
+	if members, notes, ok := membersOf(main, mainOf); ok {
 		for _, l := range members {
 			switch {
 			case l.top == "":
@@ -203,11 +215,11 @@ func Of(root string) Info {
 		return Info{Role: None, Reason: "no workspace pointer"}
 	}
 	leave := " (the owner's `jhon workspace leave` removes the pointer)"
-	if Main(p.Primary) != p.Primary {
+	if mainOf(p.Primary) != p.Primary {
 		why := "workspace pointer names " + p.Primary + ", which is no git repository's main worktree: not a member"
 		return Info{Role: None, Reason: why, Notes: []string{why + leave}}
 	}
-	members, _, _ := Members(p.Primary)
+	members, _, _ := membersOf(p.Primary, mainOf)
 	for _, l := range members {
 		if l.top == main {
 			return Info{Role: Member, Primary: p.Primary, Members: members, Name: l.Name}
@@ -216,3 +228,56 @@ func Of(root string) Info {
 	why := "workspace pointer names " + p.Primary + ", whose LDD config lists no path to this repository: not a member"
 	return Info{Role: None, Reason: why, Notes: []string{why + leave}}
 }
+
+// Roots are the folders info's workspace adds to the project of main, the
+// main worktree info is of (T57 slice 5, L1314): with main the primary or a
+// joined member, the primary's main worktree and every joined member's, each
+// with its <root>-worktrees, but main's own; none outside a workspace. A
+// listed sibling that has not joined adds nothing (fail closed).
+func (info Info) Roots(main string) []string {
+	if info.Role == None {
+		return nil
+	}
+	tops := []string{info.Primary}
+	for _, l := range info.Members {
+		if l.Joined {
+			tops = append(tops, l.top)
+		}
+	}
+	var out []string
+	for _, t := range tops {
+		if t != "" && t != main && !slices.Contains(out, t) {
+			out = append(out, t, t+"-worktrees")
+		}
+	}
+	return out
+}
+
+// ProjectRoots are the roots a guard counts as the project of dir:
+// project.Roots, and the roots its workspace adds (Info.Roots). Outside a
+// workspace they are project.Roots, the same slice.
+func ProjectRoots(dir string) []string {
+	roots := project.Roots(dir)
+	if len(roots) == 0 {
+		return roots
+	}
+	// project.Roots is the root, the main worktree when the root is a linked
+	// one, and each one's <root>-worktrees: Main's answer, with no git run.
+	main := roots[0]
+	if len(roots) == 4 {
+		main = roots[1]
+	}
+	return append(roots, of(main, Main).Roots(main)...)
+}
+
+// DiskRoots are the roots the workspace of repo adds to its own, read from
+// the disk with no git process, as the OS sandbox reads a repository
+// (project.ReadRepo, L888): each repository's main worktree is the one its
+// `.git` proves (project.RepoMain).
+func DiskRoots(repo project.Repo) []string {
+	main := project.RepoMain(repo)
+	return of(main, diskMain).Roots(main)
+}
+
+// diskMain is the main worktree of the repository dir is in, read from the disk.
+func diskMain(dir string) string { return project.RepoMain(project.ReadRepo(dir)) }

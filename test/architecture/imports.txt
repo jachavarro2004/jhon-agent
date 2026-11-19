@@ -86,6 +86,7 @@ internal/guard -> internal/ldd/layout
 internal/guard -> internal/lddswitch
 internal/guard -> internal/project
 internal/guard -> internal/sh
+internal/guard -> internal/workspace
 internal/hook -> internal/discover
 internal/hook -> internal/execution
 internal/hook -> internal/grant
@@ -101,6 +102,7 @@ internal/hook -> internal/sandbox
 internal/hook -> internal/session
 internal/hook -> internal/settings
 internal/hook -> internal/sh
+internal/hook -> internal/workspace
 internal/judgment -> internal/contract
 internal/judgment -> internal/js
 internal/judgment -> internal/lazyre
@@ -152,6 +154,7 @@ internal/sandbox -> internal/guard
 internal/sandbox -> internal/project
 internal/sandbox -> internal/settings
 internal/sandbox -> internal/sh
+internal/sandbox -> internal/workspace
 internal/session -> internal/isodate
 internal/session -> internal/js
 internal/session -> internal/lazyre

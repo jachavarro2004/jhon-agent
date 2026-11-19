@@ -16,6 +16,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lddswitch"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // Ctx is the context a call is judged in (the safety guard's).
@@ -154,7 +155,8 @@ func (ctx *Ctx) rootOf(d string) string {
 func ContextOf(cwd string) *Ctx {
 	home := project.Realish(project.Home())
 	root := project.Root(cwd)
-	roots := project.Roots(cwd)
+	// A workspace's primary and joined members are the project too (T57 slice 5).
+	roots := workspace.ProjectRoots(cwd)
 	var projects []string
 	for _, r := range roots {
 		if !strings.HasSuffix(r, "-worktrees") {
