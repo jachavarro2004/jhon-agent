@@ -42,6 +42,10 @@ func (m MemberDelivery) Next(change string) string {
 	return fmt.Sprintf("run `jhon deliver check %s` in %s", change, m.Path)
 }
 
+// Joined is whether m's pointer names the primary: false for a listed
+// member whose owner has not run `jhon workspace join` in it.
+func (m MemberDelivery) Joined() bool { return !m.unjoined }
+
 // ArchivedChange is change, archived as folder (<date>-<change>) under the
 // layout's archive, named relative to its changes directory
 // (archive/<date>-<change>), as ChangeMembers and the record read it.

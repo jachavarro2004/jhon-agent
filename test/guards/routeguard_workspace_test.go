@@ -7,7 +7,9 @@
 package guards
 
 import (
+	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -90,7 +92,10 @@ func TestRouteGuardPrimaryPRWaitsForMembersOfAnArchivedChange(t *testing.T) {
 	}
 	r := call("gh pr create --title c --body 'core work'")
 	code(t, r, 2, "an archived change whose member never ran")
-	matches(t, r.Stderr, "^route-guard: the change c \\(archived, "+archived+"\\) delivers in members of the workspace too, one PR per repository, the primary's last: member lib is not ready \\(no recorded test run: .*\\): a member's run is recorded while the change is active: move "+archived+" back to openspec/changes/c/, run `jhon executions run c --repo lib`, open the member's PR, then the primary's\\.", "names the archive and the way back")
+	matches(t, r.Stderr, "^route-guard: the change c \\(archived, "+archived+"\\) delivers in members of the workspace too, one PR per repository, the primary's last: member lib is not ready \\(no recorded test run: run jhon executions run c --repo lib \\(.*\\)\\): a member's run is recorded while the change is active: move "+archived+" back to openspec/changes/c/, run `jhon executions run c --repo lib`, open the member's PR, then the primary's\\.", "names the archive and the way back")
+	if strings.Contains(r.Stderr, "jhon executions run archive/") {
+		t.Errorf("the inner reason names the archived folder for the run: %q", r.Stderr)
+	}
 
 	tree := strings.TrimSpace(support.Git(t, w.lib, "rev-parse", "HEAD^{tree}"))
 	support.Write(t, w.app, map[string]string{archived + "execution-record.json": `{"repos":{"lib":{"working_tree":"` + tree + `","after_working_tree":"` + tree +
@@ -119,4 +124,86 @@ func TestRouteGuardPrimaryPRWaitsForMembersOfAChangeJhonArchived(t *testing.T) {
 	res := hook(t, w.env, "route-guard", nil, map[string]any{"tool_name": "Bash", "tool_input": cmd("gh pr create --title c --body 'core work'"), "cwd": w.app, "permission_mode": "default"})
 	code(t, res, 2, "a change jhon archived whose member never ran")
 	matches(t, res.Stderr, "^route-guard: the change c \\(archived, ldd/changes/archive/2026-11-18-c/\\) delivers in members of the workspace too, .*member lib is not ready", "names the member")
+}
+
+// L1346: a member that has not joined is named with the owner's join once,
+// as the first step of the way to its PR, an archived change's way back
+// included.
+func TestRouteGuardPrimaryPRNamesAnUnjoinedMembersJoinOnce(t *testing.T) {
+	t.Parallel()
+	w := newWorkspace(t, "openspec/config.yaml")
+	support.Write(t, w.app, map[string]string{"openspec/config.yaml": "workspace:\n  lib: ../lib\n"})
+	support.Git(t, w.app, "add", "-A")
+	support.Git(t, w.app, "commit", "-q", "-m", "ldd")
+	support.Git(t, w.app, "checkout", "-q", "-b", "feat/c")
+	support.Write(t, w.app, map[string]string{"openspec/changes/c/tasks.md": "## Slice 1: lib side\n\nRepo: lib\n\n- [x] lib task\n"})
+	support.Git(t, w.app, "add", "-A")
+	support.Git(t, w.app, "commit", "-q", "-m", "c")
+	support.Git(t, w.lib, "remote", "add", "origin", "git@github.com:acme/lib.git")
+	call := func() support.Result {
+		t.Helper()
+		return hook(t, w.env, "route-guard", nil, map[string]any{"tool_name": "Bash", "tool_input": cmd("gh pr create --title c --body 'see https://github.com/acme/lib/pull/7'"), "cwd": w.app, "permission_mode": "default"})
+	}
+	unjoined := "member lib is not ready \\(" + regexp.QuoteMeta(w.lib) + " has not joined the workspace\\): the owner runs `jhon workspace join " + regexp.QuoteMeta(w.app) + "` in " + regexp.QuoteMeta(w.lib) + ", "
+	once := func(r support.Result) {
+		t.Helper()
+		if n := strings.Count(r.Stderr, "has not joined"); n != 1 {
+			t.Errorf("the join is named %d times, want once: %q", n, r.Stderr)
+		}
+		if n := strings.Count(r.Stderr, "jhon workspace join"); n != 1 {
+			t.Errorf("the join command is named %d times, want once: %q", n, r.Stderr)
+		}
+	}
+
+	r := call()
+	code(t, r, 2, "an active change whose member has not joined")
+	matches(t, r.Stderr, "^route-guard: the change c delivers in members of the workspace too, one PR per repository, the primary's last: "+unjoined+"open its PR, then the primary's\\.", "names the join as the step")
+	once(r)
+
+	archived := "openspec/changes/archive/2026-11-18-c/"
+	if err := os.MkdirAll(filepath.Join(w.app, "openspec/changes/archive"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	support.Git(t, w.app, "mv", "openspec/changes/c", strings.TrimSuffix(archived, "/"))
+	support.Git(t, w.app, "commit", "-q", "-m", "archive c")
+	r = call()
+	code(t, r, 2, "an archived change whose member has not joined")
+	matches(t, r.Stderr, "^route-guard: the change c \\(archived, "+archived+"\\) delivers in members of the workspace too, one PR per repository, the primary's last: "+
+		strings.Replace(unjoined, "\\): ", "\\): a member's run is recorded while the change is active: ", 1)+
+		"move "+archived+" back to openspec/changes/c/, run `jhon executions run c --repo lib`, open the member's PR, then the primary's\\.", "the way back starts with the join")
+	once(r)
+}
+
+// L1346 (verifier's regression): a member's run recorded while the change
+// is active counts after `jhon archive`; the primary's PR opens only when
+// it names the member's PR.
+func TestRouteGuardMemberRunRecordedBeforeJhonArchiveCounts(t *testing.T) {
+	t.Parallel()
+	w := newWorkspace(t, "ldd/config.yaml")
+	support.Write(t, w.app, map[string]string{"ldd/config.yaml": "workspace:\n  lib: ../lib\n", "ldd/changes/.keep": ""})
+	support.Git(t, w.app, "add", "-A")
+	support.Git(t, w.app, "commit", "-q", "-m", "ldd")
+	support.Write(t, w.lib, map[string]string{"a/go.mod": "module example.com/a\n", "a/a.go": "package a\n", "ldd/config.yaml": "test_command_override:\n  a: \"true\"\n"})
+	support.Git(t, w.lib, "add", "-A")
+	support.Git(t, w.lib, "commit", "-q", "-m", "lib")
+	support.Git(t, w.lib, "remote", "add", "origin", "git@github.com:acme/lib.git")
+	w.join(t, w.lib)
+	support.Git(t, w.app, "checkout", "-q", "-b", "feat/c")
+	support.Write(t, w.app, map[string]string{"ldd/changes/c/tasks.md": "## Slice 1: lib side\n\nRepo: lib\n\n- [x] lib task\n"})
+	support.Git(t, w.app, "add", "-A")
+	support.Git(t, w.app, "commit", "-q", "-m", "c")
+
+	code(t, support.Jhon(t, w.app, w.env, "executions", "run", "c", "--repo", "lib"), 0, "the member's run while the change is active")
+	code(t, support.Jhon(t, w.app, w.env, "archive", "c", "2026-11-18"), 0, "jhon archive c")
+	support.Git(t, w.app, "add", "-A")
+	support.Git(t, w.app, "commit", "-q", "-m", "archive c")
+	call := func(command string) support.Result {
+		t.Helper()
+		return hook(t, w.env, "route-guard", nil, map[string]any{"tool_name": "Bash", "tool_input": cmd(command), "cwd": w.app, "permission_mode": "default"})
+	}
+	r := call("gh pr create --title c --body 'core work'")
+	code(t, r, 2, "the archived run counts, but the body names no member PR")
+	matches(t, r.Stderr, "^route-guard: the change c \\(archived, ldd/changes/archive/2026-11-18-c/\\) delivers in members of the workspace too, one PR per repository, the primary's last: this PR's body names no pull request of member lib: open its PR first and name it, https://github\\.com/acme/lib/pull/<n>, in this PR's body\\.", "the member is ready, its PR unnamed")
+	code(t, call("gh pr create --title c --body 'see https://github.com/acme/other/pull/7'"), 2, "another repository's PR")
+	code(t, call("gh pr create --title c --body 'see https://github.com/acme/lib/pull/7'"), 0, "the body names the member's PR")
 }

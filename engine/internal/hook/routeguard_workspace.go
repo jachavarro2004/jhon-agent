@@ -63,13 +63,25 @@ func membersRefusal(top, cwd, command string) string {
 		}
 		ms := ldd.MemberDeliveries(top, ch.id, ws)
 		for _, m := range ms {
-			switch {
-			case m.Ready:
-			case ch.archive != "":
-				return lead + "member " + m.Name + " is not ready (" + strings.Join(m.Reasons, "; ") + "): a member's run is recorded while the change is active: move " + ch.archive + " back to " + lay.ChangeDir(c) + "/, run `jhon executions run " + c + " --repo " + m.Name + "`, open the member's PR, then the primary's."
-			default:
-				return lead + "member " + m.Name + " is not ready (" + strings.Join(m.Reasons, "; ") + "): " + m.Next(c) + ", open its PR, then the primary's."
+			if m.Ready {
+				continue
 			}
+			// Why, then the steps: the owner's join first for a member
+			// that has not joined, named once (L1346).
+			why, steps := strings.Join(m.Reasons, "; "), ""
+			if !m.Joined() {
+				why, steps = m.Path+" has not joined the workspace", "the owner runs `jhon workspace join "+ws.Primary+"` in "+m.Path+", "
+			}
+			if ch.archive == "" {
+				if steps == "" {
+					steps = m.Next(c) + ", "
+				}
+				return lead + "member " + m.Name + " is not ready (" + why + "): " + steps + "open its PR, then the primary's."
+			}
+			// A member's run is recorded under the active name, c, not
+			// the archived folder the check read it from.
+			why = strings.ReplaceAll(why, "jhon executions run "+ch.id+" ", "jhon executions run "+c+" ")
+			return lead + "member " + m.Name + " is not ready (" + why + "): a member's run is recorded while the change is active: " + steps + "move " + ch.archive + " back to " + lay.ChangeDir(c) + "/, run `jhon executions run " + c + " --repo " + m.Name + "`, open the member's PR, then the primary's."
 		}
 		for _, m := range ms {
 			repo := originRepo(m.Path)
