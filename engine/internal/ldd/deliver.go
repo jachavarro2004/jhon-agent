@@ -190,14 +190,20 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 	exempt := execution.ChangeRecordPaths(root, change)
 	now := vcs.CandidateOf(root, exempt)
 	reasons, notes := []string{}, []string{}
-	// The last run passed on the working tree as it is now, uncommitted: its
-	// commit is what is left, with no re-run (T146g G2).
-	testedHere := run != nil && now.Clean != true && run.Passed && run.Complete && !run.Clean && !run.Dirty && !run.Unit &&
-		isSha(run.WorkingTree) && run.AfterWorkingTree == run.WorkingTree && vcs.WorkingTree(root, exempt) == run.WorkingTree
+	// The last run passed on the working tree as it is now, uncommitted, but
+	// for the change's record: its commit is what is left, with no re-run
+	// (T146g G2), as the commit that closes a slice judges it (TestedTree).
+	var here Tested
+	if run != nil && now.Clean != true {
+		here = testedTree(root, change, run, vcs.WorkingTree(root, exempt))
+	}
+	testedHere := run != nil && now.Clean != true && here.Why == ""
 	if now.Tree == vcs.CandidateUnknown() {
 		reasons = append(reasons, "HEAD's tree cannot be read: delivery needs a git repository with a commit")
 	} else if testedHere {
 		reasons = append(reasons, fmt.Sprintf("the working tree is not clean, and the last test run passed on it as it is: commit it, then `jhon deliver check %s`, with no re-run", change))
+	} else if now.Clean != true && len(here.Paths) > 0 {
+		reasons = append(reasons, "the working tree is not clean (commit or remove the uncommitted changes), and "+here.Why+deliverOrder)
 	} else if now.Clean != true {
 		reasons = append(reasons, "the working tree is not clean (commit or remove the uncommitted changes)"+deliverOrder)
 	}
@@ -219,23 +225,6 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 		if run.Dirty {
 			reasons = append(reasons, "the candidate changed during the last test run: what was tested is not one revision; run the tests again")
 		}
-		// outsideRecord is the paths that differ between two trees, but for
-		// the change's records (Judgment Day's under it included) and the
-		// rest of its own folder, written after the run (T150); ok is false
-		// when a tree does not resolve.
-		folder := execution.ChangeDirInRepo(root, change) + "/"
-		ownFolder := func(p string) bool { return change != "" && strings.HasPrefix(p, folder) }
-		outsideRecord := func(a, b string) ([]string, bool) {
-			diff, ok := vcs.TreeDiff(root, a, b)
-			judged := layout.For(root).Artifact(change, "judgments") + "/"
-			outside := []string{}
-			for _, p := range diff {
-				if !exempt[p] && !ownFolder(p) && !strings.HasPrefix(p, judged) && !strings.Contains(p, "/"+judged) {
-					outside = append(outside, p)
-				}
-			}
-			return outside, ok
-		}
 		// A run on uncommitted work tested the working tree it recorded: once
 		// that tree is committed, HEAD is the tested revision, and the run
 		// that recorded GREEN is the delivery evidence, with no re-run (T146).
@@ -248,11 +237,9 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 		if evidence && !isSha(run.AfterWorkingTree) {
 			reasons = append(reasons, fmt.Sprintf("the last test run recorded no working tree at its end (an earlier jhon wrote its record), so it cannot show the tree it tested unchanged: run the tests again, `jhon executions run %s --affected <base>`, then `jhon deliver check`", change))
 		}
-		if evidence && run.AfterWorkingTree == run.WorkingTree && now.Clean == true && isSha(now.Tree) {
-			if outside, ok := outsideRecord(run.WorkingTree, now.Tree); ok && len(outside) == 0 {
-				committed = true
-				run.Tree = run.WorkingTree
-			}
+		if evidence && now.Clean == true && isSha(now.Tree) && testedTree(root, change, run, now.Tree).Why == "" {
+			committed = true
+			run.Tree = run.WorkingTree
 		}
 		// A member's run is of its working tree always: the tree comparison
 		// below says what differs.
@@ -261,7 +248,7 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 		}
 		if committed || testedHere {
 		} else if isSha(run.Tree) && isSha(now.Tree) && run.Tree != now.Tree {
-			outside, ok := outsideRecord(run.Tree, now.Tree)
+			outside, ok := outsideRecord(root, change, run.Tree, now.Tree)
 			if !ok {
 				reasons = append(reasons, fmt.Sprintf("the tested tree %s does not resolve in this repository", run.Tree))
 			} else if len(outside) > 0 {
@@ -361,22 +348,12 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 			reasons = append(reasons, fmt.Sprintf("scenarios named by a test: %d/%d; not yet: %s: a test names the scenario it proves (its test name, or a `scenario: <name>` comment)", coverage.Covered, coverage.Total, strings.Join(quoted, ", ")))
 		}
 	}
-	// delivery: change delivers the change in one merge, after its last slice.
+	// delivery: change delivers the change in one merge, after its last
+	// slice, as a PR waits for it (SlicesLeft).
 	if action == Merge() && DeliveryUnit(root) == "change" && !t.member {
-		var src *string
-		if b, err := os.ReadFile(filepath.Join(root, execution.ChangesOf(root), change, lay.Tasks())); err == nil {
-			text := string(b)
-			src = &text
-		}
-		t := ProgressOf(lay, src)
-		outlined := t.Outlined()
-		if t.Pending > 0 {
-			reasons = append(reasons, fmt.Sprintf("delivery: change in openspec/config.yaml merges the change once, after its last slice; %d task(s) of tasks.md are unchecked (%s): commit each slice on the change's branch and merge when every slice is done", t.Pending, listed(t.Unchecked)))
-		}
-		if len(outlined) > 0 {
-			reasons = append(reasons, fmt.Sprintf("delivery: change in openspec/config.yaml merges the change once, after its last slice; %d slice(s) of tasks.md are outlined with no tasks yet (%s): commit each slice on the change's branch and merge when every slice is done", len(outlined), listed(outlined)))
-		}
-		if t.Pending == 0 && len(outlined) == 0 {
+		if left := SlicesLeft(root, change); len(left) > 0 {
+			reasons = append(reasons, left...)
+		} else {
 			notes = append(notes, "delivery: change: merge with rebase (gh pr merge <n> --rebase --delete-branch), so each slice stays its own commit on the default branch")
 		}
 	}

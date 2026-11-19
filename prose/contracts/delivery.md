@@ -17,8 +17,7 @@ when you see several rules or cases to cover or a design decision on the
 way. The record is built in slices outlined first, each tasked after the
 last is delivered, and delivered alone or, with `delivery: change` in
 `openspec/config.yaml`, committed on the change's branch and merged once
-with rebase after the last. The rest and what each guard checks:
-`contracts/ldd.md` ("The record", "Slices", "Delivery").
+with rebase after the last. The rest: `contracts/ldd.md`.
 
 Name `jhon deliver check`'s result when asking to deliver; an untested
 revision is called untested. Order: after the GREEN run, commit
@@ -55,4 +54,4 @@ Judgment Day (`contracts/judgment.md`) runs only when the owner asks, or
 One review per code change: 4R reviews code; Judgment Day judges a design
 decision or a docket, and on code only when a severe 4R finding stays
 contested. A due review's record gates the PR; only blocking findings
-warrant a fix.
+warrant a fix: an advisory never starts a correction, in verify as in 4R.

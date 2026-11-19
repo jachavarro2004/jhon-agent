@@ -41,7 +41,7 @@ var probePRForms = []string{
 
 func TestProbeT127RouteGuardPRForms(t *testing.T) {
 	t.Parallel()
-	want := "route-guard: delivery: change opens one PR per change, after its last slice: c1 has 1 outlined slice(s) with no tasks yet (Slice 2: b). Task and commit each slice on the branch and open the PR when every slice is done."
+	want := "route-guard: c1: delivery: change in openspec/config.yaml merges the change once, after its last slice; 1 slice(s) of tasks.md are outlined with no tasks yet (Slice 2: b): commit each slice on the change's branch and merge when every slice is done."
 	out := probeRG(t, "delivery: change\n", map[string]string{"c1": probeOutline})
 	done := probeRG(t, "delivery: change\n", map[string]string{"c1": probeDone})
 	perSlice := probeRG(t, "", map[string]string{"c1": probeOutline})
@@ -65,5 +65,5 @@ func TestProbeT127RouteGuardNamesTheChange(t *testing.T) {
 	r := probeRG(t, "delivery: change\n", map[string]string{"c1": probeDone, "c2": four})
 	res := r.call(t, "Bash", cmd("gh pr create --fill"), true)
 	code(t, res, 2, "c2 outlined")
-	matches(t, res.Stderr, `^route-guard: delivery: change opens one PR per change, after its last slice: c2 has 4 outlined slice\(s\) with no tasks yet \(Slice 2: b, Slice 3: c, Slice 4: d\)\. `, "names c2, 4, three slices")
+	matches(t, res.Stderr, `^route-guard: c2: delivery: change in openspec/config\.yaml merges the change once, after its last slice; 4 slice\(s\) of tasks\.md are outlined with no tasks yet \(Slice 2: b, Slice 3: c, Slice 4: d, Slice 5: e\): `, "names c2 and its 4 slices")
 }

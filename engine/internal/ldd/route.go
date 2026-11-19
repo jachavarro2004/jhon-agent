@@ -454,27 +454,6 @@ func oneLine(src string) bool {
 
 var noSpecChange = lazyre.New(`(?m)^\s*(?:[-*]\s+)?No spec change:\s*\S`)
 
-// Unchecked is the tasks of a change directory's tasks.md not yet checked.
-func Unchecked(l layout.Layout, changeDir string) []string {
-	b, err := os.ReadFile(filepath.Join(changeDir, l.Tasks()))
-	if err != nil {
-		return nil
-	}
-	s := string(b)
-	return ProgressOf(l, &s).Unchecked
-}
-
-// Outlined is the slices of a change directory's tasks.md still outlined,
-// with no task yet (TaskProgress.Outlined).
-func Outlined(l layout.Layout, changeDir string) []string {
-	b, err := os.ReadFile(filepath.Join(changeDir, l.Tasks()))
-	if err != nil {
-		return nil
-	}
-	s := string(b)
-	return ProgressOf(l, &s).Outlined()
-}
-
 // UndocumentedProjects are the projects of the change in the repository
 // whose top level is top that change code but not their own docs/, when
 // openspec/config.yaml sets `docs_with_code: true`: a project that keeps

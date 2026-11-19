@@ -202,7 +202,7 @@ func TestRouteGuardVerifiedRoute(t *testing.T) {
 	redGreen(t, r.p, "openspec/changes/c1/execution-record.json")
 	res = r.call(t, "Bash", pr, true)
 	code(t, res, 2, "an unchecked task under delivery: change")
-	matches(t, res.Stderr, `one PR per change, after its last slice: c1 has 1 unchecked task`, "why")
+	matches(t, res.Stderr, `^route-guard: c1: delivery: change in openspec/config\.yaml merges the change once, after its last slice; 1 task\(s\) of tasks\.md are unchecked \(1\.2 b\)`, "why")
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n- [x] 1.2 b\n"})
 	res = r.call(t, "Bash", pr, true)
 	code(t, res, 2, "every task checked, but no independent verification")
@@ -262,7 +262,10 @@ func TestRouteGuardBoundedWriterNeedsItsScope(t *testing.T) {
 			map[string]any{"tool_name": "Agent", "tool_input": map[string]any{"subagent_type": kind, "prompt": prompt}, "cwd": dir, "permission_mode": "default"})
 	}
 	scoped := "Do 1.1.\n\n## Allowed edit surfaces\n\n- src/app.py\n"
-	for _, dir := range []string{newRG(t, "").p, realTemp(t)} {
+	// src/ exists in both, so the listed file passes the launch check.
+	folder := realTemp(t)
+	mkdir(t, filepath.Join(folder, "src"))
+	for _, dir := range []string{newRG(t, "").p, folder} {
 		res := launch(dir, "worker", "Do 1.1.")
 		code(t, res, 2, "a worker with no scope")
 		matches(t, res.Stderr, "launched with its scope", "the refusal names the heading")
@@ -270,6 +273,74 @@ func TestRouteGuardBoundedWriterNeedsItsScope(t *testing.T) {
 		code(t, launch(dir, "worker", scoped), 0, "a worker with its scope")
 		code(t, launch(dir, "explore", "Look."), 0, "an agent that is not bounded")
 	}
+}
+
+// A bounded writer's `## Allowed edit surfaces` names paths that exist
+// (T153, L1364 b: a brief named a path that did not, and scope-guard then
+// refused the real file): a launch listing one that matches nothing is
+// refused before it starts, naming that path. A path matches when a file or
+// folder exists there, a glob when it matches one; a writer creating a new
+// file lists it, so a path whose parent folder exists matches too. Test
+// files and the change's own record are always in scope, so they pass.
+func TestRouteGuardWriterSurfacesExist(t *testing.T) {
+	t.Parallel()
+	r := newRG(t, "")
+	outside := realTemp(t)
+	support.Write(t, outside, map[string]string{"notes/a.md": "x\n"})
+	launch := func(dir string, surfaces ...string) support.Result {
+		prompt := "Do 1.1.\n\n## Allowed edit surfaces\n\n- " + strings.Join(surfaces, "\n- ") + "\n"
+		payload := map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Agent", "cwd": dir, "session_id": "s", "permission_mode": "default",
+			"tool_input": map[string]any{"subagent_type": "worker", "description": "d", "prompt": prompt}}
+		return hook(t, r.env, "pre-tool", []string{"--agent", "jhon-orchestrator", "route-guard", "worker", "jd-fix-agent"}, payload)
+	}
+	for label, surfaces := range map[string][]string{
+		"an existing file":                    {"src/app.py"},
+		"a new file in an existing folder":    {"src/new_module.py"},
+		"a new top-level file":                {"Makefile"},
+		"an existing folder":                  {"src/"},
+		"a glob that matches":                 {"src/**"},
+		"a glob over an existing folder":      {"src/*.go"},
+		"an absolute path":                    {filepath.Join(outside, "notes", "a.md")},
+		"a new file in an absolute folder":    {filepath.Join(outside, "notes", "b.md")},
+		"a test file in a new folder":         {"tests/unit/test_new.py"},
+		"the change's record in a new folder": {"openspec/changes/c9/tasks.md"},
+		"a listed note after the path":        {"`src/app.py`: the module"},
+	} {
+		res := launch(r.p, surfaces...)
+		code(t, res, 0, label)
+		if res.Stderr != "" {
+			t.Errorf("%s: stderr %q", label, res.Stderr)
+		}
+	}
+	for label, c := range map[string]struct {
+		surfaces []string
+		named    string
+	}{
+		"a file in a missing folder":         {[]string{"src/app.py", "srcs/parse/app.py"}, "srcs/parse/app.py (its folder srcs/parse does not exist)"},
+		"a folder in a missing folder":       {[]string{"pkg/parse/"}, "pkg/parse/ (its folder pkg does not exist)"},
+		"a glob that matches nothing":        {[]string{"lib/**/*.py"}, "lib/**/*.py (its folder lib does not exist)"},
+		"an absolute path that is not there": {[]string{filepath.Join(outside, "gone", "a.md")}, filepath.Join(outside, "gone", "a.md") + " (its folder " + filepath.Join(outside, "gone") + " does not exist)"},
+	} {
+		res := launch(r.p, c.surfaces...)
+		code(t, res, 2, label)
+		want := "route-guard: a worker is launched with surfaces that exist: its `## Allowed edit surfaces` names " + c.named + ", which matches nothing in " + r.p +
+			". A path matches when a file or folder exists there, a glob when it matches one, and a new file's path when its parent folder exists. Fix the path in the brief before the launch: scope-guard holds the writer to the paths listed and refuses the real file a wrong one stands for (contracts/efficiency.md, \"Writer scope\").\n"
+		if res.Stderr != want {
+			t.Errorf("%s: stderr\n%q\nwant\n%q", label, res.Stderr, want)
+		}
+	}
+	two := launch(r.p, "nope/a.py", "src/app.py", "gone/b.py")
+	code(t, two, 2, "two missing paths")
+	matches(t, two.Stderr, `names nope/a\.py \(its folder nope does not exist\), gone/b\.py \(its folder gone does not exist\), which match nothing in `, "two missing paths")
+	// A folder in no repository: its paths are read against the folder.
+	folder := realTemp(t)
+	support.Write(t, folder, map[string]string{"a/x.py": "x\n"})
+	code(t, launch(folder, "a/x.py", "a/y.py"), 0, "a folder's existing and new files")
+	code(t, launch(folder, "b/x.py"), 2, "a folder's missing folder")
+	// An agent that is not bounded is not checked.
+	explore := map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Agent", "cwd": r.p, "session_id": "s", "permission_mode": "default",
+		"tool_input": map[string]any{"subagent_type": "explore", "prompt": "Look.\n\n## Allowed edit surfaces\n- nope/a.py\n"}}
+	code(t, hook(t, r.env, "pre-tool", []string{"--agent", "jhon-orchestrator", "route-guard", "worker"}, explore), 0, "explore")
 }
 
 func TestRouteGuardReviewers(t *testing.T) {
@@ -919,21 +990,32 @@ func TestRouteGuardPRNeedsRedBeforeGreen(t *testing.T) {
 	// T146g G3 (L1274): a small change keeps no light verify: its RED
 	// before GREEN with none is enough.
 	support.Write(t, small.p, map[string]string{".git/jhon/changes/fix-small/execution-record.json": redGreenUnverified("")})
-	code(t, small.call(t, "Bash", pr, true), 0, "a small change with no light verify")
+	res = small.call(t, "Bash", pr, true)
+	code(t, res, 0, "a small change with no light verify")
+	if got := adviceOf(t, res.Stdout); got != "" {
+		t.Errorf("a small change keeps no light verify, not even a note: %q", got)
+	}
+}
+
+// lightVerifyNote is route-guard's advisory on a standard-route PR of change
+// with no passing light verify of the tree its last run tested (T154).
+func lightVerifyNote(change string) string {
+	return notePrefix + "the PR runs with no passing light verify of the tree its last run tested on record for " + change +
+		" (contracts/ldd.md, \"Light verify\"): an advisory, as no light verify has caught a defect on record; the `verify` agent in light mode records one with `jhon executions verify " + change + " --verdict pass|fail`"
 }
 
 // A light verify at slice close (T31.5, L311 (1)): on the standard route a
-// PR of a change that alters behaviour also needs a passing light verify of
-// the tree its last run tested; the verified route keeps its full
-// verify-report rule, and a passive change needs neither.
-func TestRouteGuardPRNeedsALightVerify(t *testing.T) {
+// PR of a change that alters behaviour with no passing light verify of the
+// tree its last run tested runs with a note (T154, L1394: no recorded catch);
+// the verified route keeps its full verify-report rule, and a passive change
+// is told nothing.
+func TestRouteGuardPRLightVerifyIsAnAdvisory(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
 	rec := "openspec/changes/c1/execution-record.json"
 	r := newRG(t, "")
 	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n",
 		"openspec/changes/c1/tasks.md": "## Intent\nDelivers: X is 2\n"})
-	refusal := "^route-guard: this change alters behaviour, and no passing light verify of the tree its last run tested is on record \\(LDD, contracts/ldd.md, \"Light verify\"\\): launch the `verify` agent in light mode when the slice closes; it records `jhon executions verify c1 --verdict pass`, before the PR. Route: standard: "
 	for _, lv := range []string{
 		"",
 		`,"light_verify":[{"timestamp":"2026-01-01T00:02:00.000Z","verdict":"fail","commit":"","tree":"t1"}]`,
@@ -942,25 +1024,39 @@ func TestRouteGuardPRNeedsALightVerify(t *testing.T) {
 	} {
 		support.Write(t, r.p, map[string]string{rec: redGreenUnverified(lv)})
 		res := r.call(t, "Bash", pr, true)
-		code(t, res, 2, "no passing light verify of the tested tree: "+lv)
-		matches(t, res.Stderr, refusal, "the refusal names the light verify")
+		code(t, res, 0, "no passing light verify of the tested tree: "+lv)
+		if got := adviceOf(t, res.Stdout); got != lightVerifyNote("c1") {
+			t.Errorf("%s: note %q; want %q", lv, got, lightVerifyNote("c1"))
+		}
 	}
 	support.Write(t, r.p, map[string]string{rec: redGreenUnverified(`,"light_verify":[{"timestamp":"2026-01-01T00:02:00.000Z","verdict":"pass","commit":"","tree":"t1"}]`)})
-	code(t, r.call(t, "Bash", pr, true), 0, "a passing light verify of the tested tree")
+	res := r.call(t, "Bash", pr, true)
+	code(t, res, 0, "a passing light verify of the tested tree")
+	if got := adviceOf(t, res.Stdout); got != "" {
+		t.Errorf("a passing light verify: note %q", got)
+	}
 
 	// The verified route keeps its verify-report rule: no light verify asked.
 	high := newRG(t, "")
 	support.Write(t, high.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "create table a (id int);\n", "tests/test_app.py": "def test_a(): pass\n", "openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n",
 		"openspec/changes/c1/specs/a/spec.md": "# a\n", rec: redGreenUnverified("")})
-	res := high.call(t, "Bash", pr, true)
+	res = high.call(t, "Bash", pr, true)
 	code(t, res, 2, "verified route without its verify-report")
 	matches(t, res.Stderr, `the route is verified \(.*\): verify is due before delivery`, "the verified route's own rule")
 	support.Write(t, high.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n", "openspec/changes/c1/review-4r.md": "lenses: risk\nverdict: pass\n"})
-	code(t, high.call(t, "Bash", pr, true), 0, "the verified route needs no light verify")
+	res = high.call(t, "Bash", pr, true)
+	code(t, res, 0, "the verified route needs no light verify")
+	if got := adviceOf(t, res.Stdout); got != "" {
+		t.Errorf("the verified route: note %q", got)
+	}
 
 	passive := newRG(t, "")
 	support.Write(t, passive.p, map[string]string{"docs/guide.md": "# guide\n", "tests/test_app.py": "def test_x(): pass\n", rec: redGreenUnverified("")})
-	code(t, passive.call(t, "Bash", pr, true), 0, "a passive change needs no light verify")
+	res = passive.call(t, "Bash", pr, true)
+	code(t, res, 0, "a passive change needs no light verify")
+	if got := adviceOf(t, res.Stdout); got != "" {
+		t.Errorf("a passive change: note %q", got)
+	}
 }
 
 // A 4R recorded by `jhon review record` (T118a) binds to its subject: the
@@ -1219,8 +1315,8 @@ func TestRouteGuardAcceptsASmallChangesFastPath(t *testing.T) {
 }
 
 // T146g G3 (L1274): only a change with no folder keeps no light verify; a
-// branch carrying a change with a folder under another name still needs one
-// (the verify of 2f4bd3e, L1289).
+// branch carrying a change with a folder under another name is still told
+// it has none (the verify of 2f4bd3e, L1289; a note since T154).
 func TestRouteGuardFolderChangeOnOtherBranchNameNeedsALightVerify(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
@@ -1230,8 +1326,8 @@ func TestRouteGuardFolderChangeOnOtherBranchNameNeedsALightVerify(t *testing.T) 
 		"openspec/changes/login-x/tasks.md":              "## Intent\nDelivers: X is 2\n",
 		"openspec/changes/login-x/execution-record.json": redGreenUnverified("")})
 	res := r.call(t, "Bash", pr, true)
-	code(t, res, 2, "a change with a folder keeps its light verify")
-	matches(t, res.Stderr, "no passing light verify of the tree its last run tested is on record", "the light-verify refusal")
+	code(t, res, 0, "a change with a folder keeps its light verify, as a note")
+	matches(t, adviceOf(t, res.Stdout), "no passing light verify of the tree its last run tested on record", "the light-verify note")
 }
 
 // T146g G3 (L1289, L1290): a change folder under another name, committed or
@@ -1253,8 +1349,8 @@ func TestRouteGuardSmallExemptionNeedsNoFolderChangeOnTheBranch(t *testing.T) {
 		support.Git(t, r.p, "commit", "-q", "-m", "c")
 		support.Write(t, r.p, map[string]string{".git/jhon/changes/fix-small/execution-record.json": redGreenUnverified("")})
 		res := r.call(t, "Bash", pr, true)
-		code(t, res, 2, name)
-		matches(t, res.Stderr, "no passing light verify of the tree its last run tested is on record", name)
+		code(t, res, 0, name)
+		matches(t, adviceOf(t, res.Stdout), "no passing light verify of the tree its last run tested on record", name)
 	}
 }
 
@@ -1271,6 +1367,6 @@ func TestRouteGuardDeletedBaseFolderKeepsTheLightVerify(t *testing.T) {
 	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n",
 		".git/jhon/changes/fix-small/execution-record.json": redGreenUnverified("")})
 	res := r.call(t, "Bash", cmd("gh pr create --title x --body y"), true)
-	code(t, res, 2, "deleted base folder")
-	matches(t, res.Stderr, "no passing light verify", "light verify still due")
+	code(t, res, 0, "deleted base folder")
+	matches(t, adviceOf(t, res.Stdout), "no passing light verify", "light verify still noted")
 }
