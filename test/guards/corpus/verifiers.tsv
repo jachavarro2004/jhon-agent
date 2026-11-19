@@ -145,3 +145,7 @@ framework-guard	Bash	"git status --short --branch"	allow	framework-cwd	review-E	
 framework-guard	Bash	"git -C <FW> status --short --branch"	allow	framework	review-E	-	git on the framework, named by -C: the sandbox's since T128f
 framework-guard	Bash	"git status --short --branch"	allow	framework	review-E	-	git status in the project
 framework-guard	Bash	"cat <FW>/src/tdd-evidence.ts"	allow	framework	review-E	-	reading the framework's source
+framework-guard	Bash	"node /tmp/run.js <FW>/shell/lib/agents.ts"	refuse	framework	L1367	-	T81: a script from a file handed Jhon's own code's path
+framework-guard	Bash	"python3 <FW>/tools/x.py"	refuse	framework	L1367	-	T81: an interpreter running a script of Jhon's own
+framework-guard	Bash	"cd <FW> && node x.js"	refuse	framework	L1367	-	T81: a script run inside Jhon's source
+framework-guard	Bash	"bash <HOME>/.local/bin/jhon status"	refuse	framework	L1367	-	T81: the installed CLI run as a script by hand

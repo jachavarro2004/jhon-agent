@@ -13,6 +13,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/grant"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/hook"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/release"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sandbox"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/telemetry"
@@ -183,9 +184,10 @@ func sandboxInput(pinned, profile string) sandbox.Input {
 // project or with "" the one dir is in: the project's areas, and what the
 // settings and the integrations add. Jhon's own files are named by the code
 // that owns each: the settings file (and its folder, unless JHON_SETTINGS
-// names a file elsewhere) and the state folder that holds the grants and
-// the modes. The guard hook probes with the same one (hook.SandboxInput):
-// telemetry is an integration the hooks never import (T55).
+// names a file elsewhere), the state folder that holds the grants and
+// the modes, and Jhon's source checkout (sourceCheckout). The guard hook
+// probes with the same one (hook.SandboxInput): telemetry is an
+// integration the hooks never import (T55).
 func sandboxInputAt(dir, pinned, profile string) sandbox.Input {
 	in := sandbox.Current(dir, pinned, profile)
 	in.AllowWrite = settings.Paths("sandbox.allow_write")
@@ -193,8 +195,31 @@ func sandboxInputAt(dir, pinned, profile string) sandbox.Input {
 	if os.Getenv("JHON_SETTINGS") == "" {
 		in.Protected = append(in.Protected, filepath.Dir(settings.Path()))
 	}
+	if source := sourceCheckout(in); source != "" {
+		in.Protected = append(in.Protected, source)
+	}
 	in.Telemetry = telemetry.Dir()
 	return in
+}
+
+// sourceCheckout is Jhon's source checkout when the sandbox of in keeps it
+// read-only, else "": the roots' Source (release.Locate: the checkout run
+// directly, JHON_SOURCE, or the one `jhon sync` recorded), unless it is the
+// project itself. A linked worktree of it is another project: its main
+// worktree is writable there, and the checkout would be with it (T128f
+// slice 7, L1367 B1). Its git folder stays writable inside it: the
+// worktree commits through it.
+func sourceCheckout(in sandbox.Input) string {
+	source, _, ok := in.Stat(release.Locate().Source)
+	if !ok {
+		return ""
+	}
+	if len(in.Roots) > 0 {
+		if top, _, ok := in.Stat(in.Roots[0]); ok && top == source {
+			return ""
+		}
+	}
+	return source
 }
 
 // sandboxProject is the project `jhon sandbox run` takes from the working
@@ -309,6 +334,10 @@ func (s sandboxState) line() string {
 	return "sandbox " + s.Mode + "; it cannot run here: " + s.Reason + "; fix: " + s.Fix
 }
 
+// sandboxOffUnguarded is what doctor says of the owner's sandbox.mode off
+// on Linux.
+const sandboxOffUnguarded = "with it off the model's shell commands run unguarded outside the project: a write there, Jhon's installed files and source included, is not stopped; fix: jhon settings set sandbox.mode on"
+
 // sandboxHost is the machine the status reads the mode for and probes; a
 // test gives another system's.
 var sandboxHost = sandbox.ThisHost
@@ -356,12 +385,17 @@ func sandboxStatus(asJSON bool, pinned string) (int, error) {
 // can run. Where it cannot, with the mode on (by default on Linux, or set)
 // every command of the model is refused: a problem, with the fix (T128f,
 // L1352 F2); with the mode off, the default off Linux (D3), a warning that
-// the commands run unsandboxed, never a problem. With the mode on, a second
-// warning counts the Bash rules of Claude Code that no longer apply.
+// the commands run unsandboxed, never a problem. The owner's off on Linux,
+// where it can run, is a warning too: the guards leave the shell's writes
+// outside the project to the sandbox, so they then run unguarded (T128f
+// slice 7, L1367 gap 2). With the mode on, a second warning counts the Bash
+// rules of Claude Code that no longer apply.
 func (d doctor) sandbox() {
 	d.o.Head("sandbox")
 	s := sandboxNow("")
 	switch {
+	case s.CanRun && s.Mode == "off" && s.ModeSource == sandbox.ModeSettings && sandboxHost().OS == "linux":
+		d.o.Warn(s.line() + "; " + sandboxOffUnguarded)
 	case s.CanRun:
 		d.o.OK(s.line())
 	case s.Mode == "on":

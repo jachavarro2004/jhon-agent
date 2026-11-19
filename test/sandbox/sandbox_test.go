@@ -485,7 +485,9 @@ func TestDoctorSaysWhetherTheSandboxCanRun(t *testing.T) {
 	last := func(s string) string { l := strings.Split(strings.TrimSpace(s), "\n"); return l[len(l)-1] }
 	b.settings(t, "[sandbox]\nmode = \"off\"\n")
 	r := support.Jhon(t, b.proj, append(append([]string{}, b.env...), "PATH="+path), "doctor")
-	if !strings.Contains(r.Stdout, "\nsandbox\n  ok    sandbox off; it can run here\n") {
+	// The owner's off on Linux warns that the shell's writes outside the
+	// project run unguarded (T128f slice 7, default_outside_test.go).
+	if !strings.Contains(r.Stdout, "\nsandbox\n  warn  sandbox off; it can run here; with it off the model's shell commands run unguarded outside the project") {
 		t.Errorf("doctor where the sandbox can run:\n%s", r.Out())
 	}
 	env := withFailingBwrap(t, b, path)
