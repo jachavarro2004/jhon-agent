@@ -67,6 +67,24 @@ echo "pre-push: main moves; running go vet, staticcheck and the conformance suit
 out="$(go vet ./... 2>&1)" || refuse "go vet found problems" "$out"
 out="$(go tool staticcheck ./... 2>&1)" || refuse "staticcheck found problems" "$out"
 out="$(scrubbed go test -p 4 ./test/... 2>&1)" || refuse "the conformance suite (go test -p 4 ./test/...) fails" "$out"
+# The guards' differential (T128f, tools/guarddiff/README.md): every line of
+# test/guards/corpus through the guards of the last release's binary and of
+# this tree's; a changed verdict not on tools/guarddiff/allow.tsv refuses the
+# push. It takes minutes, so it runs only when the push changes what judges or
+# feeds the guards since that release. The release's binary is built once per
+# tag commit, into the cache.
+tag="$(git describe --tags --abbrev=0 "$main" 2>/dev/null)" || refuse "no release tag to diff the guards against" "git describe --tags --abbrev=0 $main found none"
+tagc="$(git rev-parse "$tag^{commit}")" || refuse "the tag $tag names no commit" "$tag"
+if [ -n "$(git diff --name-only "$tagc" "$main" -- engine/internal/guard engine/internal/sh engine/internal/hook engine/internal/project engine/internal/settings test/guards/corpus tools/guarddiff)" ]; then
+  cache="${XDG_CACHE_HOME:-$HOME/.cache}/jhon/guarddiff/$tagc"
+  if [ ! -x "$cache/jhon" ]; then
+    out="$(mkdir -p "$cache/src" && git archive "$tagc" | tar -x -C "$cache/src" && cd "$cache/src" && go build -o "$cache/jhon.tmp" ./engine/cmd/jhon 2>&1 && mv "$cache/jhon.tmp" "$cache/jhon")" ||
+      refuse "the $tag binary could not be built for the guards' differential" "$out"
+  fi
+  out="$(go build -o "$isolated/jhon" ./engine/cmd/jhon 2>&1)" || refuse "jhon does not build" "$out"
+  out="$(scrubbed go run ./tools/guarddiff --old "$cache/jhon" --old-root "$cache/src" --new "$isolated/jhon" --allow tools/guarddiff/allow.tsv 2>&1)" ||
+    refuse "a guard's verdict changed against $tag and is not on tools/guarddiff/allow.tsv (go run ./tools/guarddiff)" "$out"
+fi
 # Every check passed: record it. A record that cannot be written costs only a rerun.
 [ -n "$checks" ] && mkdir -p "${record%/*}" 2>/dev/null && printf '%s %s\n' "$main" "$checks" >>"$record" 2>/dev/null
 exit 0

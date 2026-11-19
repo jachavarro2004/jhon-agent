@@ -8,8 +8,7 @@
 //   - settings and git-config are asked in every mode;
 //   - deny-level destroy, credentials, framework, `.git` writes, and an
 //     agent's own `jhon grant` / `jhon mode` are refused in every mode;
-//   - LDD's delivery refusal holds in every mode, and an agent's `jhon ldd`
-//     (the retired switch) is refused like `jhon mode`;
+//   - LDD's delivery refusal holds in every mode;
 //   - a repository without LDD has the modes of an LDD one, but its
 //     delivery, a commit or a PR, and every write of a file in it outside
 //     .git and the layout's directory (its first code edit) are refused in
@@ -110,8 +109,6 @@ var (
 		{name: "dot-git-write", kind: "refuse", call: writeRow(func(f matrixFixture) string { return filepath.Join(f.dir, ".git", "config") })},
 		{name: "agent-jhon-grant", kind: "refuse", call: bashRow("jhon grant push")},
 		{name: "agent-jhon-mode", kind: "refuse", call: bashRow("jhon mode yolo")},
-		{name: "agent-jhon-ldd-off", kind: "refuse", call: bashRow("jhon ldd off")},
-		{name: "agent-jhon-ldd-on", kind: "refuse", call: bashRow("jhon ldd on")},
 		{name: "unreadable", kind: "ask", cls: "unreadable", passes: superOnly, call: bashRow(askSiteCommand("unreadable"))},
 		{name: "unknown", kind: "ask", cls: "unknown", passes: superOnly, call: bashRow(askSiteCommand("unknown"))},
 		{name: "delivery-pr-without-red-green", kind: "delivery", call: bashRow("gh pr create --title x --body y")},

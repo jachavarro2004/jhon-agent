@@ -1,0 +1,41 @@
+# route-guard and scope-guard rows (route_guard_test.go, scope_guard_test.go): route-guard's record, setup and
+# delivery rules in an LDD repository and a plain one; scope-guard for the sub-agent launched with the surfaces
+# src/a.ts, src/parse/ and svc/src/** (the tree's transcript). Columns: tools/guarddiff/README.md.
+# place	fixture	caller	tool	input	source
+ldd,repo	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/openspec/changes/c1/tasks.md\"}"	route: the change's record
+ldd,repo	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/openspec/changes/c1/specs/x/spec.md\"}"	route: a spec delta
+ldd,repo	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/openspec/changes/c1/design.md\"}"	route: a design
+ldd,repo	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/openspec/changes/c1/proposal.md\"}"	route: a proposal
+ldd,repo	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/openspec/changes/c1/exploration.md\"}"	route: notes
+ldd,repo	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/openspec/config.yaml\"}"	route: LDD's setup
+ldd,repo	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/src/new.py\"}"	route: a code edit (the T89 first-edit rule)
+ldd,repo	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/tests/test_new.py\"}"	route: a test
+ldd,repo	none	*	Bash	"mkdir -p openspec/changes/c2 && echo x > openspec/changes/c2/tasks.md"	route: the layout's directory by Bash
+ldd,repo	none	*	Bash	"echo X = 3 > src/app.py"	route: a code edit by Bash
+ldd,repo	none	*	Bash	"git add -A && git commit -q -m slice"	route: a slice commit
+ldd,repo	none	*	Bash	"gh pr create --fill"	route: a PR
+ldd,repo	none	*	Bash	"gh pr merge 1 --rebase"	route: a merge with rebase
+ldd,repo	none	*	Bash	"gh pr merge 1 --merge"	route: a merge without rebase
+ldd,repo	none	*	Agent	"{\"prompt\":\"x\",\"subagent_type\":\"review-risk\"}"	route: a reviewer nobody asked for
+ldd,repo	none	*	Agent	"{\"prompt\":\"x\",\"subagent_type\":\"jd-judge-a\"}"	route: a Judgment Day judge
+ldd,repo	none	*	Agent	"{\"prompt\":\"x\",\"subagent_type\":\"verify\"}"	route: verify
+ldd,repo	none	*	Agent	"{\"prompt\":\"Fix it.\",\"subagent_type\":\"worker\"}"	route: a writer without its surfaces
+ldd,repo	none	*	Agent	"{\"prompt\":\"Fix it.\\n\\n## Allowed edit surfaces\\n- src/app.py\\n\",\"subagent_type\":\"worker\"}"	route: a writer with its surfaces
+ldd,repo	none	subagent	Write	"{\"content\":\"x\",\"file_path\":\"<P>/src/a.ts\"}"	scope: a listed file
+ldd,repo	none	subagent	Write	"{\"content\":\"x\",\"file_path\":\"<P>/svc/src/deep/x.py\"}"	scope: a listed glob
+ldd,repo	none	subagent	Write	"{\"content\":\"x\",\"file_path\":\"<P>/src/parse/p.ts\"}"	scope: a listed directory
+ldd,repo	none	subagent	Write	"{\"content\":\"x\",\"file_path\":\"<P>/src/util/helpers.ts\"}"	scope: an unlisted file
+ldd,repo	none	subagent	Edit	"{\"file_path\":\"<P>/package.json\",\"new_string\":\"b\",\"old_string\":\"a\"}"	scope: an unlisted Edit
+ldd,repo	none	subagent	Bash	"echo x > tests/test_new.py"	scope: a test file by Bash
+ldd,repo	none	subagent	Bash	"sed -i 's/a/b/' package.json"	scope: an unlisted Bash write
+ldd,repo	none	subagent	Bash	"uv run pytest -q; git status"	scope: a command that writes nothing
+ldd,repo	none	subagent	Bash	"curl -o package.json http://x/a"	scope: a download
+ldd,repo	none	subagent	Bash	"wget -qO package.json http://x/a"	scope: a download
+ldd,repo	none	subagent	Bash	"dd if=src/a.ts of=package.json"	scope: dd
+ldd,repo	none	subagent	Bash	"curl -o src/a.ts http://x/a; curl -o - http://x/a; dd if=src/a.ts of=/dev/null"	scope: a listed output, standard output, a device
+ldd,repo	none	subagent	Bash	"cp src/a.ts src/parse/b.ts"	scope: cp into a listed directory
+ldd,repo	none	subagent	Bash	"mv src/a.ts src/b.ts"	scope: mv out of the surfaces
+ldd,repo	none	subagent	Bash	"tee svc/src/x.py < /dev/null"	scope: tee into the glob
+ldd,repo	none	subagent	Bash	"rm src/util/old.ts"	scope: an unlisted file deleted
+ldd,repo	none	subagent	Bash	"d=$(mktemp -d) && echo x > \"$d/out\""	scope: mktemp scratch
+ldd,repo	none	subagent	Bash	"echo x > /tmp/scope-out"	scope: /tmp scratch

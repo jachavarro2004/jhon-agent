@@ -1,0 +1,28 @@
+# The T59 mode matrix (mode_matrix_test.go's matrixTable, which TestGuarddiffMatrixRows holds this file to), each
+# row in every place and mode and for every caller. Columns: tools/guarddiff/README.md.
+# place	fixture	caller	tool	input	source
+*	none	*	Bash	"git reset --hard"	destroy-ask
+*	none	*	Bash	"git push --force"	destroy-deny-force-push
+*	none	*	Bash	"git clean -fdx"	destroy-deny-clean-fdx
+*	none	*	Write	"{\"content\":\"x\",\"file_path\":\"/etc/jhon.conf\"}"	outside-write-tool
+*	none	*	Bash	"echo x > /etc/jhon.conf"	outside-write-bash
+*	none	*	Bash	"git push origin main"	push
+*	none	*	Bash	"gh pr merge 1 --squash"	gh-write
+*	none	*	Bash	"ssh host"	remote
+*	none	*	Bash	"npm publish"	publish
+*	none	*	Bash	"kubectl apply -f x.yaml"	deploy
+*	none	*	Read	"{\"file_path\":\"<P>/.env\"}"	credentials-read
+*	none	*	Bash	"cat .env"	credentials-bash
+*	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/.claude/settings.json\"}"	settings-write
+*	none	*	Bash	"git config core.hooksPath /tmp/h"	git-config
+*	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<FW>/orchestrator.md\"}"	framework-write
+*	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/.git/config\"}"	dot-git-write
+*	none	*	Bash	"jhon grant push"	agent-jhon-grant
+*	none	*	Bash	"jhon mode yolo"	agent-jhon-mode
+*	none	*	Bash	"$x push"	unreadable
+*	none	*	Bash	"git frobnicate"	unknown
+*	none	*	Bash	"gh pr create --title x --body y"	delivery-pr-without-red-green
+*	none	*	Bash	"git commit -q -m x"	delivery-commit
+*	none	*	Write	"{\"content\":\"x\",\"file_path\":\"<P>/src/app.py\"}"	code-write
+*	none	*	Edit	"{\"file_path\":\"<P>/src/app.py\",\"new_string\":\"3\",\"old_string\":\"2\"}"	code-edit
+*	none	*	Bash	"printf 'X = 3\\n' > src/app.py"	code-bash-write

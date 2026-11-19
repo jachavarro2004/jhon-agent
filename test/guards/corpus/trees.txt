@@ -1,0 +1,140 @@
+# The fixture files guarddiff builds its trees from (tools/guarddiff/README.md): a `-- <fixture> <path> --`
+# header, then the file; `all` is in every tree, `corpus` in the corpus place (corpus_test.go's corpusTree),
+# cred-near and cred-far as corpus_test.go names them. <P>, <OTHER>, <HOME>, … are expanded.
+-- all home/.agents/jhon/src/tdd-evidence.ts --
+export {};
+-- all home/.agents/jhon/hooks/.keep --
+-- all home/.local/share/jhon/releases/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/build/jhon --
+#!/bin/sh
+-- all home/.claude/CLAUDE.md --
+<!-- jhon:start -->
+<!-- jhon:end -->
+-- all home/.claude/agents/general.md --
+---
+name: general
+---
+-- all home/.agents/skills/ldd/SKILL.md --
+skill
+-- corpus proj/i18n/en.json --
+{}
+-- corpus proj/i18n/es/app.json --
+{}
+-- corpus proj/snapshots/a.json --
+{}
+-- corpus proj/dirs.txt --
+x
+-- corpus proj/far.sh --
+cd <OTHER>
+find . -name 'id_*' -exec cat {} \;
+-- corpus proj/far2.sh --
+source far.sh
+-- corpus proj/deploy/far.sh --
+cd <OTHER>
+find . -name 'id_*' -exec cat {} \;
+-- corpus proj/deploy/ok.sh --
+echo hi
+-- corpus proj/.venv/bin/activate --
+VIRTUAL_ENV=.venv
+export VIRTUAL_ENV
+PATH="$VIRTUAL_ENV/bin:$PATH"
+export PATH
+-- corpus proj/deploy/env.sh --
+export STAGE=dev
+[ -f local.sh ] && source local.sh
+-- corpus proj/deploy/verify-deploy-script.mjs --
+import { execSync } from 'node:child_process';
+import fg from 'fast-glob';
+const files = fg.sync('i18n/**.json');
+execSync('echo ' + files.length);
+-- corpus proj/deploy/v.py --
+import glob, subprocess
+files = glob.glob('i18n/**.json', recursive=True)
+subprocess.run(['echo', str(len(files))])
+-- corpus proj/s9.sh --
+echo hi
+-- corpus proj/gone.sh --
+source missing.sh
+-- corpus proj/deploy/pre.cjs --
+require('child_process').execSync('cat ../id_rsa');
+-- corpus proj/deploy/ok.cjs --
+module.exports = {};
+-- corpus proj/deploy/far.mjs --
+import { execSync } from 'node:child_process';
+execSync('cat ../id_rsa');
+-- corpus proj/deploy/ok.mjs --
+console.log(1);
+-- corpus proj/deploy/up.mjs --
+import { execSync } from 'node:child_process';
+import fg from 'fast-glob';
+process.chdir([String.fromCharCode(46, 46)].join(''));
+const files = fg.sync('*');
+execSync('echo ' + files.length);
+-- corpus proj/colorsys.py --
+import subprocess
+subprocess.run(['cat', '../id_rsa'])
+-- corpus proj/tools/run.mjs --
+import { execSync } from 'node:child_process';
+import fg from 'fast-glob';
+const files = fg.sync('i18n/**.json');
+execSync('echo ' + files.length);
+-- corpus proj/tools/node_modules/fast-glob/index.js --
+require('child_process').execSync('cat ../id_rsa');
+module.exports = { sync: () => [] };
+-- corpus proj/cfg.txt --
+NODE_OPTIONS=--require ./deploy/pre.cjs
+-- corpus proj/shut.sh --
+source locked.sh
+-- corpus proj/locked.sh --
+echo hi
+-- corpus proj/genc.sh --
+cp far.sh g3.sh; source g3.sh
+-- corpus proj/.github/scripts/bootstrap-registry.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+ensure_repository() { aws ecr describe-repositories --repository-names "$1" >/dev/null || aws ecr create-repository --repository-name "$1"; }
+push_rule_json() { echo "{\"account\": \"$1\", \"repo\": \"$2\"}"; }
+main() { ensure_repository acme/a; }
+[ "${BASH_SOURCE[0]}" = "$0" ] && main "$@"
+-- corpus tmpdir/acme-deploy/run-task.sh --
+#!/usr/bin/env bash
+aws ecs run-task --cluster c --task-definition "$1"
+-- corpus tmpdir/acme-deploy/scale.sh --
+#!/usr/bin/env bash
+for s in "$@"; do aws ecs update-service --cluster c --service "$s" --desired-count 1; done
+-- corpus tmpdir/acme-deploy/retag-taskdef.sh --
+#!/usr/bin/env bash
+aws ecs register-task-definition --cli-input-json "$1"
+-- corpus proj/s0.sh --
+source s1.sh
+-- corpus proj/s1.sh --
+source s2.sh
+-- corpus proj/s2.sh --
+source s3.sh
+-- corpus proj/s3.sh --
+source s4.sh
+-- corpus proj/s4.sh --
+source s5.sh
+-- corpus proj/s5.sh --
+source s6.sh
+-- corpus proj/s6.sh --
+source s7.sh
+-- corpus proj/s7.sh --
+source s8.sh
+-- corpus proj/s8.sh --
+source s9.sh
+-- cred-near proj/i18n/deep/x/credentials.json --
+{}
+-- cred-near proj/snapshots/credentials.json --
+{}
+-- cred-near proj/deep/c/credentials.json --
+{}
+-- cred-near proj/deep/sub/id_rsa --
+k
+-- cred-near proj/keys/id_rsa.old --
+k
+-- cred-far other/id_rsa --
+k
+-- cred-far other/n/credentials.json --
+{}
+-- cred-far id_rsa --
+k

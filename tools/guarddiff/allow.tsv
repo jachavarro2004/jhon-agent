@@ -1,0 +1,5 @@
+# The changed guard verdicts the owner accepted against the last release (tools/guarddiff/README.md).
+# One per line, tab-separated: id (file:line, @place/caller for a 6-column line), guard, old verdict, new verdict,
+# why (the task that changed it); `*` in the first four columns matches any value. Empty: v0.3.7 to a963427
+# changed no verdict (baseline.txt).
+# id	guard	old	new	why
