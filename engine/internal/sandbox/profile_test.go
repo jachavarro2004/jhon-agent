@@ -453,6 +453,76 @@ func TestProfileForLeavesDockerLinesUnsandboxedButLoginAndContexts(t *testing.T)
 		"./docker ps":                    Work,
 		"sh -c 'docker ps'":              Work,
 		"docker() { cat x; }; docker ps": Work,
+		// The verifier's regression rows (L1338).
+		"docker build . ; make":                         Work,
+		"docker run img | tee out.log":                  Work,
+		"docker logs x > logs.txt":                      Work,
+		"docker logs x >> logs.txt":                     Work,
+		"docker ps &> out.txt":                          Work,
+		"docker ps 2> err.txt":                          Work,
+		"env X=1 docker ps":                             Work,
+		"command docker ps":                             Work,
+		"nohup docker ps":                               Work,
+		"cd ../x && docker ps":                          Work,
+		"docker -c rootless login":                      Work,
+		"docker --config=/tmp/c login":                  Work,
+		"docker -l debug login":                         Work,
+		"docker --context rootless context use default": Work,
+		"echo pw | docker login -u x --password-stdin":  Work,
+		"docker-compose":                                Work,
+		"docker compose -f ../other/compose.yml up":     Unsandboxed,
+	} {
+		if got := ProfileFor(line); got != want {
+			t.Errorf("ProfileFor(%q) = %q, want %q", line, got, want)
+		}
+	}
+}
+
+// T128h2 (L1338): a single-quoted word, and a double-quoted one with no $
+// or backtick, is literal text: its braces and glob characters reach the
+// program as written, so they do not force work. A parameter, a command
+// substitution, a $ or a backtick still do, and so do an unquoted brace and
+// an unquoted glob, which the shell may rewrite into words the check never
+// saw (as for git, `git fetch * origin`). A quoted word is still judged by
+// its text: quoting hides no option, gh subcommand or file read. The
+// version forms of docker and docker-compose run unsandboxed.
+func TestProfileForReadsQuotedWordsLiterally(t *testing.T) {
+	for line, want := range map[string]string{
+		"docker ps -a --format '{{.Names}}'":            Unsandboxed,
+		`docker ps -a --format "{{.Names}}"`:            Unsandboxed,
+		"docker inspect -f '{{.State.Status}}' api":     Unsandboxed,
+		"docker ps --filter 'name=a*'":                  Unsandboxed,
+		`docker ps --filter "name=a?"`:                  Unsandboxed,
+		"docker run --rm app echo '$HOME'":              Unsandboxed,
+		"docker --version":                              Unsandboxed,
+		"docker -v":                                     Unsandboxed,
+		"docker version":                                Unsandboxed,
+		"docker compose version":                        Unsandboxed,
+		"docker-compose --version":                      Unsandboxed,
+		"git push origin 'feat/x'":                      Unsandboxed,
+		`gh pr create --title 'fix: a {b}' --body "c*"`: Unsandboxed,
+		"gh pr list --search 'is:open [x]'":             Unsandboxed,
+		"docker ps --filter name=a*":                    Work,
+		"docker ps --format {{.Names}}":                 Work,
+		`docker ps --format \{\{.Names\}\}`:             Work,
+		`docker ps --format "$F"`:                       Work,
+		`docker ps --format "${F}"`:                     Work,
+		`docker ps --format "a$"`:                       Work,
+		"docker ps --format \"`id`\"":                   Work,
+		"docker run app echo $HOME":                     Work,
+		"docker run app ${X}":                           Work,
+		"docker run app `id`":                           Work,
+		"docker run app $'{a,b}'":                       Unsandboxed,
+		"docker --version login":                        Work,
+		"git fetch '--upload-pack=x' origin":            Work,
+		`git fetch "--upl=x" origin`:                    Work,
+		"git fetch '*' origin":                          Unsandboxed,
+		"git -C '~/x' fetch":                            Work,
+		"gh '{auth,}' token":                            Work,
+		"gh api x -F 'b=@file'":                         Work,
+		"gh issue create --title t --body-file 'b.md'":  Work,
+		"gh pr list --search '$(id)' > /dev/null 2>&1":  Unsandboxed,
+		`gh pr list --search "$(id)"`:                   Work,
 	} {
 		if got := ProfileFor(line); got != want {
 			t.Errorf("ProfileFor(%q) = %q, want %q", line, got, want)
@@ -465,7 +535,7 @@ func TestProfileForLeavesDockerLinesUnsandboxedButLoginAndContexts(t *testing.T)
 // sandboxed command could have written.
 func TestRunsOutsideRefusesAPlantedDocker(t *testing.T) {
 	d := with(machine, disk{
-		"/usr/bin": "dir", "/usr/bin/bash": "file", "/usr/bin/docker": "file", "/usr/bin/docker-compose": "file",
+		"/usr/bin": "dir", "/usr/bin/bash": "file", "/usr/bin/docker": "file", "/usr/bin/docker-compose": "file", "/usr/bin/git": "file", "/usr/bin/gh": "file",
 		"/home/u/project/bin": "dir", "/home/u/project/bin/docker": "file", "/home/u/project/bin/docker-compose": "file",
 	})
 	h := host("linux", d, nil)
@@ -481,6 +551,8 @@ func TestRunsOutsideRefusesAPlantedDocker(t *testing.T) {
 		{"a planted docker-compose", []string{"/home/u/project/bin", "/usr/bin"}, "docker-compose ps", false},
 		{"a planted docker after the real one", []string{"/usr/bin", "/home/u/project/bin"}, "docker ps", true},
 		{"docker login", []string{"/usr/bin"}, "docker login", false},
+		{"a planted docker sends git fetch to work", []string{"/home/u/project/bin", "/usr/bin"}, "git fetch", false},
+		{"a planted docker sends gh pr list to work", []string{"/home/u/project/bin", "/usr/bin"}, "gh pr list", false},
 	} {
 		in := sample(Work, d)
 		in.Path = slices.Clone(c.path)
