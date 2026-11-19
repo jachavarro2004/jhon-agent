@@ -101,14 +101,14 @@ keeps its record in `openspec/` or in a native `ldd/` of the same shape
 | GREEN | The code, then the affected tests, recorded. A pytest project is narrowed by pytest-testmon; `jhon executions prime` builds the missing records. | `jhon executions run <change> --affected <base>` |
 | Slice commit | Under `delivery: change`, the commit that closes a slice must be the tree its last run tested. | checked by `route-guard` |
 | Verify | A light verify by the `verify` agent on the standard route; a full `verify-report.md` and the 4R lenses at high risk. | `jhon executions verify <change> --verdict pass` |
-| Delivery | Ready when the tree is clean and HEAD's tree is the last passing run's. The pull request opens only with RED before GREEN and a passing verify. | `jhon deliver check <change>` |
+| Delivery | Ready when the tree is clean and HEAD's tree is the last passing run's. The pull request opens only with RED before GREEN, and a passing verify on the verified route. | `jhon deliver check <change>` |
 
 **The rigor rises with the risk.** `jhon risk` reads a tier (passive,
 medium, high) from the paths a change touches, and the route follows it:
 
 | Route | When | Verification | 4R |
 |---|---|---|---|
-| `standard` | risk under the verified tier, whatever its size | the affected tests of each slice, and a light verify | when you ask, or `review_required` names it |
+| `standard` | risk under the verified tier, whatever its size | the affected tests of each slice; a light verify is an advisory | when you ask, or `review_required` names it |
 | `verified` | risk at the verified tier (`high`), or `review_required` names `verify` | an independent verification before delivery (`verify-report.md` or Judgment Day) | automatic, with only the pertinent lenses |
 
 **What the slice commit is checked for**, under `delivery: change`:
@@ -138,11 +138,11 @@ counts what each one costs).
 |---|---|---|
 | `inspect-guard` | Bash | a reviewer changing what it reviews: 4R and Judgment Day reviewers stay read-only |
 | `safety-guard` | Bash | a destructive or irreversible command (refused), a write or delete of a credentials file (refused), an outward-facing one without your consent (asked), a sub-agent's unbounded wait; a read, a write outside the project or one it cannot resolve is not limited (the sandbox bounds it) |
-| `vcs-guard` | Edit, Write | a write into `.git/` or the grants, an agent writing Claude Code's settings, a write outside the project (asked) |
+| `vcs-guard` | Edit, Write | a write into `.git/` or the grants, an agent writing Claude Code's settings (asked at the top level); a write outside the project, or explore's beyond its record, runs with a note |
 | `framework-guard` | Edit, Write, Bash | an agent editing Jhon or its installed release while it runs on it (Edit, Write), or running Jhon's own code by hand (Bash); a Bash write or git there is the sandbox's, where they are read-only |
-| `secrets-guard` | Read, Grep, Glob, Edit, Write | a file that holds credentials (`.env`, keys); a template such as `.env.example` passes |
-| `scope-guard` | Edit, Write, Bash | a writer editing outside the edit surfaces its handoff names |
-| `route-guard` | Edit, Write, Bash, Agent | LDD: a writer launched without its scope, a change without its record, a slice commit of an untested tree, a PR without its docs, a merge without rebase |
+| `secrets-guard` | Edit, Write | an edit of a file that holds credentials (`.env`, keys) or of a file in a home credentials directory; reading is not judged; a template such as `.env.example` passes |
+| `scope-guard` | Edit, Write, Bash | a writer editing outside the edit surfaces its handoff names; a shell write whose target it cannot resolve runs with a note |
+| `route-guard` | Edit, Write, Bash, Agent | LDD: a writer launched without its scope or with a surface that matches nothing, a change without its record, a slice commit of an untested tree, a PR without its docs, a merge without rebase; a code edit before LDD is set up runs with a note |
 
 A file an agent writes is then formatted by its project's own formatter
 (`jhon hook format-edit`). On Linux `sandbox.mode` is on by default where
@@ -192,12 +192,13 @@ rule and runtime, how it holds, and `jhon doctor --runtime <name>` prints it:
 
 | Runtime | Enforced (a hook refuses) | Behavioural (`jhon audit` checks after) | Instruction only |
 |---|---|---|---|
-| Claude Code | 6 | 11 | 4 |
-| pi | 6 | 11 | 4 |
+| Claude Code | 5 | 12 | 4 |
+| pi | 5 | 12 | 4 |
 
 The enforced rules are the safety guard's destructive and outward-facing
-rules, the framework boundary, a writer's scope, explore's writes, and the
-tool list a sub-agent gets. pi has no runtime isolation, so `jhon audit`
+rules, the framework boundary, a writer's scope, and the tool list a
+sub-agent gets; explore's writes beyond its record run with a note, which
+`jhon audit`'s explore-wrote reads. pi has no runtime isolation, so `jhon audit`
 reads a pi worker or verify child's write outside its own tree; that check,
 like test-weakened, verify-wrote, and archive-without-red, reports a
 would-be violation until real fixtures back it.
@@ -215,7 +216,7 @@ most about 20 lines per request).
 
 | Agent | Does | Writes |
 |---|---|---|
-| `explore` | investigates before a change: the code, prior decisions, approaches, outside evidence | only its change's exploration.md or research.md |
+| `explore` | investigates before a change: the code, prior decisions, approaches, outside evidence | only its change's exploration.md or research.md (another write runs with a note) |
 | `worker` | builds a slice, or one layer of it | only the edit surfaces its handoff names |
 | `verify` | checks a slice or a change independently, from tests that actually ran; fixes nothing | only verify-report.md |
 | 4R lenses | review a frozen diff through risk, resilience, reliability and readability; a refuter and a validator then challenge the findings | nothing: the verdict goes to `review-4r.md` |
@@ -311,15 +312,13 @@ own terminal in pi).
 | `publish` | a package publish (`npm publish`, `cargo publish`, …) |
 | `remote` | a session on or a copy to another host (`ssh`, `scp`, `rsync`, …) |
 | `deploy` | a cloud or cluster write (`aws`, `gcloud`, `kubectl`, `terraform apply`, …) |
-| `outside-write` | an Edit or Write outside the project (a shell write there is the sandbox's) |
 | `destroy` | a deletion that loses work (a forced branch delete, `reset --hard`); the rest of the destructive operations are never grantable |
 
-**The hard lines, in every mode.** Refused: credentials (by the file tools; by the shell, a write or delete), the
+**The hard lines, in every mode.** Refused: credentials (an edit by the file tools; by the shell, a write or delete), the
 never-grantable destructive operations, writes into `.git/`, the grants
 and the modes, Jhon's own files. Asked: a write to Claude Code's settings,
 and a `git config` that changes what git runs. A folder that is not a git
-repository takes no mode and no timed grant; pi can let one session write
-there (`jhon grant outside-write --session <id>`). See
+repository takes no mode and no grant. See
 [docs/modes-and-grants.md](docs/modes-and-grants.md).
 
 **Settings** are one file, `.config/jhon/settings.toml` in the home:
@@ -420,7 +419,7 @@ own help.
 | Document | About |
 |---|---|
 | [docs/ldd.md](docs/ldd.md) | LDD in a project: layouts, the set-up at the first change, a worktree per change, the change's state in Engram, the launch context |
-| [docs/modes-and-grants.md](docs/modes-and-grants.md) | where modes and grants apply, and the session grant |
+| [docs/modes-and-grants.md](docs/modes-and-grants.md) | where modes and grants apply |
 | [docs/status-json.md](docs/status-json.md) | the shape of `jhon status --json` |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, release by release |
 | `prose/contracts/ldd.md` | the method itself |

@@ -227,7 +227,7 @@ test("Grants lists every class with its state in this project, and gives or revo
 test("/jhon:grants offers no bypass-session: the engine removed the class (S31)", async () => {
   const { CLASS_WORDS } = await import("../lib/ui/jhon-panel-grants.ts");
   assert.equal(CLASS_WORDS["bypass-session"], undefined);
-  assert.deepEqual(Object.keys(CLASS_WORDS), ["push", "gh-write", "publish", "remote", "deploy", "outside-write", "destroy"]);
+  assert.deepEqual(Object.keys(CLASS_WORDS), ["push", "gh-write", "publish", "remote", "deploy", "destroy"]);
 });
 
 test("/jhon:grants with no live grant says so under Active grants (L175)", async () => {

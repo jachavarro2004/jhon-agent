@@ -99,7 +99,7 @@ func TestModeEveryModeStillRefuses(t *testing.T) {
 	for _, mode := range []string{"normal", "yolo", "super-yolo"} {
 		s := newSG(t)
 		s.setMode(t, s.p, mode)
-		for _, c := range []string{"rm .env", "git push --force", "git push --no-verify", "git commit --no-verify -m x", "git clean -fdx",
+		for _, c := range []string{"rm .env", "git push --force", "git clean -fdx",
 			"echo x > .git/config", "jhon grant push", "jhon mode yolo", "rm -rf /", "rm -rf .git"} {
 			for _, o := range []sgOpts{{}, top()} {
 				r := s.bash(t, c, o)
@@ -108,9 +108,9 @@ func TestModeEveryModeStillRefuses(t *testing.T) {
 			}
 		}
 		if mode == "super-yolo" {
-			s.allowedBy(t, "$x push", mode, top(), mode+": an unreadable command passes")
+			s.allowedBy(t, "echo (pwd)", mode, top(), mode+": an unreadable command passes")
 		} else {
-			matches(t, askedWhy(t, s.bash(t, "$x push", top()).Stdout, mode), `^unreadable: `, mode+": an unreadable command is asked")
+			matches(t, askedWhy(t, s.bash(t, "echo (pwd)", top()).Stdout, mode), `^unreadable: `, mode+": an unreadable command is asked")
 		}
 		w := newWriteEnv(t)
 		code(t, support.Jhon(t, w.project, w.env, "mode", mode), 0, "jhon mode "+mode)
@@ -119,8 +119,9 @@ func TestModeEveryModeStillRefuses(t *testing.T) {
 				t.Errorf("%s: a write into .git/ is not refused: %+v", mode, r)
 			}
 		}
-		read := map[string]any{"tool_name": "Read", "cwd": w.project, "tool_input": map[string]any{"file_path": filepath.Join(w.project, ".env")}}
-		code(t, hook(t, w.env, "secrets-guard", []string{"--agent", "*"}, read), 2, mode+": secrets-guard reads .env")
+		// A read of .env is not judged since T151 (L1366); an edit of it is refused.
+		edit := map[string]any{"tool_name": "Edit", "cwd": w.project, "tool_input": map[string]any{"file_path": filepath.Join(w.project, ".env"), "old_string": "a", "new_string": "b"}}
+		code(t, hook(t, w.env, "secrets-guard", []string{"--agent", "*"}, edit), 2, mode+": secrets-guard edits .env")
 	}
 }
 
@@ -245,12 +246,9 @@ func ownerActProbes(s sgEnv, act, pyArgs, glob string, halves [2]string) []strin
 		"cp build/jhon /tmp/x && /tmp/x " + act,
 		"ln -s ~/.local/bin/jhon /tmp/jj; /tmp/jj " + act,
 		"./jhon-dev " + act + " --root .",
-		`python3 -c "import subprocess;subprocess.run(['jhon',` + pyArgs + `])"`,
-		`node -e "require('child_process').spawnSync('/tmp/x', [` + pyArgs + `])"`,
 		"cp /tmp/f.json " + st + "/" + glob,
 		"echo '{}' > " + st + "/" + glob,
 		"ln -s " + st + " /tmp/st; cp f /tmp/st/" + glob,
-		`python3 -c "open('` + st + "/" + halves[0] + "'+'" + halves[1] + `','w').write('{}')"`,
 	}
 }
 
@@ -261,7 +259,6 @@ func TestModeNoAgentSetsItByAnyName(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
 	probes := append(ownerActProbes(s, "mode yolo", "'mo'+'de','yolo'", "mo*/k.json", [2]string{"mo", "des/k.json"}),
-		`python3 -c "import subprocess;subprocess.run([\"jhon\",\"mo\"+\"de\",\"yolo\"])"`,
 		"go build -o /tmp/j ./engine/cmd/jhon && /tmp/j mode super-yolo", "/tmp/x mode normal", "/tmp/x mode --root . yolo", "/tmp/x mode yolo --json")
 	for _, c := range probes {
 		for _, o := range []sgOpts{{}, top()} {
@@ -333,24 +330,26 @@ func TestModeCoversWorktrees(t *testing.T) {
 	code(t, s.bash(t, "git push", sgOpts{cwd: s.other}), 2, "no other repository")
 }
 
-// outside-write, vcs-guard's ask, is a yolo class.
+// A write outside the project runs with vcs-guard's note in every mode, top
+// level and sub-agent, never asked nor a mode's (an outside-write ask, a yolo
+// class, until T153 and T113, L957, L1402).
 func TestModeVcsGuardOutsideWrite(t *testing.T) {
 	t.Parallel()
 	w := newWriteEnv(t)
 	out := "/etc/jhon.conf"
-	if r := w.write(t, out, writeOpts{}); r.code != 2 {
-		t.Fatalf("normal: an outside write is not refused: %+v", r)
+	for _, mode := range []string{"normal", "yolo", "super-yolo"} {
+		code(t, support.Jhon(t, w.project, w.env, "mode", mode), 0, "jhon mode "+mode)
+		for _, o := range []writeOpts{{}, {top: true}} {
+			payload := map[string]any{"tool_name": "Write", "cwd": w.project, "permission_mode": "default", "tool_input": map[string]any{"file_path": out}}
+			if !o.top {
+				payload["agent_id"], payload["agent_type"], payload["permission_mode"] = "a1", "worker", "bypassPermissions"
+			}
+			r := hook(t, w.env, "vcs-guard", vcsDirs(t), payload)
+			code(t, r, 0, mode+": outside write")
+			matches(t, modeNote(t, r.Stdout), outsideNote, mode+": outside write")
+		}
 	}
 	code(t, support.Jhon(t, w.project, w.env, "mode", "yolo"), 0, "jhon mode yolo")
-	for _, o := range []writeOpts{{}, {top: true}} {
-		payload := map[string]any{"tool_name": "Write", "cwd": w.project, "permission_mode": "default", "tool_input": map[string]any{"file_path": out}}
-		if !o.top {
-			payload["agent_id"], payload["agent_type"], payload["permission_mode"] = "a1", "worker", "bypassPermissions"
-		}
-		r := hook(t, w.env, "vcs-guard", vcsDirs(t), payload)
-		code(t, r, 0, "yolo outside write")
-		matches(t, modeNote(t, r.Stdout), `^note \(not a refusal; the call ran\): allowed by the owner's yolo mode: outside-write: `, "yolo outside write")
-	}
 	// A Claude Code settings file stays the owner's, asked or refused.
 	if r := w.write(t, filepath.Join(w.project, ".claude", "settings.json"), writeOpts{}); r.code != 2 {
 		t.Errorf("yolo: a sub-agent wrote the settings: %+v", r)

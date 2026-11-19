@@ -133,6 +133,6 @@ newest 20; a later run keeps them). `--json` prints the note written; a
 change with no run on record exits 2. `tests.light_verify` is the newest
 note, or null. On the standard route `jhon status` notes "light verify due
 for <change>: …" while the GREEN run is newer than the last light verify,
-and route-guard opens a PR of a change that alters behaviour only once its
-newest light verify passed on the tree the last run tested (its working
-tree, else HEAD's).
+and route-guard notes, never refuses, a PR of a change that alters behaviour
+whose newest light verify did not pass on the tree the last run tested (its
+working tree, else HEAD's).

@@ -15,7 +15,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { judge, type CallContext, type JhonPiConfig } from "../lib/guards.ts";
+import { formatEdited, judge, type CallContext, type JhonPiConfig } from "../lib/guards.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HOOK_BIN = process.env.JHON_TEST_BIN || join(REPO, "build", "jhon");
@@ -59,11 +59,14 @@ test("the guard spawn inherits JHON_PI_AGENT and the payload names no agent_type
   assert.equal(payload.agent_id, "pi-child");
 });
 
-test("an explore child's write outside its record is refused through the real binary", async () => {
+// T153 (L957): explore's write beyond its record runs with a note (refused before).
+test("an explore child's write outside its record runs with a note through the real binary", async () => {
   const dir = repo("real");
   const ctx: CallContext = { config: configOf(HOOK_BIN), cwd: dir, child: true, interactive: false };
-  const refused = await asExplore(() => judge("write", { path: join(dir, "openspec/changes/c/tasks.md"), content: "x" }, ctx));
-  assert.ok(refused && "block" in refused, JSON.stringify(refused));
-  assert.match(refused.reason, /^vcs-guard: explore writes only its change's exploration\.md or research\.md/);
-  assert.equal(await asExplore(() => judge("write", { path: join(dir, "openspec/changes/c/exploration.md"), content: "x" }, ctx)), null);
+  const tasks = { path: join(dir, "openspec/changes/c/tasks.md"), content: "x" };
+  assert.equal(await asExplore(() => judge("write", tasks, ctx)), null);
+  assert.match(await formatEdited(ctx.config, "write", tasks, dir) ?? "", /^note \(not a refusal; the call ran\): explore writes only its change's exploration\.md or research\.md/);
+  const record = { path: join(dir, "openspec/changes/c/exploration.md"), content: "x" };
+  assert.equal(await asExplore(() => judge("write", record, ctx)), null);
+  assert.equal(await formatEdited(ctx.config, "write", record, dir), undefined);
 });

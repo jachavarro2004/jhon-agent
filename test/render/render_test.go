@@ -1255,7 +1255,7 @@ func TestRenderRuntimeModel(t *testing.T) {
 		for _, rule := range []string{"framework-boundary/no-framework-write", "safety/destructive-deny", "safety/outward-ask"} {
 			edits = append(edits, [2]string{rule + ": { by: blocking-hook-agent, claude-code: enforced, pi: enforced }", rule + ": { claude-code: unsupported, pi: unsupported }"})
 		}
-		for _, rule := range []string{"efficiency/writer-scope", "ldd/explore-scope"} {
+		for _, rule := range []string{"efficiency/writer-scope"} {
 			edits = append(edits, [2]string{rule + ": { by: blocking-hook-agent, claude-code: enforced, pi: enforced }", rule + ": { claude-code: unsupported, pi: unsupported }"})
 		}
 		home := renderManifestEdits(t, edits...)
@@ -2223,7 +2223,7 @@ func TestRenderPlugin(t *testing.T) {
 }
 
 // A write render records when the framework was installed and from which
-// commit, at ~/.cache/jhon/install.json, so `jhon sessions` and the guards can
+// commit, at ~/.cache/jhon/install.json, so `jhon doctor` and the guards can
 // tell a session that started before it (docket AI1).
 
 var recordPath = filepath.Join(".cache", "jhon", "install.json")
@@ -2508,7 +2508,7 @@ func TestRenderPi(t *testing.T) {
 		match(t, prompt, `(?m)^# Orchestrator$`)
 		match(t, prompt, `## Response Length Contract`, "the persona")
 		match(t, prompt, `\*\*A safety refusal is a stop\.\*\*`, "the contracts")
-		match(t, prompt, "Runtime guarantees in pi \\(agents\\.yaml `guarantees`\\): 6 enforced, 11 behavioural")
+		match(t, prompt, "Runtime guarantees in pi \\(agents\\.yaml `guarantees`\\): 5 enforced, 12 behavioural")
 	})
 
 	// T117b (L720): the writer-mode rules sit beside the prompt, protected,
@@ -2539,7 +2539,7 @@ func TestRenderPi(t *testing.T) {
 		} else {
 			// T117e (L746): inline mode is organic, delegating only on objective triggers.
 			r := flat(prompt[b:e])
-			for _, want := range []string{"never on price or size alone", `\*\*Read budget\.\*\*`, `\*\*Writer rule\.\*\*`, `\*\*Context backstop\.\*\*`, `\*\*Independence\.\*\*`, "small changes stay inline even when independent"} {
+			for _, want := range []string{"never on price or size alone", `\*\*Writer rule\.\*\*`, `\*\*Context backstop\.\*\*`, `\*\*Independence\.\*\*`, "small changes stay inline even when independent"} {
 				match(t, r, want, "the organic triggers")
 			}
 		}

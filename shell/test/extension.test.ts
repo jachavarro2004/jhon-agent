@@ -18,15 +18,14 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { OWNER_WAIT_EVENT } from "../lib/attention.ts";
-import jhon, { claudeCall, inspect, judge, loadConfig, CONFIG_FILE, SESSION_ENTRY, AUTHORIZATION_ENTRY, ANSWER_ONCE, ANSWER_GRANT, ANSWER_NO, ANSWER_SESSION, askClasses, type JhonPiConfig } from "../extensions/jhon.ts";
+import jhon, { claudeCall, inspect, judge, loadConfig, CONFIG_FILE, SESSION_ENTRY, AUTHORIZATION_ENTRY, ANSWER_ONCE, ANSWER_GRANT, ANSWER_NO, askClasses, type JhonPiConfig } from "../extensions/jhon.ts";
 import { createServer } from "node:net";
 import { memoryDir } from "../lib/memory.ts";
-import { childCapReason } from "../lib/child-budget.ts";
 import { continuedScope } from "../lib/agents.ts";
 import { ModelChoice } from "../lib/model-choice.ts";
 import { lddPrompt } from "../lib/ldd-command.ts";
 import { OWNER_SETTINGS, useMemorySettings } from "./fake-jhon-settings.ts";
-import { SHELL_CONTRACT, contractMismatch } from "../lib/guards.ts";
+import { SHELL_CONTRACT, contractMismatch, formatEdited } from "../lib/guards.ts";
 import { SESSION_SECTION } from "../lib/ui/append-system-prompt.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -136,19 +135,18 @@ test("the write guards refuse a write into a VCS directory and into the framewor
   assert.equal(await judge("write", { path: join(d, "src", "b.ts"), content: "x" }, child(d)), null);
 });
 
-test("in a repository with no LDD layout pi's first code edit is refused, naming init.md; setting LDD up and reads pass (T89)", async () => {
+test("in a repository with no LDD layout pi's first code edit runs with a note naming init.md; setting LDD up and reads pass with none (T89, T153)", async () => {
   const d = project();
   // The steps the session line names: the install the hook runs from (JHON_ROOT, else the binary's root).
   const root = process.env.JHON_ROOT || dirname(dirname(HOOK_BIN));
   const steps = existsSync(join(root, "prose/skills/ldd/references/init.md")) ? join(root, "prose/skills/ldd/references/init.md") : "~/.local/share/jhon/current/prose/skills/ldd/references/init.md";
-  const want = "route-guard: refused: LDD is not set up in this project yet; set it up first by following `" + steps +
-    "` (ask how to deliver and test with your ask tool, or use the recommended values), then make this edit and, before you finish, start its change (tasks.md) and record a run (`jhon executions run`)";
+  const want = "note (not a refusal; the call ran): LDD is not set up in this project yet: set it up by following `" + steps +
+    "` (ask how to deliver and test with your ask tool, or use the recommended values), and before you finish, start this edit's change (tasks.md) and record a run (`jhon executions run`)";
   for (const [tool, input] of [["edit", { path: join(d, "a.txt"), edits: [{ oldText: "b", newText: "c" }] }], ["write", { path: join(d, "src", "x.py"), content: "x" }],
     ["bash", { command: "sed -i 's/b/c/' a.txt" }]] as const) {
     for (const ctx of [child(d), parent(d)]) {
-      const r = await judge(tool, input, ctx);
-      assert.ok(r && "block" in r, `${tool}: ${JSON.stringify(r)}`);
-      assert.equal(r.reason, want, tool);
+      assert.equal(await judge(tool, input, ctx), null, tool);
+      assert.equal(await formatEdited(ctx.config, tool, input, d), want, tool);
     }
   }
   for (const [tool, input] of [["bash", { command: "mkdir -p ldd/specs ldd/changes/archive" }], ["write", { path: join(d, "ldd", "config.yaml"), content: "context: x\n" }],
@@ -160,14 +158,16 @@ test("in a repository with no LDD layout pi's first code edit is refused, naming
   assert.equal(await judge("edit", { path: join(d, "a.txt"), edits: [{ oldText: "b", newText: "c" }] }, child(d)), null, "once set up");
 });
 
-test("no file tool reads or edits a credentials file, nor a command deletes one; a command may read it; its template is any file", async () => {
+// T151 (L1394): secrets-guard no longer refuses reading a credentials file; a write, an edit or a deletion still is.
+test("no file tool edits or writes a credentials file, nor a command deletes one; a read, a grep or a command may read it; its template is any file", async () => {
   const d = lddProject();
-  for (const [tool, input] of [["read", { path: join(d, ".env") }], ["edit", { path: join(d, ".env.production") }], ["write", { path: join(d, ".env"), content: "x" }],
-    ["grep", { pattern: "KEY", path: join(d, ".env") }], ["bash", { command: "rm .env.local" }]] as const) {
+  for (const [tool, input] of [["edit", { path: join(d, ".env.production") }], ["write", { path: join(d, ".env"), content: "x" }],
+    ["bash", { command: "rm .env.local" }]] as const) {
     const r = await judge(tool, input, child(d));
     assert.ok(r && "block" in r && /holds credentials/.test(r.reason), `${tool} ${JSON.stringify(input)}: ${JSON.stringify(r)}`);
   }
-  for (const [tool, input] of [["read", { path: join(d, ".env.example") }], ["edit", { path: join(d, ".env.example") }], ["bash", { command: "cat .env.sample" }],
+  for (const [tool, input] of [["read", { path: join(d, ".env") }], ["grep", { pattern: "KEY", path: join(d, ".env") }],
+    ["read", { path: join(d, ".env.example") }], ["edit", { path: join(d, ".env.example") }], ["bash", { command: "cat .env.sample" }],
     ["bash", { command: "cat .env" }], ["bash", { command: "docker compose --env-file .env up -d" }]] as const) {
     assert.equal(await judge(tool, input, child(d)), null, `${tool} ${JSON.stringify(input)}`);
   }
@@ -747,8 +747,8 @@ test("a child past 80 turns keeps calling tools and is never shut down for its t
   }
 });
 
-// T131 with T122 (L920): no turn cap, and the context cap as it was.
-test("a child under its context cap reads freely for 89 turns; from turn 90 at 160K tokens every read is refused with the 150K cap; it is shut down at turn 94, a stale JHON_PI_MAX_TURNS or not", async () => {
+// T131 (L920): no turn cap; T155 (L1394): no context cap either.
+test("a child reads freely for 89 turns; from turn 90 at 160K tokens every read still runs and it is never shut down, a stale JHON_PI_MAX_TURNS or not", async () => {
   const d = project();
   for (const env of [{ JHON_PI_CHILD: "1" }, { JHON_PI_CHILD: "1", JHON_PI_MAX_TURNS: "5" }]) {
     const { handlers } = loaded(agentDir(), env);
@@ -761,14 +761,11 @@ test("a child under its context cap reads freely for 89 turns; from turn 90 at 1
       assert.equal(await read(), undefined, `${JSON.stringify(env)} turn ${turn}`);
     }
     tokens = 160_000;
-    for (let turn = 90; turn <= 94; turn++) {
+    for (let turn = 90; turn <= 100; turn++) {
       await turnEnd({}, ctx);
-      assert.equal(shutdowns, turn === 94 ? 1 : 0, `${JSON.stringify(env)} turn ${turn}: stopped four turns after the cap is met`);
-      const refused: any = await read();
-      assert.equal(refused?.block, true, `${JSON.stringify(env)} turn ${turn}`);
-      assert.equal(refused.reason, childCapReason(160_000, 150_000), `${JSON.stringify(env)} turn ${turn}`);
-      assert.match(refused.reason, /150K/);
+      assert.equal(await read(), undefined, `${JSON.stringify(env)} turn ${turn}`);
     }
+    assert.equal(shutdowns, 0, JSON.stringify(env));
   }
 });
 
@@ -804,7 +801,7 @@ test("the owner's yes is always on record: once, in the session; for 30 minutes,
   assert.deepEqual(askClasses("push: git push; gh-write: gh pr create; push: git push --tags"), ["push", "gh-write"]);
 });
 
-test("in a folder that is no project, the owner's yes to a write lasts the session, and ends with it (T57a)", async () => {
+test("in a folder that is no project, a write outside it runs with a note, never asked, and no grant is offered (T57a, T153, T113)", async () => {
   const folder = tempDir("jhon-pi-folder-");
   const dir = agentDir();
   const bin = join(dir, "jhon-fake");
@@ -815,20 +812,15 @@ test("in a folder that is no project, the owner's yes to a write lasts the sessi
   const call = handlers.get("tool_call")!;
   const seen: string[][] = [];
   const ctx = (answer: string, id = "sess-1") => ({ cwd: folder, hasUI: true, sessionManager: { getSessionId: () => id }, ui: { select: async (_title: string, options: string[]) => { seen.push(options); return answer; } } });
-  assert.equal(await call({ toolName: "write", input: { path: "/etc/jhon.conf", content: "x" } }, ctx(ANSWER_SESSION)), undefined);
-  assert.deepEqual(seen.at(-1), [ANSWER_ONCE, ANSWER_SESSION, ANSWER_NO]);
-  assert.equal(readFileSync(log, "utf8").trim(), "grant outside-write --session sess-1");
+  assert.equal(await call({ toolName: "write", input: { path: "/etc/jhon.conf", content: "x" } }, ctx(ANSWER_NO)), undefined);
+  assert.deepEqual(seen, [], "a write outside is not asked");
   // Another class there takes no grant for a while: a folder has no project to hold it.
   await call({ toolName: "bash", input: { command: "ssh host" } }, ctx(ANSWER_NO));
   assert.deepEqual(seen.at(-1), [ANSWER_ONCE, ANSWER_NO]);
-  // A session without an id is offered no session grant.
-  await call({ toolName: "write", input: { path: "/etc/jhon.conf", content: "x" } }, ctx(ANSWER_NO, ""));
-  assert.deepEqual(seen.at(-1), [ANSWER_ONCE, ANSWER_NO]);
-  await handlers.get("session_shutdown")!({}, { cwd: folder });
-  assert.deepEqual(readFileSync(log, "utf8").trim().split("\n"), ["grant outside-write --session sess-1", "grant --revoke outside-write --session sess-1"]);
+  assert.equal(existsSync(log), false, "no jhon grant ran");
 });
 
-test("pi offers no session grant where jhon grant would refuse it: HOME and the folders above it, and jhon's state (T57a)", async () => {
+test("pi asks no write outside the project in HOME, the folders above it, or jhon's state, and offers no grant there (T57a, T113)", async () => {
   const home = tempDir("jhon-pi-home-");
   const state = tempDir("jhon-pi-state-");
   mkdirSync(join(state, "jhon", "session-grants"), { recursive: true });
@@ -844,7 +836,9 @@ test("pi offers no session grant where jhon grant would refuse it: HOME and the 
     for (const cwd of [home, dirname(home), state, join(state, "jhon"), join(state, "jhon", "session-grants")]) {
       const seen: string[][] = [];
       const ctx = { cwd, hasUI: true, sessionManager: { getSessionId: () => "sess-1" }, ui: { select: async (_title: string, options: string[]) => { seen.push(options); return ANSWER_NO; } } };
-      await call({ toolName: "write", input: { path: "/etc/jhon.conf", content: "x" } }, ctx);
+      assert.equal(await call({ toolName: "write", input: { path: "/etc/jhon.conf", content: "x" } }, ctx), undefined, cwd);
+      assert.deepEqual(seen, [], cwd);
+      await call({ toolName: "bash", input: { command: "ssh host" } }, ctx);
       assert.deepEqual(seen.at(-1), [ANSWER_ONCE, ANSWER_NO], cwd);
     }
   } finally {
@@ -1943,14 +1937,18 @@ test("the main session suggests a fresh session once at 50% of its context and o
   assert.equal(sent.length, 1);
 });
 
-// T115a (L691): on a very large window the token budget (150K by default) comes first.
-test("on a very large window the main session suggests a fresh session once past the token budget", async (t) => {
-  // T115e's backstop (100K) comes first on this window; off here, the fresh-session notice reads alone (test/context-backstop.test.ts has the ladder).
-  useMemorySettings(t, { "shell.behaviour.backstop_tokens": 0 });
+// T115a (L691): on a very large window the token budget (150K by default, three quarters of compact_tokens) comes first.
+test("on a very large window the main session suggests a fresh session once past the token budget", async () => {
+  // T115e's backstop (100K, half of compact_tokens) comes first on this window; it fires at 120K alone (test/context-backstop.test.ts has the ladder).
   const notices: string[] = [];
   const sent: string[] = [];
   const main = loadedWith(agentDir(), {}, { sendMessage: (m: any) => sent.push(m.content) }).handlers;
   const ctx = (tokens: number) => ({ cwd: project(), ui: { notify: (m: string) => notices.push(m) }, getContextUsage: () => ({ percent: tokens / 10_000, tokens, contextWindow: 1_000_000 }) });
+  await main.get("agent_settled")!({}, ctx(120_000));
+  assert.equal(notices.length, 1, "the delegation backstop");
+  assert.match(notices[0]!, /^Context backstop: /);
+  notices.length = 0;
+  sent.length = 0;
   await main.get("agent_settled")!({}, ctx(140_000));
   assert.deepEqual(notices, [], "under the budget");
   await main.get("agent_settled")!({}, ctx(152_000));
