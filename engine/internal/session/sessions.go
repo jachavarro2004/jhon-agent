@@ -1,6 +1,6 @@
 package session
 
-// The report of `jhon sessions` (docket AI1): the live
+// The sessions report of `jhon doctor` and `jhon sync` (docket AI1): the live
 // orchestrator sessions that started before the framework was last
 // installed. Such a session keeps the prompt and agent list it loaded at
 // start while the guards and sub-agents it runs are the installed ones. It is
@@ -97,7 +97,7 @@ type Installed struct {
 	Commit      string `json:"commit"`
 }
 
-// Report is the `jhon sessions --json` document.
+// Report is the stale-session report; its JSON tags are the document's shape.
 type Report struct {
 	Installed   *Installed `json:"installed"`
 	Source      string     `json:"source"` // claude-agents or transcripts

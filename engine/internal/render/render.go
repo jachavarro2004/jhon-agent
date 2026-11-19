@@ -529,8 +529,8 @@ func (e *engine) write() int {
 	}
 
 	// The install record (docket AI1): when a write render installed
-	// anything, when and from which commit, for `jhon sessions` and the
-	// guards' stale-session note. The time moves only when something new
+	// anything, when and from which commit, for `jhon doctor`'s and `jhon
+	// sync`'s sessions report and the guards' stale-session note. The time moves only when something new
 	// was installed. The source checkout `jhon sync` recorded is sync's to
 	// write; a render keeps it.
 	if !e.args.check && s.installed {

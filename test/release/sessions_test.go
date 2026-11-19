@@ -1,6 +1,7 @@
-// `jhon sessions [--json]`, run as the binary: stale-session detection
-// against the install record (docket AI1). The install record, the guard
-// note, and the report are unit-tested in internal/session.
+// The stale-session report in `jhon doctor`, run as the binary: stale-session
+// detection against the install record (docket AI1). `jhon sessions` folded
+// into doctor (T157) and is an unknown command now. The install record, the
+// guard note, and the report are unit-tested in internal/session.
 //
 // Every source is a fixture built here under a temporary directory: a HOME
 // with `.claude/projects/<project>/<session>.jsonl` transcripts and
@@ -83,77 +84,70 @@ func fakeClaude(t *testing.T, out []any) string {
 	return dir
 }
 
-func sessions(t *testing.T, home, path string, args ...string) support.Result {
+// doctorSessions runs `jhon doctor` against the fixture sources and returns
+// its sessions section: the lines after the section's head, up to the next
+// blank line.
+func doctorSessions(t *testing.T, home, path string) string {
 	t.Helper()
-	return support.Run(t, support.Cmd{Args: append([]string{support.Bin(t), "sessions"}, args...),
-		Env: []string{"HOME=" + home, "PATH=" + path + ":/usr/bin:/bin", "JHON_ROOT=" + support.Root()}})
-}
-
-func staleIDs(t *testing.T, out string) (map[string]any, []string) {
-	t.Helper()
-	var j map[string]any
-	if err := json.Unmarshal([]byte(out), &j); err != nil {
-		t.Fatalf("%v\n%s", err, out)
+	r := support.Run(t, support.Cmd{Args: []string{support.Bin(t), "doctor"},
+		Env: []string{"HOME=" + home, "PATH=" + path + ":/usr/bin:/bin", "JHON_ROOT=" + support.Root(),
+			"JHON_ENGRAM=" + support.NoEngram, "JHON_SETTINGS=" + filepath.Join(home, "settings.toml")}})
+	_, section, ok := strings.Cut(r.Stdout, "\nsessions\n")
+	if !ok {
+		t.Fatalf("doctor printed no sessions section: exit %d\n%s", r.Code, r.Out())
 	}
-	ids := []string{}
-	stale, _ := j["stale"].([]any)
-	for _, s := range stale {
-		ids = append(ids, s.(map[string]any)["session_id"].(string))
-	}
-	return j, ids
+	section, _, _ = strings.Cut(section, "\n\n")
+	return section
 }
 
 const installed = "3eb2e0b0000000000000000000000000000000aa"
 
-func TestSessions(t *testing.T) {
-	t.Run("jhon sessions --json reports the stale orchestrator session from the fixture sources", func(t *testing.T) {
+func TestDoctorSessions(t *testing.T) {
+	t.Run("jhon doctor warns of the stale orchestrator session from the fixture sources", func(t *testing.T) {
 		t.Parallel()
 		home := t.TempDir()
 		now := time.Now()
 		install(t, home, at(5, now), installed)
 		transcript(t, home, "-a", "old-orch", at(30, now), at(0.1, now), "jhon-orchestrator")
 		path := fakeClaude(t, []any{map[string]any{"pid": 1, "id": "x", "cwd": "/a", "kind": "background", "startedAt": millis(at(30, now)), "sessionId": "old-orch", "status": "busy"}})
-		r := sessions(t, home, path, "--json")
-		if r.Code != 0 {
-			t.Fatal(r.Stderr)
-		}
-		j, ids := staleIDs(t, r.Stdout)
-		equal(t, j["source"], any("claude-agents"))
-		equal(t, ids, []string{"old-orch"})
-		match(t, sessions(t, home, path).Stdout, "(?m)^1 orchestrator session\\(s\\) started before the last install; resume each with `jhon start --resume <id>` to load the current contract and agents$")
+		out := doctorSessions(t, home, path)
+		match(t, out, `(?m)^  installed 3eb2e0b at `)
+		match(t, out, `(?m)^  source: claude agents --json$`)
+		match(t, out, `(?m)^  warn  stale  old-orch  background  busy  /a  started `)
+		match(t, out, "(?m)^  warn  1 orchestrator session\\(s\\) started before the last install; resume each with `jhon start --resume <id>` to load the current contract and agents$")
 	})
 
-	t.Run("jhon sessions degrades to transcripts when claude fails, and says so", func(t *testing.T) {
+	t.Run("jhon doctor degrades to transcripts when claude fails, and says so", func(t *testing.T) {
 		t.Parallel()
 		home := t.TempDir()
 		now := time.Now()
 		install(t, home, at(5, now), installed)
 		transcript(t, home, "-a", "old-orch", at(30, now), at(1, now), "jhon-orchestrator")
-		r := sessions(t, home, fakeClaude(t, nil), "--json")
-		if r.Code != 0 {
-			t.Fatal(r.Stderr)
-		}
-		j, ids := staleIDs(t, r.Stdout)
-		equal(t, j["source"], any("transcripts"))
-		note, _ := j["note"].(string)
-		match(t, note, `transcripts only`)
-		equal(t, ids, []string{"old-orch"})
+		out := doctorSessions(t, home, fakeClaude(t, nil))
+		match(t, out, `(?m)^  source: transcripts$`)
+		match(t, out, `(?m)^  .*transcripts only`)
+		match(t, out, `(?m)^  warn  stale  old-orch  `)
 	})
 
-	t.Run("jhon sessions prints the stale list for a human, and refuses an unknown argument", func(t *testing.T) {
+	t.Run("jhon doctor says when no orchestrator session is stale", func(t *testing.T) {
 		t.Parallel()
 		home := t.TempDir()
 		now := time.Now()
 		install(t, home, at(5, now), installed)
-		transcript(t, home, "-a", "old-orch", at(30, now), at(0.1, now), "jhon-orchestrator")
-		path := fakeClaude(t, []any{map[string]any{"cwd": "/a", "kind": "background", "startedAt": millis(at(30, now)), "sessionId": "old-orch", "status": "busy"}})
-		r := sessions(t, home, path)
-		if r.Code != 0 {
-			t.Fatal(r.Stderr)
+		transcript(t, home, "-a", "new-orch", at(1, now), at(0.1, now), "jhon-orchestrator")
+		out := doctorSessions(t, home, fakeClaude(t, []any{map[string]any{"cwd": "/a", "kind": "background", "startedAt": millis(at(1, now)), "sessionId": "new-orch", "status": "busy"}}))
+		match(t, out, `(?m)^  ok    no stale orchestrator session$`)
+		noMatch(t, out, `stale  new-orch`)
+	})
+
+	t.Run("jhon sessions is an unknown command", func(t *testing.T) {
+		t.Parallel()
+		for _, args := range [][]string{{"sessions"}, {"sessions", "--json"}} {
+			r := support.Run(t, support.Cmd{Args: append([]string{support.Bin(t)}, args...),
+				Env: []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin", "JHON_ROOT=" + support.Root()}})
+			equal(t, r.Code, 1, args)
+			equal(t, r.Stdout, "", args)
+			match(t, r.Stderr, `^jhon: unknown command: sessions\n\n`)
 		}
-		match(t, r.Stdout, `installed 3eb2e0b at `)
-		match(t, r.Stdout, `stale\s+old-orch\s+background\s+busy\s+/a`)
-		match(t, r.Stdout, `resume`)
-		equal(t, sessions(t, home, path, "--bogus").Code, 2)
 	})
 }
