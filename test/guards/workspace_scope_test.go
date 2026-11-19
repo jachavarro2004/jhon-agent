@@ -23,7 +23,9 @@ type wsFixture struct {
 
 func newWorkspace(t *testing.T, config string) wsFixture {
 	t.Helper()
-	scratch := realTemp(t)
+	// Outside /tmp and $TMPDIR: the guards take any write there for scratch
+	// (project.TmpRoots), so a sibling there would never be outside.
+	scratch := outsideTemp(t)
 	w := wsFixture{app: filepath.Join(scratch, "app"), lib: filepath.Join(scratch, "lib"), web: filepath.Join(scratch, "web"), other: filepath.Join(scratch, "other")}
 	w.env = support.Env("HOME="+sgHome, "XDG_STATE_HOME="+filepath.Join(scratch, "state"), "TMPDIR="+mkdir(t, filepath.Join(scratch, "tmp")), "JHON_ROOT="+support.Root())
 	for _, d := range []string{w.app, w.lib, w.web, w.other} {
