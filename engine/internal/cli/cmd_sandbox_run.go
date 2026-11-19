@@ -82,6 +82,15 @@ func sandboxSupervised(path string, argv, env []string, profile string) (int, er
 	errOut := &lastByte{w: os.Stderr}
 	cmd := &exec.Cmd{Path: path, Args: argv, Env: env, Stdin: os.Stdin,
 		Stdout: io.MultiWriter(os.Stdout, watch), Stderr: io.MultiWriter(errOut, watch), WaitDelay: pipeGrace}
+	// A caller that gave stdout and stderr one file (2>&1) reads one stream
+	// in the order it was written: the program gets one pipe for both, as
+	// it got the caller's one descriptor before (L1318 c). exec.Cmd gives
+	// one pipe when Stdout and Stderr are the same writer.
+	if sameFile(os.Stdout, os.Stderr) {
+		errOut = &lastByte{w: os.Stdout}
+		both := io.MultiWriter(errOut, watch)
+		cmd.Stdout, cmd.Stderr = both, both
+	}
 	signals := make(chan os.Signal, 4)
 	signal.Notify(signals, forwarded...)
 	defer signal.Stop(signals)
@@ -141,6 +150,17 @@ func sandboxSupervised(path string, argv, env []string, profile string) (int, er
 		time.Sleep(100 * time.Millisecond)
 	}
 	return code, nil
+}
+
+// sameFile is whether a and b are one open file (one pipe, one terminal,
+// one regular file), as the caller's 2>&1 makes them.
+func sameFile(a, b *os.File) bool {
+	x, err := a.Stat()
+	if err != nil {
+		return false
+	}
+	y, err := b.Stat()
+	return err == nil && os.SameFile(x, y)
 }
 
 // lastByte is a writer that remembers the last byte written through it.
