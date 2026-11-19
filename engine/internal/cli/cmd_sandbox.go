@@ -237,8 +237,8 @@ type sandboxState struct {
 	// the sandbox can run, off elsewhere, D3) or settings (sandbox.Mode,
 	// T128f).
 	ModeSource string `json:"mode_source"`
-	// ModeReason is why the default is off on Linux: the reason the
-	// sandbox cannot run (T128f slice 8, L1375); "" otherwise.
+	// ModeReason is why the default is off on Linux: the probe's reason
+	// and fix, on one line (T128f slice 8 L1375, 8b L1379); "" otherwise.
 	ModeReason string `json:"mode_reason"`
 	CanRun     bool   `json:"can_run"`
 	Reason     string `json:"reason"`
@@ -354,20 +354,25 @@ var sandboxHost = sandbox.ThisHost
 // pinned project or with "" the one this folder is in: one empty sandbox
 // started for real, with the bubblewrap and the options such a command
 // would get. The mode is sandbox.Mode's, with its source and, for the
-// default's off on Linux, its reason; the mode and the probe read the same
-// sandbox, built once.
+// default's off on Linux, the probe's reason and fix; the mode and the
+// probe read the same sandbox, built once, and bubblewrap starts once.
 func sandboxNow(pinned string) sandboxState {
 	s := sandboxState{CanRun: true, Project: pinned}
 	in := sandboxInput(pinned, sandbox.Work)
-	mode, source, why := sandbox.Mode(sandboxHost(), func() sandbox.Input { return in })
-	s.Mode, s.ModeSource = mode, source
-	if why != nil {
-		s.ModeReason = why.Reason
+	e := sandbox.Mode(sandboxHost(), func() sandbox.Input { return in })
+	s.Mode, s.ModeSource = e.Mode, e.Source
+	if e.Mode == "off" && e.Problem != nil {
+		s.ModeReason = e.Problem.Line()
 	}
 	if pinned == "" {
 		s.Project = sandboxProject()
 	}
-	if p := sandbox.Probe(sandboxHost(), in); p != nil {
+	// One empty sandbox started: the mode's probe when it probed.
+	p := e.Problem
+	if !e.Probed {
+		p = sandbox.Probe(sandboxHost(), in)
+	}
+	if p != nil {
 		s.CanRun, s.Reason, s.Fix = false, p.Reason, p.Fix
 	}
 	if s.Mode == "on" {
@@ -397,11 +402,11 @@ func sandboxStatus(asJSON bool, pinned string) (int, error) {
 }
 
 // sandbox is doctor's sandbox section: the mode and whether the sandbox
-// can run. Where it cannot, with the mode on (by default on Linux where
-// Check passes, or set) every command of the model is refused: a problem,
-// with the fix (T128f, L1352 F2); with the mode off, the default off Linux
-// (D3) or on Linux where it cannot run (slice 8, L1375), a warning that the
-// commands run unsandboxed, never a problem. The owner's off on Linux,
+// can run. Where it cannot, with the mode set on every command of the
+// model is refused: a problem, with the fix (T128f, L1352 F2); with the mode
+// off, the default off Linux (D3) or on Linux where it cannot run (slices 8
+// and 8b, L1375, L1379), a warning that the commands run unsandboxed, never
+// a problem. The owner's off on Linux,
 // where it can run, is a warning too: the guards leave the shell's writes
 // outside the project to the sandbox, so they then run unguarded (T128f
 // slice 7, L1367 gap 2). With the mode on, a second warning counts the Bash

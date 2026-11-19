@@ -201,10 +201,10 @@ func schema() []spec {
 		// do it or say why not (hook/announcestop.go); false lets it end.
 		{key: "agents.act_on_announce", kind: kBool, def: true},
 		// T128a (L872, odd/proposals/t128-sandbox.md): whether the runtimes run
-		// each model-chosen command in the OS sandbox, on by default since
-		// T128f (sandbox.Mode reads the default as off where the sandbox does
-		// not run, D3), and the folders a sandboxed command may write besides
-		// the project's.
+		// each model-chosen command in the OS sandbox, on by default where
+		// the sandbox can run since T128f (sandbox.Mode reads the default as
+		// off where the probe starts no sandbox, and off Linux, D3), and the
+		// folders a sandboxed command may write besides the project's.
 		{key: "sandbox.mode", kind: kEnum, def: "on", enum: []string{"on", "off"}},
 		{key: "sandbox.allow_write", kind: kPaths, def: []string{}},
 		{key: "pi.profile", kind: kName, def: "default"},

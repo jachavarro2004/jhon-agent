@@ -500,14 +500,22 @@ func TestDoctorSaysWhetherTheSandboxCanRun(t *testing.T) {
 	if last(failed.Stdout) != last(r.Stdout) || failed.Code != r.Code {
 		t.Errorf("the sandbox line changed doctor's verdict: %q exit %d, against %q exit %d", last(failed.Stdout), failed.Code, last(r.Stdout), r.Code)
 	}
-	// T128f (L1352 F2): with the mode on, by default or set, a sandbox that
-	// cannot run refuses every command: a problem, with the fix.
+	// T128f (L1352 F2): with the mode on, by default or set, where the
+	// sandbox runs, doctor is ok. Set on where it cannot run refuses every
+	// command: a problem, with the fix. With no owner value the default is
+	// then off (slice 8b, L1379; default_probe_test.go).
 	for _, text := range []string{"", "[sandbox]\nmode = \"on\"\n"} {
 		b.settings(t, text)
 		if ok := support.Jhon(t, b.proj, append(append([]string{}, b.env...), "PATH="+path), "doctor"); !strings.Contains(ok.Stdout, "\nsandbox\n  ok    sandbox on; it can run here\n") {
 			t.Errorf("%q: doctor where the sandbox can run:\n%s", text, ok.Out())
 		}
 		on := support.Jhon(t, b.proj, env, "doctor")
+		if text == "" {
+			if !strings.Contains(on.Stdout, "\nsandbox\n  warn  sandbox off by default; it cannot run here: bubblewrap cannot start a sandbox") || on.Code != failed.Code {
+				t.Errorf("no settings: doctor where bubblewrap cannot start: exit %d\n%s", on.Code, on.Out())
+			}
+			continue
+		}
 		row := "\nsandbox\n  FAIL  sandbox on; it cannot run here: bubblewrap cannot start a sandbox (bwrap: No permissions to create a new namespace); fix: turn unprivileged user namespaces on"
 		if !strings.Contains(on.Stdout, row) || !strings.Contains(on.Stdout, "; until then every command of the model is refused\n") || on.Code != 1 || !strings.HasSuffix(last(on.Stdout), "problem(s)") {
 			t.Errorf("%q: doctor with the mode on where the sandbox cannot run: exit %d\n%s", text, on.Code, on.Out())

@@ -107,7 +107,8 @@ func Check(h Host, in Input) (bwrap string, problem *Problem) {
 
 // Probe is Check, then one empty sandbox started for real with the
 // bubblewrap Check gave and one of every option a run gives it (probeArgs),
-// bounded to 5 seconds: what `jhon sandbox status` and `jhon doctor` report.
+// bounded to 5 seconds: what `jhon sandbox status` and `jhon doctor` report,
+// and what turns the default mode on on Linux (Mode).
 // A bubblewrap that does not know one of the options is too old, and would
 // fail every run.
 func Probe(h Host, in Input) *Problem {
@@ -115,6 +116,12 @@ func Probe(h Host, in Input) *Problem {
 	if p != nil {
 		return p
 	}
+	return started(bwrap)
+}
+
+// started is Probe's start of one empty sandbox with bwrap: nil when it ran,
+// else why it did not and the fix. A test gives its own.
+var started = func(bwrap string) *Problem {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bwrap, append(slices.Clone(probeArgs), "true")...)
