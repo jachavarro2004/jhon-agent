@@ -99,7 +99,11 @@ says so: it writes no tasks.md, saves no memory or session summary, and
 keeps no todo list. Its RED and GREEN runs are its record. When the run that
 recorded GREEN started on uncommitted work and the commit holds exactly the
 tree it tested, `jhon deliver check` takes that run as the delivery
-evidence: no re-run on the clean tree.
+evidence: no re-run on the clean tree. For a change with a folder, the files
+under it (tasks.md, the proposal, the design, the spec deltas) are its
+record, not project input: marking a task after the GREEN run and committing
+it needs no re-run either. An edit anywhere else, another change's folder
+included, does.
 
 ## A worktree per change
 

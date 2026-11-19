@@ -30,6 +30,10 @@ All notable changes to Jhon are recorded here. The format follows
 - A multi-repository workspace, reported: the primary's LDD config lists its sibling repositories (`workspace:`, name: path relative to its top); the owner's `jhon workspace join <primary>`, run in a sibling, records its pointer under Jhon's state (`leave` removes it, `list` shows them); `jhon status` reports the role, the primary and the members (`workspace` in `--json`) and notes a sibling that has not joined or a pointer the primary does not list. The safety guard refuses `jhon workspace join|leave` to agents and keeps the pointers' folder as it keeps the grants (T57).
 - Executions per repository in a workspace: `jhon executions run <change> --repo <name>`, in the primary or any member, runs the member's own tests and records them in the primary's record under `repos.<name>` (`working_tree`, `after_working_tree`, `executions`, `passed`, `complete`); `jhon deliver check` in a member reads that entry with the same tested-tree rules; a tasks.md slice's `Repo: <name>` line is shown by `jhon status` (`repo` in `--json`). Outside a workspace records and delivery checks are unchanged (T57).
 
+### Fixed
+
+- `jhon deliver check` no longer asks for a re-run when only the change's own folder (tasks.md, proposal, design, spec deltas, under `openspec/changes/<change>/` or `ldd/changes/<change>/`) changed after the passing run and was committed: it is the change's record, as `--affected` reads it. An edit outside that folder, another change's folder included, still makes the check not ready (T150).
+
 ## [0.3.7] - 2026-11-18
 
 ### Added
