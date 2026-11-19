@@ -148,7 +148,11 @@ A file an agent writes is then formatted by its project's own formatter
 (`jhon hook format-edit`). On Linux `sandbox.mode` is on by default: an
 allowed command runs inside `jhon sandbox run` (bubblewrap): the project, the
 temporary folders, the caches and `sandbox.allow_write` are writable,
-everything else is read-only, and the home's credentials are not there. A
+everything else is read-only, and the home's credentials are not there.
+Jhon's source checkout, the one `jhon sync` installs from, stays read-only
+unless it is the project itself: a linked worktree of it is another project,
+and writes only its own files (and commits through the checkout's git
+folder). A
 line of git network commands (fetch, pull, push, ls-remote, clone, remote
 update) working inside the project, or gh, runs outside the sandbox, still
 judged by the guards: git over SSH and gh cannot run inside it. So does a
@@ -167,8 +171,11 @@ telemetry event. There is no PID namespace: a child a command detaches
 (`setsid`, `nohup`) outlives the sandbox's bubblewrap. Where the sandbox
 cannot run (no bubblewrap, user namespaces off) every command is refused
 with the fix and `jhon doctor` fails, never run unsandboxed in silence;
-`sandbox.mode = "off"` turns it off. macOS and Windows run unsandboxed
-(off by default there) with a `jhon doctor` warning. See
+`sandbox.mode = "off"` turns it off. Off, nothing guards a shell command's
+writes outside the project: the guards leave them to the sandbox, so a
+redirect, `dd`, a recursive `chmod` or a write to Jhon's installed files or
+source there runs, and on Linux `jhon doctor` warns. macOS and Windows run
+unsandboxed (off by default there) with a `jhon doctor` warning. See
 `jhon sandbox --help`.
 
 ### What each runtime guarantees

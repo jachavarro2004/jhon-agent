@@ -184,7 +184,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            the version Jhon pins, and where the OS sandbox
                            cannot run with sandbox.mode off (the model's
                            commands run unsandboxed: macOS and Windows by
-                           default); fails where it cannot run with the
+                           default), or on Linux the owner set it off (the
+                           shell's writes outside the project then run
+                           unguarded); fails where it cannot run with the
                            mode on (by default on Linux: every command is
                            refused), with the fix; fails when the record of the
                            rendered agents or the main agent's definition
@@ -415,7 +417,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            caches), sandbox.allow_write and Jhon's telemetry
                            folder; everything else is read-only,
                            Jhon's settings, grants, modes and releases
-                           included, wherever they are, and every PATH
+                           included, wherever they are, Jhon's source
+                           checkout unless it is the project (a linked
+                           worktree of it writes only its own files and
+                           the git common dir), and every PATH
                            folder outside the project, also inside a
                            writable folder: the folders with the
                            toolchains' programs (go's and cargo's bin,
