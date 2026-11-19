@@ -23,7 +23,11 @@ import (
 // branch (origin/HEAD, origin/main, origin/master, main, master), else HEAD.
 //
 // Each changed file gets a level and a reason:
-//   - high: a migration or schema file, a destructive data statement added
+//   - high: a migration or schema file (a .sql file, schema.prisma, any
+//     file under a migrations, migration, alembic, flyway, liquibase or
+//     db/migrate folder; outside vendor/ and node_modules/, any file under a
+//     migrate folder and code, no test, whose base name starts with migrate
+//     or migration), a destructive data statement added
 //     (DROP, TRUNCATE, DELETE FROM), a security path (auth, permissions,
 //     crypto, secrets, tokens, .env), a contract others consume (OpenAPI,
 //     AsyncAPI, proto, GraphQL), delivery or infrastructure (CI, Dockerfile,
@@ -119,6 +123,9 @@ func (g gitReads) git(dir string, args ...string) (string, bool) {
 // to k.
 var (
 	migration   = lazyre.New(`(^|/)(migrations?|alembic|flyway|liquibase)/|(^|/)db/migrate/|(^|/)schema\.prisma$|\.sql$`)
+	migrateDir  = lazyre.New(`(^|/)migrate/`)
+	migrateName = lazyre.New(`(^|/)migrat(e|ion)[^/]*$`)
+	vendored    = lazyre.New(`(^|/)(vendor|node_modules)/`)
 	destructive = lazyre.New(`\b(?:drop` + js.Space + `+(?:table|column|database|schema|index)|truncate` + js.Space + `+(?:table` + js.Space + `+)?\w|delete` + js.Space + `+from)\b`)
 	contractRe  = lazyre.New(`(^|/)[^/]*(openapi|swagger|asyncapi)[^/]*\.(ya?ml|json)$|\.proto$|\.(graphql|gql)$`)
 	delivery    = lazyre.New(`(^|/)dockerfile[^/]*$|(^|/)(docker-)?compose[^/]*\.ya?ml$|(^|/)\.github/workflows/|(^|/)\.gitlab-ci\.ya?ml$|(^|/)jenkinsfile$|(^|/)\.circleci/|(^|/)azure-pipelines[^/]*\.ya?ml$|\.tf$|\.tfvars$|(^|/)(helm|k8s|kubernetes|kustomize|deploy|infra)/`)
@@ -153,6 +160,16 @@ func asciiLower(s string) string {
 // matchI is a case-insensitive rule's test of s.
 func matchI(re interface{ MatchString(string) bool }, s string) bool {
 	return re.MatchString(asciiLower(s))
+}
+
+// isMigration is a data migration the folder and SQL rules miss: a file
+// under a migrate folder at any depth, or code whose base name starts with
+// migrate or migration and is no test; vendored code is not the change's.
+func isMigration(f string) bool {
+	if matchI(vendored, f) {
+		return false
+	}
+	return matchI(migrateDir, f) || matchI(migrateName, f) && code.MatchString(f) && !testRe.MatchString(f)
 }
 
 func isSecurityPath(f string) bool {
@@ -203,7 +220,7 @@ func defaultLevel(c Changed) defaulted {
 	switch {
 	case record.MatchString(f):
 		return r(Passive, "change record")
-	case matchI(migration, f):
+	case matchI(migration, f), isMigration(f):
 		return r(High, "migration or schema")
 	case testRe.MatchString(f):
 		return r(Passive, "test")
