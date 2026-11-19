@@ -110,12 +110,14 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 	}
 	in := current()
 	// bubblewrap starts at most once a call: the mode's probe is the verdict
-	// when it probed.
+	// when it probed. A probe that timed out is none (L1382): the command is
+	// wrapped as usual, and `jhon sandbox run` fails visibly if bubblewrap
+	// cannot start.
 	problem := effective.Problem
 	if !effective.Probed {
 		problem = sandbox.Probe(sandboxHost(), in)
 	}
-	if problem != nil {
+	if problem != nil && !problem.TimedOut {
 		return nil, "sandbox: sandbox.mode is on and the sandbox cannot run here: " + problem.Reason + "; the call is refused; fix: " + problem.Fix
 	}
 	jhon, err := os.Executable()
