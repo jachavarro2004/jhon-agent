@@ -19,7 +19,7 @@ func TestSessionStartWithAnEmptyMainAgentDefinitionSaysNothing(t *testing.T) {
 	if err := os.WriteFile(definition, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	off := append(append([]string{}, env...), "JHON_SETTINGS="+filepath.Join(b.base, "no-settings.toml"))
+	off := modeOff(t, b, env)
 	for _, mode := range []struct {
 		name string
 		env  []string

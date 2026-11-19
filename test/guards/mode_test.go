@@ -367,7 +367,8 @@ func TestModeNoteThroughPreTool(t *testing.T) {
 	s := newSG(t)
 	s.setMode(t, s.p, "yolo")
 	payload := map[string]any{"tool_name": "Bash", "tool_input": cmd("git push"), "cwd": s.p, "session_id": "s", "agent_id": "a1", "agent_type": "worker", "permission_mode": "bypassPermissions"}
-	r := hook(t, s.env, "pre-tool", []string{"--agent", "worker", "safety-guard"}, payload)
+	// The note unwrapped (T128f: the wrap is on by default on Linux).
+	r := hook(t, sandboxEnv(t, s, "off"), "pre-tool", []string{"--agent", "worker", "safety-guard"}, payload)
 	code(t, r, 0, "pre-tool push")
 	matches(t, modeNote(t, r.Stdout), `^note \(not a refusal; the call ran\): allowed by the owner's yolo mode: push: git push$`, "pre-tool push")
 }

@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sandbox"
-	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
 )
 
 // sandboxTools are Claude Code's tools that start a shell command of the
@@ -28,12 +27,17 @@ var sandboxTools = []string{"Bash", "Monitor"}
 // never import (T55).
 var SandboxInput = func(dir, pinned string) sandbox.Input { return sandbox.Current(dir, pinned, sandbox.Work) }
 
+// sandboxHost is the machine the wrap reads the mode for and probes; a test
+// gives another system's.
+var sandboxHost = sandbox.ThisHost
+
 // sandboxAllowReason goes with the allow of a wrapped command; Claude Code
 // writes an allow's reason to its debug log only.
 const sandboxAllowReason = "Jhon's guards allow the command; it runs in Jhon's sandbox"
 
 // sandboxWrap is the tool input Claude Code runs in place of the payload's
-// when sandbox.mode is on (T128c, L894, design section 3): the same input
+// when sandbox.mode is on as sandbox.Mode reads it, by default on Linux
+// (T128c, L894, design section 3; T128f): the same input
 // with only its command replaced by
 //
 //	<jhon> sandbox run --project '<folder>' --profile work -- <shell> -c '<command>'
@@ -76,7 +80,7 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 		_ = json.Unmarshal(top["tool_input"], &input)
 	}
 	raw, has := input["command"]
-	if (!has && tool == "Monitor") || settings.Str("sandbox.mode") != "on" {
+	if mode, _ := sandbox.Mode(sandboxHost()); (!has && tool == "Monitor") || mode != "on" {
 		return nil, ""
 	}
 	var command string
@@ -90,7 +94,7 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 	}
 	cwd := p.Cwd()
 	in := SandboxInput(cwd, folder)
-	if problem := sandbox.Probe(sandbox.ThisHost(), in); problem != nil {
+	if problem := sandbox.Probe(sandboxHost(), in); problem != nil {
 		return nil, "sandbox: sandbox.mode is on and the sandbox cannot run here: " + problem.Reason + "; the call is refused; fix: " + problem.Fix
 	}
 	jhon, err := os.Executable()

@@ -9,6 +9,7 @@ package guards
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -74,9 +75,26 @@ func TestSandboxModeOffLeavesThePreToolOutputAsItWas(t *testing.T) {
 				t.Errorf("%s: stdout %q, stderr %q; want nothing printed", c.name, r.Stdout, r.Stderr)
 			}
 		}
-		// The setting absent is the setting off.
-		if plain := hook(t, s.env, "pre-tool", claudeGuards, claudePayload(s, c.tool, c.input)); plain != r {
-			t.Errorf("%s: with no settings %+v, with the mode off %+v", c.name, plain, r)
+	}
+}
+
+// T128f (L1352 F1): the setting absent is the setting on where the sandbox
+// runs, Linux; elsewhere it is off (D3).
+func TestSandboxModeAbsentIsOnOnLinux(t *testing.T) {
+	t.Parallel()
+	s := newSG(t)
+	support.Write(t, s.scratch, map[string]string{"settings-empty.toml": ""})
+	empty := append(append([]string{}, s.env...), "JHON_SETTINGS="+filepath.Join(s.scratch, "settings-empty.toml"))
+	same := "off"
+	if runtime.GOOS == "linux" {
+		same = "on"
+	}
+	for _, c := range wrapCalls {
+		for _, extra := range [][]string{nil, {"JHON_SANDBOX_PROJECT=" + s.p, "PATH=" + mkdir(t, filepath.Join(s.scratch, "no-bwrap"))}} {
+			got := hook(t, append(append([]string{}, empty...), extra...), "pre-tool", claudeGuards, claudePayload(s, c.tool, c.input))
+			if want := hook(t, sandboxEnv(t, s, same, extra...), "pre-tool", claudeGuards, claudePayload(s, c.tool, c.input)); got != want {
+				t.Errorf("%s %v: with no settings %+v, with the mode %s %+v", c.name, extra, got, same, want)
+			}
 		}
 	}
 }

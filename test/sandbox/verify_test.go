@@ -83,6 +83,8 @@ func TestBubblewrapIsNotTakenFromAWritablePATHFolder(t *testing.T) {
 // status and doctor say it cannot run and why, without starting it (F1).
 func TestBubblewrapOnlyInAWritableFolderRunsNothing(t *testing.T) {
 	b := newBox(t)
+	// The mode off: a warning (T128f: on, by default on Linux, is a problem).
+	b.settings(t, "[sandbox]\nmode = \"off\"\n")
 	git, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +114,7 @@ func TestBubblewrapOnlyInAWritableFolderRunsNothing(t *testing.T) {
 			if r := support.Jhon(t, b.proj, env, "sandbox", "status"); r.Code != 0 || r.Stdout != "sandbox off; it cannot run here: "+reason+"; fix: "+fix+"; project "+b.proj+"\n" {
 				t.Errorf("status: exit %d, %q", r.Code, r.Stdout)
 			}
-			if r := support.Jhon(t, b.proj, env, "doctor"); !strings.Contains(r.Stdout, "\nsandbox\n  warn  sandbox off; it cannot run here: "+reason+"; fix: "+fix+"\n") {
+			if r := support.Jhon(t, b.proj, env, "doctor"); !strings.Contains(r.Stdout, "\nsandbox\n  warn  sandbox off; it cannot run here: "+reason+"; fix: "+fix+"; the model's commands run unsandboxed\n") {
 				t.Errorf("doctor:\n%s", r.Out())
 			}
 			if exists(escaped) {
@@ -435,6 +437,8 @@ func withOldBwrap(t *testing.T, b box) []string {
 // names the version that can (L888 continuation, item 3).
 func TestABubblewrapTooOldForTheSandboxCannotRun(t *testing.T) {
 	b := newBox(t)
+	// The mode off: a warning (T128f: on, by default on Linux, is a problem).
+	b.settings(t, "[sandbox]\nmode = \"off\"\n")
 	// A runtime dir of the box's own, so a run gives --perms on any machine.
 	run := filepath.Join(b.base, "run")
 	mkdirs(t, run)
@@ -448,7 +452,7 @@ func TestABubblewrapTooOldForTheSandboxCannotRun(t *testing.T) {
 	if r := support.Jhon(t, b.proj, env, "sandbox", "status"); r.Code != 0 || r.Stdout != "sandbox off; it cannot run here: "+reason+"; fix: "+fix+"; project "+b.proj+"\n" {
 		t.Errorf("status: exit %d, %q", r.Code, r.Stdout)
 	}
-	if r := support.Jhon(t, b.proj, env, "doctor"); !strings.Contains(r.Stdout, "\nsandbox\n  warn  sandbox off; it cannot run here: "+reason+"; fix: "+fix+"\n") {
+	if r := support.Jhon(t, b.proj, env, "doctor"); !strings.Contains(r.Stdout, "\nsandbox\n  warn  sandbox off; it cannot run here: "+reason+"; fix: "+fix+"; the model's commands run unsandboxed\n") {
 		t.Errorf("doctor:\n%s", r.Out())
 	}
 	// run says the same in bubblewrap's own words, and runs nothing.

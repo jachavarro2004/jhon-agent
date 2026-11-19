@@ -3,8 +3,10 @@
  * (T147, L1209): every test file imports this module first, so each test
  * process starts, before any other module loads, with
  *
- *   - JHON_SETTINGS on an empty settings file of its own (the owner's
- *     sandbox.mode = "on" once pinned the sandbox in extension.test.ts);
+ *   - JHON_SETTINGS on a settings file of its own that sets only
+ *     sandbox.mode = "off" (the owner's "on" once pinned the sandbox in
+ *     extension.test.ts, and since T128f it is the default on Linux): a test
+ *     that wants the sandbox or the default writes its own file;
  *   - XDG_STATE_HOME (grants, modes, session grants, the LDD switch) and
  *     XDG_CACHE_HOME (jhon's caches) on scratch directories;
  *   - JHON_PROFILES on a profile file that does not exist;
@@ -45,9 +47,9 @@ export const SETTING_OVERRIDES: readonly string[] = Object.freeze([
 export const ISOLATED_ROOT = mkdtempSync(join(tmpdir(), "jhon-shell-test-env-"));
 process.on("exit", () => rmSync(ISOLATED_ROOT, { recursive: true, force: true }));
 
-/** An empty settings file: every setting at its default. */
+/** A settings file with every setting at its default but sandbox.mode, off. */
 export const ISOLATED_SETTINGS = join(ISOLATED_ROOT, "settings.toml");
-writeFileSync(ISOLATED_SETTINGS, "");
+writeFileSync(ISOLATED_SETTINGS, '[sandbox]\nmode = "off"\n');
 for (const dir of ["state", "cache"]) mkdirSync(join(ISOLATED_ROOT, dir));
 
 Object.assign(process.env, {

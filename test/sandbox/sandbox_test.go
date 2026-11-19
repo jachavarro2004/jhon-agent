@@ -415,11 +415,18 @@ func statusOf(t *testing.T, b box, env []string) status {
 
 func TestStatusGivesTheSettingAndWhetherTheSandboxCanRun(t *testing.T) {
 	b := newBox(t)
-	if got := statusOf(t, b, b.env); got != (status{Mode: "off", CanRun: true, Project: b.proj}) {
-		t.Errorf("with no settings: %+v; want off and able to run", got)
+	// T128f (L1352 F1): on by default where the sandbox runs.
+	if got := statusOf(t, b, b.env); got != (status{Mode: "on", CanRun: true, Project: b.proj}) {
+		t.Errorf("with no settings: %+v; want on and able to run", got)
 	}
-	if r := support.Jhon(t, b.proj, b.env, "sandbox", "status"); r.Code != 0 || r.Stdout != "sandbox off; it can run here; project "+b.proj+"\n" {
+	if r := support.Jhon(t, b.proj, b.env, "sandbox", "status"); r.Code != 0 || r.Stdout != "sandbox on; it can run here; project "+b.proj+"\n" {
 		t.Errorf("status: exit %d, %q", r.Code, r.Stdout)
+	}
+	if r := support.Jhon(t, b.proj, b.env, "settings", "set", "sandbox.mode", "off"); r.Code != 0 {
+		t.Fatalf("settings set sandbox.mode off: %d\n%s", r.Code, r.Out())
+	}
+	if got := statusOf(t, b, b.env); got != (status{Mode: "off", CanRun: true, Project: b.proj}) {
+		t.Errorf("with sandbox.mode off: %+v; want off and able to run", got)
 	}
 	if r := support.Jhon(t, b.proj, b.env, "settings", "set", "sandbox.mode", "on"); r.Code != 0 {
 		t.Fatalf("settings set sandbox.mode on: %d\n%s", r.Code, r.Out())
@@ -475,18 +482,34 @@ func TestDoctorSaysWhetherTheSandboxCanRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(b.home, "bin") + ":" + os.Getenv("PATH")
+	last := func(s string) string { l := strings.Split(strings.TrimSpace(s), "\n"); return l[len(l)-1] }
+	b.settings(t, "[sandbox]\nmode = \"off\"\n")
 	r := support.Jhon(t, b.proj, append(append([]string{}, b.env...), "PATH="+path), "doctor")
 	if !strings.Contains(r.Stdout, "\nsandbox\n  ok    sandbox off; it can run here\n") {
 		t.Errorf("doctor where the sandbox can run:\n%s", r.Out())
 	}
 	env := withFailingBwrap(t, b, path)
 	failed := support.Jhon(t, b.proj, env, "doctor")
-	if !strings.Contains(failed.Stdout, "\nsandbox\n  warn  sandbox off; it cannot run here: bubblewrap cannot start a sandbox (bwrap: No permissions to create a new namespace); fix: ") {
+	if !strings.Contains(failed.Stdout, "\nsandbox\n  warn  sandbox off; it cannot run here: bubblewrap cannot start a sandbox (bwrap: No permissions to create a new namespace); fix: ") ||
+		!strings.Contains(failed.Stdout, "; the model's commands run unsandboxed\n") {
 		t.Errorf("doctor where the sandbox cannot run:\n%s", failed.Out())
 	}
-	// A warning, never a problem: the verdict is the one without it.
-	if last := func(s string) string { l := strings.Split(strings.TrimSpace(s), "\n"); return l[len(l)-1] }; last(failed.Stdout) != last(r.Stdout) || failed.Code != r.Code {
+	// With the mode off, a warning, never a problem: the verdict is the one without it.
+	if last(failed.Stdout) != last(r.Stdout) || failed.Code != r.Code {
 		t.Errorf("the sandbox line changed doctor's verdict: %q exit %d, against %q exit %d", last(failed.Stdout), failed.Code, last(r.Stdout), r.Code)
+	}
+	// T128f (L1352 F2): with the mode on, by default or set, a sandbox that
+	// cannot run refuses every command: a problem, with the fix.
+	for _, text := range []string{"", "[sandbox]\nmode = \"on\"\n"} {
+		b.settings(t, text)
+		if ok := support.Jhon(t, b.proj, append(append([]string{}, b.env...), "PATH="+path), "doctor"); !strings.Contains(ok.Stdout, "\nsandbox\n  ok    sandbox on; it can run here\n") {
+			t.Errorf("%q: doctor where the sandbox can run:\n%s", text, ok.Out())
+		}
+		on := support.Jhon(t, b.proj, env, "doctor")
+		row := "\nsandbox\n  FAIL  sandbox on; it cannot run here: bubblewrap cannot start a sandbox (bwrap: No permissions to create a new namespace); fix: turn unprivileged user namespaces on"
+		if !strings.Contains(on.Stdout, row) || !strings.Contains(on.Stdout, "; until then every command of the model is refused\n") || on.Code != 1 || !strings.HasSuffix(last(on.Stdout), "problem(s)") {
+			t.Errorf("%q: doctor with the mode on where the sandbox cannot run: exit %d\n%s", text, on.Code, on.Out())
+		}
 	}
 }
 

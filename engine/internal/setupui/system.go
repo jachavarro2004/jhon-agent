@@ -252,7 +252,7 @@ var Elsewhere = func() map[string]string {
 	e := map[string]string{
 		"pi.profile":             "jhon profile use, or /jhon:profile in the shell",
 		"agents.act_on_announce": "jhon settings set agents.act_on_announce true|false",
-		"sandbox.mode":           "jhon settings set sandbox.mode on|off",
+		"sandbox.mode":           "jhon settings set sandbox.mode on|off (on by default on Linux)",
 		"sandbox.allow_write":    "jhon settings set sandbox.allow_write <folder>,<folder>",
 	}
 	for _, m := range manifests.Optional() {
