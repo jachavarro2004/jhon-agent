@@ -16,7 +16,8 @@ const ExploreAgent = "explore"
 // ExploreRecords are the only files the explore agent writes, in its change's folder.
 var ExploreRecords = []string{"exploration.md", "research.md"}
 
-// ExploreScope is the rule as a refusal states it.
+// ExploreScope is the rule as vcs-guard's note on another write of
+// explore's states it (a refusal until T153: the write is not destructive).
 const ExploreScope = "explore writes only its change's exploration.md or research.md (<layout>/changes/<change>/exploration.md or research.md, openspec/ or ldd/)"
 
 // ExploreMayWrite is whether p, an absolute path, is a change's

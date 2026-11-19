@@ -495,8 +495,8 @@ func SafetyRefusal(r ToolResult, agentType string) (guard, body string, ask, ok 
 	if m[1] == "inspect-guard" && !slices.Contains(ReviewAgents, agentType) {
 		return
 	}
-	// Any guard may ask: vcs-guard asks for outside-write as safety-guard
-	// asks for a push, and the owner's grant answers both alike.
+	// Any guard may ask (safety-guard for a push, vcs-guard for a
+	// settings write), and the owner's grant answers both alike.
 	ask = !refusedLead.MatchString(m[2]) && needsOwner.MatchString(m[2])
 	return m[1], m[2], ask, true
 }

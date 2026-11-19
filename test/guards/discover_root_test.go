@@ -42,8 +42,8 @@ func TestRouteGuardIgnoresALayoutAboveTheRepository(t *testing.T) {
 			}
 			edit := hook(t, env, "route-guard", nil, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write",
 				"tool_input": map[string]any{"file_path": filepath.Join(inner, "src", "app.py"), "content": "X = 2\n"}, "cwd": inner, "session_id": "s"})
-			if edit.Code != 2 || !strings.Contains(edit.Stderr, "LDD is not set up in this project yet") {
-				t.Errorf("a code edit in a plain repository under %s/: exit %d %s", name, edit.Code, edit.Stderr)
+			if edit.Code != 0 || adviceOf(t, edit.Stdout) != setUpNote() {
+				t.Errorf("a code edit in a plain repository under %s/ runs with the set-up note: exit %d %s %s", name, edit.Code, edit.Stdout, edit.Stderr)
 			}
 		})
 	}

@@ -176,7 +176,7 @@ func TestModeNotYetExistingDirInAnotherProjectNeedsBothModes(t *testing.T) {
 	for _, c := range []struct{ command, cls string }{
 		{"mkdir -p <OTHER>/nd && cd <OTHER>/nd && aws ecs run-task --cluster c", "deploy"},
 		{"ln -s <OTHER> <P>/l2 && cd <P>/l2 && aws ecs run-task --cluster c", "deploy"},
-		{`cd <OTHER>/nd3 && eval "$X"`, "unreadable"},
+		{`cd <OTHER>/nd3 && rm -f "$X/config"`, "unknown"},
 		{"mkdir -p <OTHER>/nd && cd <OTHER>/nd && git reset --hard", "destroy"},
 	} {
 		s.askedOrRefused(t, s.expand(c.command), c.cls, sgOpts{}, "a super-yolo session, a normal project: "+c.command)
@@ -248,8 +248,9 @@ func TestModeLostDirInAnotherProjectNeedsBothModes(t *testing.T) {
 	}
 }
 
-// vcs-guard: a write outside the project from a worktree of a super-yolo
-// project passes with the project's mode; from a normal one it asks.
+// vcs-guard: a write outside the project from a worktree runs with the
+// note naming the worktree, in a normal project and a super-yolo one alike
+// (asked, or passed by the mode, until T153 and T113, L957, L1402).
 func TestModeVcsGuardFromASessionWorktree(t *testing.T) {
 	t.Parallel()
 	w := newWriteEnv(t)
@@ -262,11 +263,13 @@ func TestModeVcsGuardFromASessionWorktree(t *testing.T) {
 	}
 	r := call()
 	code(t, r, 0, "normal")
-	matches(t, askedWhy(t, r.Stdout, "normal"), `^outside-write: `, "normal")
+	matches(t, modeNote(t, r.Stdout), outsideNote, "normal")
+	matches(t, modeNote(t, r.Stdout), `\(`+regexp.QuoteMeta(wt)+`\)`, "normal")
 	code(t, support.Jhon(t, w.project, w.env, "mode", "super-yolo"), 0, "jhon mode super-yolo")
 	r = call()
 	code(t, r, 0, "super-yolo")
-	matches(t, modeNote(t, r.Stdout), `^note \(not a refusal; the call ran\): allowed by the owner's super-yolo mode: outside-write: `, "super-yolo")
+	matches(t, modeNote(t, r.Stdout), outsideNote, "super-yolo")
+	matches(t, modeNote(t, r.Stdout), `\(`+regexp.QuoteMeta(wt)+`\)`, "super-yolo")
 }
 
 // route-guard: a reviewer nobody asked for, from a worktree of a yolo
@@ -305,7 +308,7 @@ func TestModeOwnScriptElsewhereAndFunsubNeedBothModes(t *testing.T) {
 		{"(cd <OTHER> && bash <P>/scripts/aws.sh)", "deploy"},
 		{"x=${ cd <OTHER>; } && aws ecs run-task --cluster c", "deploy"},
 		{"x=${| cd <OTHER>; } && aws ecs run-task --cluster c", "deploy"},
-		{`x=${ cd <OTHER>; } && eval "$X"`, "unreadable"},
+		{`x=${ cd <OTHER>; } && rm -f "$X/config"`, "unknown"},
 	} {
 		s.askedOrRefused(t, s.expand(c.command), c.cls, sgOpts{}, "a super-yolo session, a normal project: "+c.command)
 	}
@@ -333,14 +336,15 @@ func TestModeOwnDestroyScriptElsewhereNeedsBothModes(t *testing.T) {
 	s.allowedBy(t, s.expand("bash <P>/scripts/prune.sh"), "super-yolo", sgOpts{}, "the session's own script at home")
 }
 
-// A git command the guard cannot read (an unknown alias, a word it cannot
-// tell) is the repository's git -C names: it lends another project nothing.
-func TestModeGitChdirUnknownNeedsBothModes(t *testing.T) {
+// A git command is the repository's git -C names: it lends another project
+// nothing. A subcommand the guard cannot read is judged by its visible
+// words (T152, L1311), so the probe is a deletion.
+func TestModeGitChdirDestroyNeedsBothModes(t *testing.T) {
 	t.Parallel()
 	s := varSG(t, "jhon-mode-v3g-")
-	s.askedOrRefused(t, s.expand(`git -C <OTHER> "$X"`), "unknown", sgOpts{}, "a super-yolo session, a normal project")
+	s.askedOrRefused(t, s.expand(`git -C <OTHER> reset --hard`), "destroy", sgOpts{}, "a super-yolo session, a normal project")
 	equalStr(t, modeLog(t, s.state), "", "the modes' log")
-	s.allowedBy(t, s.expand(`git -C <P> "$X"`), "super-yolo", sgOpts{}, "the session's own project")
+	s.allowedBy(t, s.expand(`git -C <P> reset --hard`), "super-yolo", sgOpts{}, "the session's own project")
 }
 
 // S31/L187: more B1/B2 variants (T51 verify #4, L189).
@@ -355,7 +359,7 @@ func TestModeOwnScriptAndFunsubVariantsNeedBothModes(t *testing.T) {
 		{"y=$(x=${ cd <OTHER>; }; aws ecs run-task --cluster c)", "deploy"},
 		{"declare x=${ cd <OTHER>; }; aws ecs run-task --cluster c", "deploy"},
 		{"cd <OTHER>; x=${ ( cd <P> ); }; aws ecs run-task --cluster c", "deploy"},
-		{`x=${ cd <OTHER>; } && git -C . "$X"`, "unknown"},
+		{`x=${ cd <OTHER>; } && git -C . reset --hard`, "destroy"},
 	} {
 		s.askedOrRefused(t, s.expand(c.command), c.cls, sgOpts{}, c.command)
 	}

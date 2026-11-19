@@ -81,7 +81,6 @@ import { activeProfileName, profileDelegation } from "../lib/profiles.ts";
 import { delegationPrompt, followMode, profileModeActions, writerFile } from "../lib/delegation-mode.ts";
 import { ORCHESTRATOR, SESSION_PROFILE_CHANGED, SESSION_PROFILE_ENTRY, SESSION_PROFILE_ENV, SessionProfile, lostProfileNotice, orchestratorSwitchNotice, piRows, sessionMark, sessionProfileOnBranch, unavailableRefusal, type PiRow } from "../lib/session-profile.ts";
 import { WriterBudget } from "../lib/writer-guard.ts";
-import { ExplorationBudget } from "../lib/exploration-budget.ts";
 import { ChildContextBudget, ChildReadBudget, readBudgetApplies, readBudgetKind } from "../lib/child-budget.ts";
 import { waitingForOwner } from "../lib/attention.ts";
 import { formatTaskDuration, registerBackgroundTasks } from "../lib/background-tasks-tools.ts";
@@ -348,45 +347,29 @@ export function askClasses(ask: string): string[] {
 export const ANSWER_ONCE = "Yes, just this once (recorded in the session)";
 export const ANSWER_GRANT = "Yes, and grant it for 30 min (recorded in the grants' history)";
 export const ANSWER_NO = "No";
-export const ANSWER_SESSION = "Yes, and allow writes in this folder for this session (recorded in the grants' history)";
 
 /** Whether cwd is in a git repository: a folder that is in none is no project, and takes no grant for a while (T57a). */
 function inRepo(cwd: string): boolean {
   return spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8", env: gitReadEnv() }).status === 0;
 }
 
-/** Whether `jhon grant --session` could take cwd as its folder: never /, HOME or a folder above it, nor jhon's state or a folder in or above it (grant.SessionFolder). */
-function sessionGrantable(cwd: string): boolean {
-  const real = (p: string) => { try { return realpathSync(p); } catch { return p; } };
-  const within = (p: string, r: string) => p === r || p.startsWith(r.endsWith("/") ? r : `${r}/`);
-  const xdg = process.env.XDG_STATE_HOME;
-  const state = real(join(xdg && xdg.startsWith("/") ? xdg : join(homedir(), ".local", "state"), "jhon"));
-  const dir = real(cwd), home = real(homedir());
-  return dir !== "/" && !within(home, dir) && !within(state, dir) && !within(dir, state);
-}
-
 /**
  * The owner's answer to a guard's question, always on record: once (the
  * session records it), a 30-minute grant of the classes (jhon grant, the
- * grants' history), or no. In a folder that is no project, a write outside
- * the scratch roots is granted for the session instead (`jhon grant
- * outside-write --session`, revoked when the session ends), and nothing
- * else is granted for a while.
+ * grants' history), or no. In a folder that is no project nothing is
+ * granted for a while (a write outside the scratch roots runs with a note,
+ * T153, so it is never asked).
  */
-async function ownerAnswer(ctx: any, ask: string, bin: string, session: string): Promise<{ allowed: boolean; scope?: "once" | "grant" | "session"; classes: string[]; error?: string }> {
+async function ownerAnswer(ctx: any, ask: string, bin: string): Promise<{ allowed: boolean; scope?: "once" | "grant"; classes: string[]; error?: string }> {
   const classes = askClasses(ask);
   const cwd = ctx?.cwd ?? process.cwd();
-  const folder = !inRepo(cwd);
-  const options = !folder ? [ANSWER_ONCE, ANSWER_GRANT, ANSWER_NO]
-    : session && sessionGrantable(cwd) && classes.length === 1 && classes[0] === "outside-write" ? [ANSWER_ONCE, ANSWER_SESSION, ANSWER_NO] : [ANSWER_ONCE, ANSWER_NO];
+  const options = inRepo(cwd) ? [ANSWER_ONCE, ANSWER_GRANT, ANSWER_NO] : [ANSWER_ONCE, ANSWER_NO];
   const choice = await ctx.ui.select(`Jhon safety guard · ${ask}`, options);
   if (choice === ANSWER_ONCE) return { allowed: true, scope: "once", classes };
-  if (!options.includes(choice) || (choice !== ANSWER_GRANT && choice !== ANSWER_SESSION)) return { allowed: false, classes };
-  const r = choice === ANSWER_SESSION
-    ? spawnSync(bin, ["grant", "outside-write", "--session", session], { cwd, encoding: "utf8" })
-    : spawnSync(bin, ["grant", ...classes, "--for", "30m"], { cwd, encoding: "utf8" });
+  if (!options.includes(choice) || choice !== ANSWER_GRANT) return { allowed: false, classes };
+  const r = spawnSync(bin, ["grant", ...classes, "--for", "30m"], { cwd, encoding: "utf8" });
   if (r.status !== 0) return { allowed: false, classes, error: `${r.stderr || r.stdout || r.error?.message || "exit " + r.status}`.trim() };
-  return { allowed: true, scope: choice === ANSWER_SESSION ? "session" : "grant", classes };
+  return { allowed: true, scope: "grant", classes };
 }
 
 /**
@@ -834,10 +817,9 @@ export default function jhon(pi: any): void {
   const fresh = child ? undefined : new FreshSessionLatch();
   // T115e (L715): the ladder's first rung, a delegation signal (lib/context-backstop.ts).
   const backstop = child ? undefined : new ContextBackstop();
-  // T117e (L746): per owner request, the writer guard's lines and the exploration budget's lookups.
+  // T117e (L746): per owner request, the writer guard's lines.
   const written = child ? undefined : new WriterBudget();
-  const explored = child ? undefined : new ExplorationBudget();
-  // T122 (L762 F2), T125 (L783 F5): a child's own context budget and cap, and an explore's or worker's CodeGraph-first read budget (lib/child-budget.ts).
+  // T122 (L762 F2), T125 (L783 F5): a child's own context budget (a wrap-up notice, never a cap: T155), and an explore's or worker's CodeGraph-first read budget (lib/child-budget.ts).
   const childBudget = child ? new ChildContextBudget() : undefined;
   const childReads = child && readBudgetApplies(process.env.JHON_PI_AGENT, limits.tools) ? new ChildReadBudget(readBudgetKind(process.env.JHON_PI_AGENT)) : undefined;
   // T135 (L1055, L1063): a main-session reply that announces an action and stops, or is empty, is sent back once per owner turn (lib/announce-stop.ts).
@@ -863,7 +845,7 @@ export default function jhon(pi: any): void {
       if (answer !== UNCHOSEN_YES) return { action: "handled" };
       if (modelChoice!.refused()) modelChoice!.picked({ source: "set", model: fallback });
     }
-    if (event?.source !== "extension") { written!.reset(); explored!.reset(); announce?.ownerTurn(); }
+    if (event?.source !== "extension") { written!.reset(); announce?.ownerTurn(); }
     // T121: a session already over budget (a resume, a smaller model) compacts before the prompt runs.
     await compaction!.beforePrompt(event, ctx);
     return undefined;
@@ -1026,28 +1008,14 @@ export default function jhon(pi: any): void {
     },
   });
 
-  // A child past its context cap is stopped past its grace (lib/child-budget.ts);
-  // its turns alone never stop it (T131).
-  let turns = 0;
+  // A child is never stopped for its turns (T131) nor its context (T155).
   pi.on("turn_end", async (_event: any, ctx: any) => {
-    turns += 1;
     // T121 (L762 F1): a long run over budget compacts between turns and carries on.
     compaction?.afterTurn(_event, ctx);
-    if (childBudget?.overdue(turns)) ctx.shutdown();
-    return undefined;
-  });
-
-  // The sessions whose owner granted a folder's writes; each grant ends with the session.
-  const grantedSessions = new Set<string>();
-  pi.on("session_shutdown", async (_event: any, ctx: any) => {
-    for (const id of grantedSessions) spawnSync(bin, ["grant", "--revoke", "outside-write", "--session", id], { cwd: ctx?.cwd ?? process.cwd(), encoding: "utf8" });
-    grantedSessions.clear();
     return undefined;
   });
 
   const guardCall = async (event: any, ctx: any): Promise<any> => {
-    const overCap = childBudget?.capped(ctx, turns);
-    if (overCap) return { block: true, reason: overCap };
     const input = (event.input ?? {}) as Record<string, unknown>;
     if (!config) {
       return claudeCall(event.toolName, input) === null ? undefined
@@ -1068,8 +1036,7 @@ export default function jhon(pi: any): void {
     if ("block" in d) return d;
     if (!child && ctx.hasUI) {
       // The short label (L87): the class, not its detail, so a multiplexer's row stays readable.
-      const answer = await waitingForOwner(pi.events, `permission: ${askClasses(d.ask).join(", ")}`, () => ownerAnswer(ctx, d.ask, bin, sessionId));
-      if (answer.scope === "session") grantedSessions.add(sessionId);
+      const answer = await waitingForOwner(pi.events, `permission: ${askClasses(d.ask).join(", ")}`, () => ownerAnswer(ctx, d.ask, bin));
       if (answer.allowed) {
         // The owner's answer is on record: in the session, and a grant in the grants' history.
         pi.appendEntry?.(AUTHORIZATION_ENTRY, { ask: d.ask, classes: answer.classes, tool: event.toolName, scope: answer.scope, at: new Date().toISOString() });
@@ -1121,8 +1088,7 @@ export default function jhon(pi: any): void {
     pi.on("session_start", async () => { backstop.reset(); return undefined; });
     pi.on("tool_result", async (event: any, ctx: any) => {
       written?.settle(event.toolCallId, event.isError === true);
-      // T117e: the exploration budget rides the same channel, once per owner request.
-      const notices = [backstop.measure(ctx), explored?.result(event, () => sessionPrompt.frozenDelegation())].filter(Boolean) as string[];
+      const notices = [backstop.measure(ctx)].filter(Boolean) as string[];
       if (!notices.length) return undefined;
       for (const notice of notices) ctx.ui?.notify?.(notice, "info");
       return { content: [...(event.content ?? []), ...notices.map((text) => ({ type: "text", text }))] };

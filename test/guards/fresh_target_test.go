@@ -198,11 +198,23 @@ func TestScratchDirPoisonedRmRefused(t *testing.T) {
 		if r := s.piCall(t, e, true); r.Code != 2 {
 			t.Errorf("pi child: %q exits %d: %s", e, r.Code, r.Stderr)
 		}
+		// safety-guard refuses the delete above; scope-guard refuses a line it
+		// resolves to src, and notes one it cannot resolve; route-guard
+		// notes each as a code edit (T153: a write alone is not destructive).
 		d := strings.ReplaceAll(c, "<P>", sc.repo)
-		code(t, sc.guard(t, "Bash", map[string]any{"command": d}), 2, "scope-guard: "+d)
+		if r := sc.guard(t, "Bash", map[string]any{"command": d}); r.Code == 2 {
+			matches(t, r.Stderr, `^scope-guard: the command writes \S*/src, outside the allowed edit surfaces`, "scope-guard: "+d)
+		} else {
+			code(t, r, 0, "scope-guard: "+d)
+			matches(t, adviceOf(t, r.Stdout), `^note \(not a refusal; the call ran\): the command writes .*a target the guard cannot resolve`, "scope-guard: "+d)
+		}
 		rc := strings.ReplaceAll(c, "<P>", repo)
 		for rt, pl := range rgPayloads(repo, rc) {
-			code(t, hook(t, env, "route-guard", nil, pl), 2, rt+" route-guard: "+rc)
+			r := hook(t, env, "route-guard", nil, pl)
+			code(t, r, 0, rt+" route-guard: "+rc)
+			if got := adviceOf(t, r.Stdout); got != setUpNote() {
+				t.Errorf("%s route-guard: %s: note %q", rt, rc, got)
+			}
 		}
 	}
 	// `d[0]=x` sets what $d reads, and every guard reads $d as x: the scratch
@@ -230,12 +242,25 @@ func TestFreshMktempPoisonedScopeAndRoute(t *testing.T) {
 	sc := newScope(t, &p)
 	code(t, sc.guard(t, "Bash", map[string]any{"command": "out=$(mktemp -d); echo x > $out/x"}), 0, "scope-guard control")
 	repo, env := noLayoutRepo(t)
+	// None passes silently: scope-guard refuses a line it resolves into
+	// docs/, outside the surfaces, and lets one it cannot resolve run with a
+	// note (T153); route-guard notes each as a code edit.
 	for _, c := range freshPoisoned {
 		d := strings.ReplaceAll(c, "<D>", "docs")
-		code(t, sc.guard(t, "Bash", map[string]any{"command": d}), 2, "scope-guard: "+d)
+		r := sc.guard(t, "Bash", map[string]any{"command": d})
+		if r.Code == 2 {
+			matches(t, r.Stderr, `^scope-guard: the command writes \S*/docs/x, outside the allowed edit surfaces`, "scope-guard: "+d)
+		} else {
+			code(t, r, 0, "scope-guard: "+d)
+			matches(t, adviceOf(t, r.Stdout), `^note \(not a refusal; the call ran\): the command writes .*a target the guard cannot resolve`, "scope-guard: "+d)
+		}
 		rc := strings.ReplaceAll(c, "<D>", "src")
 		for rt, pl := range rgPayloads(repo, rc) {
-			code(t, hook(t, env, "route-guard", nil, pl), 2, rt+" route-guard: "+rc)
+			r := hook(t, env, "route-guard", nil, pl)
+			code(t, r, 0, rt+" route-guard: "+rc)
+			if got := adviceOf(t, r.Stdout); got != setUpNote() {
+				t.Errorf("%s route-guard: %s: note %q", rt, rc, got)
+			}
 		}
 	}
 	// A commit whose output goes to the line's mktemp file is still delivery.

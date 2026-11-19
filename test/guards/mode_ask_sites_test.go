@@ -29,18 +29,17 @@ import (
 // grant.Questions (unreadable and unknown may hide a destroy; settings and
 // git-config could switch the guards off).
 var modePasses = map[string][]string{
-	"push":          {"yolo", "super-yolo"},
-	"gh-write":      {"yolo", "super-yolo"},
-	"publish":       {"yolo", "super-yolo"},
-	"remote":        {"yolo", "super-yolo"},
-	"deploy":        {"yolo", "super-yolo"},
-	"outside-write": {"yolo", "super-yolo"},
-	"destroy":       {"super-yolo"},
-	"review":        {"yolo", "super-yolo"},
-	"unreadable":    {"super-yolo"},
-	"unknown":       {"super-yolo"},
-	"settings":      nil,
-	"git-config":    nil,
+	"push":       {"yolo", "super-yolo"},
+	"gh-write":   {"yolo", "super-yolo"},
+	"publish":    {"yolo", "super-yolo"},
+	"remote":     {"yolo", "super-yolo"},
+	"deploy":     {"yolo", "super-yolo"},
+	"destroy":    {"super-yolo"},
+	"review":     {"yolo", "super-yolo"},
+	"unreadable": {"super-yolo"},
+	"unknown":    {"super-yolo"},
+	"settings":   nil,
+	"git-config": nil,
 }
 
 // askSite is one place a guard asks the owner: its guard, the class it
@@ -103,7 +102,6 @@ var askSites = []askSite{
 	}),
 	// vcs-guard (vcsJudge).
 	vcsSite("settings", "a write to the Claude Code settings", func(p string) string { return filepath.Join(p, ".claude", "settings.json") }),
-	vcsSite("outside-write", "a write outside the project", func(string) string { return "/etc/jhon.conf" }),
 	// safety-guard (guard.Classify), one command per class.
 	safetySite("push", "git push origin main"),
 	safetySite("gh-write", "gh pr merge 1 --squash"),
@@ -111,8 +109,8 @@ var askSites = []askSite{
 	safetySite("remote", "ssh host"),
 	safetySite("deploy", "kubectl apply -f x.yaml"),
 	safetySite("destroy", "git reset --hard"),
-	safetySite("unreadable", "$x push"),
-	safetySite("unknown", "git frobnicate"),
+	safetySite("unreadable", "echo (pwd)"),
+	safetySite("unknown", "rm -f /tmp/$X"),
 	safetySite("git-config", "git config core.hooksPath /tmp/h"),
 }
 
@@ -168,14 +166,14 @@ func TestModeEveryAskSiteHonoursTheMode(t *testing.T) {
 	}
 }
 
-// A question no grant answers (an unreadable command) is passed only when
+// A question no grant answers (a deletion it cannot resolve) is passed only when
 // the session's own project's mode covers it too: a cd into a super-yolo
 // project does not lend a normal session that mode (T46 verify, L157).
 func TestModeUnreadableTakesTheSessionProjectToo(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
 	code(t, support.Jhon(t, s.other, s.env, "mode", "super-yolo"), 0, "mode other")
-	r := s.bash(t, s.expand("cd <OTHER> && $x push"), sgOpts{})
-	code(t, r, 2, "a normal session's unreadable command run in a super-yolo project")
+	r := s.bash(t, s.expand("cd <OTHER> && rm -f \"$X/config\""), sgOpts{})
+	code(t, r, 2, "a normal session's unresolved deletion run in a super-yolo project")
 	noDecision(t, r.Stdout, "sub-agent")
 }

@@ -19,7 +19,7 @@ import (
 // and here, so that no ask skips the owner's mode again.
 var (
 	askSites   = []string{"RouteGuard", "SafetyGuard", "VCSGuard"}
-	askClasses = []string{"deploy", "destroy", "gh-write", "git-config", "outside-write", "publish", "push", "remote", "review", "settings", "unknown", "unreadable"}
+	askClasses = []string{"deploy", "destroy", "gh-write", "git-config", "publish", "push", "remote", "review", "settings", "unknown", "unreadable"}
 )
 
 func parseDir(t *testing.T, dir string) []*ast.File {
@@ -125,11 +125,12 @@ func TestAskSitesAreListed(t *testing.T) {
 	}
 
 	// The classes: the guard package's findings, route-guard's ask, and
-	// vcs-guard's settings and outside-write questions.
+	// vcs-guard's settings question (a write outside the project runs with a
+	// note since T153, so nothing asks outside-write).
 	classes := classesAsked(t, parseDir(t, filepath.Join("..", "guard")), "ask", "askAt", "writeAsk", "A")
 	classes = append(classes, "destroy") // guard.destroy
 	classes = append(classes, classesAsked(t, hookFiles, "ask")...)
-	classes = append(classes, "settings", "outside-write") // vcsJudge
+	classes = append(classes, "settings") // vcsJudge
 	slices.Sort(classes)
 	classes = slices.Compact(classes)
 	if !slices.Equal(classes, askClasses) {

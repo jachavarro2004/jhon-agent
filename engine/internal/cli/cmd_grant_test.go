@@ -37,6 +37,11 @@ func TestParseGrantUsageErrors(t *testing.T) {
 		"push --json":      "--json goes with --list",
 		"push --force":     "unknown option: --force",
 		"force-push push2": "unknown class 'force-push'",
+		// T113 (L1402): nothing asks under outside-write, so no grant names it, for a while or a session.
+		"outside-write":                       "unknown class 'outside-write'",
+		"outside-write --for 30m":             "unknown class 'outside-write'",
+		"outside-write --session s1":          "unknown option: --session",
+		"--revoke outside-write --session s1": "unknown option: --session",
 	} {
 		if _, bad := parseGrant(strings.Fields(args)); bad != want {
 			t.Errorf("parseGrant(%q) = %q, want %q", args, bad, want)

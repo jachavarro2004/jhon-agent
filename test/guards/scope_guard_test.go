@@ -13,6 +13,7 @@ package guards
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jachavarro2004/jhon-agent/test/support"
@@ -231,4 +232,33 @@ func TestScopeGuardTheWriterNeverSetsItsOwnScope(t *testing.T) {
 	f.Close()
 	code(t, s.guard(t, "Write", map[string]any{"file_path": filepath.Join(s.repo, "src/util/helpers.ts")}), 2, "an unreadable later line")
 	code(t, s.guard(t, "Write", map[string]any{"file_path": filepath.Join(s.repo, "src/a.ts")}), 0, "an unreadable later line: the launch list still allows its files")
+}
+
+// A bounded writer's Bash write whose target the guard cannot resolve runs,
+// with a note naming the write and the surfaces (T153, L1364 b, L1366: it
+// is not destructive); a write the guard resolves outside them is refused,
+// beside an unresolved one too, naming only the resolved file.
+func TestScopeGuardUnresolvedWritesAreAdvisories(t *testing.T) {
+	t.Parallel()
+	p := scopePrompt
+	s := newScope(t, &p)
+	for _, c := range []string{"echo x > $OUT", "git apply fix.patch", "patch -p1 < fix.patch"} {
+		r := s.guard(t, "Bash", map[string]any{"command": c})
+		code(t, r, 0, c)
+		matches(t, adviceOf(t, r.Stdout), `^note \(not a refusal; the call ran\): the command writes .*\(a target the guard cannot resolve\), which the guard cannot hold to the allowed edit surfaces \(src/a\.ts, src/parse/, svc/src/\*\*\): write only inside them`, c)
+		if r.Stderr != "" {
+			t.Errorf("%s: stderr %q", c, r.Stderr)
+		}
+	}
+	mixed := s.guard(t, "Bash", map[string]any{"command": "echo x > $OUT; sed -i 's/a/b/' package.json"})
+	code(t, mixed, 2, "a resolved write outside beside an unresolved one")
+	matches(t, mixed.Stderr, `^scope-guard: the command writes [^,]*package\.json, outside the allowed edit surfaces`, "only the resolved file is named")
+	if strings.Contains(mixed.Stderr, "$OUT") {
+		t.Errorf("the refusal names the unresolved write: %q", mixed.Stderr)
+	}
+	in := s.guard(t, "Bash", map[string]any{"command": "f=src/a.ts; echo x > $f"})
+	code(t, in, 0, "a variable naming a listed file")
+	if in.Stdout != "" {
+		t.Errorf("a resolved write in scope has a note: %q", in.Stdout)
+	}
 }

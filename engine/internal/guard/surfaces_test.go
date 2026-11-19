@@ -187,3 +187,35 @@ func TestDownloadWrites(t *testing.T) {
 		}
 	}
 }
+
+// A surface matches when a file or folder exists at its path or a glob
+// matches one; a new file's path matches when its parent folder exists (a
+// glob's parent is the folder before its first wildcard). Test files and
+// the change's record are always in scope, so they always match. Each root
+// is tried; an absolute surface is read as it is (T153, L1364 b).
+func TestMissingSurfaces(t *testing.T) {
+	r, other := repo(t), repo(t)
+	for _, d := range []string{"src/parse", "openspec/changes"} {
+		os.MkdirAll(filepath.Join(r, d), 0o755)
+	}
+	os.WriteFile(filepath.Join(r, "src", "a.ts"), []byte("x"), 0o644)
+	os.MkdirAll(filepath.Join(other, "svc"), 0o755)
+	listed := []string{
+		"src/a.ts", "src/new.ts", "src/parse/", "src/parse/deep/", "src/**", "src/*.go", "**/*.go", "Makefile",
+		"svc/x.py", filepath.Join(r, "src", "b.ts"), "tests/unit/test_new.py", "openspec/changes/c9/tasks.md",
+		"srcs/a.ts", "pkg/parse/", "lib/**/*.py", "a/*/b.go", filepath.Join(r, "gone", "a.md"),
+	}
+	want := []string{"srcs/a.ts", "pkg/parse/", "lib/**/*.py", "a/*/b.go", filepath.Join(r, "gone", "a.md")}
+	if got := MissingSurfaces(listed, []string{r, other}); !slices.Equal(got, want) {
+		t.Errorf("MissingSurfaces = %q, want %q", got, want)
+	}
+	if got := MissingSurfaces([]string{"svc/x.py"}, []string{r}); !slices.Equal(got, []string{"svc/x.py"}) {
+		t.Errorf("a path only another root holds, with that root not given: %q", got)
+	}
+	for s, want := range map[string]string{"src/a.ts": "src", "src/parse/": "src", "src/**": "src", "lib/*.py": "lib",
+		"a/b*/c.go": "a", "**/*.go": ".", "Makefile": "."} {
+		if got := SurfaceParent(s); got != want {
+			t.Errorf("SurfaceParent(%q) = %q, want %q", s, got, want)
+		}
+	}
+}
