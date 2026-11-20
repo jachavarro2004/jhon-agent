@@ -1,12 +1,13 @@
-      // The presentation's one paused GSAP timeline, built from window.__plan (compose.mjs: every
-      // time in absolute seconds, from the lines' real lengths), and the film grain. Inlined into
-      // index.html by compose.mjs. Everything visible is a function of timeline time.
+      // The presentation's one timeline, on Jhon's motion engine (../motion/motion.js), built from
+      // window.__plan (compose.mjs: every time in absolute seconds, from the lines' real lengths),
+      // and the film grain. Inlined into index.html by compose.mjs. Everything visible is a
+      // function of timeline time.
       (function () {
         const P = window.__plan;
-        const tl = gsap.timeline({ paused: true });
+        const tl = motion.timeline();
         const E = "expo.out", P3 = "power3.out", P4o = "power4.out", P4i = "power4.in";
         const ink = (sel, at, dur) => tl.fromTo(sel, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: dur, ease: "power2.out", immediateRender: true }, at);
-        const q = (sel) => gsap.utils.toArray(sel);
+        const q = (sel) => motion.toArray(sel);
 
         // Waterfall entry (cut-the-curve §6): words whip up from below, binary opacity, gaps shrinking x0.84.
         function waterfall(sel, at, base) {
@@ -14,7 +15,7 @@
           let gap = 0.06, t = at;
           ws.forEach((w) => {
             const heavy = w.textContent.length > 5;
-            gsap.set(w, { opacity: 0 });
+            motion.set(w, { opacity: 0 });
             tl.set(w, { opacity: 1 }, t);
             tl.fromTo(w, { y: heavy ? base + 24 : base }, { y: 0, duration: heavy ? 0.2 : 0.15, ease: P4o, immediateRender: false }, t);
             t += gap; gap *= 0.84;
@@ -23,13 +24,13 @@
         }
         // A stamp (identity's "ink and stamp"): binary in, from 1.12x down to rest, its hard shadow landing.
         function stamp(sel, at) {
-          gsap.set(sel, { opacity: 0 });
+          motion.set(sel, { opacity: 0 });
           tl.set(sel, { opacity: 1 }, at);
           tl.fromTo(sel, { scale: 1.12, boxShadow: "0px 0px 0 #000" }, { scale: 1, boxShadow: "5px 5px 0 #000", duration: 0.3, ease: P3, immediateRender: false }, at);
         }
         // A row stamps in: binary, from a little below, landing.
         function rowIn(sel, at) {
-          gsap.set(sel, { opacity: 0 });
+          motion.set(sel, { opacity: 0 });
           tl.set(sel, { opacity: 1 }, at);
           tl.fromTo(sel, { y: 40 }, { y: 0, duration: 0.3, ease: P4o, immediateRender: false }, at);
         }
@@ -63,7 +64,7 @@
           const id = s.id, len = s.end - s.start;
           if (s.kind === "head") {
             tl.fromTo(`#${id}-cam`, { scale: 1 }, { scale: 1.04, duration: len, ease: "none" }, s.start);
-            gsap.set(`#${id}-kick`, { opacity: 0 });
+            motion.set(`#${id}-kick`, { opacity: 0 });
             tl.set(`#${id}-kick`, { opacity: 1 }, s.start + 0.3);
             ink(`#${id}-kick`, s.start + 0.3, 0.35);
             tl.fromTo(`#${id}-lead`, { yPercent: 110 }, { yPercent: 0, duration: 0.6, ease: E }, s.vo);
@@ -74,12 +75,12 @@
             tl.fromTo(c, { rotationY: -5, transformPerspective: 2200 }, { rotationY: -1.5, duration: len, ease: "sine.out" }, s.start);
             tl.fromTo(`#${id}-cam .card-face, #${id}-cam .card-shadow`, { scale: 1 }, { scale: 1.035, duration: len, ease: "none" }, s.start);
             const k0 = s.start + (s.seam === "band" ? 0.4 : 0.12);
-            gsap.set(`#${id}-kick`, { opacity: 0 });
+            motion.set(`#${id}-kick`, { opacity: 0 });
             tl.set(`#${id}-kick`, { opacity: 1 }, k0);
             ink(`#${id}-kick`, k0, 0.3);
             if (s.kind === "card") {
               waterfall(`#${id}-cam .card-title .w`, s.title, 60);
-              s.body.forEach(([sel, at]) => { gsap.set(sel, { clipPath: "inset(0% 100% 0% 0%)" }); ink(sel, at, 0.55); });
+              s.body.forEach(([sel, at]) => { motion.set(sel, { clipPath: "inset(0% 100% 0% 0%)" }); ink(sel, at, 0.55); });
             } else {
               s.rows.forEach(([sel, at]) => rowIn(sel, at));
             }
@@ -97,7 +98,7 @@
             tl.fromTo(`#${id}-seal-shadow`, { opacity: 0, x: -9, y: -9 }, { opacity: 1, x: 0, y: 0, duration: 0.3, ease: P3 }, s.vo - 0.06);
             tl.fromTo(`#${id}-l1`, { yPercent: 110 }, { yPercent: 0, duration: 0.7, ease: E }, s.vo + 0.56);
             tl.fromTo(`#${id}-l2`, { yPercent: 110 }, { yPercent: 0, duration: 0.7, ease: E }, s.vo + 1.84);
-            gsap.set(`#${id}-url`, { opacity: 0 });
+            motion.set(`#${id}-url`, { opacity: 0 });
             tl.set(`#${id}-url`, { opacity: 1 }, s.vo + s.sec + 0.2);
             ink(`#${id}-url`, s.vo + s.sec + 0.2, 0.5);
           }
@@ -117,8 +118,7 @@
           tl.fromTo(sel, { opacity: 1 }, { opacity: 0, duration: 0.25, ease: "power1.in", immediateRender: false }, end - 0.3);
         }
 
-        window.__timelines = window.__timelines || {};
-        window.__timelines["main"] = tl;
+        motion.register(tl); // window.__timelines["main"], the timeline HyperFrames seeks
       })();
 
       // Film grain: six fixed noise frames (a seeded PRNG), each held two video frames (15 a second,

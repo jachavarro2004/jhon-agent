@@ -5,8 +5,8 @@ recording. The images are SVG, rasterised with `resvg` and encoded with
 `ffmpeg`; the terminal captures are Jhon's own shell components rendered
 through their real render functions, so a capture changes when the shell
 does. The presentation video is a [HyperFrames](https://github.com/heygen-com/hyperframes)
-composition (HTML and GSAP rendered to video by a headless Chrome), in
-`hyperframes/presentation/`.
+composition (HTML moved by Jhon's own motion engine, `hyperframes/motion/motion.js`,
+and rendered to video by a headless Chrome), in `hyperframes/presentation/`.
 
 ## Rebuild the images
 
@@ -42,8 +42,9 @@ composition, its narration and how to render it are in
 `hyperframes/README.md`.
 
 Tests (the ANSI-to-SVG conversion, the determinism of the image build, the
-diagrams' tokens and bytes, and the presentation's narration cache and
-Spanish subtitles covering every line):
+diagrams' tokens and bytes, the presentation's narration cache and
+Spanish subtitles covering every line, and the motion engine: its eases,
+seek-order independence and HyperFrames contract):
 
 ```sh
 node --experimental-strip-types --test docs/media/test/*.test.ts
@@ -128,7 +129,7 @@ video draw from it; nothing here imitates another project's media.
 - `frames.ts` — the terminal panel and the feature frame.
 - `banner.ts` — the banner.
 - `raster.ts` — `resvg` and `ffmpeg`, with the flags that keep bytes stable.
-- `hyperframes/` — the presentation video (its own README).
+- `hyperframes/` — the presentation video and its motion engine (its own README).
 
 Every claim the video makes must be true to the README, `docs/ldd.md`,
 `docs/modes-and-grants.md` or `jhon help`: never a command or flag they do

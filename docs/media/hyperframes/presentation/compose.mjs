@@ -5,9 +5,10 @@
 // Reads script.mjs (the shots and their lines) and the narration cache (narration/<key>.json,
 // each line's seconds; narrate.mjs makes it) and writes:
 //   index.html        the HyperFrames composition: every shot as a timed clip with a stable id,
-//                     the narration clips, the subtitle clips, the plan of times, and the two
-//                     scripts it runs (timeline.js: the one paused GSAP timeline and the grain;
-//                     stage.js: the intro's 3D seal), inlined
+//                     the narration clips, the subtitle clips, the plan of times, and the
+//                     scripts it runs, inlined (../motion/motion.js: Jhon's motion engine;
+//                     timeline.js: the film's one timeline on it, and the grain; stage.js: the
+//                     intro's 3D seal)
 //   captions.es.json  the Spanish subtitles, one per line, as composition variables
 // Every time is computed here from the lines' real lengths: a shot lasts its lead-in, its
 // line and a tail (a proof is held at least PROOF_MIN seconds and its line plus PROOF_TAIL);
@@ -176,6 +177,7 @@ plan.total = TOTAL;
 plan.introEnd = INTRO;
 
 const css = readFileSync(join(HERE, "style.css"), "utf8");
+const motionJs = readFileSync(join(HERE, "..", "motion", "motion.js"), "utf8");
 const timelineJs = readFileSync(join(HERE, "timeline.js"), "utf8");
 const stageJs = readFileSync(join(HERE, "stage.js"), "utf8");
 const shotList = timed.map((x) => `  ${x.s.id.padEnd(9)} ${x.s.kind.padEnd(7)} ${r3(x.start).toFixed(2).padStart(6)}-${r3(x.end).toFixed(2).padStart(6)} s  vo ${r3(x.vo).toFixed(2)} (${x.sec} s)${x.seam === "band" ? "  [band]" : ""}`).join("\n");
@@ -193,7 +195,6 @@ ${shotList}
     <style>
 ${css}
     </style>
-    <script src="vendor/gsap-3.15.1/gsap.min.js"></script>
     <script type="importmap">
       { "imports": { "three": "./vendor/three-0.187.0/module/three.module.js", "three/addons/": "./vendor/three-0.187.0/examples/jsm/" } }
     </script>
@@ -231,6 +232,9 @@ ${css}
 
     <script>
       window.__plan = ${JSON.stringify(plan)};
+    </script>
+    <script>
+${motionJs}
     </script>
     <script>
 ${timelineJs}
