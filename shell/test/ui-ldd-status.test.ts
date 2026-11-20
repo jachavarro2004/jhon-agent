@@ -10,7 +10,6 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
 import { ago, estadoLines, lddFromStatus } from "../lib/ui/ldd-status.ts";
-import { renderShellJobsSection, renderShellStatusSections, type ShellBarModel } from "../lib/ui/shell-bar.ts";
 
 const plain = { fg: (_r: string, t: string) => t, bold: (t: string) => t, value: (t: string) => t, label: (t: string) => t };
 
@@ -63,20 +62,6 @@ test("STATUS says the change and where it is, its slices done of all and the ope
   assert.deepEqual(estadoLines(undefined, plain), ["No active LDD change"]);
   assert.equal(lddFromStatus("x", { tasks: {} }), undefined);
   assert.deepEqual([ago("2026-10-29T03:00:00Z", now), ago("2026-10-26T05:00:00Z", now)], ["2 h ago", "3 d ago"]);
-});
-
-test("the STATUS card names its route, and JOBS a running task in one row, its step left to alt+s (L141, L168)", () => {
-  const model: ShellBarModel = { cwd: "~/acme", branch: "feat/x", dirty: 0, sessionName: undefined, modelId: "m", effort: undefined, contextPercent: null, contextWindow: 0, costTotal: 0, subscription: true, usage: undefined, statuses: [],
-    ldd: { change: "x", slice: "Slice 2: launch", slices: ["done", "current"], route: "standard" },
-    jobs: [{ id: "agent-1", label: "worker: slice 2", startedAt: 1, step: "bash · uv run pytest" }] };
-  const text = renderShellStatusSections(model, plain, 60).join("\n");
-  assert.match(text, /^▾ LDD +standard route\n {2}◆ x *\n {4}1\/2 slices · on 2: launch/, "the route is the section's count, said once");
-  assert.doesNotMatch(text, /enter detail|o tasks\.md/, "the rail takes no keys: no action line (L110)");
-  assert.doesNotMatch(text, /✓ 1 done/, "no per-slice rows");
-  assert.doesNotMatch(text, /worker: slice 2/, "running agents have their own card");
-  const agents = renderShellJobsSection(model.jobs, plain, 60, 1 + 125_000).join("\n");
-  assert.match(agents, /▾ JOBS +1 running\n {2}⧗ agent-1 worker: slice 2 +2m 5s$/m);
-  assert.doesNotMatch(agents, /↳|uv run pytest/, "the latest step is in the alt+s view, not the rail");
 });
 
 test("the change's tasks.md is found from the session's folder or a parent, for STATUS to watch", async () => {

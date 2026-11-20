@@ -102,7 +102,7 @@ reads none of them. So is a session's own profile (T120): the shell keeps it
 in the session (`jhon-shell.session-profile/v1`) and reads that profile's pi
 rows from `jhon profile json`; the binary knows one default profile.
 
-`jhon status --json`, which the rail's LDD section and the LDD detail read, is a contract of its own: `docs/status-json.md`.
+`jhon status --json`, which the right pane's LDD section and the LDD detail read, is a contract of its own: `docs/status-json.md`.
 
 ## What the shell records of its own use
 
@@ -113,8 +113,8 @@ of the model's context) each time a person uses its UI (`lib/ui-use.ts`):
 `key <key>` for a shortcut (`key alt+s`), and `click <view>` for a click the
 shell handles that opens a view: `click agents`, or `click jobs`, for each
 request on `jhon-shell:open-tasks` to open the Agents or the Jobs view (the
-narrow work row's tap while sub-agents lead it). A header click that only folds a section, and every pointer move, are
-not recorded. The entry records no arguments, text or paths; a session with
+click on a row of the pane's Agents or Jobs, or of the narrow form's Running block). No pointer move is
+recorded. The entry records no arguments, text or paths; a session with
 no file to record in loses it, and the feature runs all the same.
 `jhon audit --all` reads these entries from pi's session files and counts
 each feature's runs across the sessions (`ui_use` in its JSON).

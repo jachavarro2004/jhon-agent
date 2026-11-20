@@ -30,9 +30,16 @@ export interface LddStatus {
 	strictTdd?: boolean;
 	/** The change's route: standard, or verified (verify runs). */
 	route?: string;
+	/** The change's risk tier as its route reads it (jhon status's route.tier): passive, medium or high. */
+	risk?: string;
 	/** The next step jhon status suggests (a phase or an action). */
 	next?: string;
-	tests?: { passed: boolean; failed: number; at: string; scope?: string };
+	/**
+	 * The last recorded run; commit is the one it tested. jhon status says no
+	 * count of tests and no time (docs/status-json.md): count and seconds are
+	 * shown only when a reader has them.
+	 */
+	tests?: { passed: boolean; failed: number; at: string; scope?: string; commit?: string; count?: number; seconds?: number };
 	/** The change's tasks.md on disk, for the shell to watch; undefined when it cannot be found. */
 	tasksFile?: string;
 	/**
@@ -94,10 +101,11 @@ export function lddFromStatus(change: string, status: any): LddStatus | undefine
 		slices,
 		detail,
 		...(typeof status.route?.level === "string" ? { route: status.route.level } : {}),
+		...(typeof status.route?.tier === "string" && status.route.tier ? { risk: status.route.tier } : {}),
 		...(typeof status.next === "string" && status.next ? { next: status.next } : {}),
 		...(typeof tasks.total === "number" ? { tasks: { completed: tasks.completed ?? 0, total: tasks.total } } : {}),
 		...((strict && typeof strict === "object" ? strict.value : strict) === true ? { strictTdd: true } : {}),
-		...(t && typeof t.timestamp === "string" ? { tests: { passed: t.passed === true, failed: Array.isArray(t.failed) ? t.failed.length : 0, at: t.timestamp, ...(typeof t.scope === "string" ? { scope: t.scope } : {}) } } : {}),
+		...(t && typeof t.timestamp === "string" ? { tests: { passed: t.passed === true, failed: Array.isArray(t.failed) ? t.failed.length : 0, at: t.timestamp, ...(typeof t.scope === "string" ? { scope: t.scope } : {}), ...(typeof t.commit === "string" && t.commit ? { commit: t.commit } : {}) } } : {}),
 	};
 }
 

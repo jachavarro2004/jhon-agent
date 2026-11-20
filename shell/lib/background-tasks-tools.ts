@@ -32,7 +32,7 @@ import { foregroundWaitNote } from "./foreground-wait.ts";
 import { createMonitorController, MONITOR_BATCH_MS, MONITOR_FLOOD_LINES, MONITOR_FLOOD_WINDOW_MS, MONITOR_LINES_PER_NOTICE, MONITOR_MAX_TIMEOUT_SECONDS, type MonitorBatch, type MonitorNotice, type MonitorStopReason } from "./ui/background-monitor.ts";
 import { withOverlayRepaint } from "./ui/overlay-repaint.ts";
 import { CARD_TONE, renderCard, type CardTheme } from "./ui/primitives/index.ts";
-import { JOBS_FINISHED_TTL_MS, shellEnabled } from "./ui/shell-bar.ts";
+import { JOBS_FINISHED_TTL_MS, shellEnabled } from "./ui/panel.ts";
 import { sanitizeTerminalText } from "./ui/terminal-theme.ts";
 
 export const TASK_NOTICE_TYPE = "jhon-tasks.notice";
@@ -524,7 +524,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		description: "Jobs: this session's background commands and monitors, running first",
 		handler: async (_args: string, ctx: any) => openTasks(ctx, "jobs"),
 	});
-	// The narrow work row asks for the Agents view (T15.12d), or the Jobs view;
+	// A click on a row of Agents, Jobs or the Running block asks for the Agents view, or the Jobs view;
 	// each click is counted as a command is (T171, lib/ui-use.ts).
 	pi.events?.on?.(OPEN_TASKS_EVENT, (payload: { ctx?: ExtensionContext; view?: unknown } | undefined) => {
 		if (!payload?.ctx) return;

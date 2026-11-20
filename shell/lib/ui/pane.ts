@@ -11,7 +11,7 @@
  * the last run and the key that opens the change (04).
  *
  * The pane shows the parts registered in it (paneSlot), in PANE_ORDER: LDD,
- * the agent's todo list (while no LDD change shows), jobs and agents. Each
+ * the agent's todo list (while no LDD change shows), agents and jobs. Each
  * part renders its own rows; the pane stacks them, a blank row apart in the
  * comfortable density, and hands a click to the part under it.
  *
@@ -25,7 +25,7 @@ import { HStack, ScrollView, VStack, visibleWidth, type Component, type TUI, typ
 import { hookLayout } from "./pi-layout-hook.ts";
 import { NARROW_BELOW } from "./bars.ts";
 import { clip, fit, glyph, paintSurface, renderDivider, stateGlyph, STATES, themePainter, type Role, type ThemeLike } from "./primitives/index.ts";
-import { chromeSurface, paintPanelSurface, panelSurfaceOpener, RAIL_ORDER, sectionGap, type PanelSummary } from "./shell-panel.ts";
+import { chromeSurface, paintPanelSurface, panelSurfaceOpener, RAIL_ORDER, sectionGap } from "./shell-panel.ts";
 import type { Density, StatusPlacement } from "./visual-customization-policy.ts";
 import type { LddStatus } from "./ldd-status.ts";
 
@@ -48,10 +48,6 @@ export const PANE_ORDER = RAIL_ORDER;
 export interface PanePart extends Component {
 	/** Cheap digest of the live state the part paints: an unchanged one reuses its rows. */
 	digest?(): string;
-	/** One-row digest for the narrow work row above the editor. */
-	summary?(): PanelSummary | undefined;
-	/** The part's own view, which a tap on the work row opens. */
-	open?(): void;
 	/** The narrow form's strip (04), one row exactly width cells, or undefined with nothing to show. */
 	strip?(width: number): string | undefined;
 }

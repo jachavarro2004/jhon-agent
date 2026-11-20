@@ -13,7 +13,6 @@ import { AskView } from "../lib/ui/ask-view.ts";
 import { JhonPanel, type ProfilesData } from "../lib/ui/jhon-panel.ts";
 import { customizeRows as settingsRows } from "../lib/ui/customize/registry.ts";
 import { SettingsView } from "../lib/ui/settings-view.ts";
-import { renderShellAgentsSection, renderShellJobsSection } from "../lib/ui/shell-bar.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { TasksView } from "../lib/background-tasks-view.ts";
 import type { TaskRecord } from "../lib/background-tasks.ts";

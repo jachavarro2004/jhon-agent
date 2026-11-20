@@ -4,7 +4,7 @@
  * divider, the status bar across the whole width) and 04 (100 columns: the
  * pane folds into one strip under the top row). The frames are pi-tui's own
  * (its layout renderer, the pinned version in shell/node_modules) with the
- * existing rail sections in the pane: LDD, AGENTS and JOBS.
+ * pane's sections (lib/ui/panel.ts, T174-S5): LDD, Agents and Jobs.
  *
  * The pane rides a pi-tui internal (L1469): one test pins it against the
  * pinned pi, another takes it away and expects the narrow form, never a
@@ -21,7 +21,7 @@ import { LAYOUT_NODE } from "@earendil-works/pi-tui/dist/layout-node.js";
 import { installPane, invalidatePane, paneSlot, paneState, renderStrip, stripModel, PANE_COLUMNS, PANE_TEXT, type PanePart } from "../lib/ui/pane.ts";
 import { layoutHookState, LAYOUT_HOOK_MISSING_NOTE, PI_LAYOUT_NODE, resetLayoutHookNote } from "../lib/ui/pi-layout-hook.ts";
 import { renderStatusBar, renderTopRow, type BarModel } from "../lib/ui/bars.ts";
-import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusLayout, type RunningJobDisplay } from "../lib/ui/shell-bar.ts";
+import { renderAgentsSection, renderJobsSection, renderLddPanel, type RunningJobDisplay } from "../lib/ui/panel.ts";
 import type { LddStatus } from "../lib/ui/ldd-status.ts";
 import { stripAnsi } from "../lib/ui/primitives/index.ts";
 import { assertRows, padded, plainTheme, spread } from "./rows.ts";
@@ -39,15 +39,46 @@ const LDD: LddStatus = {
 	detail: [
 		{ name: "Invoice model and CSV writer", total: 4, completed: 4 },
 		{ name: "Export endpoint", total: 3, completed: 3 },
-		{ name: "Date-range filter", total: 4, completed: 2 },
+		{ name: "Date-range filter", total: 4, completed: 2, tasks: [
+			{ text: "parse from and to", done: true }, { text: "default to the current month", done: true },
+			{ text: "reject an inverted range", done: false }, { text: "filter the invoice query", done: false },
+		] },
 		{ name: "Download button in billing", total: 3, completed: 0 },
 	],
 	tasks: { completed: 9, total: 14 },
 	strictTdd: true,
 	route: "standard",
+	risk: "medium",
 	next: "apply slice 3",
-	tests: { passed: true, failed: 0, at: new Date(NOW - 6 * 60_000).toISOString() },
+	tests: { passed: true, failed: 0, at: new Date(NOW - 6 * 60_000).toISOString(), scope: "affected", count: 42, seconds: 11.8, commit: "3f2a9c1" },
 };
+/** design/shell-tui 01's right pane, column 136 on, rows 2 to 25 (.src/parts.py ldd_panel and running_block). */
+const DESIGN_PANE = [
+	"◆ add-invoice-export",
+	"standard · strict TDD · risk medium",
+	"next apply slice 3",
+	"",
+	"Slices  2/4 · tasks 9/14",
+	"✓ 1 Invoice model and CSV writer       4/4",
+	"✓ 2 Export endpoint                    3/3",
+	"◐ 3 Date-range filter                  2/4",
+	"  ✓ parse from and to",
+	"  ✓ default to the current month",
+	"  ◐ reject an inverted range",
+	"  · filter the invoice query",
+	"· 4 Download button in billing         0/3",
+	"",
+	"Last run",
+	"✓ passed · affected · 6m ago",
+	"  42 tests · 11.8s · 3f2a9c1",
+	"",
+	"Agents  2 running",
+	"◐ jhon-builder  slice 3              4m12s",
+	"◐ jhon-checker  slice 2 tests        1m03s",
+	"",
+	"Jobs  1 running",
+	"⧗ pytest tests/billing -k range        18s",
+];
 const JOBS: RunningJobDisplay[] = [
 	{ id: "a1", kind: "agent", label: "jhon-builder: slice 3", startedAt: NOW - 252_000 },
 	{ id: "a2", kind: "agent", label: "jhon-checker: slice 2 tests", startedAt: NOW - 63_000 },
@@ -74,12 +105,12 @@ function shell(columns: number, rows = 24, tui: FakeTui = { mode: "fullscreen", 
 		paneSlot(host, "header", { render: (width) => [renderTopRow(BARS, plainTheme, width, { home: "/home/owner", ascii: false })], invalidate() {} }),
 		paneSlot(host, "statusbar", { render: (width) => [renderStatusBar(BARS, plainTheme, width, { ascii: false, compactAt: null })], invalidate() {} }),
 		paneSlot(host, "ldd", {
-			render: (width) => renderShellStatusLayout({ ldd: LDD }, plainTheme, width).lines,
+			render: (width) => renderLddPanel(LDD, plainTheme, width, { now: NOW }),
 			strip: (width) => renderStrip(stripModel(LDD, NOW, "alt+j"), plainTheme, width),
 			invalidate() {},
 		}),
-		paneSlot(host, "jobs", { render: (width) => renderShellJobsSection(JOBS, plainTheme, width, NOW), invalidate() {} }),
-		paneSlot(host, "agents", { render: (width) => renderShellAgentsSection(JOBS, plainTheme, width, NOW), invalidate() {} }),
+		paneSlot(host, "jobs", { render: (width) => renderJobsSection(JOBS, plainTheme, width, { now: NOW }), invalidate() {} }),
+		paneSlot(host, "agents", { render: (width) => renderAgentsSection(JOBS, plainTheme, width, { now: NOW }), invalidate() {} }),
 	];
 	const notes: string[] = [];
 	const uninstall = installPane(host, plainTheme, { placement, density: () => "comfortable", note: (text) => notes.push(text) });
@@ -91,7 +122,7 @@ function shell(columns: number, rows = 24, tui: FakeTui = { mode: "fullscreen", 
 }
 
 test("01 at 180 columns: the top row, the conversation left and the pane right behind one thin divider, the status bar across the width", (t) => {
-	const s = shell(180);
+	const s = shell(180, 30);
 	t.after(s.dispose);
 	assert.equal(s.state.hosted?.(), true);
 	assert.equal(s.state.wide?.(), true);
@@ -101,19 +132,8 @@ test("01 at 180 columns: the top row, the conversation left and the pane right b
 		180: [
 			padded(" 力 acme_app  /home/dev/acme_app", 180),
 			left(" Slice 2's endpoint answers the CSV and its 14 tests pass.") + pane(),
-			// The existing rail sections, unchanged (S5 draws the panel to 01).
-			left() + pane(spread("▾ LDD", "standard route", PANE_TEXT)),
-			left() + pane("  ◆ add-invoice-export"),
-			left() + pane("    2/4 slices · on 3: Date-range filter"),
-			left() + pane("    next apply slice 3 · tests ✓ passed"),
-			left() + pane(),
-			left() + pane(spread("▾ JOBS", "1 running", PANE_TEXT)),
-			left() + pane(spread("  ⧗ j1 pytest tests/billing -k range", "18s", PANE_TEXT)),
-			left() + pane(),
-			left() + pane(spread("▾ AGENTS", "2 running", PANE_TEXT)),
-			left() + pane(spread("  ◐ slice 3               jhon-buil…", "4m12s", PANE_TEXT)),
-			left() + pane(spread("  ◐ slice 2 tests         jhon-chec…", "1m03s", PANE_TEXT)),
-			...Array.from({ length: 7 }, () => left() + pane()),
+			// The pane as design 01 draws it (T174-S5).
+			...DESIGN_PANE.map((row) => left() + pane(row)),
 			"─".repeat(133) + pane(),
 			padded(" ❯ Ask, or / for commands", 133) + pane(),
 			"─".repeat(133) + pane(),
@@ -124,7 +144,7 @@ test("01 at 180 columns: the top row, the conversation left and the pane right b
 			spread(" ◆ add-invoice-export  ◐ slice 3/4 · tasks 2/4 · next apply slice 3  ✓ passed 6m", "alt+j ▾ ", 100),
 			padded(" Slice 2's endpoint answers the CSV and its 14 tests pass.", 100),
 			// pi paints its own rows as they come: no pane, nothing pads them.
-			...Array.from({ length: 17 }, () => ""),
+			...Array.from({ length: 23 }, () => ""),
 			"─".repeat(100),
 			" ❯ Ask, or / for commands",
 			"─".repeat(100),
@@ -142,7 +162,7 @@ test("the pane has a fixed width: wider terminals give the conversation the room
 		assert.equal(s.state.wide?.(), true);
 	}
 	const narrow = s.frame(139);
-	assert.equal(narrow.some((row) => row.includes(" │ ▾ LDD")), false, "139 columns: no pane");
+	assert.equal(narrow.some((row) => row.includes(" │ ◆ add-invoice-export")), false, "139 columns: no pane");
 	assert.match(narrow[1]!, /^ ◆ add-invoice-export/, "the strip under the top row");
 	assert.equal(s.state.wide?.(), false);
 });
@@ -170,11 +190,11 @@ test("a click in the pane reaches the part under it, in the part's own rows", (t
 	paneSlot(s.host, "jobs", part);
 	invalidatePane(s.host);
 	s.frame(180);
-	// The pane content row 7 is JOBS's second row (a blank row, LDD's four, a blank row, then JOBS).
+	// The pane content row 24 is Jobs's second row (a blank row, LDD's seventeen, a blank row, Agents's three, a blank row, then Jobs).
 	const pane = (tui: FakeTui) => (tui.layoutRoot as Component & { [PI_LAYOUT_NODE](): { entries: Array<{ component: Component & { [PI_LAYOUT_NODE]?(): { entries: Array<{ component: { child?: Component } }> } } }> } })[PI_LAYOUT_NODE]();
 	const split = pane(s.tui).entries[2]!.component;
 	const content = split[PI_LAYOUT_NODE]!().entries[2]!.component.child!;
-	assert.deepEqual(content.handleMouse?.({ type: "click", button: "left", x: 4, y: 7, width: 44, height: 20 } as never), { handled: true });
+	assert.deepEqual(content.handleMouse?.({ type: "click", button: "left", x: 4, y: 24, width: 44, height: 30 } as never), { handled: true });
 	assert.deepEqual(seen, [{ y: 1, width: PANE_TEXT }]);
 	assert.equal(content.handleMouse?.({ type: "click", button: "left", x: 4, y: 0, width: 44, height: 20 } as never), undefined, "the blank row above the sections is no part's");
 });

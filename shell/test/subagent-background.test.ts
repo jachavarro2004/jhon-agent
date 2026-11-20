@@ -15,7 +15,7 @@ import test, { after } from "node:test";
 import jhon from "../extensions/jhon.ts";
 import { TASK_NOTICE_TYPE } from "../lib/background-tasks-tools.ts";
 import { TASKS_EVENT } from "../lib/events.ts";
-import { renderShellAgentsSection } from "../lib/ui/shell-bar.ts";
+import { renderAgentsSection } from "../lib/ui/panel.ts";
 
 const temps: string[] = [];
 after(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
@@ -165,9 +165,9 @@ test("several sub-agents launched in one turn each get a background task, all on
 		assert.deepEqual(rail.map((t: any) => t.id).sort(), [...ids].sort());
 		assert.ok(rail.every((t: any) => t.kind === "agent" && /^explore: look \d$/.test(t.label)), JSON.stringify(rail));
 		const plain = { fg: (_c: string, t: string) => t, bg: (_c: string, t: string) => t, bold: (t: string) => t };
-		const drawn = renderShellAgentsSection(rail, plain as any, 60, Date.now()).join("\n");
-		assert.match(drawn, /AGENTS[\s\S]*3 running/);
-		for (const n of [1, 2, 3]) assert.match(drawn, new RegExp(`look ${n}\\s+explore\\s+\\d+s`));
+		const drawn = renderAgentsSection(rail, plain as any, 60, { now: Date.now() }).join("\n");
+		assert.match(drawn, /^Agents {2}3 running/);
+		for (const n of [1, 2, 3]) assert.match(drawn, new RegExp(`◐ explore {2}look ${n} +\\d+s`));
 		await until(() => s.sent.length === 3);
 		for (const id of ids) assert.ok(s.sent.some((m) => new RegExp(`${id}.*explore.*completed`).test(m.message.content)), id);
 	});
