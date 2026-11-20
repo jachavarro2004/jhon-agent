@@ -14,7 +14,6 @@ import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusSect
 import { renderStatusBar } from "../lib/ui/bars.ts";
 import { setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { framePromptLines, resolvePromptLayout, PROMPT_STATE } from "../lib/ui/shell-prompt.ts";
-import { narrowStatusOwner, STATUS_OWNER } from "../lib/ui/shell-sidebar-layout.ts";
 
 const plain: ShellBarTheme & { strikethrough(t: string): string } = { fg: (_c, t) => t, bold: (t) => t, strikethrough: (t) => t };
 const tagged: ShellBarTheme & { strikethrough(t: string): string } = { fg: (c, t) => `<${c}>${t}</${c}>`, bold: (t) => `<b>${t}</b>`, strikethrough: (t) => t };
@@ -103,12 +102,6 @@ test("STATUS in sections: one block per change, the header counting them, and no
 test("JOBS hides while idle; AGENTS stays as G's idle row", () => {
 	assert.deepEqual(renderShellAgentsSection([], plain, 50), ["▾ AGENTS" + " ".repeat(50 - 12) + "idle", "  no agent running · /jhon:agents".padEnd(50)]);
 	assert.deepEqual(renderShellJobsSection([], plain, 50), []);
-});
-
-test("the status line owns the status at narrow fullscreen widths, unless Status is hidden", () => {
-	assert.equal(narrowStatusOwner({ mode: "fullscreen", columns: 100, statusPlacement: "auto" }), STATUS_OWNER.BOTTOM);
-	assert.equal(narrowStatusOwner({ mode: "fullscreen", columns: 100, statusPlacement: "hidden" }), STATUS_OWNER.HEADER);
-	assert.equal(narrowStatusOwner({ mode: "fullscreen", columns: 140, statusPlacement: "auto" }), undefined, "the rail carries it when wide");
 });
 
 // T34 (L98): the band is darker than the page (rose ink's `band`, Mix(page,

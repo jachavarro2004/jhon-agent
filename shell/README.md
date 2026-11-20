@@ -79,11 +79,11 @@ Not covered: an extension that calls a model itself through pi's registry.
 | `themes/` | The pi themes Customize → Appearance's Theme row lists after rose ink ("Adding a theme"); none today. |
 | `fixtures/kanagawa.json` | The former Kanagawa theme, kept as the reference that declares every color pi's theme schema requires (`lib/desktop-palette.ts`); not registered with pi, so the Theme row does not list it. |
 | `lib/rose-ink.ts` | With `integrations.theme.palette = "desktop"`, asks `jhon palette --write-pi` for the rose ink theme now and on every desktop palette change, while rose ink is pi's active theme; and, whatever the palette, when Customize switches back to rose ink, before applying it. |
-| `extensions/ui.ts` | The shell UI: the status bar and header, the prompt editor (double-Esc cancel, animations; after 60 s with no stream event and no tool running its working line reads `waiting for Claude API · <N>s`; after 75 s the main session aborts the turn as Esc does and sends one continue, once per owner message, never while a tool or an owner prompt is open; `shell.behaviour.stall_seconds` sets the seconds and `0` turns all recovery off; on the `claude-bridge` provider or while a reasoning model thinks above minimal, where minutes can pass with no stream event, the threshold is `shell.behaviour.thinking_stall_seconds` instead, 300 s, `0` never recovering there), the sidebar, and Customize. |
+| `extensions/ui.ts` | The shell UI: the status bar and header, the prompt editor (double-Esc cancel, animations; after 60 s with no stream event and no tool running its working line reads `waiting for Claude API · <N>s`; after 75 s the main session aborts the turn as Esc does and sends one continue, once per owner message, never while a tool or an owner prompt is open; `shell.behaviour.stall_seconds` sets the seconds and `0` turns all recovery off; on the `claude-bridge` provider or while a reasoning model thinks above minimal, where minutes can pass with no stream event, the threshold is `shell.behaviour.thinking_stall_seconds` instead, 300 s, `0` never recovering there), the right pane (`lib/ui/pane.ts`), and Customize. |
 | `extensions/pretty.ts` | pi-pretty (syntax-highlighted reads, diffs, file trees) under the UI: the render lists `@heyhuynhgiabuu/pi-pretty` pinned with nothing loaded, so pi installs it into `<agent dir>/npm`, and this loads it from there, never in a sub-agent, keeping the prompt editor the UI's and its FFF store in the agent dir. |
 | `extensions/todo.ts` | The `todo` tool the model keeps its task list with, drawn in the rail's TODOS section while no LDD change is active, restored from the session. With no list, the model is told when to start one, and three tool-use turns that change something without a list bring one nudge per owner message. The list block and the start rule never sit in the system prompt: each goes out as a persisted `jhon-todo-list` message when it changed, and the nudges (`jhon-todo-start`, `jhon-todo-reminder`) as persisted steer messages after a tool-use turn, so the prompt cache holds (T115d). |
 | `extensions/quiet.ts` | The quiet tool cards: `read`, `grep`, `find`, `ls`, `edit`, and `write` drawn as compact cards with bounded previews (and `bash` too under the minimal card content), executing as pi's own tools (`bash` in the OS sandbox when `sandbox.mode` is on, `lib/sandbox.ts`, drawn the same); every other tool's call gets its family icon (`lib/ui/tool-icons.ts`). Always Jhon's cards (T15.3: `quiet_tools` is gone). |
-| `lib/ui/` | The UI's modules, one per piece: bar, prompt, sidebar, Customize and `primitives/` (cards, tinted blocks, rules, glyphs). The rail's LDD section (`ldd-status.ts`) shows every LDD change in progress, the session's own first: its name and worktree, its slices done, route and open slice, the next step and the last test run; another worktree's change shows its slices and next step. Its keys (`t` tests, `o` tasks.md) live in the LDD detail (alt+j). Under a multiplexer the rail draws it too: the multiplexer shows nothing of LDD (L112). |
+| `lib/ui/` | The UI's modules, one per piece: bars, prompt, the right pane, Customize and `primitives/` (cards, tinted blocks, rules, glyphs). The rail's LDD section (`ldd-status.ts`) shows every LDD change in progress, the session's own first: its name and worktree, its slices done, route and open slice, the next step and the last test run; another worktree's change shows its slices and next step. Its keys (`t` tests, `o` tasks.md) live in the LDD detail (alt+j). Under a multiplexer the rail draws it too: the multiplexer shows nothing of LDD (L112). |
 | `lib/profiles.ts` | The owner's active Jhon profile, shown in the header poster and the bar, and a profile's delegation mode (`delegation` in profiles.json: `writer`, else `inline`). |
 | `lib/session-profile.ts` | T120: a profile used in one session only, apart from the default for new sessions. `u` in the profiles panel appends the session entry `jhon-shell.session-profile/v1` (`{ profile }`) and writes nothing global: no `jhon profile use`, and settings' `pi.profile`, profiles.json's `active`, the agent folder's `settings.json` and the rendered agent files stay as they are, so the other sessions are untouched. From then on the session's sub-agents run on that profile's model and thinking level for each agent (read from `jhon profile json` at each launch, in place of the rendered file's `model:` and `thinking:`), its orchestrator switches to the profile's model and level through `pi.setModel` and `pi.setThinkingLevel` with a notice (pi saves neither as a default), its delegation mode follows the profile, and the header, the status bar and the panel name it, marked while it is not the default (`<name> (session)`; `●` on its tab). The entry is read from the session's branch at each start: a resumed session comes back with its profile, `/new` starts on the default. A sub-agent hears its parent session's profile in `JHON_PI_SESSION_PROFILE`, so the sub-agents it launches follow it. `u` is refused, with one line and nothing changed, when this pi does not list one of the profile's models as available (its provider is not loaded in this process, or has no credential): `d` and a restart load it, as the line says; the panel wraps a note wider than the card onto up to three rows. A session profile that was renamed or deleted puts the session back on the default with a one-line notice. `d` is unchanged: `jhon profile use`, the default every session without a profile of its own reads. Claude Code sessions (no panel; their agent files are global) and `jhon review-native` keep reading the default profile. |
 | `lib/delegation-mode.ts` | T117c: the active profile's delegation mode, read once per session with the prompt's frozen parts, so the prompt stays byte-identical. In `writer` mode the main session's prompt carries `jhon-orchestrator-writer.md` (rendered beside the orchestrator's file) in place of the orchestrator's region between `<!-- delegation:begin -->` and `<!-- delegation:end -->`; a missing file, a missing marker or markers out of order keep the organic rules whole, said once. A child never gets it. The profiles panel's actions (`JhonPanelDeps`): `setMode` (`w` then `s`) runs `jhon profile mode <profile> <inline\|writer>` (from the next session); `useNow` (`u`) makes a profile this session's only (T120, `lib/session-profile.ts`) and, when this session's mode changes, rebuilds the prompt once with the notice "The orchestrator's rules switch to writer mode from the next turn." (one notice with the orchestrator's model switch before it when `u` changes both: pi draws only the last of two notices sent back to back); `makeDefault` (`d`) and `use` activate it without the rebuild (the engine has one `active` profile, which is also the default for new sessions). |
@@ -128,30 +128,33 @@ The chrome wears Jhon's brand (`力`, rose ink) and has only Jhon's options
 (L146). In a fullscreen terminal the top row holds the project and its path
 and nothing else (` 力 <project>  <~path>`; the project alone when a
 multiplexer host that shows the path is announced, `jhon:host`), and the
-status bar sits at the bottom: on the left `⎇ <branch>`, `sandbox on|off`
-(the session's `sandbox.mode`) and the permission mode when it is not normal
+status bar sits at the bottom: on the left `⎇ <branch>`, the sandbox's real
+state (`sandbox on`, `sandbox off`, or `sandbox not running · <why>` when
+the mode is on but the sandbox cannot run, no project can be pinned or the
+status gave no answer: what `lib/sandbox.ts` read at the session's start)
+and the permission mode when it is not normal
 (`YOLO` in amber, `SUPER YOLO` in red and bold); on the right
 `model · effort · profile`, `ctx` with its 70/90 meter, the percent and
 `· compacts at N%` near it, and the cost, thin `│` dividers between.
 Running agents and jobs are not on the bar. Under 140 columns the status
 bar takes its narrow form: no meter, the branch cut to 18 cells. Narrowing
-further, the branch shortens first (to 8 cells); then the meter, the
-profile, the compaction note, model · effort, sandbox, the branch, ctx and
-the mode badge go in that order; the cost goes last. A regular (not
-fullscreen) terminal shows the status bar alone, as its footer.
-`shell.appearance.status = "hidden"` hides it.
+further, the branch shortens first (to 8 cells); then why the sandbox is not
+running, the meter, the profile, the compaction note, model · effort,
+sandbox, the branch, ctx and the mode badge go in that order; the cost goes
+last. `shell.appearance.status = "hidden"` hides it, with the right pane and
+the strip.
 
 Cards come in two styles, `shell.appearance.cards`: `float` (the default: a
 tinted panel with a `▎` bar in the card's tone) or `neon` (a rounded
 outline). Notices, tool cards (`<icon> <name> <args>`, then `↳ ✓ <summary>`
-or `↳ ✗ <why>` and a preview) and the rail's cards take it; a theme that
+or `↳ ✗ <why>` and a preview) take it; a theme that
 cannot paint a background draws the outline. `shell.appearance.ascii` draws every glyph of the chrome in ASCII (`力`
 reads `jhon`).
 
-The surface, `shell.appearance.surface`: `transparent` (the default) draws
-each rail section as its own card on the terminal's background; `tinted`
-paints them all on one panel down to the bottom, and paints the top row,
-the status bar and the narrow work row on it too.
+The surface, `shell.appearance.surface`: `transparent` (the default) leaves
+the right pane's sections on the terminal's background; `tinted` paints them
+on one panel, and paints the top row, the strip, the status bar and the
+narrow work row on it too.
 
 The density, `shell.appearance.density`: `comfortable` (the default) draws a
 blank row between the rail's sections; `compact` draws none; `minimal` spaces
@@ -160,7 +163,20 @@ preview, no output tail or duration); tool calls are otherwise full cards (a
 bash card shows its whole command, the last five output lines with the
 ctrl+o hint, and "Took Ns") (T91, L656).
 
-The rail (140 columns and up, 50 wide) holds the sections, each a header
+The right pane (`lib/ui/pane.ts`; design 01) sits beside the conversation
+and the editor behind one thin `│`, 47 columns wide whatever the terminal's
+width (the divider, a space, 42 columns of panel and 2 blank ones), between
+the top row and the status bar. Under 140 columns it folds into one strip
+under the top row (design 04): ` ◆ <change>  ◐ slice 3/4 · tasks 2/4 · next
+<step>  ✓ passed 6m … alt+j ▾`, giving way from the right (the key, the last
+run, the next step, the tasks, the slice; the change last). The pane rides a
+pi-tui internal, the layout root's layout method (`lib/ui/pi-layout-hook.ts`,
+the only file that names it): where it is missing the shell says so once and
+keeps the narrow form. A regular (not fullscreen) terminal has no layout of
+its own to put a pane in either: it shows the top row and the strip above
+the editor and the status bar under it.
+
+The pane holds the sections, each a header
 `▾ NAME … count` with rows under it: LDD first (L174), then TODOS, JOBS and
 AGENTS (T174: no CHANGES, no INTEGRATIONS). A section with nothing to show
 is left out (L173), but AGENTS (`no agent running · /jhon:agents`) stays;
@@ -181,10 +197,10 @@ In a fullscreen terminal the prompt is a ruled editor:
 `─ 力 ready for you ── <hint> ─`, the petal's tone turning while the agent works, the esc hint
 (`esc again clears it`, `esc again stops it`) at the rule's right end, then
 `› <input>`. A regular terminal draws it as a card in
-`shell.appearance.cards`' style. In a fullscreen terminal without the rail
-(under 140 columns, or Status hidden) running sub-agents fold into one work
+`shell.appearance.cards`' style. In a fullscreen terminal without the pane
+(under 140 columns, Status hidden, or no layout hook) running sub-agents fold into one work
 row above the rule (` ▸ ◐ 1 agent`); a tap on it opens `/jhon:agents`. With
-no rail, `alt+j` (the LDD status) and `alt+s` (the agents) remain. `ask_user` asks in the dock between two accent
+no pane, `alt+j` (the LDD status) and `alt+s` (the agents) remain. `ask_user` asks in the dock between two accent
 rules, never an overlay.
 
 Every tool call's header starts with its family's icon, geometric by default:

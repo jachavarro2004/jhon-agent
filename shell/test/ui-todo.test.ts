@@ -7,7 +7,7 @@ import { convertToLlm, type ExtensionAPI, type ExtensionContext } from "@earendi
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import jhonTodo, { todoEnabled } from "../extensions/todo.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
-import { sidebarState } from "../lib/ui/shell-sidebar.ts";
+import { paneState } from "../lib/ui/pane.ts";
 import { lddFromStatus, selectChange, shareSelection } from "../lib/ui/ldd-status.ts";
 import { renderShellStatusSections } from "../lib/ui/shell-bar.ts";
 
@@ -86,7 +86,7 @@ function fakeContext(branch: unknown[] = [], hasUI = true) {
 		if (!factory) return undefined;
 		const tui = { ...fakeTui, terminal: { rows: 48, columns: 180 } };
 		assert.deepEqual(factory(tui, plainTheme).render(70), [], "nothing above the prompt");
-		return sidebarState(tui as never).parts.get("todo")!.render(70).map(stripAnsi);
+		return paneState(tui as never).parts.get("todo")!.render(70).map(stripAnsi);
 	};
 	return { ctx, widgets, widget };
 }

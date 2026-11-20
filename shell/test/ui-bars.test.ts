@@ -116,6 +116,18 @@ test("the status bar's facts: sandbox off, unknown sandbox, no branch, no effort
 	for (const width of [180, 100]) assert.doesNotMatch(at(acme(), width), /⧗|job|agent/, "jobs and agents are the right pane's (S5)");
 });
 
+test("the sandbox's real state (L1489): on, off, or not running and why; the why gives way before the sandbox does", () => {
+	const at = (model: BarModel, width = 180) => stripAnsi(renderStatusBar(model, plainTheme, width));
+	assert.match(at(acme({ sandbox: "on" })), /^ ⎇ feat\/add-invoice-export │ sandbox on +opus/);
+	assert.match(at(acme({ sandbox: "off" })), /^ ⎇ feat\/add-invoice-export │ sandbox off +opus/);
+	assert.match(at(acme({ sandbox: "not running", sandboxWhy: "bubblewrap is not on PATH" })), /^ ⎇ feat\/add-invoice-export │ sandbox not running · bubblewrap is not on PATH +opus/);
+	assert.match(renderStatusBar(acme({ sandbox: "not running", sandboxWhy: "no project" }), tagged, 400), /<dim>sandbox<\/dim> <error>not running<\/error><dim> · no project<\/dim>/, "not running is an error, the why dim");
+	assert.match(at(acme({ sandbox: "not running" })), /│ sandbox not running +opus/, "no why: the state alone");
+	const down = acme({ sandbox: "not running", sandboxWhy: "bubblewrap is not on PATH" });
+	assert.equal(at(down, 100), spread(" ⎇ feat/add-i… │ sandbox not running · bubblewrap is not on PATH", "opus-5-5 · high │ ctx 38% │ $1.42 ", 100), "100 columns: the branch shortens first, as ever");
+	assert.equal(at(down, 80), spread(" ⎇ feat/ad… │ sandbox not running", "opus-5-5 · high │ ctx 38% │ $1.42 ", 80), "80 columns: then the why goes, before anything else");
+});
+
 test("the owner's mode wears its badge after sandbox; normal shows none (S31)", () => {
 	assert.match(stripAnsi(renderStatusBar(acme({ mode: "yolo" }), plainTheme, 180)), /^ ⎇ feat\/add-invoice-export │ sandbox on │ YOLO +opus/);
 	assert.match(renderStatusBar(acme({ mode: "yolo" }), tagged, 400), /<mdHr> │ <\/mdHr><b><warning>YOLO<\/warning><\/b>/);

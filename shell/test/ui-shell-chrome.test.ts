@@ -1,8 +1,9 @@
 /**
  * The status bar's sandbox segment (T174-S3, design/shell-tui 01): the
  * session pins sandbox.mode once at its start (lib/sandbox.ts) and says so on
- * pi.events (SANDBOX_EVENT), which the shell UI turns into `sandbox on` or
- * `sandbox off`; an unread pin says nothing, and the bar shows no segment.
+ * pi.events (SANDBOX_EVENT) with what the pin means for the commands (T174-S4,
+ * L1489): `sandbox on`, `sandbox off`, or `sandbox not running · <why>` when
+ * the mode is on but the commands are refused (an unread pin included).
  * The bars' own rows are test/ui-bars.test.ts's.
  *
  *   cd shell && node --experimental-strip-types --test test/ui-shell-chrome.test.ts
@@ -44,11 +45,12 @@ async function said(jhon: string | undefined): Promise<unknown[]> {
 	return events;
 }
 
-test("the session's sandbox pin reaches the status bar: on, off, and nothing when it was not read", async (t) => {
-	const status = (mode: "on" | "off") => ({ mode, can_run: true, reason: "", fix: "", project: "" });
+test("the session's sandbox pin reaches the status bar: on, off, or not running and why, never `on` for refused commands", async (t) => {
+	const status = (mode: "on" | "off", project = "/p") => ({ mode, can_run: true, reason: "", fix: "", project });
 	assert.equal(SANDBOX_EVENT, "jhon-shell:sandbox");
-	assert.deepEqual(await said(fakeJhon(t, status("on"))), [{ mode: "on" }]);
-	assert.deepEqual(await said(fakeJhon(t, status("off"))), [{ mode: "off" }]);
-	assert.deepEqual(await said(fakeJhon(t, undefined)), [{ mode: undefined }], "unread: the segment goes");
-	assert.deepEqual(await said(undefined), [{ mode: "off" }], "no jhon to ask: the sandbox is off");
+	assert.deepEqual(await said(fakeJhon(t, status("on"))), [{ mode: "on", state: "on" }]);
+	assert.deepEqual(await said(fakeJhon(t, status("off"))), [{ mode: "off", state: "off" }]);
+	assert.deepEqual(await said(fakeJhon(t, status("on", ""))), [{ mode: "on", state: "not running", why: "not in a repository" }], "mode on in no repository: every command is refused");
+	assert.deepEqual(await said(fakeJhon(t, undefined)), [{ mode: undefined, state: "not running", why: "no status answer" }], "unread: every command is refused");
+	assert.deepEqual(await said(undefined), [{ mode: "off", state: "off" }], "no jhon to ask: the sandbox is off");
 });

@@ -18,7 +18,8 @@ import { childEnv } from "../lib/agents.ts";
 import { registerBackgroundTasks } from "../lib/background-tasks-tools.ts";
 import { createTaskRegistry } from "../lib/background-tasks.ts";
 import { SHELL_CONTRACT } from "../lib/guards.ts";
-import { readSandboxStatus, sandboxOperations, sandboxVerdict, wireSandbox } from "../lib/sandbox.ts";
+import { readSandboxStatus, sandboxOperations, sandboxShown, sandboxVerdict, wireSandbox } from "../lib/sandbox.ts";
+import { SANDBOX_EVENT } from "../lib/events.ts";
 import { waitFor } from "./bounded-wait.ts";
 import { useMemorySettings } from "./fake-jhon-settings.ts";
 
@@ -125,6 +126,44 @@ function suite(): void {
 	const bash = existsSync("/bin/bash");
 	// A session exports the project it pinned (E5); no test inherits another's.
 	beforeEach(() => { delete process.env.JHON_SANDBOX_PROJECT; });
+
+	// L1489 (T174-S4): the status bar says the real state, from the same pin.
+	test("the pin says the status bar's state: on, off, or not running and why in a few words", async (t) => {
+		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);
+		const d = project(t);
+		const cases: Array<[string, Status, unknown]> = [
+			["on", ON, { mode: "on", state: "on" }],
+			["off", OFF, { mode: "off", state: "off" }],
+			["cannot run", CANNOT, { mode: "on", state: "not running", why: "bubblewrap is not installed" }],
+			["probe timed out: wrapped as usual", TIMED_OUT, { mode: "on", state: "on" }],
+			["no git repository", { ...ON, project: "" }, { mode: "on", state: "not running", why: "not in a repository" }],
+		];
+		for (const [name, status, said] of cases) {
+			fake.set(status);
+			const emitted: unknown[] = [];
+			const { pi, fire } = fakePi();
+			wireSandbox({ ...pi, events: { emit: (event: string, payload: unknown) => { if (event === SANDBOX_EVENT) emitted.push(payload); } } }, { jhon: fake.bin });
+			await fire("session_start", {}, ctxAt(d));
+			assert.deepEqual(emitted, [said], name);
+		}
+		const broken = fakePi();
+		const emitted: unknown[] = [];
+		wireSandbox({ ...broken.pi, events: { emit: (_event: string, payload: unknown) => emitted.push(payload) } }, { jhon: join(d, "no-such-jhon") });
+		await broken.fire("session_start", {}, ctxAt(d));
+		assert.deepEqual(emitted, [{ mode: undefined, state: "not running", why: "no status answer" }], "no answer: every command is refused");
+	});
+
+	test("the why is a few words of the engine's reason: up to its first aside, never a long line", () => {
+		const down = (reason: string, extra: object = {}) => sandboxShown({ mode: "on", canRun: false, reason, fix: "", project: "/p", ...extra });
+		assert.deepEqual(down("unprivileged user namespaces are off (kernel.unprivileged_userns_clone = 0)"), { state: "not running", why: "unprivileged user namespaces are off" });
+		assert.deepEqual(down("the sandbox does not run on this system (darwin)"), { state: "not running", why: "does not run on this system" });
+		assert.deepEqual(down("bubblewrap (bwrap) is not on PATH"), { state: "not running", why: "bubblewrap is not on PATH" });
+		assert.deepEqual(down("bubblewrap is on PATH only in a folder a sandboxed command may write and a much longer tail"), { state: "not running", why: "bubblewrap is on PATH only in a fol…" });
+		assert.deepEqual(down(""), { state: "not running", why: "cannot run here" });
+		assert.deepEqual(sandboxShown({ mode: "on", canRun: true, reason: "", fix: "", project: undefined }), { state: "not running", why: "no project" });
+		assert.deepEqual(sandboxShown({ mode: "off", canRun: false, reason: "bubblewrap is not on PATH", fix: "", project: undefined }), { state: "off" }, "off is off, whatever the probe");
+		assert.deepEqual(sandboxShown({ unread: "exit 2" }), { state: "not running", why: "no status answer" });
+	});
 
 	test("rule 1: the session asks `jhon sandbox status --json` once, in its folder, and keeps the answer", async (t) => {
 		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);

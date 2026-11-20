@@ -18,6 +18,10 @@ export const OPEN_TASKS_EVENT = "jhon-shell:open-tasks";
 /**
  * The session's sandbox pin (lib/sandbox.ts), for the status bar:
  * `{ mode: "on" | "off" }` once `jhon sandbox status --json` answered,
- * `{ mode: undefined }` when it did not.
+ * `{ mode: undefined }` when it did not, with what the pin means for the
+ * commands (sandboxShown): `state` on, off or `not running`, and `why`.
  */
 export const SANDBOX_EVENT = "jhon-shell:sandbox";
+
+/** In-process notification after a visual preference is persisted (Customize). */
+export const VISUAL_SETTINGS_CHANGED = "jhon-shell.visual-settings-changed";

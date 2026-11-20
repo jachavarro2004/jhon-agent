@@ -64,7 +64,7 @@ export const APPEARANCE: CustomizeCategory = {
 		},
 		{
 			key: "shell.appearance.cards", label: "Cards", kind: "choice", values: ["float", "neon"],
-			note: "Notices, tool cards and the rail's cards: a ▎ bar on a tint, or the rounded outline.",
+			note: "Notices and tool cards: a ▎ bar on a tint, or the rounded outline.",
 			// G's two card styles, drawn as a notice and a tool card are (L153 answer 1).
 			preview: (v, ascii) => ({
 				caption: "a notice and a tool card",
@@ -82,12 +82,12 @@ export const APPEARANCE: CustomizeCategory = {
 		{
 			key: "shell.appearance.surface", label: "Surface", kind: "choice", values: ["transparent", "tinted"],
 			note: "The rail, the top row and the status bar: on the terminal's background, or one painted panel.",
-			// G's two surfaces (L153 answer 2): every rail section its own card, or one painted panel.
+			// Two surfaces (L153 answer 2): the right pane's sections on the terminal's background (design 01), or one painted panel.
 			preview: (v, ascii) => ({
 				caption: "the rail",
 				lines: v === "tinted"
 					? [ascii ? "one painted panel: v TODOS ... 2/5" : "one painted panel: ▾ TODOS … 2/5", "every section's header and rows on it"]
-					: ["each section its own card in the card style,", "on the terminal's own background"],
+					: ["each section's header and rows,", "on the terminal's own background"],
 			}),
 			read: (h) => h.settings.surface(),
 			live: appearance,

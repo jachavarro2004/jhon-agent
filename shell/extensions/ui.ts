@@ -23,7 +23,7 @@ import { createApiWait } from "../lib/ui/api-wait.ts";
 import { createStallRecovery, stallContinueText, stallNotice, stallSeconds, stallThreshold, type Schedule } from "../lib/ui/stall-recovery.ts";
 import { activeProfileName } from "../lib/profiles.ts";
 import { SESSION_PROFILE_CHANGED, sessionMark, sessionProfileOnBranch } from "../lib/session-profile.ts";
-import { OPEN_TASKS_EVENT, SANDBOX_EVENT, TASKS_EVENT } from "../lib/events.ts";
+import { OPEN_TASKS_EVENT, SANDBOX_EVENT, TASKS_EVENT, VISUAL_SETTINGS_CHANGED } from "../lib/events.ts";
 import { retiredNotice, shellSettings } from "../lib/settings.ts";
 import { resolveAnimationPolicy, type AnimationPolicy } from "../lib/ui/animation-policy.ts";
 import {
@@ -31,8 +31,7 @@ import {
 	resolveDoubleEscCancelPolicy,
 	type DoubleEscCancelPolicy,
 } from "../lib/ui/double-esc-cancel-policy.ts";
-import { setSidebarHover, sidebarHeader, sidebarPart, sidebarSlot, sidebarState, VISUAL_SETTINGS_CHANGED, type SidebarRail } from "../lib/ui/shell-sidebar.ts";
-import { installSidebar, invalidateSidebar } from "../lib/ui/shell-sidebar-layout.ts";
+import { installPane, invalidatePane, paneSlot, paneState, renderStrip, setPaneHover, stripModel, type PanePart } from "../lib/ui/pane.ts";
 import type { PanelSummary } from "../lib/ui/shell-panel.ts";
 import { renderWorkRow, setChromeSurface, workRowLead } from "../lib/ui/shell-panel.ts";
 import { recentSessionRoots } from "../lib/ui/session-changes.ts";
@@ -53,7 +52,7 @@ export interface ShellFooterData {
 
 interface ShellRenderHost {
 	requestRender(): void;
-	invalidateSidebar?(): void;
+	invalidatePane?(): void;
 }
 
 export interface ShellDeps {
@@ -342,8 +341,8 @@ export class JhonPromptEditor extends CustomEditor {
 
 	handleMouse(event: Parameters<CustomEditor["handleMouse"]>[0]): ReturnType<CustomEditor["handleMouse"]> {
 		if (event.type === "move" && event.button === "none") {
-			if (event.y >= 0 && event.y < this.topRowCount) setSidebarHover(this.pointerTui, this, () => this.clearEditorHover());
-			else setSidebarHover(this.pointerTui);
+			if (event.y >= 0 && event.y < this.topRowCount) setPaneHover(this.pointerTui, this, () => this.clearEditorHover());
+			else setPaneHover(this.pointerTui);
 		}
 		// Rows drawn above the rule belong to the shell, not to pi's editor.
 		if (this.topRowCount > 0) {
@@ -470,21 +469,20 @@ const PROMPT_OWNER = Symbol.for("jhon-shell.prompt-owner");
 type PromptFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>> & { [PROMPT_OWNER]?: boolean };
 
 /**
- * The Gentle Shell's narrow chrome (T15.12c): a fullscreen terminal whose
- * rail is not shown (under 140 columns, or Status hidden): live work folds
- * into the work row above the editor rule.
+ * The narrow form of a full-screen terminal (04): no right pane (under 140
+ * columns, Status hidden, or a pi-tui without the layout hook): live work
+ * folds into the work row above the editor rule.
  */
 function narrowChrome(tui: TUI): boolean {
 	if ((tui as TUI & { mode?: string }).mode !== "fullscreen" || !tui.terminal) return false;
-	const state = sidebarState(tui);
-	return !(state.active && state.ownsHost?.());
+	return !paneState(tui).wide?.();
 }
 
 /** The live-work digests the work row folds: the sub-agents (the todo list shows in the right pane only, T174). */
-function workParts(tui: TUI): Array<{ part: SidebarRail; summary: NonNullable<ReturnType<NonNullable<SidebarRail["summary"]>>> }> {
+function workParts(tui: TUI): Array<{ part: PanePart; summary: NonNullable<ReturnType<NonNullable<PanePart["summary"]>>> }> {
 	if (!tui.terminal) return [];
 	return ["agents"].flatMap((key) => {
-		const part = sidebarState(tui).parts.get(key);
+		const part = paneState(tui).parts.get(key);
 		const summary = part?.summary?.();
 		return part && summary ? [{ part, summary }] : [];
 	});
@@ -519,6 +517,9 @@ function installPrompt(
 	ctx.ui.setEditorComponent(factory);
 	return true;
 }
+
+/** The widget above the editor that carries the top row and the strip where the pane host does not (lib/ui/pane.ts). */
+const CHROME_WIDGET = "jhon-chrome";
 
 /** Settings is Customize (L174): /jhon:customize opens it; /jhon:settings is gone (L195). */
 const SETTINGS_COMMAND_NAME = "jhon:customize";
@@ -577,11 +578,16 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	const agentDir = env.PI_CODING_AGENT_DIR;
 	// A host announced late (jhon:host) may drop the top row's path: redraw.
 	pi.events.on(HOST_EVENT, () => { renderHost?.requestRender(); });
-	// sandbox.mode as extensions/jhon.ts pinned it for the session (lib/sandbox.ts), for the status bar.
+	// What the session's sandbox pin means for the commands (lib/sandbox.ts sandboxShown), for the
+	// status bar: on, off, or not running and why (L1489). An emitter that names the mode alone says on or off.
 	let sandbox: BarModel["sandbox"];
+	let sandboxWhy: string | undefined;
 	pi.events.on(SANDBOX_EVENT, (payload) => {
-		const said = (payload as { mode?: unknown } | undefined)?.mode;
-		sandbox = said === "on" || said === "off" ? said : undefined;
+		const said = payload as { mode?: unknown; state?: unknown; why?: unknown } | undefined;
+		const state = said?.state ?? said?.mode;
+		sandbox = state === "on" || state === "off" || state === "not running" ? state : undefined;
+		sandboxWhy = sandbox === "not running" && typeof said?.why === "string" && said.why ? said.why : undefined;
+		renderHost?.invalidatePane?.();
 		renderHost?.requestRender();
 	});
 	// T120: `u` in the profiles panel, or a session profile that is gone: the bar and the rail show it at once.
@@ -592,7 +598,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		if (!said || current === undefined || said.sessionId !== current) return;
 		sessionProfile = typeof said.profile === "string" && said.profile ? said.profile : undefined;
 		if (!profileReader.refresh()) return;
-		renderHost?.invalidateSidebar?.();
+		renderHost?.invalidatePane?.();
 		renderHost?.requestRender();
 	});
 	let prompt: JhonPromptEditor | undefined;
@@ -619,7 +625,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	// The Card content preference rides the same kind of slot: the quiet tool
 	// renderers read it live, so the saved level applies from the first render.
 	let visualSettings = resolveVisualSettings(animationOptions).settings;
-	let sidebarTui: TUI | undefined;
 	/** The rail cards folded by a click this session (LDD, JOBS, AGENTS). */
 	const railFolded = new Set<string>();
 	// The Gentle Shell's card style and chrome surface (L153 answers 1-2) live in
@@ -631,7 +636,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	const refreshVisual = () => {
 		visualSettings = resolveVisualSettings(animationOptions).settings;
 		applyAppearance();
-		renderHost?.invalidateSidebar?.();
+		renderHost?.invalidatePane?.();
 		renderHost?.requestRender();
 	};
 	let doubleEscCancelPolicy: DoubleEscCancelPolicy = resolveDoubleEscCancelPolicy({ settings }).policy;
@@ -681,7 +686,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		if ((runningJobs.length || lingering()) && !jobClock) {
 			jobClock = setInterval(() => {
 				if (!runningJobs?.length && !lingering() && jobClock) { clearInterval(jobClock); jobClock = undefined; }
-				renderHost?.invalidateSidebar?.();
+				renderHost?.invalidatePane?.();
 				renderHost?.requestRender();
 			}, 1000);
 			jobClock.unref?.();
@@ -689,7 +694,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			clearInterval(jobClock);
 			jobClock = undefined;
 		}
-		renderHost?.invalidateSidebar?.();
+		renderHost?.invalidatePane?.();
 		renderHost?.requestRender();
 	});
 	pi.registerTool({
@@ -821,7 +826,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			mode = read;
 			if (!modeMoved && JSON.stringify(status) === JSON.stringify(ldd)) return status;
 			ldd = status;
-			renderHost?.invalidateSidebar?.();
+			renderHost?.invalidatePane?.();
 			renderHost?.requestRender();
 			return status;
 		}, () => ldd);
@@ -857,7 +862,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			profilePoll = setInterval(() => {
 				if (currentContext !== ctx || ctx.sessionManager.getSessionId() !== sessionId) return;
 				if (!profileReader.refresh()) return;
-				renderHost?.invalidateSidebar?.();
+				renderHost?.invalidatePane?.();
 				renderHost?.requestRender();
 			}, 2_000);
 			profilePoll.unref?.();
@@ -868,11 +873,10 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		void refreshLdd(ctx);
 		if (ctx.hasUI) watchLddSources(ctx);
 		ctx.ui.setFooter((tui, theme, footerData) => {
-			sidebarTui = tui;
-			const host: ShellRenderHost = { requestRender: () => tui.requestRender(), invalidateSidebar: () => invalidateSidebar(tui) };
+			const host: ShellRenderHost = { requestRender: () => tui.requestRender(), invalidatePane: () => invalidatePane(tui) };
 			renderHost = host;
 			const unsubscribeBranch = footerData.onBranchChange(() => {
-				host.invalidateSidebar?.();
+				host.invalidatePane?.();
 				host.requestRender();
 			});
 			// The bars paint live session state no event re-registers a part for:
@@ -881,51 +885,46 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			const bars = (): BarModel => barModel(pi, ctx, footerData, {
 				...(deps.activeProfile() ? { profile: deps.activeProfile() } : {}),
 				...(sandbox ? { sandbox } : {}),
+				...(sandboxWhy ? { sandboxWhy } : {}),
 				...(mode ? { mode } : {}),
 				...(hostShowsPath() ? { hostShowsPath: true } : {}),
 			});
-			// Design 01 (T174-S3): the top row above everything and the status bar
-			// at the bottom, one row each; the status bar takes its narrow form
-			// under 140 columns. A regular terminal has no top row: its footer is
-			// the status bar alone. Fullscreen, the footer steps aside for the
-			// statusbar row.
-			const bottomBar = {
-				render: (width: number) => [renderStatusBar(bars(), theme, width)],
-				invalidate() {},
-				dispose() { unsubscribeBranch(); },
-			};
+			// Design 01 and 04 (T174-S3, S4): the top row above everything and the
+			// status bar at the bottom, one row each; the status bar takes its
+			// narrow form under 140 columns. Where the pane host lays the terminal
+			// out (lib/ui/pane.ts), both are its rows and the footer steps aside;
+			// elsewhere (a regular terminal, a pi-tui without the layout hook) the
+			// footer is the status bar and the chrome widget the top row and strip.
 			// A click on a card's header folds or opens it. Kept for the session (T15.8).
 			const fold = (title: string) => {
 				if (railFolded.has(title)) railFolded.delete(title); else railFolded.add(title);
-				invalidateSidebar(tui);
+				invalidatePane(tui);
 				return { handled: true, render: true };
 			};
 			// Every header is a control, as the Gentle Shell's: a move over one paints
-			// it in the hover role, a move anywhere else clears it (setSidebarHover).
+			// it in the hover role, a move anywhere else clears it (setPaneHover).
 			const hoverTo = <T>(owner: object, current: T | undefined, next: T | undefined, set: (value: T | undefined) => void) => {
-				if (next !== undefined) setSidebarHover(tui, owner, () => { set(undefined); invalidateSidebar(tui); tui.requestRender(); });
-				else setSidebarHover(tui);
+				if (next !== undefined) setPaneHover(tui, owner, () => { set(undefined); invalidatePane(tui); tui.requestRender(); });
+				else setPaneHover(tui);
 				if (next === current) return { handled: true };
 				set(next);
-				invalidateSidebar(tui);
+				invalidatePane(tui);
 				return { handled: true, render: true };
 			};
 			// The rail's LDD section, which leads it (L174) and folds on a click on its header.
-			const lddRail = (): SidebarRail => {
+			const lddRail = (): PanePart => {
 				let statusAt: StatusTarget[] = [];
-				const statusGroups = new Map<number, Array<{ start: number; end: number }>>();
 				let statusHover: StatusHover | undefined;
 				const statusOwner = {};
 				return {
-					surface: "panel",
 					digest: () => JSON.stringify([ldd, visualSettings, [...railFolded], statusHover ?? ""]),
 					render: (width) => {
 						const layout = renderShellStatusLayout({ ...(ldd ? { ldd } : {}) }, theme, width, railFolded, statusHover, visualSettings.density);
 						statusAt = layout.targets;
-						statusGroups.set(width, layout.groups);
 						return layout.lines;
 					},
-					cardGroups: (width) => { const groups = statusGroups.get(width); return groups ? { groups } : undefined; },
+					// The narrow form's strip (04): the change, its slice, the next step, the last run.
+					strip: (width) => ldd ? renderStrip(stripModel(ldd, deps.now(), settings.string("shell.keys.panel")), theme, width, { ascii: settings.ascii() }) : undefined,
 					invalidate() {},
 					handleMouse(event) {
 						const target = statusAt.find((candidate) => candidate.row === event.y);
@@ -937,16 +936,13 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 					},
 				};
 			};
-			const disposeLdd = sidebarSlot(tui, "ldd", lddRail());
-			// The footer has no rail section (T174: CHANGES and INTEGRATIONS are gone); it keeps the regular terminal's bar.
-			const part = sidebarPart(tui, "footer", bottomBar, { render: () => [], invalidate() {} });
+			const disposeLdd = paneSlot(tui, "ldd", lddRail());
 			// Background work gets its own rail sections, out of Status, each its own
 			// part as in Gentle Shell: JOBS (commands and monitors) and AGENTS (sub-agents) (L168).
 			const workPart = (key: string, title: string, render: typeof renderShellJobsSection, summary?: () => PanelSummary | undefined, open?: () => void) => {
 				let hovered = false;
 				const owner = {};
-				return sidebarPart(tui, key, { render: (): string[] => [], invalidate() {}, dispose() {} }, {
-					surface: "panel",
+				return paneSlot(tui, key, {
 					digest: () => JSON.stringify([runningJobs, finishedJobs, runningJobs?.length || lingering() ? Math.floor(deps.now() / 1000) : 0, railFolded.has(title), hovered]),
 					render: (width) => render([...(runningJobs ?? []), ...finishedJobs], theme, width, deps.now(), railFolded.has(title), hovered),
 					...(summary ? { summary } : {}),
@@ -959,34 +955,54 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 					},
 				});
 			};
-			const jobsPart = workPart("jobs", "JOBS", renderShellJobsSection, undefined, () => { pi.events.emit(OPEN_TASKS_EVENT, { ctx, view: "jobs" }); });
+			const disposeJobs = workPart("jobs", "JOBS", renderShellJobsSection, undefined, () => { pi.events.emit(OPEN_TASKS_EVENT, { ctx, view: "jobs" }); });
 			// The work row's lead while sub-agents run, as the Gentle Shell's: `◐ N agents`.
-			const agentsPart = workPart("agents", "AGENTS", renderShellAgentsSection, () => agentsWorkSummary([...(runningJobs ?? []), ...finishedJobs], theme, deps.now()), () => { pi.events.emit(OPEN_TASKS_EVENT, { ctx }); });
+			const disposeAgents = workPart("agents", "AGENTS", renderShellAgentsSection, () => agentsWorkSummary([...(runningJobs ?? []), ...finishedJobs], theme, deps.now()), () => { pi.events.emit(OPEN_TASKS_EVENT, { ctx }); });
 			// The status bar spans the width under the rail (L97); the rail has no
 			// key line, "/ commands" is the prompt's alone (L143).
-			const disposeStatusbar = sidebarSlot(tui, "statusbar", {
+			const disposeStatusbar = paneSlot(tui, "statusbar", {
 				digest: () => JSON.stringify([bars(), visualSettings, tui.terminal?.columns]),
 				render: (width) => visualSettings.statusPlacement === "hidden" ? [] : [renderStatusBar(bars(), theme, width)],
 				invalidate() {},
 			});
 			// The top row: the project's name and its path, nothing else.
-			const disposeHeader = sidebarHeader(tui, {
+			const disposeHeader = paneSlot(tui, "header", {
 				digest: () => JSON.stringify([ctx.sessionManager.getCwd(), hostShowsPath(), visualSettings, tui.terminal?.columns]),
 				render: (width) => [renderTopRow(bars(), theme, width)],
 				invalidate() {},
 			});
-			const uninstall = installSidebar(tui, theme, () => visualSettings.statusPlacement, () => visualSettings.density);
-			// Without the rail, live work folds into the editor's work row (T15.12c).
-			if (tui.terminal) sidebarState(tui).compactWork = () => narrowChrome(tui);
-			return { ...part,
+			const uninstall = installPane(tui, theme, {
+				placement: () => visualSettings.statusPlacement,
+				density: () => visualSettings.density,
+				note: (text) => ctx.ui.notify(text, "warning"),
+			});
+			return {
 				render(width: number) {
-					if (visualSettings.statusPlacement === "hidden" && (tui as TUI & { mode?: string }).mode !== "fullscreen" && runningJobs?.length) {
+					if (paneState(tui).hosted?.()) return [];
+					if (visualSettings.statusPlacement !== "hidden") return [renderStatusBar(bars(), theme, width)];
+					if ((tui as TUI & { mode?: string }).mode !== "fullscreen" && runningJobs?.length) {
 						return [truncateToWidth(theme.fg("muted", shellJobsCount(runningJobs.length)), width, "…")];
 					}
-					return part.render(width);
+					return [];
 				},
-				dispose() { disposeHeader(); disposeStatusbar(); disposeLdd(); uninstall(); jobsPart.dispose(); agentsPart.dispose(); part.dispose(); if (sidebarTui === tui) sidebarTui = undefined; } };
+				invalidate() {},
+				dispose() { disposeHeader(); disposeStatusbar(); disposeLdd(); uninstall(); disposeJobs(); disposeAgents(); unsubscribeBranch(); },
+			};
 		});
+		// The narrow form through pi's public slots (04, L1489): where the pane host
+		// does not lay the terminal out (a regular terminal, a pi-tui without the
+		// layout hook), the top row and the strip sit above the editor, the status
+		// bar under it in the footer. Hosted, the host draws them and this is empty.
+		ctx.ui.setWidget(CHROME_WIDGET, (tui) => ({
+			render: (width: number) => {
+				const state = paneState(tui);
+				if (state.hosted?.()) return [];
+				const top = state.parts.get("header")?.render(width) ?? [];
+				const strip = visualSettings.statusPlacement === "hidden" ? undefined : state.parts.get("ldd")?.strip?.(width);
+				return strip ? [...top, strip] : top;
+			},
+			invalidate() {},
+		}));
 		const ownsPrompt = installPrompt(
 			ctx,
 			(created) => {
@@ -1099,7 +1115,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				doubleEsc: () => { doubleEscCancelPolicy = resolveDoubleEscCancelPolicy({ settings }).policy; },
 				status: () => { refreshVisual(); pi.events.emit(VISUAL_SETTINGS_CHANGED, { settings: settings.path }); },
 				appearance: () => { refreshVisual(); pi.events.emit(VISUAL_SETTINGS_CHANGED, { settings: settings.path }); },
-				redraw: () => { renderHost?.invalidateSidebar?.(); renderHost?.requestRender(); },
+				redraw: () => { renderHost?.invalidatePane?.(); renderHost?.requestRender(); },
 				// G's "Reload now" (L198): Customize closes, then pi reloads, so changed keys apply.
 				reload: () => {
 					close();

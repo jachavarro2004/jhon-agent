@@ -6,14 +6,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { initTheme, type ExtensionAPI, type ExtensionContext, type SlashCommandInfo, type SourceInfo } from "@earendil-works/pi-coding-agent";
-import { CURSOR_MARKER, matchesKey, visibleWidth, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, matchesKey, visibleWidth, VStack, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { registerSubagentWorktree, resolveSessionWorktree } from "../lib/ui/session-worktree-registry.ts";
 import { SESSION_PROFILE_CHANGED, SESSION_PROFILE_ENTRY } from "../lib/session-profile.ts";
 import installShellUi, { createActiveProfileReader, extractQueuedText, JhonPromptEditor } from "../extensions/ui.ts";
 import { barModel, renderTopRow } from "../lib/ui/bars.ts";
 import { SANDBOX_EVENT } from "../lib/events.ts";
 import { openInExternalEditor } from "../lib/ui/jhon-panel-editor.ts";
-import { setSidebarHover, sidebarPart, sidebarState, type SidebarRail } from "../lib/ui/shell-sidebar.ts";
+import { paneState, type PanePart } from "../lib/ui/pane.ts";
 import type { ShellBarTheme } from "../lib/ui/shell-bar.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { CARD_STYLE, cardStyle, setCardStyle } from "../lib/ui/primitives/index.ts";
@@ -335,13 +335,13 @@ test("the fullscreen LDD rail and the bars carry live digests: a profile switch 
 	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, footerData: unknown) => { render(width: number): string[]; dispose(): void };
 	const component = factory(tui, plainTheme, liveFooterData);
 	try {
-		const rail = sidebarState(tui as unknown as TUI).parts.get("ldd") as SidebarRail;
+		const rail = paneState(tui as unknown as TUI).parts.get("ldd") as PanePart;
 		assert.equal(typeof rail.digest, "function", "the LDD card paints live state and must declare a digest");
 		assert.doesNotMatch(rail.render(46).join("\n"), /claude-opus-5-5/, "the model is the status bar's, not the Status card's");
 
 		// The profile is the status bar's (beside the model): STATUS and the top row never show it.
-		const header = sidebarState(tui as unknown as TUI).parts.get("header") as SidebarRail;
-		const bar = sidebarState(tui as unknown as TUI).parts.get("statusbar") as SidebarRail;
+		const header = paneState(tui as unknown as TUI).parts.get("header") as PanePart;
+		const bar = paneState(tui as unknown as TUI).parts.get("statusbar") as PanePart;
 		assert.doesNotMatch(rail.render(46).join("\n"), /team/);
 		assert.doesNotMatch(header.render(160).join("\n"), /team|claude/, "the top row is the project and its path alone");
 		assert.match(bar.render(160).join("\n"), /claude-opus-5-5 · medium · team │/);
@@ -370,7 +370,7 @@ test("the fullscreen status line carries a live digest so model, context, and co
 	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, footerData: unknown) => { render(width: number): string[]; dispose(): void };
 	const component = factory(tui, plainTheme, liveFooterData);
 	try {
-		const header = sidebarState(tui as unknown as TUI).parts.get("statusbar") as SidebarRail;
+		const header = paneState(tui as unknown as TUI).parts.get("statusbar") as PanePart;
 		assert.equal(typeof header.digest, "function", "the status line paints live state every frame and must declare a digest");
 		const live = () => header.digest?.();
 		const text = () => header.render(160).join("\n");
@@ -540,11 +540,11 @@ test("without the rail the status bar is exactly one row: no extension status, n
 	const { ctx, ui } = fakeContext();
 	await fire(handlers, "session_start", ctx);
 	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, data: unknown) => { render(width: number): string[] };
-	const narrowTui = { mode: "fullscreen", terminal: { rows: 40, columns: 120 }, requestRender() {} };
-	// As G's, the narrow status row is the statusbar part's, a sibling row under
-	// the native layout; the footer itself paints nothing (T15.12g).
+	const narrowTui = { mode: "fullscreen", layoutRoot: new VStack([]), terminal: { rows: 40, columns: 120 }, requestRender() {} };
+	// Hosted (lib/ui/pane.ts), the narrow status row is the statusbar part's, a
+	// row of the host's own under pi's layout; the footer itself paints nothing.
 	const footer = factory(narrowTui, plainTheme, { ...footerData, getExtensionStatuses: () => new Map([["mcp", "MCP: 2 servers"]]) });
-	const statusRow = () => sidebarState(narrowTui as unknown as TUI).parts.get("statusbar")!.render(120);
+	const statusRow = () => paneState(narrowTui as unknown as TUI).parts.get("statusbar")!.render(120);
 	assert.deepEqual(footer.render(120), [], "the footer steps aside for the statusbar row");
 	const rows = statusRow();
 	assert.equal(rows.length, 1, rows.join("\n"));
@@ -576,6 +576,51 @@ test("a regular (not fullscreen) terminal's footer is the status bar alone: bran
 	assert.match(factory(fakeTui, plainTheme, footerData).render(160)[0]!, /^ ⎇ main +claude/, "unread: no segment");
 });
 
+// L1489 (T174-S4): the bar says what lib/sandbox.ts's pin says, never `on` for a sandbox that cannot run.
+test("the status bar's sandbox is the pin's real state: on, off, or not running and why", async (t) => {
+	const home = mkdtempSync(join(tmpdir(), "jhon-sandbox-state-"));
+	t.after(() => rmSync(home, { recursive: true, force: true }));
+	const { pi, handlers } = fakePi();
+	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home, JHON_SHELL_CHANGES_WATCH_MS: "off" });
+	const { ctx, ui } = fakeContext();
+	await fire(handlers, "session_start", ctx);
+	const bar = () => renderFooter(ui);
+	pi.events.emit(SANDBOX_EVENT, { mode: "on", state: "on" });
+	assert.match(bar(), /^ ⎇ main │ sandbox on +claude/);
+	pi.events.emit(SANDBOX_EVENT, { mode: "off", state: "off" });
+	assert.match(bar(), /^ ⎇ main │ sandbox off +claude/);
+	pi.events.emit(SANDBOX_EVENT, { mode: "on", state: "not running", why: "bubblewrap is not on PATH" });
+	assert.match(bar(), /^ ⎇ main │ sandbox not running · bubblewrap is not on PATH +claude/, "mode on, but it cannot run: not `on`");
+	pi.events.emit(SANDBOX_EVENT, { mode: undefined, state: "not running", why: "no status answer" });
+	assert.match(bar(), /^ ⎇ main │ sandbox not running · no status answer +claude/);
+});
+
+// L1489 (T174-S4): a regular terminal shows the narrow form through pi's public
+// slots: the top row and the strip in the chrome widget above the editor, the
+// status bar in the footer under it.
+test("a regular terminal shows the top row and the strip above the editor, the status bar under it (04's narrow form)", async (t) => {
+	const home = mkdtempSync(join(tmpdir(), "jhon-regular-chrome-"));
+	t.after(() => rmSync(home, { recursive: true, force: true }));
+	const status = { change: "add-invoice-export", slice: "Slice 3: Date-range filter", slices: ["done", "done", "current", "pending"] as Array<"done" | "current" | "pending">, detail: [{ name: "a", total: 4, completed: 4 }, { name: "b", total: 3, completed: 3 }, { name: "c", total: 4, completed: 2 }, { name: "d", total: 3, completed: 0 }], next: "apply slice 3" };
+	const { pi, handlers } = fakePi();
+	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home, JHON_SHELL_CHANGES_WATCH_MS: "off" }, { lddStatus: async () => status });
+	const { ctx, ui } = fakeContext();
+	await fire(handlers, "session_start", ctx);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(fakeTui, plainTheme, footerData);
+	try {
+		const chrome = (ui.widgets.get("jhon-chrome") as ((tui: unknown, theme: unknown) => { render(width: number): string[] }) | undefined)?.(fakeTui, plainTheme);
+		assert.ok(chrome, "the chrome widget is registered");
+		assert.deepEqual(chrome.render(100).map(stripAnsi), [
+			" 力 repo  /repo".padEnd(99),
+			` ◆ add-invoice-export  ◐ slice 3/4 · tasks 2/4 · next apply slice 3${" ".repeat(25)}alt+j ▾ `,
+		]);
+		assert.match(stripAnsi(footer.render(100)[0]!), /^ ⎇ main +claude/, "the footer keeps the status bar");
+		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }] });
+		assert.equal(chrome.render(100).length, 2, "two rows, whatever runs");
+	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
+});
+
 // Design 01 and 04 (T174-S3): the top row and the status bar are one row
 // each at every width and density; under 140 columns the status bar takes
 // its narrow form and the footer steps aside for it.
@@ -584,10 +629,10 @@ test("the chrome: the top row and the status bar one row each; under 140 columns
 	shellUi(pi, {}, { activeProfile: () => "jhon" });
 	const { ctx, ui } = fakeContext();
 	await fire(handlers, "session_start", ctx);
-	const tui = { mode: "fullscreen", terminal: { rows: 40, columns: 160 }, requestRender() {} };
+	const tui = { mode: "fullscreen", layoutRoot: new VStack([]), terminal: { rows: 40, columns: 160 }, requestRender() {} };
 	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, plainTheme, footerData);
 	try {
-		const parts = sidebarState(tui as unknown as TUI).parts;
+		const parts = paneState(tui as unknown as TUI).parts;
 		assert.deepEqual(parts.get("header")!.render(160).map(stripAnsi), [" 力 repo  /repo".padEnd(159)], "the project and its path, nothing else");
 		assert.deepEqual(parts.get("statusbar")!.render(160).map(stripAnsi), [" ⎇ main" + " ".repeat(89) + "claude-opus-5-5 · medium · jhon │ ctx ▰▰▰▰▱▱▱▱ 45% │ $0.000 sub "]);
 		tui.terminal.columns = 100;
@@ -610,7 +655,7 @@ function narrowShell(columns = 100) {
 	for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
 	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, plainTheme, footerData);
 	const editor = (ui.editorFactory as (tui: unknown, theme: unknown, keybindings: unknown) => JhonPromptEditor)(tui, editorTheme, fakeKeybindings);
-	return { pi, handlers, shortcuts, ctx, ui, tui, footer, editor, state: sidebarState(tui as unknown as TUI) };
+	return { pi, handlers, shortcuts, ctx, ui, tui, footer, editor, state: paneState(tui as unknown as TUI) };
 }
 
 test("without the rail the editor rule carries no [ Panel ], and a click at its right end opens nothing (T169)", async () => {
@@ -635,17 +680,15 @@ test("without the rail running sub-agents fold into the work row above the edito
 		assert.match(lines[0]!, /^ ▸ ◐ 1 agent +$/, "agents alone: no todo count");
 		assert.match(lines[1]!, /^─ 力 ready for you ─+$/, "the rule under it, no [ Panel ] (T169)");
 		assert.equal(visibleWidth(lines[0]!), 100);
-		assert.equal(state.compactWork?.(), true, "the AGENTS card steps aside");
+		assert.equal(state.wide?.() ?? false, false, "no pane: the work row carries the agents");
 		assert.deepEqual(editor.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 100, height: lines.length } as never), { handled: true, render: true });
 		assert.equal(opened.length, 1, "agents lead: the tap opens /jhon:agents, as G's opens its agents view");
 		assert.equal(ui.overlayView, undefined, "not the sheet");
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [] });
 		assert.equal(editor.render(100).map(stripAnsi).filter((line) => /▸/.test(line)).length, 0, "no agents: no work row, the todo list never leads it");
 		assert.equal(opened.length, 1);
-		state.active = true;
-		state.ownsHost = () => true;
+		state.wide = () => true;
 		assert.doesNotMatch(editor.render(100).map(stripAnsi).join("\n"), /▸ ◐/, "beside the rail the work is the rail's");
-		assert.equal(state.compactWork?.(), false);
 	} finally { editor.dispose(); footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
@@ -2181,7 +2224,7 @@ test("T120: the status bar shows the session's profile from its branch at the st
 	await fire(handlers, "session_start", ctx);
 	const tui = { mode: "fullscreen", terminal: { rows: 40, columns: 160 }, requestRender() {} };
 	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, plainTheme, { getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} });
-	const bar = () => sidebarState(tui as unknown as TUI).parts.get("statusbar")!.render(160).map(stripAnsi)[0]!;
+	const bar = () => paneState(tui as unknown as TUI).parts.get("statusbar")!.render(160).map(stripAnsi)[0]!;
 	try {
 		assert.match(bar(), /claude-opus-5-5 · medium · fast \(session\) │ ctx/);
 		pi.events.emit(SESSION_PROFILE_CHANGED, { sessionId: "another-session", profile: "slow" });
@@ -2438,10 +2481,9 @@ test("a click on a Status section's header folds that section alone, and a secon
 	const { ctx, ui } = fakeContext();
 	await fire(handlers, "session_start", ctx);
 	renderFooter(ui);
-	type Part = SidebarRail & { handleMouse(e: unknown): unknown };
+	type Part = PanePart & { handleMouse(e: unknown): unknown };
 	// L174: LDD is its own part, first in the rail; T174: the footer draws nothing in the rail.
-	const ldd = sidebarState(fakeTui as unknown as TUI).parts.get("ldd")! as Part;
-	const rail = sidebarState(fakeTui as unknown as TUI).parts.get("footer")! as Part;
+	const ldd = paneState(fakeTui as unknown as TUI).parts.get("ldd")! as Part;
 	const open = ldd.render(46).map(stripAnsi);
 	assert.match(open[0]!, /^▾ LDD/);
 	assert.ok(open.length >= 2);
@@ -2449,7 +2491,7 @@ test("a click on a Status section's header folds that section alone, and a secon
 	assert.deepEqual(ldd.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 46, height: open.length }), { handled: true, render: true });
 	assert.deepEqual(ldd.render(46).map(stripAnsi).filter((line) => line.trim() !== "").map((line) => line.trim()).length, 1, "LDD is its header alone");
 	assert.match(stripAnsi(ldd.render(46)[0]!), /^▸ LDD/);
-	assert.deepEqual(rail.render(46), [], "no CHANGES, no INTEGRATIONS: the footer's rail is empty");
+	assert.equal(paneState(fakeTui as unknown as TUI).parts.has("footer"), false, "no CHANGES, no INTEGRATIONS: the footer has no part in the pane (T174-S4)");
 	ldd.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 46, height: 1 });
 	assert.match(stripAnsi(ldd.render(46)[0]!), /^▾ LDD/);
 	await fire(handlers, "session_shutdown", ctx);
@@ -2465,9 +2507,9 @@ test("a move over the JOBS or AGENTS header paints it in the hover role; the key
 	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, tagged, footerData);
 	try {
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }, { id: "agent-1", kind: "agent", label: "explore: callers", startedAt: 2 }] });
-		type Part = SidebarRail & { handleMouse(e: unknown): unknown };
+		type Part = PanePart & { handleMouse(e: unknown): unknown };
 		for (const [key, title] of [["jobs", "JOBS"], ["agents", "AGENTS"]] as const) {
-			const part = sidebarState(tui as unknown as TUI).parts.get(key) as Part;
+			const part = paneState(tui as unknown as TUI).parts.get(key) as Part;
 			assert.doesNotMatch(stripAnsi(part.render(200)[0]!), /alt\+s/, `${title}: no key on the header`);
 			part.handleMouse({ type: "move", button: "none", x: 3, y: 0, width: 200, height: 3 });
 			assert.match(part.render(200)[0]!, new RegExp(`<warning>${title}</warning>`), title);
@@ -2483,7 +2525,7 @@ test("the rail draws no key line and no / commands: those live only in the promp
 	const { ctx, ui } = fakeContext();
 	await fire(handlers, "session_start", ctx);
 	renderFooter(ui);
-	const parts = sidebarState(fakeTui as unknown as TUI).parts;
+	const parts = paneState(fakeTui as unknown as TUI).parts;
 	assert.equal(parts.has("keys"), false);
 	for (const [key, part] of parts) if (key !== "header" && key !== "statusbar") assert.doesNotMatch(stripAnsi(part.render(50).join("\n")), /\/ commands/, key);
 	await fire(handlers, "session_shutdown", ctx);
@@ -2633,8 +2675,8 @@ test("a click on the JOBS or the AGENTS header folds that section, and a second 
 	});
 	try {
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }, { id: "agent-1", kind: "agent", label: "explore: callers", startedAt: 2 }] });
-		const parts = sidebarState(tui as unknown as TUI).parts;
-		type Part = SidebarRail & { handleMouse(e: unknown): unknown };
+		const parts = paneState(tui as unknown as TUI).parts;
+		type Part = PanePart & { handleMouse(e: unknown): unknown };
 		// JOBS is its own part, as Gentle Shell's: the rail orders todo, jobs, agents, Status.
 		const jobs = parts.get("jobs") as Part;
 		const agents = parts.get("agents") as Part;
@@ -2690,9 +2732,9 @@ test("the rail has no STATS part, whatever the session and its sub-agents spent 
 	});
 	try {
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "agent-1", kind: "agent", label: "explore: callers", startedAt: 1 }], spend: { runs: 2, tokens: 3000, cost: 0.1 } });
-		const parts = sidebarState(tui as unknown as TUI).parts;
+		const parts = paneState(tui as unknown as TUI).parts;
 		assert.equal(parts.has("stats"), false, "no STATS part");
-		for (const kept of ["ldd", "jobs", "agents", "footer"]) assert.ok(parts.has(kept), `${kept} stays: ${[...parts.keys()].join(", ")}`);
+		for (const kept of ["ldd", "jobs", "agents"]) assert.ok(parts.has(kept), `${kept} stays: ${[...parts.keys()].join(", ")}`);
 		for (const part of parts.values()) assert.doesNotMatch(part.render(48).map(stripAnsi).join("\n"), /STATS/);
 	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
