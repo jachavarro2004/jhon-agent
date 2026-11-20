@@ -23,7 +23,7 @@ import { BANNER, bannerSvg } from "./banner.ts";
 
 /** What each feature capture shows, under it. */
 export const FEATURE_CAPTIONS: Record<string, string> = {
-  "shell-bar": "The title row and the status bar: project, branch, model and effort, context, cost, running jobs.",
+  "shell-bar": "The top row and the status bar: the project and its path; branch, sandbox, model and effort, context, cost.",
   "ldd-status": "The rail's LDD status: the change, its slices done of all, the route, the next step and the last test run.",
   "agents-jobs": "Sub-agents and background jobs, live in the rail: what each runs, its tokens and how long.",
   "ldd-question": "A repo with no LDD yet: at the first code change, the session asks once how to deliver and test.",

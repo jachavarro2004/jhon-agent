@@ -6,7 +6,7 @@
  * load order does not matter. `alerts: true` says the host plays its own
  * alert while the owner is waited for (the shell plays no sound, so nothing
  * reads it; CONTRACT.md keeps the field);
- * `showsPath: true` drops the path from the title row (the host shows it).
+ * `showsPath: true` drops the path from the top row (the host shows it).
  * shell/CONTRACT.md, "Events for other extensions".
  */
 

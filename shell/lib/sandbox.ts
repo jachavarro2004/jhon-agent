@@ -54,6 +54,7 @@ import { delimiter, join } from "node:path";
 import { createBashToolDefinition, getAgentDir, getShellConfig, SettingsManager, type BashOperations } from "@earendil-works/pi-coding-agent";
 import { HOOK_TIMEOUT_MS, runAsync, type Started } from "./guards.ts";
 import { BASH_BACKGROUND_TOOL, MONITOR_TOOL } from "./ui/background-jobs.ts";
+import { SANDBOX_EVENT } from "./events.ts";
 
 /** `jhon sandbox status --json`, as the session keeps it; `unread` when it gave no answer. */
 export type SandboxPin =
@@ -244,6 +245,8 @@ export function wireSandbox(pi: any, o: { jhon: string | undefined; timeoutMs?: 
 				const verdict = sandboxVerdict(pin);
 				if ("run" in verdict && verdict.run === "sandbox") env[SANDBOX_PROJECT_ENV] = verdict.project;
 				else delete env[SANDBOX_PROJECT_ENV];
+				// The status bar shows the pin (extensions/ui.ts).
+				pi.events?.emit?.(SANDBOX_EVENT, { mode: "unread" in pin ? undefined : pin.mode });
 			}
 			return pin;
 		});

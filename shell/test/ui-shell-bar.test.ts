@@ -3,14 +3,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sliceByColumn, visibleWidth } from "@earendil-works/pi-tui";
 import {
-	compactionPercent, compactAt,
-	formatCost,
-	formatTokens,
-	gaugeTone,
-	renderGauge,
 	renderShellStatusLayout,
 	renderShellStatusSections,
-	renderShellStatusBar,
 	renderShellAgentsSection,
 	renderShellJobsSection,
 	elapsed,
@@ -18,14 +12,16 @@ import {
 	type ShellBarModel,
 	type ShellBarTheme,
 } from "../lib/ui/shell-bar.ts";
+import { compactionPercent, compactAt, formatCost, formatTokens } from "../lib/ui/bars.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { envOverrides, memorySettings } from "./fake-jhon-settings.ts";
 
 // The settings `jhon settings` would give the shell under an environment (S38).
 const envSettings = (env: NodeJS.ProcessEnv) => memorySettings({}, undefined, envOverrides(env));
 
-// The shell bar replaces pi's three-line footer with one line of
-// segments. Rendering is pure so it can be verified without a TUI.
+// The rail's sections (LDD, JOBS, AGENTS) until the right pane (T174-S5);
+// the top row and the status bar are test/ui-bars.test.ts's. Rendering is
+// pure so it can be verified without a TUI.
 
 const taggedTheme: ShellBarTheme = {
 	fg(color: string, value: string) {
@@ -96,26 +92,11 @@ test("Status respects terminal width", () => {
 	}
 });
 
-test("renderGauge fills cells proportionally to the percentage", () => {
-	assert.equal(renderGauge(45, 8), "▰▰▰▰▱▱▱▱");
-	assert.equal(renderGauge(0, 8), "▱▱▱▱▱▱▱▱");
-	assert.equal(renderGauge(100, 8), "▰▰▰▰▰▰▰▰");
-	assert.equal(renderGauge(null, 8), "▱▱▱▱▱▱▱▱");
-});
-
-test("gaugeTone reads the one meter ladder: ok under 70, warning from 70, error from 90 (S1)", () => {
-	assert.equal(gaugeTone(45), "success");
-	assert.equal(gaugeTone(69), "success");
-	assert.equal(gaugeTone(70), "warning");
-	assert.equal(gaugeTone(89), "warning");
-	assert.equal(gaugeTone(90), "error");
-	assert.equal(gaugeTone(null), "dim");
-});
-
 test("formatTokens and formatCost keep the bar compact", () => {
 	assert.equal(formatTokens(950), "950");
 	assert.equal(formatTokens(4_200), "4.2k");
 	assert.equal(formatTokens(272_000), "272k");
+	assert.equal(formatTokens(2_600_000), "2.6M");
 	assert.equal(formatTokens(13_000_000), "13M");
 	assert.equal(formatCost(9.49, true), "$9.49 sub");
 	assert.equal(formatCost(0.004, false), "$0.004");
@@ -173,11 +154,10 @@ test("the Status sections report the LDD header's row, the click target (T15.12c
 });
 
 
-// T174 (L1462): no INTEGRATIONS section; the status line keeps the mode's badge.
-test("the integrations are gone from the rail; the status line keeps a mode's badge", () => {
+// T174 (L1462): no INTEGRATIONS section; the mode's badge is the status bar's (test/ui-bars.test.ts).
+test("the integrations are gone from the rail, and the mode is not the rail's", () => {
 	const yolo = renderShellStatusSections(model({ mode: "yolo" }), plainTheme, 50).join("\n");
-	assert.doesNotMatch(yolo, /INTEGRATIONS|permissions|nothing reported/);
-	assert.match(renderShellStatusBar(model({ mode: "yolo" }), plainTheme, 160).rows[0]!, /YOLO/, "the status bar keeps its badge");
+	assert.doesNotMatch(yolo, /INTEGRATIONS|permissions|nothing reported|YOLO/);
 });
 
 
@@ -206,15 +186,12 @@ test("the Status sections drop Model, Effort, Context and Cost, all the header's
 	for (const gone of [/Usage/, /Model/, /Effort/, /Context/, /Cost/, /\$9\.49/, /gpt-5\.5/]) assert.doesNotMatch(text, gone);
 });
 
-test("a filling context says where pi compacts", () => {
+test("where the session compacts: Jhon's point, or pi's own when sooner (the status bar's note is test/ui-bars.test.ts's)", () => {
 	assert.equal(compactionPercent(200_000), 60, "Jhon compacts the main session at 60%");
 	assert.equal(compactionPercent(200_000, null), 92, "with Jhon's off, pi's own");
+	assert.equal(compactionPercent(20_000, 60), 18, "a small window: pi's comes first");
 	assert.equal(compactionPercent(undefined), undefined);
 	assert.deepEqual([compactAt(envSettings({})), compactAt(envSettings({ JHON_SHELL_COMPACT_AT: "70" })), compactAt(envSettings({ JHON_SHELL_COMPACT_AT: "off" })), compactAt(envSettings({ JHON_SHELL_COMPACT_AT: "x" }))], [60, 70, undefined, 60]);
-	const plain = { fg: (_r: string, t: string) => t, bold: (t: string) => t };
-	const at = (percent: number) => renderShellStatusBar(model({ contextPercent: percent, contextWindow: 200_000 }), plain, 200).rows[0]!;
-	assert.doesNotMatch(at(45), /compacts/);
-	assert.match(at(55), /ctx ▰+▱* 55% · compacts at 60%/, "ten points before it, the gauge says where");
 });
 
 test("JOBS and AGENTS count their running tasks and run their time to the second (L168)", () => {

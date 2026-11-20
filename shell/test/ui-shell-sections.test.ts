@@ -10,7 +10,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { BAND_ROLE } from "../lib/ui/primitives/index.ts";
-import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusBar, renderShellStatusSections, type ShellBarModel, type ShellBarTheme } from "../lib/ui/shell-bar.ts";
+import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusSections, type ShellBarModel, type ShellBarTheme } from "../lib/ui/shell-bar.ts";
+import { renderStatusBar } from "../lib/ui/bars.ts";
 import { setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { framePromptLines, resolvePromptLayout, PROMPT_STATE } from "../lib/ui/shell-prompt.ts";
 import { narrowStatusOwner, STATUS_OWNER } from "../lib/ui/shell-sidebar-layout.ts";
@@ -37,8 +38,8 @@ function model(overrides: Partial<ShellBarModel> = {}): ShellBarModel {
 	};
 }
 
-// The title row and the status bar are the Gentle Shell's split chrome now:
-// test/ui-shell-chrome.test.ts holds them (T15.12d slice 6).
+// The top row and the status bar are lib/ui/bars.ts's (T174-S3):
+// test/ui-bars.test.ts holds them.
 
 test("the prompt in sections: a rule-line header with the petal and state, then › and the input", () => {
 	const layout = resolvePromptLayout(40, undefined, undefined, true);
@@ -118,7 +119,8 @@ test("a tinted status bar and rail paint one band role: pi's customMessageBg", (
 	const roles: string[] = [];
 	setChromeSurface("tinted");
 	try {
-		renderShellStatusBar(model(), { ...plain, bg: (c: string, t: string) => { roles.push(c); return `${BG_OPEN}${t}${BG_CLOSE}`; } }, 60);
+		const bg = (c: string, t: string) => { roles.push(c); return `${BG_OPEN}${t}${BG_CLOSE}`; };
+		renderStatusBar({ cwd: "/repo", branch: "main", modelId: "m", contextPercent: 10, costTotal: 0 }, { ...plain, bg }, 60);
 	} finally { setChromeSurface("transparent"); }
 	assert.deepEqual([...new Set(roles)], [BAND_ROLE]);
 });

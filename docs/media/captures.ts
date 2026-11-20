@@ -13,7 +13,8 @@ import { pathToFileURL } from "node:url";
 import { SHELL } from "./paths.ts";
 
 import { ShellSettings, installShellSettings } from "../../shell/lib/settings.ts";
-import { renderShellStatusBar, renderShellTitleRows, renderShellStatusSections, renderShellAgentsSection, renderShellJobsSection, type ShellBarModel, type ShellBarTheme } from "../../shell/lib/ui/shell-bar.ts";
+import { renderShellStatusSections, renderShellAgentsSection, renderShellJobsSection, type RunningJobDisplay, type ShellBarTheme } from "../../shell/lib/ui/shell-bar.ts";
+import { renderStatusBar, renderTopRow, type BarModel } from "../../shell/lib/ui/bars.ts";
 import { lddFromStatus } from "../../shell/lib/ui/ldd-status.ts";
 import { AskView } from "../../shell/lib/ui/ask-view.ts";
 
@@ -47,12 +48,11 @@ export interface Capture {
   lines: string[];
 }
 
-function model(extra: Partial<ShellBarModel> = {}): ShellBarModel {
-  return {
-    cwd: `${HOME}/src/lumen`, branch: "feat/invoice-export", sessionName: "export invoices as CSV",
-    modelId: "claude-opus-5-5", effort: "high", contextPercent: 38, contextWindow: 200_000, costTotal: 1.84, subscription: true, ...extra,
-  };
-}
+/** The bars' data: the invented project ~/src/lumen mid-change, in the sandbox. */
+const BARS: BarModel = {
+  cwd: `${HOME}/src/lumen`, branch: "feat/csv-export", sandbox: "on",
+  modelId: "claude-opus-5-5", effort: "high", contextPercent: 38, contextWindow: 200_000, costTotal: 1.84, subscription: true,
+};
 
 /** A change in the shape `jhon status --json` reports (as ui-ldd-status.test.ts builds it). */
 const LDD = lddFromStatus("invoice-csv-export", {
@@ -68,7 +68,7 @@ const LDD = lddFromStatus("invoice-csv-export", {
   tests: { timestamp: "2026-11-16T09:52:00Z", passed: true, failed: [], scope: "affected" },
 })!;
 
-const JOBS: NonNullable<ShellBarModel["jobs"]> = [
+const JOBS: RunningJobDisplay[] = [
   { id: "agent-1", kind: "agent", label: "jhon-builder: stream to the response", startedAt: NOW - 252_000, tokens: 48_200, step: "bash · go test ./export/..." },
   { id: "agent-2", kind: "agent", label: "jhon-scout: where invoices are read", startedAt: NOW - 95_000, tokens: 12_900 },
   { id: "agent-3", kind: "agent", label: "reviewer: slice 1", startedAt: NOW - 900_000, endedAt: NOW - 30_000, status: "completed", exitCode: 0 },
@@ -171,16 +171,17 @@ export async function captures(theme: MediaTheme): Promise<Capture[]> {
   const wide = 112;
   const out: Capture[] = [];
 
-  const bar = model({ jobs: JOBS, ldd: LDD });
+  // The top row and the status bar as a terminal `wide` columns wide gets them
+  // (the status bar's narrow form, under 140), a blank row between them.
   out.push({
     name: "shell-bar", title: "the shell's bars", cols: wide,
-    lines: [...renderShellTitleRows(bar, theme, wide, HOME), ...renderShellStatusBar(bar, theme, wide, { jobs: true }).rows],
+    lines: [renderTopRow(BARS, theme, wide, { home: HOME }), "", renderStatusBar(BARS, theme, wide)],
   });
 
   const rail = 58;
   out.push({
     name: "ldd-status", title: "LDD status", cols: rail,
-    lines: renderShellStatusSections(model({ ldd: LDD }), theme, rail),
+    lines: renderShellStatusSections({ ldd: LDD }, theme, rail),
   });
 
   out.push({

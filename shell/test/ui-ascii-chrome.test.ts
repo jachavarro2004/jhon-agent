@@ -1,8 +1,7 @@
 /**
  * shell.appearance.ascii reaches every chrome piece forked from the Gentle
  * Shell (T15.12g, inventory row 79): the prompt rule and the card prompt, the
- * title row (力 reads jhon), the status bar and the regular bar with their
- * separators and meters, the LDD rows, the TODOS, JOBS and AGENTS sections
+ * top row and the status bar (T174-S3) with their dividers and meter, the LDD rows, the TODOS, JOBS and AGENTS sections
  * and a notice's title draw nothing outside 0x20-0x7e, in the
  * forms design/system.md's glyph table gives, at 160 and 100 columns.
  *
@@ -12,7 +11,8 @@ import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { renderShellAgentsSection, renderShellBar, renderShellChromeBar, renderShellJobsSection, renderShellStatusBar, renderShellStatusSections, renderShellTitleRow, renderShellTitleRows, type ShellBarModel } from "../lib/ui/shell-bar.ts";
+import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusSections, type ShellBarModel } from "../lib/ui/shell-bar.ts";
+import { renderStatusBar, renderTopRow, type BarModel } from "../lib/ui/bars.ts";
 import { CARD_STYLE, renderCard, setCardStyle, cardStyle, CARD_TONE } from "../lib/ui/primitives/index.ts";
 import { framePromptLines, PROMPT_STATE, resolvePromptLayout } from "../lib/ui/shell-prompt.ts";
 import { renderTodoRail } from "../extensions/todo.ts";
@@ -53,6 +53,10 @@ const model = (overrides: Partial<ShellBarModel> = {}): ShellBarModel => ({
 	},
 	...overrides,
 });
+const bars: BarModel = {
+	cwd: "/home/owner/code/jhon", branch: "feat/shell-gentle", sandbox: "on", modelId: "claude-opus-5-5", effort: "high", profile: "jhon",
+	contextPercent: 85, contextWindow: 1_000_000, costTotal: 1.25, subscription: true, mode: "yolo",
+};
 const todos = { tasks: [
 	{ id: 1, title: "Read the rail", status: "done" },
 	{ id: 2, title: "Cards → ASCII", status: "in_progress", note: "the todo rows · its notes" },
@@ -81,32 +85,27 @@ test("the prompt rule, the neon card prompt and the float card prompt draw in AS
 	}
 });
 
-test("the title row and the title rows draw in ASCII, the brand 力 as jhon, each still exactly the width", (t) => {
+test("the top row draws in ASCII without the brand mark, exactly the width (L165: never jhon jhon)", (t) => {
 	ascii(t);
 	for (const width of WIDTHS) {
-		const row = renderShellTitleRow(model(), plain, width, "/home/owner");
-		pureAscii(`title row ${width}`, [row]);
+		const row = renderTopRow(bars, plain, width, { home: "/home/owner" });
+		pureAscii(`top row ${width}`, [row]);
 		assert.equal(visibleWidth(row), width);
-		assert.equal(stripAnsi(row).slice(0, 20), " jhon  ~/code/jhon  ", "no brand before the name: never jhon jhon (L165)");
-		pureAscii(`title row with the model ${width}`, [renderShellTitleRow(model(), plain, width, "/home/owner", { model: true })]);
-		pureAscii(`title rows ${width}`, renderShellTitleRows(model(), plain, width, "/home/owner"));
-		pureAscii(`narrow title row ${width}`, [renderShellTitleRow(model(), plain, 40, "/home/owner", { model: true })]);
+		assert.equal(stripAnsi(row).slice(0, 20), " jhon  ~/code/jhon  ", "no brand before the name");
+		pureAscii(`narrow top row ${width}`, [renderTopRow(bars, plain, 12, { home: "/home/owner" })]);
 	}
 });
 
-test("the status bar, the chrome bar and the regular bar draw their separators and meters in ASCII", (t) => {
+test("the status bar draws its dividers, branch mark and meter in ASCII, wide and in the narrow form", (t) => {
 	ascii(t);
 	for (const width of WIDTHS) {
-		const bar = renderShellStatusBar(model(), plain, width, { jobs: true });
-		pureAscii(`status bar ${width}`, bar.rows);
-		assert.match(stripAnsi(bar.rows[0]!), / \| /, "the divider reads |");
-		assert.match(stripAnsi(renderShellStatusBar(model(), plain, 200, { jobs: true }).rows[0]!), /ctx #+-* 85%/, "the meter reads # and -");
-		pureAscii(`chrome bar ${width}`, renderShellChromeBar(model(), plain, width).rows);
-		pureAscii(`narrow status bar ${width}`, renderShellStatusBar(model(), plain, 60, { jobs: true, modelDetails: false }).rows);
-		const regular = renderShellBar(model({ cwd: "~/code/jhon" }), plain, width);
-		pureAscii(`regular bar ${width}`, regular);
-		assert.match(stripAnsi(regular[0]!), /^jhon \| \S/, "the brand reads jhon, ⟡ reads |");
+		const row = renderStatusBar(bars, plain, width);
+		pureAscii(`status bar ${width}`, [row]);
+		assert.equal(visibleWidth(row), width);
+		assert.match(stripAnsi(row), /^ @ feat\/sh\S+ \| sandbox on \| YOLO /, "⎇ reads @, │ reads |");
+		pureAscii(`status bar at 30, ${width}`, [renderStatusBar(bars, plain, 30)]);
 	}
+	assert.match(stripAnsi(renderStatusBar(bars, plain, 200)), /ctx #+-* 85%/, "the meter reads # and -");
 });
 
 test("the Status sections and the LDD rows draw in ASCII", (t) => {

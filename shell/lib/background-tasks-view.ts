@@ -19,7 +19,7 @@ import { Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi, type 
 import type { AgentRun, JobRecord, TaskRecord, ThreadItem } from "./background-tasks.ts";
 import { formatTaskDuration, taskOutcome, taskSucceeded } from "./background-tasks-tools.ts";
 import { measureAgentsViewLayout, type AgentsViewLayout } from "./ui/agents-view-layout.ts";
-import { formatCost, formatTokens } from "./ui/shell-bar.ts";
+import { formatCost, formatTokens } from "./ui/bars.ts";
 import { sanitizeTerminalText } from "./ui/terminal-theme.ts";
 import { STATES } from "./ui/primitives/states.ts";
 import { THEME_NAME } from "./ui/primitives/paint.ts";
