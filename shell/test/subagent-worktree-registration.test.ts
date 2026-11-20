@@ -1,9 +1,10 @@
 /**
  * T132: the `subagent` tool registers the worktree it creates or is given as
  * one of the session's roots, through the session's worktree registry, for a
- * child that answers in the call and for one that runs in the background; so
- * what the child commits there is among the session's changes. A child in the
- * session's own folder adds no root.
+ * child that answers in the call and for one that runs in the background,
+ * with the commit its HEAD was at (its base); the LDD section looks there for
+ * the change the child works on. A child in the session's own folder adds no
+ * root.
  */
 import "./isolated-env.ts";
 import assert from "node:assert/strict";
@@ -14,10 +15,8 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test, { after } from "node:test";
 import jhon, { CONFIG_FILE } from "../extensions/jhon.ts";
-import { shellGitRunner } from "../extensions/ui.ts";
 import { SESSION_WORKTREE_ENTRY } from "../lib/ui/session-worktree-registry.ts";
 import { sessionChangeRoots, sessionRootBases } from "../lib/ui/session-changes.ts";
-import { WorktreeChangesTracker } from "../lib/ui/shell-changes.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HOOK_BIN = process.env.JHON_TEST_BIN || join(REPO, "build", "jhon");
@@ -94,28 +93,26 @@ function setup(cwd: string, child = false) {
 	};
 	const textOf = (r: any) => r.content.map((c: any) => c.text).join("\n");
 	const registered = () => entries.filter((entry) => entry.customType === SESSION_WORKTREE_ENTRY).map((entry) => entry.data);
-	/** The session's changes as the shell's tracker reads them from these entries. */
-	const changes = async () => {
-		const runner = (root: string) => shellGitRunner(root);
-		const tracker = new WorktreeChangesTracker(runner(cwd), runner, undefined, () => sessionChangeRoots("parent", entries).filter((root) => existsSync(join(root, ".git"))), undefined, () => sessionRootBases("parent", entries));
-		await tracker.start();
-		return Object.fromEntries(tracker.worktrees.map((tree) => [tree.root, tree.model.files.map((file) => `${file.status} ${file.path} +${file.added} -${file.deleted}`)]));
+	/** The session's roots that exist, each with its base, as the shell reads them from these entries. */
+	const roots = () => {
+		const bases = sessionRootBases("parent", entries);
+		return Object.fromEntries(sessionChangeRoots("parent", entries).filter((root) => existsSync(join(root, ".git"))).map((root) => [root, bases.get(root)]));
 	};
-	return { run, textOf, registered, changes, sent };
+	return { run, textOf, registered, roots, sent };
 }
 
 async function until(check: () => boolean): Promise<void> {
 	for (const deadline = Date.now() + 10_000; !check(); await new Promise((r) => setTimeout(r, 20))) if (Date.now() > deadline) throw new Error("timed out waiting");
 }
 
-test("a sub-agent that answers in the call: the worktree the tool creates for it is one of the session's roots, with its base, and what it commits there is the session's change", async () => {
+test("a sub-agent that answers in the call: the worktree the tool creates for it is one of the session's roots, with its base", async () => {
 	const { repo, head } = layout();
 	const s = setup(repo, true);
 	const answer = s.textOf(await s.run({ agent: "explore", task: "write the slice", worktree: true }));
 	const created = /^committed in (\S+)$/m.exec(answer)?.[1];
 	assert.ok(created && dirname(created) === `${repo}-worktrees`, answer);
 	assert.deepEqual(s.registered(), [{ sessionId: "parent", root: created, evidence: "subagent:spawn", base: head }]);
-	assert.deepEqual(await s.changes(), { [created]: ["added slice.txt +2 -0"] }, "its commit left git status clean, and still counts");
+	assert.deepEqual(s.roots(), { [created]: head }, "a session root, against the commit it started from");
 });
 
 test("a sub-agent that answers in the call: the worktree it is given (cwd) is registered once, however many children run there", async () => {
@@ -125,7 +122,7 @@ test("a sub-agent that answers in the call: the worktree it is given (cwd) is re
 	assert.deepEqual(s.registered(), [{ sessionId: "parent", root: tree, evidence: "subagent:spawn", base: head }]);
 	await s.run({ agent: "explore", task: "again", cwd: join(tree, ".") });
 	assert.equal(s.registered().length, 1, "the same root is not registered twice");
-	assert.deepEqual(await s.changes(), { [tree]: ["added slice.txt +2 -0"] });
+	assert.deepEqual(s.roots(), { [tree]: head });
 });
 
 test("a background sub-agent: its worktree is registered when it starts, before it has answered", async () => {
@@ -139,7 +136,7 @@ test("a background sub-agent: its worktree is registered when it starts, before 
 	// The child works after the call returned: wait for its commit.
 	await until(() => git(created, "rev-list", "--count", "HEAD") === "2");
 	assert.equal(readFileSync(join(created, "slice.txt"), "utf8"), "one\ntwo\n");
-	assert.deepEqual(await s.changes(), { [created]: ["added slice.txt +2 -0"] });
+	assert.deepEqual(s.roots(), { [created]: head });
 });
 
 test("a sub-agent in the session's own folder adds no root, and a folder of another repository is still refused and registers nothing", async () => {

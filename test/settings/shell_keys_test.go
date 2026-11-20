@@ -8,31 +8,9 @@ import (
 	"github.com/jachavarro2004/jhon-agent/test/support"
 )
 
-// T167 (L1437, L1438): alt+u is the setting shell.keys.usage, and
-// JHON_SHELL_USAGE_KEY still sets it; shell.keys.tasks is shell.keys.agents,
-// an old file's value read under the new key and moved there by migrate.
+// T167 (L1437, L1438): shell.keys.tasks is shell.keys.agents, an old
+// file's value read under the new key and moved there by migrate.
 const tasksWhy = "the key opens /jhon:agents, so it is shell.keys.agents now"
-
-func TestTheUsageKeyIsASettingEndToEnd(t *testing.T) {
-	h := newHome(t)
-	l := list(t, h, h.dir)
-	if r, ok := find(l, "shell.keys.usage"); !ok || r.Value != "alt+u" || r.Source != "default" {
-		t.Errorf("shell.keys.usage = %+v (%v), want alt+u by default", r, ok)
-	}
-	env := newHome(t, "JHON_SHELL_USAGE_KEY=ctrl+shift+u")
-	if r, _ := find(list(t, env, env.dir), "shell.keys.usage"); r.Value != "ctrl+shift+u" || r.Source != "env" || r.Env != "JHON_SHELL_USAGE_KEY" {
-		t.Errorf("from the variable: %+v", r)
-	}
-	if r := h.jhon(t, "set", "shell.keys.usage", "alt+o"); r.Code != 0 {
-		t.Fatalf("set: %d\n%s", r.Code, r.Out())
-	}
-	if r := h.jhon(t, "get", "shell.keys.usage"); r.Code != 0 || strings.TrimSpace(r.Stdout) != "alt+o" {
-		t.Errorf("get: %d %q", r.Code, r.Out())
-	}
-	if r := h.jhon(t, "list"); strings.Contains(r.Stderr, "usage") {
-		t.Errorf("list warns about the usage key: %q", r.Stderr)
-	}
-}
 
 func TestTheTasksKeyMovesToAgentsEndToEnd(t *testing.T) {
 	h := newHome(t)
@@ -93,6 +71,56 @@ func TestThePaletteAndSheetKeysAreRetiredEndToEnd(t *testing.T) {
 	}
 	if strings.Contains(r.Stdout, "shell.keys.rail") || strings.Contains(r.Stdout, "shell.keys.commands") || strings.Contains(r.Stdout, "JHON_SHELL_RAIL_KEY") {
 		t.Errorf("list shows a retired key as a setting:\n%s", r.Stdout)
+	}
+	for key, w := range why {
+		for _, args := range [][]string{{"get", key}, {"set", key, "alt+x"}} {
+			if r := h.jhon(t, args...); r.Code != 2 || !strings.Contains(r.Stderr, key+": removed in v0.4: "+w) {
+				t.Errorf("%s: %d %q, want 2 and removed in v0.4", strings.Join(args, " "), r.Code, r.Out())
+			}
+		}
+	}
+	if support.Read(t, h.file()) != old {
+		t.Fatal("list or a refused set wrote the file")
+	}
+	if r := h.jhon(t, "migrate"); r.Code != 0 || !strings.Contains(r.Stdout, "backup:") {
+		t.Fatalf("migrate: %d\n%s", r.Code, r.Out())
+	}
+	if now, want := support.Read(t, h.file()), "schema = 1\n\n[integrations]\ntelemetry = false\n"; now != want {
+		t.Errorf("after migrate:\n%s\nwant:\n%s", now, want)
+	}
+}
+
+// T174 (L1462, L1469): the changes view, the usage view and the todo card are
+// gone, and shell.keys.changes, shell.keys.usage and shell.keys.todos with
+// them, retired as the palette keys were: list warns once and leaves the
+// file, get and set exit 2 saying removed in v0.4, migrate drops them with a
+// backup.
+func TestTheChangesUsageAndTodosKeysAreRetiredEndToEnd(t *testing.T) {
+	h := newHome(t, "JHON_SHELL_USAGE_KEY=ctrl+u")
+	old := "schema = 1\n\n[shell.keys]\nchanges = \"alt+g\"\nusage = \"alt+y\" # mine\ntodos = \"off\"\n\n[integrations]\ntelemetry = false\n"
+	support.Write(t, filepath.Join(h.config, "jhon"), map[string]string{"settings.toml": old})
+	why := map[string]string{
+		"shell.keys.changes": "the changes view (/jhon:changes) was removed from the shell",
+		"shell.keys.usage":   "the usage view (/jhon:usage) was removed from the shell; the dashboard has the stats",
+		"shell.keys.todos":   "the todo card and its keys were removed; the agent's list shows in the right pane while no LDD change is active",
+	}
+	r := h.jhon(t, "list")
+	if r.Code != 0 {
+		t.Fatalf("a file with the old keys must still load: %d\n%s", r.Code, r.Out())
+	}
+	for _, line := range []string{
+		`shell.keys.changes = "alt+g" is no longer read: ` + why["shell.keys.changes"],
+		`shell.keys.usage = "alt+y" is no longer read: ` + why["shell.keys.usage"],
+		`shell.keys.todos = "off" is no longer read: ` + why["shell.keys.todos"],
+	} {
+		if n := strings.Count(r.Stderr, line); n != 1 {
+			t.Errorf("list warns %d times, want once: %q\n%s", n, line, r.Stderr)
+		}
+	}
+	for _, gone := range []string{"shell.keys.changes", "shell.keys.usage", "shell.keys.todos", "JHON_SHELL_USAGE_KEY"} {
+		if strings.Contains(r.Stdout, gone) {
+			t.Errorf("list shows %s as a setting:\n%s", gone, r.Stdout)
+		}
 	}
 	for key, w := range why {
 		for _, args := range [][]string{{"get", key}, {"set", key, "alt+x"}} {

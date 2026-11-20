@@ -13,7 +13,6 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { shellGitRunner } from "../extensions/ui.ts";
 import { folderlessRecordDir, lddInWorktrees, lddLanes, lddWatchTargets } from "../lib/ui/ldd-status.ts";
 import { projectRoot } from "../lib/memory.ts";
 
@@ -36,24 +35,6 @@ function logged(fn: () => unknown): Promise<string[]> {
 	return Promise.resolve().then(fn).finally(() => { process.env.PATH = path; })
 		.then(() => existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : []);
 }
-
-test("the shell's git runner sets GIT_OPTIONAL_LOCKS=0 and still drops the other GIT_* variables", async () => {
-	const envs: Array<NodeJS.ProcessEnv | undefined> = [];
-	const run = ((_c: string, _a: readonly string[], options: { env?: NodeJS.ProcessEnv }, callback: (e: Error | null, out: string, err: string) => void) => {
-		envs.push(options.env);
-		callback(null, "", "");
-	}) as unknown as typeof import("node:child_process").execFile;
-	const git = shellGitRunner("/repo", { PATH: "/bin", GIT_DIR: "/elsewhere", GIT_INDEX_FILE: "/x" }, run);
-	await git(["status", "--porcelain=v1", "--untracked-files=all", "-z"]);
-	await git(["diff", "HEAD", "--", "a"]);
-	assert.equal(envs.length, 2);
-	for (const env of envs) {
-		assert.equal(env?.GIT_OPTIONAL_LOCKS, "0");
-		assert.equal(env?.GIT_DIR, undefined);
-		assert.equal(env?.GIT_INDEX_FILE, undefined);
-		assert.equal(env?.PATH, "/bin");
-	}
-});
 
 test("the LDD status and the memory root read git with GIT_OPTIONAL_LOCKS=0", async () => {
 	const lines = await logged(async () => {

@@ -1,5 +1,4 @@
 import "./isolated-env.ts";
-import { renderTodoCard, type TodoState } from "../lib/ui/shell-todo.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CURSOR_MARKER, ScrollView, VStack, visibleWidth, type Component, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
@@ -41,28 +40,16 @@ function railWithHeader(f: ReturnType<typeof fixture>): ScrollView {
 	return hstackOf(f).entries[1].component as ScrollView;
 }
 
-test("grouped Status preserves structured fields and opaque integration text", (t) => {
+test("grouped Status keeps structured fields alone: no integration text, no usage, no session name (T174)", () => {
 	const painted = { ...theme, bg: (_color: string, text: string) => `\x1b[48;5;22m${text}\x1b[49m` };
-	{
-		const lines = renderShellStatusSections({
-			// A name no label holds: CHANGES' empty row says `no changes since session start` (T132).
-			cwd: "/project", branch: "main", dirty: 2, sessionName: "quarterly-notes",
-			modelId: "model", effort: "high", contextPercent: 45, contextWindow: 1000,
-			costTotal: 1, subscription: false, usage: undefined, statuses: ["opaque integration"],
-		}, painted, 46);
-		const text = lines.join("\n");
-		assert.match(text, /LDD[\s\S]*No active LDD change[\s\S]*INTEGRATIONS[\s\S]*opaque integration/);
-		assert.doesNotMatch(text, /Usage|quarterly-notes/, "neither usage nor the session's name is a Status field");
-	}
-});
-
-test("scrollable TODO keeps every task while bottom and collapsed cards stay bounded", () => {
-	const state: TodoState = { tasks: Array.from({ length: 20 }, (_, i) => ({ id: i + 1, title: `Task-${i + 1}!`, status: "pending" })), nextId: 21, updatedTurn: 0 };
-	const todoTheme = { ...theme, strikethrough: (text: string) => text };
-	const render = (scrollable: boolean, collapsed = false) => renderTodoCard(state, todoTheme, 46, { scrollable, collapsed, staleTurns: 0 }).join("\n");
-	for (const task of state.tasks) assert.ok(render(true).includes(task.title));
-	assert.ok(!render(false).includes("Task-20!"));
-	assert.ok(!render(true, true).includes("Task-20!"));
+	const lines = renderShellStatusSections({
+		cwd: "/project", branch: "main", sessionName: "quarterly-notes",
+		modelId: "model", effort: "high", contextPercent: 45, contextWindow: 1000,
+		costTotal: 1, subscription: false,
+	}, painted, 46);
+	const text = lines.join("\n");
+	assert.match(text, /LDD[\s\S]*No active LDD change/);
+	assert.doesNotMatch(text, /INTEGRATIONS|Usage|quarterly-notes/, "neither integrations, usage nor the session's name is a Status field");
 });
 
 test("installation on a missing-terminal host is a harmless no-op", () => {
@@ -251,7 +238,7 @@ test("rail orders its sections LDD first, then G's todo, jobs, agents and the re
 	}
 	sidebarSlot(f.tui, "ldd", { render: () => ["ldd", ""], invalidate() {} });
 	t.after(installSidebar(f.tui, theme));
-	assert.deepEqual(rail(f).render(50).map((line) => line.trim()), ["力 Jhon", "", "ldd", "", "todo", "", "jobs", "", "agents", "", "Status"]);
+	assert.deepEqual(rail(f).render(50).map((line) => line.trim()), ["ldd", "", "todo", "", "jobs", "", "agents", "", "Status"], "T174: no banner");
 });
 
 test("the rail is 50 columns at every width, as Gentle Shell's (C9)", (t) => {
@@ -323,23 +310,16 @@ test("sections: TODOS is a bounded section: the layout hands it no band room, it
 	assert.ok(seen.every((room) => room === undefined));
 });
 
-test("branding belongs to scroll content before Status, never transcript or narrow bottom", (t) => {
+// T174: the rail has no banner; the title row carries the brand.
+test("the rail has no banner: Status is its scroll content, never the transcript or the narrow bottom", (t) => {
 	const f = fixture();
 	t.after(installSidebar(f.tui, theme));
 	const scroll = rail(f);
 	const lines = scroll.render(50);
-	const brandIndex = lines.findIndex((line) => line.includes("力 Jhon"));
-	assert.ok(brandIndex >= 0 && brandIndex < lines.findIndex((line) => line.includes("Status")));
+	assert.doesNotMatch(lines.join("\n"), /力 Jhon/);
+	assert.equal(lines.findIndex((line) => line.includes("Status")), 0);
 	assert.doesNotMatch(lines.join("\n"), /[\u2800-\u28ff]/);
-	const heading = lines[brandIndex];
-	const usableWidth = scroll.getContentWidth(50) - 2;
-	const spare = usableWidth - visibleWidth("力 Jhon");
-	const scrollbarWidth = 50 - scroll.getContentWidth(50);
-	assert.equal(heading, " ".repeat(1 + Math.floor(spare / 2)) + "力 Jhon" + " ".repeat(1 + Math.ceil(spare / 2) + scrollbarWidth));
 	assert.deepEqual(f.root.render(), ["transcript"]);
-	scroll.updateLayout(lines.length, 2, () => {});
-	scroll.scrollBy(9);
-	assert.ok(scroll.scrollTop > 0);
 	f.host.terminal.columns = 80;
 	assert.equal(f.root[NODE]().type, "vstack");
 	assert.deepEqual(f.bottom.render(80), ["Status"]);
@@ -914,23 +894,23 @@ test("below the sidebar breakpoint a rule-like header paints above native layout
 	assert.deepEqual(f.bottom.render(139), ["Status"], "the status line keeps Status under the narrow top line");
 });
 
-test("without a registered header the rail keeps the banner and the plain hstack", (t) => {
+test("without a registered header the rail keeps the plain hstack, and no banner (T174)", (t) => {
 	const f = fixture();
 	t.after(installSidebar(f.tui, theme));
 	const node = f.root[NODE]() as unknown as { type: string };
 	assert.equal(node.type, "hstack");
 	const scroll = rail(f);
-	assert.match(scroll.render(50).join("\n"), /力 Jhon/);
+	assert.doesNotMatch(scroll.render(50).join("\n"), /力 Jhon/);
 });
 
-test("a header too narrow to show anything falls back to the plain hstack and the banner", (t) => {
+test("a header too narrow to show anything falls back to the plain hstack", (t) => {
 	const f = fixture();
 	sidebarHeader(f.tui, { render: () => [""], invalidate() {} });
 	t.after(installSidebar(f.tui, theme));
 	const node = f.root[NODE]() as unknown as { type: string };
 	assert.equal(node.type, "hstack", "a blank header line does not earn its own row");
 	const scroll = rail(f);
-	assert.match(scroll.render(50).join("\n"), /力 Jhon/);
+	assert.match(scroll.render(50).join("\n"), /Status/);
 });
 
 test("header content changes reach the header row while an unrelated part is untouched", (t) => {

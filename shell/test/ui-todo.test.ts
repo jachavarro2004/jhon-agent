@@ -5,19 +5,14 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { convertToLlm, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
-import jhonTodo, { todoCollapseKey, todoEnabled } from "../extensions/todo.ts";
+import jhonTodo, { todoEnabled } from "../extensions/todo.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { sidebarState } from "../lib/ui/shell-sidebar.ts";
-import { installSidebar } from "../lib/ui/shell-sidebar-layout.ts";
 import { lddFromStatus, selectChange, shareSelection } from "../lib/ui/ldd-status.ts";
 import { renderShellStatusSections } from "../lib/ui/shell-bar.ts";
-import { renderLayoutFrame } from "@earendil-works/pi-tui/dist/layout.js";
-import { envOverrides, memorySettings } from "./fake-jhon-settings.ts";
 
-// The settings `jhon settings` would give the shell under an environment (S38).
-const envSettings = (env: NodeJS.ProcessEnv) => memorySettings({}, undefined, envOverrides(env));
 
-// The todo extension: the `todo` tool, the card above the editor,
+// The todo extension: the `todo` tool, its list in the right pane (T174),
 // the per-turn prompt block, and the staleness signal, driven by fakes.
 
 type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
@@ -85,252 +80,16 @@ function fakeContext(branch: unknown[] = [], hasUI = true) {
 			},
 		},
 	} as unknown as ExtensionContext;
-	const widgetComponent = () => {
+	// T174 (L1469): the list is the right pane's TODOS section alone; nothing renders above the prompt.
+	const widget = () => {
 		const factory = widgets.get("jhon-todo");
-		return factory?.(fakeTui, plainTheme);
+		if (!factory) return undefined;
+		const tui = { ...fakeTui, terminal: { rows: 48, columns: 180 } };
+		assert.deepEqual(factory(tui, plainTheme).render(70), [], "nothing above the prompt");
+		return sidebarState(tui as never).parts.get("todo")!.render(70).map(stripAnsi);
 	};
-	const widget = () => widgetComponent()?.render(70).map(stripAnsi);
-	return { ctx, widgets, widget, widgetComponent };
+	return { ctx, widgets, widget };
 }
-
-test("long Todo widgets stay bounded, scroll, resize and keep their collapse control in mobile and sidebar", async () => {
-	for (const style of ["sections"]) {
-		const { pi, tools, fire, shortcuts } = fakePi();
-		jhonTodo(pi, {});
-		const { ctx, widgets } = fakeContext();
-		await fire("session_start", ctx);
-		const title = "long active title ".repeat(150);
-		const note = "description ".repeat(150);
-		const result = await tools.get("todo")!.execute("write", { action: "write", tasks: [{ title, note, status: "in_progress" }, { title: "LAST TASK" }] }, undefined, undefined, ctx);
-		await fire("tool_execution_end", ctx, { toolName: "todo" });
-		const tui = { requestRender() {}, terminal: { rows: 30, columns: 40 } };
-		const theme = { ...plainTheme, bg: (_color: string, text: string) => `\x1b[48;5;22m${text}\x1b[49m` };
-		const bottom = widgets.get("jhon-todo")!(tui, theme);
-		const rail = sidebarState(tui as never).parts.get("todo")!;
-		// The card above the prompt floats (its header on row 1); the rail's section has its header on row 0.
-		for (const [component, header, title] of [[bottom, 1, /Todos ▾ Collapse/], [rail, 0, /▾ TODOS/]] as const) {
-			const before = component.render(40).map(stripAnsi);
-			assert.ok(before.length <= 10, "card uses at most one third of terminal height");
-			// G's position row: where the view is, and the key that scrolls the todos (L136).
-			// T165: alt+PgUp/PgDn, as pi 1.5.2 keeps ctrl+shift+↑/↓ for its message jump.
-			const hint = before.find((row) => row.includes("alt+PgUp/PgDn"))!;
-			assert.match(hint, /^ *↑↓ 1–\d+\/\d+ · alt\+PgUp\/PgDn/, `${style}: the position and the key: ${JSON.stringify(hint)}`);
-			assert.ok(!before.some((row) => row.includes("ctrl+shift")), "pi's key is not offered");
-			assert.match(before[header]!, title);
-			assert.equal(component.handleMouse?.({ type: "wheel", button: "none", wheelDelta: 10000, x: 5, y: header + 2, screenX: 5, screenY: 5, width: 40, height: before.length, shift: false, alt: false, ctrl: false })?.handled, true);
-			const after = component.render(40).map(stripAnsi);
-			assert.match(after[header]!, title);
-			assert.match(after.join("\n"), /LAST TASK/, "all details remain reachable by scrolling");
-			assert.notDeepEqual(after, before);
-		}
-		tui.terminal.rows = 24;
-		assert.ok(bottom.render(40).length <= 8, "height responds to resize");
-		await shortcuts.get("alt+t")!.handler(ctx);
-		const collapsed = bottom.render(40).map(stripAnsi);
-		assert.ok(collapsed.length <= 6, `${style}: a collapsed card stays small: ${JSON.stringify(collapsed)}`);
-		assert.match(collapsed[1]!, /Todos ▸ Expand/, "folded: G's card names its control");
-		assert.equal((result.details.jhonTodo as { tasks: { title: string; note: string }[] }).tasks[0].title, title.trim());
-		assert.equal((result.details.jhonTodo as { tasks: { title: string; note: string }[] }).tasks[0].note, note.trim());
-		await shortcuts.get("alt+t")!.handler(ctx);
-		await shortcuts.get("alt+pageDown")!.handler(ctx);
-		assert.notDeepEqual(bottom.render(40), collapsed, "keyboard scrolling is available without mouse");
-	}
-});
-
-// T15.12c slice 4: under the narrow chrome the TODOS card above the prompt
-// steps aside and the rail part offers the work row its digest, as the
-// Gentle Shell's (`◐ <task in progress>` and `done/planned todos`).
-test("the TODOS card above the prompt steps aside while the work folds into the work row, whose digest the rail part gives (T15.12c)", async () => {
-	const { pi, tools, fire } = fakePi();
-	jhonTodo(pi, {});
-	const { ctx, widgets } = fakeContext();
-	await fire("session_start", ctx);
-	await tools.get("todo")!.execute("w", { action: "write", tasks: [{ title: "Write the sheet", status: "in_progress" }, { title: "Test it" }, { title: "Read G", status: "done" }] }, undefined, undefined, ctx);
-	await fire("tool_execution_end", ctx, { toolName: "todo" });
-	const tui = { requestRender() {}, terminal: { rows: 30, columns: 100 } };
-	const bottom = widgets.get("jhon-todo")!(tui, plainTheme);
-	const state = sidebarState(tui as never);
-	const rail = state.parts.get("todo") as unknown as { summary(): { left: string; right?: string; rightLabel?: string } | undefined };
-	assert.deepEqual(rail.summary(), { left: "◐ Write the sheet", right: "1/3", rightLabel: "todos" });
-	assert.match(bottom.render(100).map(stripAnsi)[0]!, /Todos ▾ Collapse/, "no work row: the card above the prompt");
-	state.compactWork = () => true;
-	assert.deepEqual(bottom.render(100), [], "the work row carries it");
-	state.compactWork = () => false;
-	assert.match(bottom.render(100).map(stripAnsi)[0]!, /Todos ▾ Collapse/);
-});
-
-test("Todo keyboard scrolling targets the visible card after a cached sidebar breakpoint round-trip", async () => {
-	const node = Symbol.for("@earendil-works/pi-tui/layout-node");
-	for (const style of ["sections"]) {
-		const { pi, tools, fire, shortcuts } = fakePi();
-		jhonTodo(pi, {});
-		const { ctx, widgets } = fakeContext();
-		await fire("session_start", ctx);
-		// Longer than the rail's band (L141: TODOS takes the band's free rows), so it scrolls.
-		await tools.get("todo")!.execute("write", { action: "write", tasks: [{ title: Array.from({ length: 400 }, (_, i) => `TITLE${i}`).join(" "), status: "in_progress" }] }, undefined, undefined, ctx);
-		await fire("tool_execution_end", ctx, { toolName: "todo" });
-		const root = { render: () => [], invalidate() {}, [node]: () => ({ type: "vstack", entries: [] }) };
-		const tui = { mode: "fullscreen", terminal: { rows: 30, columns: 160 }, layoutRoot: root, requestRender() {} };
-		const theme = { ...plainTheme, bold: (text: string) => text, bg: (_color: string, text: string) => `\x1b[48;5;22m${text}\x1b[49m` };
-		const bottom = widgets.get("jhon-todo")!(tui, theme);
-		const dispose = installSidebar(tui as unknown as TUI, theme);
-		try {
-			const railLines = () => {
-				const layout = root[node]() as unknown as { entries: { component: Component }[] };
-				return layout.entries[1]!.component.render(50).map(stripAnsi);
-			};
-			railLines();
-			tui.terminal.columns = 40;
-			root[node]();
-			bottom.render(40);
-			tui.terminal.columns = 160;
-			const before = railLines();
-			await shortcuts.get("alt+pageDown")!.handler(ctx);
-			const after = railLines();
-			assert.notDeepEqual(after, before, "DOWN changes the visible cached rail, not the hidden bottom widget");
-			// DOWN moves the viewport three rows: the first changed row now shows what was three rows lower.
-			const moved = after.findIndex((row, index) => row !== before[index]);
-			assert.ok(moved >= 0 && before[moved + 3] !== undefined && after[moved] === before[moved + 3], `scrolled by three rows: ${JSON.stringify({ before, after })}`);
-			await shortcuts.get("alt+pageUp")!.handler(ctx);
-			assert.deepEqual(railLines(), before, "UP restores the expanded viewport");
-		} finally {
-			dispose();
-		}
-	}
-});
-
-test("sections: TODOS is bounded in the rail as above the prompt, a third of the screen and at most 16 rows, scrolling past them (C10)", async (t) => {
-	const node = Symbol.for("@earendil-works/pi-tui/layout-node");
-	const tasks = Array.from({ length: 21 }, (_, i) => ({ title: `Task-${i + 1}`, status: i === 0 ? "in_progress" : "pending" }));
-	const theme = { ...plainTheme, bold: (text: string) => text, bg: (_color: string, text: string) => `\x1b[48;5;22m${text}\x1b[49m` };
-	const start = async (rows: number) => {
-		const { pi, tools, fire, shortcuts } = fakePi();
-		jhonTodo(pi, {});
-		const { ctx, widgets } = fakeContext();
-		await fire("session_start", ctx);
-		await tools.get("todo")!.execute("write", { action: "write", tasks }, undefined, undefined, ctx);
-		await fire("tool_execution_end", ctx, { toolName: "todo" });
-		const root = { render: () => [], invalidate() {}, [node]: () => ({ type: "vstack", entries: [] }) };
-		const tui = { mode: "fullscreen", terminal: { rows, columns: 160 }, layoutRoot: root, requestRender() {} };
-		widgets.get("jhon-todo")!(tui, theme);
-		t.after(installSidebar(tui as unknown as TUI, theme));
-		const frame = () => renderLayoutFrame(root as never, 160, rows, () => {}).lines.map(stripAnsi);
-		return { ctx, shortcuts, frame };
-	};
-	const tall = (await start(60)).frame();
-	const card = tall.filter((line) => /Task-\d+\b|TODOS|╰─|alt\+PgUp/.test(line));
-	assert.ok(card.length <= 16, `at most 16 rows even in a tall band: ${card.length}`);
-	assert.ok(!tall.some((line) => /Task-21\b/.test(line)), "the rest waits a scroll away");
-	assert.ok(tall.some((line) => line.includes("alt+PgUp/PgDn")), "an overflowing list shows the hint");
-	const short = await start(12);
-	const before = short.frame();
-	assert.ok(before.some((line) => line.includes("alt+PgUp/PgDn")), "a short band overflows: the hint shows");
-	assert.ok(!before.some((line) => /Task-21\b/.test(line)));
-	await short.shortcuts.get("alt+pageDown")!.handler(short.ctx);
-	assert.notDeepEqual(short.frame(), before, "alt+PgDn scrolls the list");
-	// The bottom widget above the prompt keeps its cap: a third of the screen, at most 16 rows.
-	const { pi, tools, fire } = fakePi();
-	jhonTodo(pi, {});
-	const { ctx, widgets } = fakeContext();
-	await fire("session_start", ctx);
-	await tools.get("todo")!.execute("write", { action: "write", tasks }, undefined, undefined, ctx);
-	await fire("tool_execution_end", ctx, { toolName: "todo" });
-	const bottom = widgets.get("jhon-todo")!({ requestRender() {}, terminal: { rows: 30, columns: 100 } }, theme);
-	const rows = bottom.render(100).map(stripAnsi);
-	assert.ok(rows.length <= 10, `the bottom widget stays within a third of 30 rows: ${rows.length}`);
-	assert.ok(rows.some((line) => line.includes("alt+PgUp/PgDn")));
-});
-
-test("todoEnabled and todoCollapseKey read their environment flags", () => {
-	assert.equal(todoEnabled({}), true);
-	assert.equal(todoEnabled({ JHON_SHELL_TODO: "0" }), false);
-	assert.equal(todoEnabled({ JHON_PI_CHILD: "1" }), false);
-	assert.equal(todoCollapseKey(envSettings({})), "alt+t", "terminals take ctrl+shift+t for a new tab");
-	assert.equal(todoCollapseKey(envSettings({ JHON_SHELL_TODO_KEY: "ctrl+o" })), "ctrl+o");
-	assert.equal(todoCollapseKey(envSettings({ JHON_SHELL_TODO_KEY: "off" })), undefined);
-	const off = fakePi();
-	jhonTodo(off.pi, { JHON_SHELL_TODO: "off" });
-	assert.equal(off.tools.size, 0);
-});
-
-test("todo registration owns its transparent transcript shell", () => {
-	const { pi, tools } = fakePi();
-	jhonTodo(pi, {});
-	assert.equal(tools.get("todo")?.renderShell, "self");
-});
-
-test("the todo tool writes the list, shows the card after the call, and carries the snapshot in details", async () => {
-	const { pi, tools, fire } = fakePi();
-	jhonTodo(pi, {});
-	const { ctx, widget } = fakeContext();
-	await fire("session_start", ctx);
-	assert.deepEqual(widget(), [], "no card without tasks");
-
-	const tool = tools.get("todo")!;
-	const result = await tool.execute("c1", { action: "write", tasks: [{ title: "Write the parser", status: "in_progress", note: "parsing" }, { title: "Add tests" }] }, undefined, undefined, ctx);
-	assert.match(result.content[0].text, /2 tasks · 0 done · 1 in progress/);
-	assert.equal((result.details.jhonTodo as { tasks: unknown[] }).tasks.length, 2);
-	await fire("tool_execution_end", ctx, { toolName: "todo" });
-	const lines = widget()!;
-	assert.match(lines[0], /^╭─ 力 Todos ▾ Collapse · 0 of 2 ─+ alt\+t collapse ╮$/);
-	assert.match(lines[1], /◐ Write the parser · parsing/);
-	assert.match(lines[2], /· Add tests/);
-	assert.equal(lines[lines.length - 1], "", "a blank line keeps the card off the prompt");
-
-	const bad = await tool.execute("c2", { action: "update", id: 9, status: "done" }, undefined, undefined, ctx);
-	assert.match(bad.content[0].text, /Error: no task #9/);
-	assert.equal(bad.details.error, "no task #9");
-	assert.match(tool.renderCall({ action: "write" }, plainTheme).render(40).join(""), /力 todo · write/);
-	assert.equal(tool.renderResult({ content: [{ type: "text", text: "a\nb" }] }, { expanded: false }, plainTheme).render(40).join("|").trimEnd(), "a");
-});
-
-test("the Todo header is a fullscreen left-click control while non-click pointer events stay inert", async () => {
-	const { pi, tools, fire } = fakePi();
-	jhonTodo(pi, {});
-	const { ctx, widgetComponent } = fakeContext();
-	await fire("session_start", ctx);
-	await tools.get("todo")!.execute("c1", { action: "write", tasks: [{ title: "A", status: "in_progress" }, { title: "B" }] }, undefined, undefined, ctx);
-	await fire("tool_execution_end", ctx, { toolName: "todo" });
-
-	const component = widgetComponent()!;
-	assert.match(stripAnsi(component.render(70)[0]!), /Todos ▾ Collapse/);
-	const event = (type: "press" | "click", button: "left" | "right", y = 0) => ({
-		type, button, x: 1, y, screenX: 1, screenY: y, width: 70, height: 5, shift: false, alt: false, ctrl: false,
-	});
-	assert.equal(component.handleMouse?.(event("press", "left")), undefined);
-	assert.equal(component.handleMouse?.(event("click", "right")), undefined);
-	assert.equal(component.handleMouse?.(event("click", "left", 1)), undefined);
-	assert.match(stripAnsi(component.render(70)[0]!), /Todos ▾ Collapse/, "only a left click on the header toggles");
-	assert.equal(component.handleMouse?.(event("click", "left"))?.handled, true);
-	assert.match(stripAnsi(component.render(70)[0]!), /Todos ▸ Expand/);
-});
-
-// H1 (odd/tasks/usage-click-and-changes-attribution.md): the header control
-// now paints the same shared hover role every other clickable surface uses.
-test("the Todo header paints the shared hover role while hovered, and clears it off the header row or on leave", async () => {
-	const { pi, tools, fire } = fakePi();
-	jhonTodo(pi, {});
-	const { ctx, widgetComponent } = fakeContext();
-	await fire("session_start", ctx);
-	await tools.get("todo")!.execute("c1", { action: "write", tasks: [{ title: "A" }] }, undefined, undefined, ctx);
-	await fire("tool_execution_end", ctx, { toolName: "todo" });
-	const component = widgetComponent()!;
-	const move = (y: number) => ({ type: "move" as const, button: "none" as const, x: 1, y, screenX: 1, screenY: y, width: 70, height: 5, shift: false, alt: false, ctrl: false });
-	assert.match(stripAnsi(component.render(70)[0]!), /Todos ▾ Collapse/);
-
-	const entered = component.handleMouse?.(move(0));
-	assert.deepEqual(entered, { handled: true, render: true });
-	assert.match(stripAnsi(component.render(70)[0]!), /Todos ▾ Collapse/, "the title is unchanged; only its role changes (not observable through plainTheme here)");
-
-	// Moving to another row of the card (still inside the region, but off the
-	// clickable header) clears the hover.
-	const movedOff = component.handleMouse?.(move(1));
-	assert.deepEqual(movedOff, { handled: true, render: true });
-
-	// Re-entering, then a second move at the same row is a no-op (already hovered).
-	component.handleMouse?.(move(0));
-	assert.deepEqual(component.handleMouse?.(move(0)), { handled: true });
-});
 
 // The nudges reach the model as a user-role message (pi's custom messages
 // convert to user text), so each carries the harness's frame (T42d).
@@ -363,6 +122,46 @@ async function workTurns(fire: ReturnType<typeof fakePi>["fire"], ctx: Extension
 		assert.equal(await fire("turn_end", ctx, toolTurn()), undefined, "a reminder never requests continuation");
 	}
 }
+
+// T174: JHON_SHELL_TODO is gone with the card; the tool is the agent's, and a
+// child has it only when its tools name it.
+test("todoEnabled: the main session always has the tool, a child only when its tools name it", () => {
+	assert.equal(todoEnabled({}), true);
+	assert.equal(todoEnabled({ JHON_SHELL_TODO: "0" }), true, "the variable is no longer read");
+	assert.equal(todoEnabled({ JHON_PI_CHILD: "1" }), false);
+	assert.equal(todoEnabled({ JHON_PI_CHILD: "1", JHON_PI_TOOLS: "read,todo" }), true);
+});
+
+test("todo registration owns its transparent transcript shell", () => {
+	const { pi, tools } = fakePi();
+	jhonTodo(pi, {});
+	assert.equal(tools.get("todo")?.renderShell, "self");
+});
+
+test("the todo tool writes the list, shows it in the right pane after the call, and carries the snapshot in details", async () => {
+	const { pi, tools, fire } = fakePi();
+	jhonTodo(pi, {});
+	const { ctx, widget } = fakeContext();
+	await fire("session_start", ctx);
+	assert.deepEqual(widget(), [], "no section without tasks");
+
+	const tool = tools.get("todo")!;
+	const result = await tool.execute("c1", { action: "write", tasks: [{ title: "Write the parser", status: "in_progress", note: "parsing" }, { title: "Add tests" }] }, undefined, undefined, ctx);
+	assert.match(result.content[0].text, /2 tasks · 0 done · 1 in progress/);
+	assert.equal((result.details.jhonTodo as { tasks: unknown[] }).tasks.length, 2);
+	await fire("tool_execution_end", ctx, { toolName: "todo" });
+	const lines = widget()!;
+	assert.match(lines[0], /^▾ TODOS +0\/2$/);
+	assert.match(lines[1], /◐ Write the parser · parsing/);
+	assert.match(lines[2], /· Add tests/);
+	assert.equal(lines.length, 3);
+
+	const bad = await tool.execute("c2", { action: "update", id: 9, status: "done" }, undefined, undefined, ctx);
+	assert.match(bad.content[0].text, /Error: no task #9/);
+	assert.equal(bad.details.error, "no task #9");
+	assert.match(tool.renderCall({ action: "write" }, plainTheme).render(40).join(""), /力 todo · write/);
+	assert.equal(tool.renderResult({ content: [{ type: "text", text: "a\nb" }] }, { expanded: false }, plainTheme).render(40).join("|").trimEnd(), "a");
+});
 
 test("runtime reminder arrives after four tool-use turns, only once, without changing todo state", async () => {
 	const { pi, tools, fire } = fakePi();
@@ -630,7 +429,7 @@ test("the todo tool's text stays short and keeps its rules", () => {
 	assert.ok(text.length <= 900, `the todo tool's text is ${text.length} chars`);
 });
 
-test("a changed list reaches the model as a persisted message (never a returned systemPrompt) and the card goes stale after two silent turns", async () => {
+test("a changed list reaches the model as a persisted message (never a returned systemPrompt) and goes stale after two silent turns", async () => {
 	const { pi, tools, fire } = fakePi();
 	jhonTodo(pi, {});
 	const { ctx, widget } = fakeContext();
@@ -644,16 +443,12 @@ test("a changed list reaches the model as a persisted message (never a returned 
 	assert.equal(withTasksResult.systemPrompt, undefined, "the handler must not return a replacement systemPrompt");
 	assert.match(session(withTasksEvent), /^## Todo list/);
 	assert.match(session(withTasksEvent), /1\. \[pending\] Fix the bug/);
-	assert.doesNotMatch(widget()![0], /stale/);
 
 	const staleEvent = promptEvent();
 	await fire("before_agent_start", ctx, staleEvent);
 	assert.match(session(staleEvent), /stale: 2 turns without an update/);
-	assert.match(widget()![1], /stale · 2 turns/);
-
-	await tools.get("todo")!.execute("c2", { action: "update", id: 1, status: "in_progress", note: "on it" }, undefined, undefined, ctx);
-	await fire("tool_execution_end", ctx, { toolName: "todo" });
-	assert.doesNotMatch(widget()![0], /stale/);
+	assert.match(widget()![0], /TODOS +0\/1$/);
+	assert.equal(widget()![1].trim(), "· Fix the bug");
 });
 
 test("before_agent_start is idempotent: a block the session's branch already carries is not sent again", async () => {
@@ -681,27 +476,23 @@ test("before_agent_start is idempotent: a block the session's branch already car
 	assert.equal(session(seededEvent), "", "a block already present must not be sent again");
 });
 
-test("a finished list stays for its turn and clears at the next, and the collapse key folds the card", async () => {
-	const { pi, tools, shortcuts, fire } = fakePi();
+test("a finished list stays for its turn and clears at the next", async () => {
+	const { pi, tools, fire } = fakePi();
 	jhonTodo(pi, {});
 	const { ctx, widget } = fakeContext();
 	await fire("session_start", ctx);
 	await tools.get("todo")!.execute("c1", { action: "write", tasks: [{ title: "A", status: "in_progress" }, { title: "B" }] }, undefined, undefined, ctx);
 	await fire("tool_execution_end", ctx, { toolName: "todo" });
-	await shortcuts.get("alt+t")!.handler(ctx);
-	assert.equal(widget()!.filter((line) => line.trim() !== "").length, 3, "folded: G's card holds the current task alone");
-	assert.match(widget()![0], /╭─ 力 Todos ▸ Expand /);
-	await shortcuts.get("alt+t")!.handler(ctx);
-	assert.match(widget()!.join("\n"), /◐ A/, "open again");
+	assert.match(widget()!.join("\n"), /◐ A/);
 
 	await tools.get("todo")!.execute("c2", { action: "write", tasks: [{ id: 1, title: "A", status: "done" }, { id: 2, title: "B", status: "done" }] }, undefined, undefined, ctx);
 	await fire("tool_execution_end", ctx, { toolName: "todo" });
 	await fire("agent_end", ctx);
-	assert.match(widget()![0], /Todos ▾ Collapse · 2 of 2 ─+ alt\+t collapse/, "the finished list is still visible at the end of its turn");
+	assert.match(widget()![0], /TODOS +2\/2$/, "the finished list is still visible at the end of its turn");
 	const next = await fire("before_agent_start", ctx, { systemPrompt: "base" }) as { systemPrompt?: string; message?: SentMessage };
 	assert.equal(next.systemPrompt, undefined, "no replacement systemPrompt");
 	assert.equal(next.message?.content, START_RULE, "nothing open: only the rule to start a list, as a message");
-	assert.deepEqual(widget(), [], "the card clears at the next turn");
+	assert.deepEqual(widget(), [], "the list clears at the next turn");
 });
 
 test("session_start replays the list from the branch, rpiv-todo results included, and counts past turns", async () => {
@@ -715,11 +506,11 @@ test("session_start replays the list from the branch, rpiv-todo results included
 	const { ctx, widget } = fakeContext(branch);
 	await fire("session_start", ctx);
 	const lines = widget()!;
-	assert.match(lines[0], /Todos ▾ Collapse · 0 of 1 ─+ alt\+t collapse/);
+	assert.match(lines[0], /TODOS +0\/1$/);
 	assert.match(lines[1], /◐ Old task · still going/);
 	const headless = fakeContext(branch, false);
 	await fire("session_start", headless.ctx);
-	assert.equal(headless.widget(), undefined, "no UI, no card");
+	assert.equal(headless.widget(), undefined, "no UI, no section");
 });
 
 test("session_start drops a list that was already finished, so a reload never shows stale done work", async () => {
@@ -757,7 +548,7 @@ test("a list left with only dropped tasks open finishes and clears; a blocked-on
 	await tools.get("todo")!.execute("c1", { action: "write", tasks: [{ title: "A", status: "done" }, { title: "Old plan", status: "dropped" }] }, undefined, undefined, ctx);
 	await fire("tool_execution_end", ctx, { toolName: "todo" });
 	await fire("agent_end", ctx);
-	assert.match(widget()![0], /Todos ▾ Collapse · 1 of 1 ─+ alt\+t collapse/);
+	assert.match(widget()![0], /TODOS +1\/1$/);
 	await fire("before_agent_start", ctx, promptEvent());
 	assert.deepEqual(widget(), [], "a done-and-dropped list clears at the next turn");
 
@@ -774,9 +565,9 @@ test("a list left with only dropped tasks open finishes and clears; a blocked-on
 	assert.match(widget()![2], /◉ Deploy · waiting for an admin/);
 });
 
-// L154 (the owner, reversing T49's slice in TODOS): the rail's TODOS shows
-// only the tasks the agent works through with the todo tool; the change's
-// tasks.md and its slices are the LDD section's alone, so nothing shows twice.
+// L154: the change's tasks.md and its slices are the LDD section's alone;
+// T174 (L1469): with a change shown the LDD section rules and TODOS hides,
+// so nothing shows twice.
 const CHANGE_STATUS = lddFromStatus("rail-redesign", { route: { level: "verified" }, next: "apply", tasks: { total: 3, completed: 1, slice: "Slice 1: rail", slices: [
 	{ name: "Slice 1: rail", total: 3, completed: 1, tasks: [{ text: "Read tasks", done: true }, { text: "Draw rows", done: false }, { text: "Docs", done: false }] },
 ] } });
@@ -788,26 +579,26 @@ function inChange(t: { after(fn: () => void): void }, status = CHANGE_STATUS) {
 	return withdraw;
 }
 
-test("inside a change TODOS lists only the agent's own tasks and LDD only the change's: nothing shows in both (L154)", async (t) => {
+test("inside a change TODOS hides and LDD shows only the change's tasks: nothing shows in both (L154, L1469)", async (t) => {
 	const { pi, tools, fire } = fakePi();
 	jhonTodo(pi, {});
 	const { ctx, widget } = fakeContext();
 	await fire("session_start", ctx);
-	assert.deepEqual(widget(), [], "no list: no card");
+	assert.deepEqual(widget(), [], "no list: no section");
 	inChange(t);
 	assert.deepEqual(widget(), [], "a change alone draws no TODOS: its tasks are the LDD section's");
 	await tools.get("todo")!.execute("w", { action: "write", tasks: [{ title: "write the test", status: "in_progress" }, { title: "fix tsc" }] }, undefined, undefined, ctx);
 	await fire("tool_execution_end", ctx, { toolName: "todo" });
-	const todos = widget()!.join("\n");
-	assert.match(todos, /Todos[\s\S]*0 of 2/);
-	assert.match(todos, /◐ write the test[\s\S]*fix tsc/);
-	assert.doesNotMatch(todos, /Read tasks|Draw rows|Docs|└|1\/3|rail-redesign|Slice/, "no task, slice or count of the change");
-	const ldd = renderShellStatusSections({ cwd: "/repo", branch: "main", dirty: 0, sessionName: undefined, modelId: "m", effort: undefined, contextPercent: 1, contextWindow: 1000, costTotal: 0, subscription: false, usage: undefined, statuses: [], ldd: CHANGE_STATUS }, { ...plainTheme, bold: (text: string) => text }, 60)
+	assert.deepEqual(widget(), [], "inside a change the LDD section rules: the list hides");
+	const ldd = renderShellStatusSections({ cwd: "/repo", branch: "main", sessionName: undefined, modelId: "m", effort: undefined, contextPercent: 1, contextWindow: 1000, costTotal: 0, subscription: false, ldd: CHANGE_STATUS }, { ...plainTheme, bold: (text: string) => text }, 60)
 		.map(stripAnsi).join("\n");
 	assert.match(ldd, /▾ LDD[\s\S]*◆ rail-redesign[\s\S]*on 1: rail/);
 	assert.doesNotMatch(ldd, /write the test|fix tsc/, "the agent's tasks are TODOS' alone");
 	selectChange("s1", undefined);
-	assert.equal(widget()!.join("\n"), todos, "outside a change, the same list");
+	const todos = widget()!.join("\n");
+	assert.match(todos, /TODOS +0\/2/);
+	assert.match(todos, /◐ write the test[\s\S]*fix tsc/);
+	assert.doesNotMatch(todos, /Read tasks|Draw rows|Docs|└|1\/3|rail-redesign|Slice/, "outside a change: the agent's own tasks, nothing of the change");
 });
 
 test("inside a change the main session still gets the start rule and the nudge: its own steps, never the change's tasks (T134, L1019)", async (t) => {
@@ -838,38 +629,11 @@ test("no todo text tells the agent to copy the change's tasks into the todo list
 	await workTurns(fire, ctx, 2);
 	const nudge = (await contextReminder(fire, ctx) as { message?: SentMessage } | undefined)?.message?.content ?? "";
 	const tool = tools.get("todo") as unknown as { description: string; promptSnippet: string; promptGuidelines: string[] };
-	const sources = ["../extensions/todo.ts", "../lib/ui/shell-todo.ts"].map((f) => readFileSync(new URL(f, import.meta.url), "utf8"));
+	const sources = ["../extensions/todo.ts", "../lib/todo.ts"].map((f) => readFileSync(new URL(f, import.meta.url), "utf8"));
 	for (const text of [tool.description, tool.promptSnippet, ...tool.promptGuidelines, session(event), nudge, ...sources]) {
 		assert.doesNotMatch(text, copies);
 	}
 	assert.ok(session(event) && nudge, "the rule and the nudge were read");
-});
-
-// L175 (5): TODOS idle reads as AGENTS idle does, in the rail and the sheet:
-// the header with `idle` as its count and one row `no tasks`; above the
-// prompt nothing shows, and the work row carries nothing.
-test("TODOS with no tasks shows its idle row in the rail, as AGENTS does; the card above the prompt stays away (L175)", async () => {
-	const { pi, tools, fire } = fakePi();
-	jhonTodo(pi, {});
-	const { ctx, widgets } = fakeContext();
-	await fire("session_start", ctx);
-	const tui = { requestRender() {}, terminal: { rows: 30, columns: 160 } };
-	const factory = widgets.get("jhon-todo");
-	assert.ok(factory, "the rail part is there with no tasks");
-	const bottom = factory!(tui, plainTheme);
-	const rail = sidebarState(tui as never).parts.get("todo")! as unknown as Component & { summary(): unknown };
-	const idle = rail.render(48).map(stripAnsi);
-	assert.match(idle[0]!, /^▾ TODOS +alt\+t {2}idle$/);
-	assert.deepEqual(idle.slice(1).map((row) => row.trim()), ["no tasks"]);
-	assert.deepEqual(bottom.render(100), [], "nothing above the prompt");
-	assert.equal(rail.summary(), undefined, "no work row for an empty list");
-	await tools.get("todo")!.execute("w", { action: "write", tasks: [{ title: "Write it", status: "in_progress" }] }, undefined, undefined, ctx);
-	await fire("tool_execution_end", ctx, { toolName: "todo" });
-	await tools.get("todo")!.execute("c", { action: "clear" }, undefined, undefined, ctx);
-	await fire("tool_execution_end", ctx, { toolName: "todo" });
-	const again = widgets.get("jhon-todo")!(tui, plainTheme);
-	assert.deepEqual(again.render(100), []);
-	assert.match(stripAnsi(sidebarState(tui as never).parts.get("todo")!.render(48)[0]!), /idle$/, "cleared, idle again");
 });
 
 // T146h L4 (L1277): a lean session (no change, or a small one) gets no start

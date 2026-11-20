@@ -78,11 +78,10 @@ test("oversized, binary, nonregular and missing snapshots are bounded and explic
 	} finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test("bounded captures mark partial counts, including the narrow widget", async () => {
-	const { renderChangesWidget } = await import("../lib/ui/shell-changes.ts");
+test("bounded captures mark partial counts", () => {
 	const changes = new SessionChanges("session");
-	changes.record({ ...evidence("large", "/repo", "a-very-long-path-that-does-not-fit-in-the-widget.bin"), before: {kind:"unavailable",reason:"Binary file"}, after:{kind:"unavailable",reason:"Binary file"} });
-	assert.match(renderChangesWidget(changes.model,{fg:(_color,text)=>text},75).join("\n"),/partial counts/);
+	changes.record({ ...evidence("large", "/repo", "a-very-long-path.bin"), before: {kind:"unavailable",reason:"Binary file"}, after:{kind:"unavailable",reason:"Binary file"} });
+	assert.equal(changes.model.files[0]?.countsUnavailable, "Binary file");
 });
 
 test("malformed evidence is rejected", () => {

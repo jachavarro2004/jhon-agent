@@ -7,8 +7,7 @@
  *             STATUS expanded (jhon-panel-change.ts): its route, risk and
  *             why, slices, the open slice's tasks, notes and last run. t
  *             runs its tests in the background and shows their end here
- *             (jhon-panel-tests.ts), d opens alt+g on its worktree, o its
- *             tasks.md.
+ *             (jhon-panel-tests.ts), o opens its tasks.md.
  *   grants    /jhon:grants: the owner's grants for the project, given,
  *             revoked and timed (jhon-panel-grants.ts); the permission
  *             mode is Customize's (L214).
@@ -69,8 +68,6 @@ export interface JhonPanelDeps {
 	inSession?(model: string): boolean;
 	/** `jhon status --json` where the session's change is, with `root` (that folder) and `risk` (`jhon risk --json`) when read. */
 	loadChange(): Promise<unknown>;
-	/** Open the changes overlay on root's uncommitted changes; the view has closed first. */
-	openDiff?(root: string): void;
 	/** Open path in the owner's editor, the view closed around it; why it could not (no editor), with the view left open. */
 	openFile?(path: string): string | undefined;
 	/** `jhon grant --list --json`, and giving or revoking one class. */
@@ -188,11 +185,6 @@ export class JhonPanel {
 			return true;
 		}
 		if (data === "s" && this.tests.running()) return this.tests.handleInput("s");
-		if (data === "d" && this.deps.openDiff && shown.root) {
-			this.deps.onClose();
-			this.deps.openDiff(shown.root);
-			return true;
-		}
 		if (data === "o" && this.deps.openFile && shown.directory) {
 			const path = [shown.root, shown.directory, "tasks.md"].filter(Boolean).join("/");
 			const failed = this.deps.openFile(path);
@@ -207,7 +199,6 @@ export class JhonPanel {
 		if (!shown) return [];
 		return [
 			this.tests.running() ? ["s", "stop tests"] : ["t", "tests"],
-			...(this.deps.openDiff && shown.root ? [["d", "diff"] as KeyHint] : []),
 			...(this.deps.openFile && shown.directory ? [["o", "tasks.md"] as KeyHint] : []),
 		];
 	}

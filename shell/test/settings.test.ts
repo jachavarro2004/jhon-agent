@@ -15,27 +15,26 @@ const SHELL = join(dirname(fileURLToPath(import.meta.url)), "..");
 const S38 = {
 	animations: "full", ascii: false, icons: "geometric", status: "auto", cards: "float", surface: "transparent", compactAt: 60, freshSessionAt: 50, stallSeconds: 75, thinkingStallSeconds: 300,
 	doubleEscCancel: false,
-	keys: { panel: "alt+j", agents: "alt+s", todos: "alt+t", changes: "alt+g", usage: "alt+u" },
+	keys: { panel: "alt+j", agents: "alt+s" },
 };
 
 function snapshot(s: ShellSettings) {
 	return {
 		animations: s.animations(), ascii: s.ascii(), icons: s.icons(), status: s.status(), cards: s.cards(), surface: s.surface(), compactAt: s.compactAt(), freshSessionAt: s.freshSessionAt(),
 		stallSeconds: s.stallSeconds(), thinkingStallSeconds: s.thinkingStallSeconds(), doubleEscCancel: s.doubleEscCancel(),
-		keys: { panel: s.key("panel"), agents: s.key("agents"), todos: s.key("todos"), changes: s.key("changes"), usage: s.key("usage") },
+		keys: { panel: s.key("panel"), agents: s.key("agents") },
 	};
 }
 
 test("the values come from `jhon settings list --json`, each typed", (t) => {
-	const fake = fakeJhon(t, { file: { "shell.appearance.icons": "emoji", "shell.behaviour.stall_seconds": 0, "shell.keys.agents": "off", "shell.keys.usage": "ctrl+shift+u" }, env: { "shell.behaviour.double_esc_cancel": true } });
+	const fake = fakeJhon(t, { file: { "shell.appearance.icons": "emoji", "shell.behaviour.stall_seconds": 0, "shell.keys.agents": "off", "shell.keys.panel": "ctrl+shift+j" }, env: { "shell.behaviour.double_esc_cancel": true } });
 	const s = new ShellSettings(jhonSettingsBackend(fake.bin));
 	assert.equal(s.loaded, true);
 	assert.equal(s.path, join(fake.dir, "settings.toml"));
 	assert.equal(s.icons(), "emoji");
 	assert.equal(s.stallSeconds(), 0);
 	assert.equal(s.key("agents"), undefined, "off turns the shortcut off");
-	assert.equal(s.key("usage"), "ctrl+shift+u", "T167: alt+u is the setting shell.keys.usage");
-	assert.equal(s.key("panel"), "alt+j");
+	assert.equal(s.key("panel"), "ctrl+shift+j");
 	assert.equal(s.doubleEscCancel(), true, "an environment override arrives resolved by the engine");
 	assert.equal(s.source("shell.behaviour.double_esc_cancel"), "env");
 	assert.equal(s.source("shell.appearance.icons"), "file");

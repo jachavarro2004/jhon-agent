@@ -134,13 +134,14 @@ func TestTheSchemaNoLongerKnowsTheRetiredKeys(t *testing.T) {
 		`shell.notifications.audio.events."subagent.timed_out"`, "shell.extra.visual_profiles",
 		`shell.notifications.audio.events."agent.attention"`, `shell.notifications.audio.events."subagent.failed"`,
 		"shell.keys.rail", "shell.keys.commands", "shell.keys.tasks",
+		"shell.keys.changes", "shell.keys.usage", "shell.keys.todos",
 	} {
 		if slices.Contains(keys, gone) || Known(gone) {
 			t.Errorf("%s is retired, still in the schema", gone)
 		}
 	}
 	for _, kept := range []string{
-		"shell.appearance.icons", "shell.appearance.status", "shell.keys.agents", "shell.keys.usage",
+		"shell.appearance.icons", "shell.appearance.status", "shell.keys.agents", "shell.keys.panel",
 	} {
 		if !slices.Contains(keys, kept) {
 			t.Errorf("%s is missing", kept)
@@ -380,7 +381,6 @@ stall_seconds = 30
 
 [shell.keys]
 panel = "alt+p"
-usage = "off"
 agents = "off"
 `
 
@@ -495,54 +495,70 @@ func TestAnExplicitNewKeyWinsOverARetiredOne(t *testing.T) {
 	}
 }
 
-// T167 (L1437, L1438): alt+u, which opens /jhon:usage, is a setting again
-// (T15.10 had retired the key with the old /jhon:usage): shell.keys.usage,
-// alt+u by default, JHON_SHELL_USAGE_KEY overriding it as the other keys'
-// variables do. A file that sets it reads it, and migrate leaves it.
-func TestTheUsageKeyIsASetting(t *testing.T) {
-	if !Known("shell.keys.usage") || !slices.Contains(Keys(), "shell.keys.usage") {
-		t.Fatal("shell.keys.usage is not in the schema")
+// T174 (L1462, L1469): the changes view (/jhon:changes, alt+g), the usage
+// view (/jhon:usage, alt+u) and the todo rail's keys (alt+t) are gone, and
+// their keys with them. A file that still sets one loads, its variable is no
+// longer read, the key is a note that says why, `set` refuses it (removed in
+// v0.4), and Cleanup drops it.
+func TestTheChangesUsageAndTodosKeysAreRetired(t *testing.T) {
+	why := map[string]string{
+		"shell.keys.changes": "the changes view (/jhon:changes) was removed from the shell",
+		"shell.keys.usage":   "the usage view (/jhon:usage) was removed from the shell; the dashboard has the stats",
+		"shell.keys.todos":   "the todo card and its keys were removed; the agent's list shows in the right pane while no LDD change is active",
 	}
-	if why := RetiredWhy("shell.keys.usage"); why != "" {
-		t.Errorf("shell.keys.usage still reads as retired: %q", why)
+	for key, w := range why {
+		if Known(key) || slices.Contains(Keys(), key) {
+			t.Errorf("%s is retired, still in the schema", key)
+		}
+		if got := RetiredWhy(key); got != w {
+			t.Errorf("RetiredWhy(%s) = %q, want %q", key, got, w)
+		}
+		if got := RetiredIn(key); got != "v0.4" {
+			t.Errorf("RetiredIn(%s) = %q, want v0.4", key, got)
+		}
 	}
-	none := filepath.Join(t.TempDir(), "settings.toml")
-	defaults, err := Load(none, noEnv)
+	vals, err := Load(filepath.Join(t.TempDir(), "settings.toml"), envOf(map[string]string{"JHON_SHELL_CHANGES_KEY": "ctrl+g", "JHON_SHELL_USAGE_KEY": "off", "JHON_SHELL_TODO_KEY": "alt+x"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := valueOf(t, defaults, "shell.keys.usage"); v.Value != "alt+u" || v.Source != SourceDefault {
-		t.Errorf("usage default = %+v, want alt+u", v)
-	}
-	for raw, want := range map[string]string{"ctrl+shift+u": "ctrl+shift+u", "off": "off", "": "off"} {
-		vals, err := Load(none, envOf(map[string]string{"JHON_SHELL_USAGE_KEY": raw}))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v := valueOf(t, vals, "shell.keys.usage"); v.Value != want || v.Source != SourceEnv || v.Env != "JHON_SHELL_USAGE_KEY" {
-			t.Errorf("JHON_SHELL_USAGE_KEY=%q: %+v, want %s from the variable", raw, v, want)
+	for _, v := range vals {
+		if v.Env == "JHON_SHELL_CHANGES_KEY" || v.Env == "JHON_SHELL_USAGE_KEY" || v.Env == "JHON_SHELL_TODO_KEY" {
+			t.Errorf("%s still reads %s", v.Key, v.Env)
 		}
 	}
-	const file = "schema = 1\n[shell.keys]\nusage = \"alt+y\"\npanel = \"alt+j\"\n"
-	path := write(t, file)
-	vals, err := Load(path, noEnv)
+	old := "schema = 1\n\n[shell.keys]\npanel = \"alt+j\" # mine\nchanges = \"alt+g\"\nusage = \"alt+y\"\ntodos = \"off\"\n"
+	path := write(t, old)
+	vals, err = Load(path, noEnv)
 	if err != nil {
-		t.Fatalf("a file with the usage key must load: %v", err)
+		t.Fatalf("a file with the old keys must load: %v", err)
 	}
-	if v := valueOf(t, vals, "shell.keys.usage"); v.Value != "alt+y" || v.Source != SourceFile {
-		t.Errorf("usage = %+v, want alt+y from the file", v)
+	if v := valueOf(t, vals, "shell.keys.panel"); v.Value != "alt+j" || v.Source != SourceFile {
+		t.Errorf("panel = %+v", v)
 	}
-	if notes, err := Retired(path); err != nil || len(notes) != 0 {
-		t.Errorf("notes = %+v, %v; want none", notes, err)
+	notes, err := Retired(path)
+	if err != nil || !slices.Equal(noteKeys(notes), []string{"shell.keys.changes", "shell.keys.todos", "shell.keys.usage"}) {
+		t.Fatalf("notes = %+v, %v", notes, err)
 	}
-	if rep, err := Cleanup(path, time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)); err != nil || rep.Done {
-		t.Errorf("cleanup = %+v, %v; want nothing to do", rep, err)
+	for _, n := range notes {
+		if n.Silent || n.Why != why[n.Key] || n.Now != "" {
+			t.Errorf("%+v", n)
+		}
 	}
-	if b, _ := os.ReadFile(path); string(b) != file {
-		t.Errorf("the file changed:\n%s", b)
+	for key := range why {
+		_, err := Set(path, key, "alt+x")
+		if want := key + ": removed in v0.4: " + why[key]; err == nil || err.Error() != want {
+			t.Errorf("Set(%s) = %v, want %q", key, err, want)
+		}
 	}
-	if v, err := Set(path, "shell.keys.usage", "alt+o"); err != nil || v.Value != "alt+o" {
-		t.Errorf("set usage = %+v, %v", v, err)
+	if b, _ := os.ReadFile(path); string(b) != old {
+		t.Errorf("a refused set wrote the file:\n%s", b)
+	}
+	rep, err := Cleanup(path, time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC))
+	if err != nil || !rep.Done || len(rep.Notes) != 3 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "schema = 1\n\n[shell.keys]\npanel = \"alt+j\" # mine\n" {
+		t.Errorf("cleaned file:\n%s", b)
 	}
 }
 

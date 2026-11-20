@@ -20,7 +20,7 @@ export interface SidebarState {
 	statusHidden?: () => boolean;
 	/** True while a painting top header is the only status row of a narrow fullscreen terminal: the bottom Status bar steps aside. */
 	headerOwnsStatus?: () => boolean;
-	/** True while a fullscreen terminal shows no rail and folds live work into the editor's work row: the TODOS and AGENTS cards step aside (T15.12c), and the footer too, its status row being the "statusbar" part's, as G's. */
+	/** True while a fullscreen terminal shows no rail and folds live work into the editor's work row: the AGENTS card steps aside (T15.12c), and the footer too, its status row being the "statusbar" part's, as G's. */
 	compactWork?: () => boolean;
 	/** The pointer's current control on the shell's surfaces (setSidebarHover). */
 	hover?: { owner: object; clear: () => void };
@@ -58,7 +58,7 @@ export function sidebarPart<T extends Component & { dispose?(): void }>(tui: TUI
 	state.parts.set(key, rail);
 	return {
 		...bottom,
-		render: (width: number) => (key === "footer" && (state.statusHidden?.() || state.headerOwnsStatus?.() || state.compactWork?.())) || ((key === "todo" || key === "agents") && state.compactWork?.()) || (state.active && state.ownsHost?.()) ? [] : bottom.render(width),
+		render: (width: number) => (key === "footer" && (state.statusHidden?.() || state.headerOwnsStatus?.() || state.compactWork?.())) || (key === "agents" && state.compactWork?.()) || (state.active && state.ownsHost?.()) ? [] : bottom.render(width),
 		dispose() {
 			if (state.parts.get(key) === rail) state.parts.delete(key);
 			bottom.dispose?.();

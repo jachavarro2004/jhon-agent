@@ -13,10 +13,8 @@ import { BAND_ROLE, panelInnerWidth, renderCard } from "../lib/ui/shell-card.ts"
 import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusBar, renderShellStatusSections, type ShellBarModel, type ShellBarTheme } from "../lib/ui/shell-bar.ts";
 import { setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { framePromptLines, resolvePromptLayout, PROMPT_STATE } from "../lib/ui/shell-prompt.ts";
-import { renderTodoCard, type TodoState } from "../lib/ui/shell-todo.ts";
 import { narrowStatusOwner, STATUS_OWNER } from "../lib/ui/shell-sidebar-layout.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
-import type { ProviderUsage } from "../lib/ui/shell-usage.ts";
 
 const plain: ShellBarTheme & { strikethrough(t: string): string } = { fg: (_c, t) => t, bold: (t) => t, strikethrough: (t) => t };
 const tagged: ShellBarTheme & { strikethrough(t: string): string } = { fg: (c, t) => `<${c}>${t}</${c}>`, bold: (t) => `<b>${t}</b>`, strikethrough: (t) => t };
@@ -25,21 +23,10 @@ const BG_CLOSE = "\x1b[49m";
 const withBackground = <T extends object>(theme: T) => ({ ...theme, bg: (_c: string, t: string) => `${BG_OPEN}${t}${BG_CLOSE}` });
 
 const NOW = 1_788_600_000_000;
-const usage = (fiveHour: number, week: number): ProviderUsage => ({
-	provider: "claude-bridge",
-	plan: undefined,
-	fetchedAt: NOW,
-	limits: [{ name: "claude", limitReached: false, windows: [
-		{ label: "5h", usedPercent: fiveHour, windowSeconds: 18_000, resetAt: NOW + 2 * 3_600_000 },
-		{ label: "week", usedPercent: week, windowSeconds: 604_800, resetAt: NOW + 3 * 86_400_000 + 2 * 3_600_000 },
-	] }],
-});
-
 function model(overrides: Partial<ShellBarModel> = {}): ShellBarModel {
 	return {
 		cwd: "/home/owner/code/jhon",
 		branch: "main",
-		dirty: undefined,
 		sessionName: undefined,
 		modelId: "claude-opus-5-5",
 		effort: "high",
@@ -48,8 +35,6 @@ function model(overrides: Partial<ShellBarModel> = {}): ShellBarModel {
 		contextWindow: 1_000_000,
 		costTotal: 0,
 		subscription: true,
-		usage: undefined,
-		statuses: [],
 		...overrides,
 	};
 }
@@ -74,7 +59,7 @@ test("the prompt in sections: a rule-line header with the petal and state, then 
 	assert.equal(resolvePromptLayout(40).panel, undefined, "outside the fullscreen chrome the prompt is a card, as G's");
 });
 
-test("a panel card (the todo card above the prompt) is G's: neon the outline with the hint in its top rule; float a tinted panel, the header on row 1", () => {
+test("a panel card (a card above the prompt) is G's: neon the outline with the hint in its top rule; float a tinted panel, the header on row 1", () => {
 	const card = { title: "Todos ▾ Collapse", subtitle: "1 of 3", body: ["◐ my task"], tone: "info", glyph: "◈" } as const;
 	assert.deepEqual(renderCard(card, { fg: (_c, t) => t }, 50, { expanded: true, panel: true, hint: "alt+t collapse" }), [
 		"╭─ ◈ Todos ▾ Collapse · 1 of 3 ── alt+t collapse ╮",
@@ -98,8 +83,8 @@ test("the rail sections name their state: LDD the route, AGENTS the count; an id
 test("STATUS in sections: one block per change, the header counting them, and no action line (T35, L110)", () => {
 	const session = { change: "refactor-layering-by-service", slices: Array(7).fill("done"), route: "verified", next: "verify", tests: { passed: false, failed: 0, at: "2026-11-04T05:00:00Z" }, worktree: "layering", root: "/w/layering" } as NonNullable<ShellBarModel["ldd"]>;
 	const lane = { change: "fix-infra-hardening", worktree: "infra-hardening", root: "/w/infra-hardening", done: 10, slices: 10, next: "archive" };
-	// The LDD section's rows, read under its header (the blank row and the next sections cut).
-	const inner = (lines: string[]) => lines.slice(1, lines.findIndex((l, i) => i > 0 && l.trim() === "")).map((l) => l.slice(2).trimEnd());
+	// The LDD section's rows, read under its header (T174: it is the rail's only Status section).
+	const inner = (lines: string[]) => lines.slice(1).map((l) => l.slice(2).trimEnd());
 	const twoCard = renderShellStatusSections(model({ ldd: { ...session, lanes: [lane] } }), plain, 50);
 	assert.match(twoCard[0]!, /^▾ LDD +2 changes$/);
 	const two = inner(twoCard);

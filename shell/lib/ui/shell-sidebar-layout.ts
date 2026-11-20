@@ -3,7 +3,6 @@ import { setSidebarHover, sidebarState, type SidebarRail } from "./shell-sidebar
 import type { ShellBarTheme } from "./shell-bar.ts";
 import { CARD_STYLE, CARD_TONE, cardBottom, cardLine, cardStyle, cardTop, floatRows, paintSurfaceRow, panelInnerWidth, type CardStyle } from "./shell-card.ts";
 import { chromeSurface, PANEL_ROW_INDENT, panelSurfaceOpener, RAIL_ORDER, sectionGap } from "./shell-panel.ts";
-import { renderSidebarBanner } from "./shell-sidebar-banner.ts";
 import type { Density, StatusPlacement } from "./visual-customization-policy.ts";
 
 export const SIDEBAR_BREAKPOINT = 140;
@@ -100,7 +99,7 @@ type PreparedRail = {
 	hits: RailHit[];
 	// The header row is a full-width sibling above the hstack, not a rail
 	// section: it never enters `lines`/`hits`, and an empty/blank result
-	// falls back to the old hstack-direct shape with the banner restored.
+	// falls back to the old hstack-direct shape.
 	headerLines: string[];
 	headerActive: boolean;
 	/** Sections: the full-width status line under the rail and the transcript. */
@@ -333,9 +332,7 @@ export function installSidebar(tui: TUI, theme: ShellBarTheme, placement: () => 
 			const contentWidth = scroll.getContentWidth(RAIL_WIDTH);
 			const statusPart = state.parts.get("statusbar");
 			const preparedStatusLines = [...(statusPart?.render(Math.max(0, width)) ?? [])];
-			// The header carries the brand once it is active; the banner is the
-			// rail's fallback identity when no header is wired up.
-			const branding = headerActive ? [] : renderSidebarBanner(theme, contentWidth - RAIL_PADDING * 2);
+			// The header carries the brand; the rail has no banner of its own (T174).
 			headerLines = headerActive ? preparedHeaderLines : [];
 			statusLines = preparedStatusLines.some((line) => line.trim() !== "") ? preparedStatusLines : [];
 			// A transparent surface draws every panel section as its own card
@@ -346,8 +343,7 @@ export function installSidebar(tui: TUI, theme: ShellBarTheme, placement: () => 
 			// their blank row; otherwise the density decides the gap.
 			const cardGap = () => (carded && style === CARD_STYLE.FLOAT) || sectionGap(density());
 			const panelWidth = carded ? panelInnerWidth(theme, contentWidth) + PANEL_ROW_INDENT : contentWidth - RAIL_PADDING * 2;
-			// LDD first (L174), then live work and the rest of Status, as Gentle Shell's;
-			// TODOS is a bounded section with its own cap (C10).
+			// LDD first (L174), then the agent's todo list and live work.
 			const sections = RAIL_ORDER.map((slot) => {
 				const component = state.parts.get(slot);
 				if (!component) {
@@ -377,16 +373,12 @@ export function installSidebar(tui: TUI, theme: ShellBarTheme, placement: () => 
 			// Tinted spacing continues the rail's surface; transparent spacing
 			// leaves a clear row above the first card.
 			if (sections.length && headerActive) railLines.push(carded ? "" : paint(""));
-			if (sections.length && branding.length) {
-				railLines.push(...branding.map((line) => " ".repeat(RAIL_PADDING) + line + " ".repeat(RAIL_PADDING)));
-			}
-			// One blank row separates a section from the banner or the previous
-			// one: float cards are tinted edge to edge and would fuse into one
+			// One blank row separates a section from the previous one: float cards are tinted edge to edge and would fuse into one
 			// slab without it, neon cards and the tinted panel keep it too.
 			let previousPanel = false;
 			for (const section of sections) {
 				const panel = section.component.surface === "panel";
-				if ((hits.length > 0 || branding.length > 0) && (carded ? cardGap() : sectionGap(density()))) railLines.push(!carded && panel && previousPanel ? paint("") : "");
+				if (hits.length > 0 && (carded ? cardGap() : sectionGap(density()))) railLines.push(!carded && panel && previousPanel ? paint("") : "");
 				if (carded && panel) {
 					const layout = section.component.cardGroups?.(section.renderWidth) ?? { groups: [{ start: 0, end: section.lines.length }] };
 					const geometry = cardGeometry(theme, contentWidth, style);

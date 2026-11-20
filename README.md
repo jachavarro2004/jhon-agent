@@ -283,8 +283,6 @@ Its commands:
 | `/jhon-ldd <action>` | | an LDD action, as in Claude Code |
 | `/jhon:agents` | `alt+s` | the session's sub-agents and each one's live thread |
 | `/jhon:jobs` | | background commands and monitors |
-| `/jhon:changes` | `alt+g` | what the session's agents changed, per worktree |
-| `/jhon:usage` | `alt+u` | each provider's usage windows and resets: the session's provider and every provider its profile (the session's own included) routes sub-agents to; Claude and ChatGPT (openai-codex: 5h and week) from each reply, NaN from its quota |
 | `/jhon:profile` | | the model profiles |
 | `/jhon:grants` | | the project's grants |
 | `/jhon:customize` | | the shell's settings, and the permission mode |

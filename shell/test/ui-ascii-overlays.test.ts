@@ -1,8 +1,8 @@
 /**
  * shell.appearance.ascii reaches every overlay (T15.11, L121): Settings, the
- * change detail, /jhon:grants, /jhon:profile, the ask view, /jhon:agents
- * and /jhon:changes draw their frame, header,
- * footer and rows in plain ASCII, nothing outside 0x20-0x7e.
+ * change detail, /jhon:grants, /jhon:profile, the ask view and /jhon:agents
+ * draw their frame, header, footer and rows in plain ASCII, nothing outside
+ * 0x20-0x7e.
  *
  *   cd shell && node --experimental-strip-types --test test/ui-ascii-overlays.test.ts
  */
@@ -14,9 +14,6 @@ import { JhonPanel, type ProfilesData } from "../lib/ui/jhon-panel.ts";
 import { customizeRows as settingsRows } from "../lib/ui/customize/registry.ts";
 import { SettingsView } from "../lib/ui/settings-view.ts";
 import { renderShellAgentsSection, renderShellJobsSection } from "../lib/ui/shell-bar.ts";
-import { changesModel, CHANGE_STATUS } from "../lib/ui/shell-changes.ts";
-import { WorktreeChangesView } from "../lib/ui/shell-changes-view.ts";
-import { renderTodoCard, type TodoState } from "../lib/ui/shell-todo.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { TasksView } from "../lib/background-tasks-view.ts";
 import type { TaskRecord } from "../lib/background-tasks.ts";
@@ -58,7 +55,7 @@ function panel(view: "change" | "grants" | "profiles") {
 		loadGrants: async () => ({ root: "/p/acme", classes: ["push", "destroy"], grants: [{ class: "push", root: "/p/acme", until: new Date(Date.now() + 600_000).toISOString() }] }),
 		grant: async () => {}, revoke: async () => {},
 		loadTests: async () => ({}), startTests: () => ({ id: "job-1", startedAt: 0 }), stopTests: () => {},
-		openDiff() {}, openFile: () => undefined,
+		openFile: () => undefined,
 		onClose() {}, requestRender() {},
 	});
 }
@@ -105,16 +102,3 @@ test("/jhon:jobs draws in ASCII", () => {
 	}
 });
 
-test("/jhon:changes draws in ASCII", async () => {
-	const file = (path: string) => ({ path, added: 1, deleted: 0, status: CHANGE_STATUS.MODIFIED });
-	const trees = [{ root: "/p/acme", branch: "main", model: changesModel([file("a.py"), file("deep/dir/with/a/very/long/path/name/views.py")]) }];
-	const view = new WorktreeChangesView(trees, { theme: plain, rows: 12, ascii: true, loadDiff: async () => "@@ -1 +1 @@\n+x", onOpen() {}, onClose() {}, requestRender() {}, onRefresh() {} });
-	for (const width of [160, 100, 80]) pureAscii(`changes ${width}`, view.render(width));
-	view.handleInput("j");
-	for (let i = 0; i < 4; i++) await flush();
-	for (const width of [160, 100, 80]) pureAscii(`changes on a file ${width}`, view.render(width));
-	view.handleInput("j");
-	for (let i = 0; i < 4; i++) await flush();
-	for (const width of [160, 100, 80, 50]) pureAscii(`changes on a long path ${width}`, view.render(width));
-	view.dispose();
-});
