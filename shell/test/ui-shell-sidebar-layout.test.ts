@@ -6,7 +6,7 @@ import { getScrollViewsAt, renderLayoutFrame, type LayoutBox } from "@earendil-w
 import { installSidebar, invalidateSidebar, narrowStatusOwner } from "../lib/ui/shell-sidebar-layout.ts";
 import { sidebarHeader, sidebarPart, sidebarSlot, sidebarState } from "../lib/ui/shell-sidebar.ts";
 import { renderShellStatusSections } from "../lib/ui/shell-bar.ts";
-import { setCardStyle } from "../lib/ui/shell-card.ts";
+import { setCardStyle } from "../lib/ui/primitives/index.ts";
 import { setChromeSurface } from "../lib/ui/shell-panel.ts";
 
 const NODE = Symbol.for("@earendil-works/pi-tui/layout-node");

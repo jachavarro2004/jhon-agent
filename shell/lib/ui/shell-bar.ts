@@ -1,10 +1,9 @@
 import { basename } from "node:path";
 import { homedir } from "node:os";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { gaugeTone, paintGauge, renderGauge, type GaugeTone } from "./shell-gauge.ts";
+import { meterTone, paintMeter, paintSurface, renderMeter, type CardTheme, type MeterTone } from "./primitives/index.ts";
 import { asciiText, glyph } from "./primitives/glyphs.ts";
 import { sanitizeTerminalText } from "./terminal-theme.ts";
-import { paintSurfaceRow, type CardTheme } from "./shell-card.ts";
 import { clipPanelText, fitPanelLine, PANEL_ROW_INDENT, panelSurfaceOpener, renderPanelHeader, renderPanelRow, sectionGap } from "./shell-panel.ts";
 import type { Density } from "./visual-customization-policy.ts";
 import { changeCount, estadoLines, routeText, type LddStatus } from "./ldd-status.ts";
@@ -12,7 +11,8 @@ import { STATES } from "./primitives/states.ts";
 import { THEME_NAME } from "./primitives/paint.ts";
 import { shellSettings, type ShellSettings } from "../settings.ts";
 
-export { gaugeTone, renderGauge, type GaugeTone };
+// The context meter is the primitives' Meter (primitives/meter.ts).
+export { meterTone as gaugeTone, renderMeter as renderGauge, type MeterTone as GaugeTone };
 
 // jhon-shell status bar: one line of segments that replaces pi's built-in
 // three-line footer. Everything here is pure so the bar can be rendered and
@@ -165,7 +165,7 @@ function contextSegment(contextPercent: number | null, theme: ShellBarTheme, con
 	const compacts = compactionPercent(contextWindow);
 	const note = compacts !== undefined && contextPercent !== null && contextPercent >= compacts - COMPACTION_NOTE_BEFORE
 		? ` ${theme.fg("dim", `· compacts at ${compacts}%`)}` : "";
-	return `${theme.fg(ROLE.LABEL, "ctx")} ${paintGauge(contextPercent, theme)} ${theme.fg(ROLE.VALUE, percentText)}${note}`;
+	return `${theme.fg(ROLE.LABEL, "ctx")} ${paintMeter(contextPercent, theme)} ${theme.fg(ROLE.VALUE, percentText)}${note}`;
 }
 
 function costSegment(costTotal: number, subscription: boolean, theme: ShellBarTheme): string {
@@ -417,7 +417,7 @@ export function agentsWorkSummary(jobs: readonly RunningJobDisplay[] | undefined
 // sit on the panel surface when it is tinted (shell.appearance.surface).
 const STATUS_BAR_DIVIDER = "│";
 const COMPACT_BRANCH_WIDTH = 15;
-const paintChromeRow = (theme: ShellBarTheme, row: string) => paintSurfaceRow(row, panelSurfaceOpener(theme as CardTheme));
+const paintChromeRow = (theme: ShellBarTheme, row: string) => paintSurface(row, panelSurfaceOpener(theme as CardTheme));
 
 /** `~/code/jhon`: the folder with the home directory as `~`. */
 export function tildePath(path: string, home = homedir()): string {

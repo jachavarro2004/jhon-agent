@@ -14,7 +14,7 @@ import { openInExternalEditor } from "../lib/ui/jhon-panel-editor.ts";
 import { setSidebarHover, sidebarPart, sidebarState, type SidebarRail } from "../lib/ui/shell-sidebar.ts";
 import type { ShellBarTheme } from "../lib/ui/shell-bar.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
-import { CARD_STYLE, cardStyle, setCardStyle } from "../lib/ui/shell-card.ts";
+import { CARD_STYLE, cardStyle, setCardStyle } from "../lib/ui/primitives/index.ts";
 import { chromeSurface, setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { resolveVisualSettings, writeVisualSettings } from "../lib/ui/visual-customization-policy.ts";
 import { resolveAnimationPolicy } from "../lib/ui/animation-policy.ts";

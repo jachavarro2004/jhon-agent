@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { renderShellAgentsSection, renderShellBar, renderShellChromeBar, renderShellJobsSection, renderShellStatusBar, renderShellStatusSections, renderShellTitleRow, renderShellTitleRows, type ShellBarModel } from "../lib/ui/shell-bar.ts";
-import { CARD_STYLE, renderCard, setCardStyle, cardStyle, CARD_TONE } from "../lib/ui/shell-card.ts";
+import { CARD_STYLE, renderCard, setCardStyle, cardStyle, CARD_TONE } from "../lib/ui/primitives/index.ts";
 import { framePromptLines, PROMPT_STATE, resolvePromptLayout } from "../lib/ui/shell-prompt.ts";
 import { renderTodoRail } from "../extensions/todo.ts";
 import type { TodoState } from "../lib/todo.ts";

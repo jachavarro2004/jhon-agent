@@ -9,18 +9,16 @@ import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { BAND_ROLE, panelInnerWidth, renderCard } from "../lib/ui/shell-card.ts";
+import { BAND_ROLE } from "../lib/ui/primitives/index.ts";
 import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusBar, renderShellStatusSections, type ShellBarModel, type ShellBarTheme } from "../lib/ui/shell-bar.ts";
 import { setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { framePromptLines, resolvePromptLayout, PROMPT_STATE } from "../lib/ui/shell-prompt.ts";
 import { narrowStatusOwner, STATUS_OWNER } from "../lib/ui/shell-sidebar-layout.ts";
-import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 
 const plain: ShellBarTheme & { strikethrough(t: string): string } = { fg: (_c, t) => t, bold: (t) => t, strikethrough: (t) => t };
 const tagged: ShellBarTheme & { strikethrough(t: string): string } = { fg: (c, t) => `<${c}>${t}</${c}>`, bold: (t) => `<b>${t}</b>`, strikethrough: (t) => t };
 const BG_OPEN = "\x1b[48;5;236m";
 const BG_CLOSE = "\x1b[49m";
-const withBackground = <T extends object>(theme: T) => ({ ...theme, bg: (_c: string, t: string) => `${BG_OPEN}${t}${BG_CLOSE}` });
 
 const NOW = 1_788_600_000_000;
 function model(overrides: Partial<ShellBarModel> = {}): ShellBarModel {
@@ -57,18 +55,6 @@ test("the prompt in sections: a rule-line header with the petal and state, then 
 	assert.match(working[2], /^ {2}b/, "continuation rows keep the input's column");
 	assert.equal(resolvePromptLayout(3, undefined, undefined, true).panel, undefined, "under 4 columns the prompt keeps a frame, as G's");
 	assert.equal(resolvePromptLayout(40).panel, undefined, "outside the fullscreen chrome the prompt is a card, as G's");
-});
-
-test("a panel card (a card above the prompt) is G's: neon the outline with the hint in its top rule; float a tinted panel, the header on row 1", () => {
-	const card = { title: "Todos ▾ Collapse", subtitle: "1 of 3", body: ["◐ my task"], tone: "info", glyph: "◈" } as const;
-	assert.deepEqual(renderCard(card, { fg: (_c, t) => t }, 50, { expanded: true, panel: true, hint: "alt+t collapse" }), [
-		"╭─ ◈ Todos ▾ Collapse · 1 of 3 ── alt+t collapse ╮",
-		`│ ◐ my task${" ".repeat(37)} │`,
-		`╰${"─".repeat(48)}╯`,
-	], "a theme that cannot paint draws the outline, the float's fallback");
-	const float = renderCard(card, withBackground({ fg: (_c: string, t: string) => t }), 50, { expanded: true, panel: true, hint: "alt+t" }).map(stripAnsi);
-	assert.deepEqual(float.map((row) => row.trimEnd()), [" ▎", " ▎ ◈ Todos ▾ Collapse  1 of 3             alt+t", " ▎", " ▎ ◐ my task", " ▎"]);
-	assert.equal(panelInnerWidth(withBackground({ fg: (_c: string, t: string) => t }), 50), 44, "float: two columns narrower than the outline's 46");
 });
 
 test("the rail sections name their state: LDD the route, AGENTS the count; an idle AGENTS is its header and `no agent running` (L165)", () => {
@@ -126,7 +112,7 @@ test("the status line owns the status at narrow fullscreen widths, unless Status
 
 // T34 (L98): the band is darker than the page (rose ink's `band`, Mix(page,
 // frame, 0.5)); pi reads it as customMessageBg. Notices are cards in the
-// card style now (L153 answer 1, ui-shell-card.test.ts).
+// card style now (L153 answer 1, ui-primitives-frame.test.ts).
 test("a tinted status bar and rail paint one band role: pi's customMessageBg", () => {
 	assert.equal(BAND_ROLE, "customMessageBg");
 	const roles: string[] = [];

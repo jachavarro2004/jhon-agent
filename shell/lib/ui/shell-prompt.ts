@@ -1,6 +1,6 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { stripAnsi } from "./terminal-theme.ts";
-import { CARD_STYLE, type CardStyle } from "./shell-card.ts";
+import { CARD_STYLE, type CardStyle } from "./primitives/index.ts";
 import { asciiText, glyph as tableGlyph } from "./primitives/glyphs.ts";
 import { shellSettings } from "../settings.ts";
 

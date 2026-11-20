@@ -25,8 +25,7 @@ import { ProfilesCard, type ProfilesData } from "./jhon-panel-profiles.ts";
 import { changeCardLines } from "./jhon-panel-change.ts";
 import { GrantsCard, type GrantsData } from "./jhon-panel-grants.ts";
 import { TestsCard, type TestsData } from "./jhon-panel-tests.ts";
-import { asciiText, renderStateBlock, themePainter, type KeyHint } from "./primitives/index.ts";
-import { renderPaletteCard } from "./overlay-card.ts";
+import { asciiText, renderBox, renderStateBlock, themePainter, type KeyHint } from "./primitives/index.ts";
 import { fullscreenBodyRows, renderFullscreenView } from "./fullscreen-view.ts";
 
 /** A key hint as G's footers write it, `<Key> <action>`: `esc` → `Esc`, `or` kept. */
@@ -260,7 +259,7 @@ export class JhonPanel {
 			// As G's detail card: as tall as its body, never past the height.
 			const head = cut(title, Math.max(1, inner - 4), ascii);
 			const footer = keys.map(hintText).join(" · ");
-			return renderPaletteCard([t.fg("accent", head + " ".repeat(Math.max(1, inner - visibleWidth(head) - 3)) + "esc"), "", ...fitted, "", t.fg("muted", fitRow(footer))], width, t, ascii);
+			return renderBox([t.fg("accent", head + " ".repeat(Math.max(1, inner - visibleWidth(head) - 3)) + "esc"), "", ...fitted, "", t.fg("muted", fitRow(footer))], width, t, ascii);
 		};
 		const close: KeyHint = ["esc", "close"];
 		const move = ascii ? "up/down" : "↑/↓";

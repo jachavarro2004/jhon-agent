@@ -1,7 +1,6 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { asciiText, glyph } from "./primitives/glyphs.ts";
-import { BAND_ROLE, paintBand, surfaceOpener, type CardTheme } from "./shell-card.ts";
-import { HOVER_ROLE, paintHoverable } from "./shell-hover.ts";
+import { BAND_ROLE, HOVER_ROLE, paintHover, paintSurfaceRows, surfaceOpener, type CardTheme } from "./primitives/index.ts";
 import type { ChromeSurface } from "./visual-customization-policy.ts";
 
 // The rail's sections drawn as Gentle Shell's panel (its lib/shell-panel.ts,
@@ -76,7 +75,7 @@ export function fitPanelLine(left: string, right: string, width: number, ascii =
 
 export function renderPanelHeader(theme: PanelTheme, width: number, header: PanelHeader): string {
 	const ascii = header.ascii ?? false;
-	const fold = paintHoverable(theme, glyph(header.open ? "open" : "closed", ascii), header.hovered ?? false, "muted");
+	const fold = paintHover(theme, glyph(header.open ? "open" : "closed", ascii), header.hovered ?? false, "muted");
 	const name = header.title.toUpperCase();
 	// The hover paints the name too: a lone glyph is too small a signal.
 	const title = theme.fg(header.hovered ? HOVER_ROLE : "text", theme.bold ? theme.bold(name) : name);
@@ -91,7 +90,7 @@ export function renderPanelRow(width: number, left: string, right = "", indent =
 
 /** Every row on the panel surface, padded to width; transparent, or a theme that cannot paint it, leaves rows as they are. */
 export function paintPanelSurface(theme: CardTheme, rows: readonly string[], width: number): string[] {
-	return chromeSurface() === "transparent" ? [...rows] : paintBand(rows, theme, PANEL_SURFACE_ROLE, width);
+	return chromeSurface() === "transparent" ? [...rows] : paintSurfaceRows(rows, theme, PANEL_SURFACE_ROLE, width);
 }
 
 /** A one-row digest of a rail section for the narrow work row. */
@@ -122,7 +121,7 @@ export function renderWorkRow(summaries: readonly PanelSummary[], theme: PanelTh
 	const right = !counted ? "" : counted === lead ? counted.right! : `${counted.right} ${counted.rightLabel ?? ""}`.trimEnd();
 	const target = Math.max(0, Math.floor(width));
 	// The ▸ is the row's tap affordance; hovering paints it like every other clickable surface.
-	const row = fitPanelLine(`${paintHoverable(theme, glyph("cursor", ascii), hovered, "muted")} ${lead.left}`, right ? theme.fg("muted", right) : "", Math.max(0, target - 2), ascii);
+	const row = fitPanelLine(`${paintHover(theme, glyph("cursor", ascii), hovered, "muted")} ${lead.left}`, right ? theme.fg("muted", right) : "", Math.max(0, target - 2), ascii);
 	return paintPanelSurface(theme, [` ${ascii ? asciiText(row) : row} `], target)[0];
 }
 

@@ -20,11 +20,10 @@ import type { AgentRun, JobRecord, TaskRecord, ThreadItem } from "./background-t
 import { formatTaskDuration, taskOutcome, taskSucceeded } from "./background-tasks-tools.ts";
 import { measureAgentsViewLayout, type AgentsViewLayout } from "./ui/agents-view-layout.ts";
 import { formatCost, formatTokens } from "./ui/shell-bar.ts";
-import { HOVER_ROLE, paintHoverable } from "./ui/shell-hover.ts";
 import { sanitizeTerminalText } from "./ui/terminal-theme.ts";
 import { STATES } from "./ui/primitives/states.ts";
 import { THEME_NAME } from "./ui/primitives/paint.ts";
-import { asciiText, glyph as tableGlyph } from "./ui/primitives/index.ts";
+import { HOVER_ROLE, asciiText, glyph as tableGlyph, paintHover } from "./ui/primitives/index.ts";
 
 export interface TasksViewDeps {
 	theme: { fg(role: string, text: string): string; bold?(text: string): string };
@@ -301,7 +300,7 @@ export class TasksView {
 			const hovered = !isSelected && task.id === this.hoveredId;
 			const marker = isSelected ? theme.fg(ROLE.SELECTED, tableGlyph("cursor", ascii)) : hovered ? theme.fg(HOVER_ROLE, ascii ? ">" : "▹") : " ";
 			const [mark, role] = stateGlyph(task);
-			const name = paintHoverable(theme, taskName(task), hovered, isSelected ? ROLE.SELECTED : ROLE.NAME_IDLE);
+			const name = paintHover(theme, taskName(task), hovered, isSelected ? ROLE.SELECTED : ROLE.NAME_IDLE);
 			return { text: `${marker} ${theme.fg(ROLE.META, tableGlyph("tree", ascii))} ${theme.fg(role, mark)} ${name}  ${theme.fg(ROLE.META, this.elapsed(task))}`, id: task.id };
 		});
 	}

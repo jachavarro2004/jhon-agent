@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { ScrollView, visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusLayout, renderShellStatusSections, type ShellBarModel } from "../lib/ui/shell-bar.ts";
-import { CARD_STYLE, cardStyle, setCardStyle } from "../lib/ui/shell-card.ts";
+import { CARD_STYLE, cardStyle, setCardStyle } from "../lib/ui/primitives/index.ts";
 import { chromeSurface, setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { installSidebar } from "../lib/ui/shell-sidebar-layout.ts";
 import { sidebarPart } from "../lib/ui/shell-sidebar.ts";
