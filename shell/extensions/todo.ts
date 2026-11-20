@@ -1,36 +1,35 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { ScrollView, Text, truncateToWidth, type Component, type TUI } from "@earendil-works/pi-tui";
-import { NativePointerRegion } from "../lib/ui/native-pointer-region.ts";
-import { setSidebarHover, sidebarPart, sidebarState } from "../lib/ui/shell-sidebar.ts";
+import { Text, type TUI } from "@earendil-works/pi-tui";
+import { sidebarSlot } from "../lib/ui/shell-sidebar.ts";
 import { invalidateSidebar } from "../lib/ui/shell-sidebar-layout.ts";
-import { panelHeaderRow } from "../lib/ui/shell-card.ts";
-import { renderPanelRow } from "../lib/ui/shell-panel.ts";
+import { renderPanelHeader, renderPanelRow, type PanelTheme } from "../lib/ui/shell-panel.ts";
 import { asciiText } from "../lib/ui/primitives/glyphs.ts";
-import { onSelection } from "../lib/ui/ldd-status.ts";
+import { STATES } from "../lib/ui/primitives/states.ts";
+import { THEME_NAME } from "../lib/ui/primitives/paint.ts";
+import { selectedChange } from "../lib/ui/ldd-status.ts";
 import { contextLevel } from "../lib/lean-context.ts";
 import {
 	applyTodo,
 	emptyTodo,
-	renderTodoCard,
-	renderTodoSection,
 	replayTodo,
 	staleTurns,
 	TODO_DETAILS_KEY,
 	TODO_GLYPH,
+	TODO_STATUS,
 	TODO_TOOL_NAME,
 	todoPromptBlock,
 	todoStartBlock,
-	todoCardTone,
 	todoSummary,
-	todoWorkSummary,
 	type TodoParams,
 	type TodoState,
-} from "../lib/ui/shell-todo.ts";
+	type TodoStatus,
+} from "../lib/todo.ts";
 import { counted } from "../lib/ui-use.ts";
-import { shellSettings, type ShellSettings } from "../lib/settings.ts";
+import { shellSettings } from "../lib/settings.ts";
 
-// Jhon's todo: the task list the model keeps while it works, drawn as a
-// jhon-shell card above the editor. Three things keep it current that a
+// Jhon's todo: the task list the model keeps while it works, drawn in the
+// right pane's TODOS section while no LDD change is active (T174, L1469:
+// with one, the LDD section rules and the list is hidden). Three things keep it current that a
 // static tool description cannot: `write` replaces the whole list in one
 // call, each run's system prompt carries the open tasks and the rules, and
 // a list that goes untouched while tasks stay open is marked stale for both
@@ -41,8 +40,8 @@ import { shellSettings, type ShellSettings } from "../lib/settings.ts";
 // is the agent's own next steps, never the change's tasks, which stay in
 // `jhon status` (L1019): so the start rule and the nudge hold inside an LDD
 // change too (T134; T49 had silenced them there). jhon-builder, jhon-scout and jhon-checker
-// keep one too (T134), private to their child process, with no card, no
-// keys, no start rule and no nudge, since a child's task is bounded.
+// keep one too (T134), private to their child process, with no section, no
+// start rule and no nudge, since a child's task is bounded.
 
 const WIDGET_KEY = "jhon-todo";
 const STATUS_ENUM = ["pending", "in_progress", "blocked", "done", "dropped"];
@@ -109,31 +108,33 @@ const TOOL_PARAMETERS = {
 const inChild = (env: NodeJS.ProcessEnv): boolean => env.JHON_PI_CHILD === "1";
 
 export function todoEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	if (inChild(env) && !(env.JHON_PI_TOOLS ?? "").split(",").includes(TODO_TOOL_NAME)) return false;
-	const value = env.JHON_SHELL_TODO?.trim().toLowerCase();
-	return !(value === "0" || value === "false" || value === "off");
+	return !inChild(env) || (env.JHON_PI_TOOLS ?? "").split(",").includes(TODO_TOOL_NAME);
 }
 
-/**
- * The key that folds the todo card, shell.keys.todos (JHON_SHELL_TODO_KEY
- * overrides it), or off. alt+t by default, beside the shell's alt+g, alt+j,
- * alt+s and alt+u: terminals take ctrl+shift+t for a new tab (Ghostty does),
- * so it never reached pi.
- */
-export function todoCollapseKey(settings: ShellSettings = shellSettings()): string | undefined {
-	return settings.key("todos");
-}
+// The shell's state glyphs (primitives/states.ts): blocked needs you, so it is
+// ◉ in the bad role; dropped is a dim ✕.
+const MARK: Record<TodoStatus, string> = { [TODO_STATUS.PENDING]: STATES.pending.glyph, [TODO_STATUS.IN_PROGRESS]: STATES.working.glyph, [TODO_STATUS.BLOCKED]: STATES.blocked.glyph, [TODO_STATUS.DONE]: STATES.done.glyph, [TODO_STATUS.DROPPED]: "✕" };
+const MARK_ROLE: Record<TodoStatus, string> = { [TODO_STATUS.PENDING]: THEME_NAME[STATES.pending.role], [TODO_STATUS.IN_PROGRESS]: THEME_NAME[STATES.working.role], [TODO_STATUS.BLOCKED]: THEME_NAME[STATES.blocked.role], [TODO_STATUS.DONE]: THEME_NAME[STATES.done.role], [TODO_STATUS.DROPPED]: "muted" };
 
 /**
- * The keys that scroll the todo list three rows, and how its position row
- * names them (T165). Not ctrl+shift+up/down: pi 1.5.2 binds those to
- * tui.altScreen.previousPrompt/nextPrompt, and in fullscreen its transcript
- * listener consumes them before the editor asks the extensions, so the
- * todo's shortcut never ran there. pi binds no alt+pageUp/alt+pageDown
- * (docs/keybindings.md), and its plain pageUp/pageDown do not match them.
- * A constant until shell.keys.* holds a pair for it (settings.ts, the engine).
+ * The right pane's TODOS section: `▾ TODOS … done/planned`, then one row per
+ * task, its state glyph, its title and, in progress or blocked, its note.
+ * Nothing without tasks. S5's LDD panel replaces it.
  */
-export const TODO_SCROLL_KEYS = Object.freeze({ up: "alt+pageUp", down: "alt+pageDown", hint: "alt+PgUp/PgDn" } as const);
+export function renderTodoRail(state: TodoState, theme: PanelTheme, width: number, ascii = false): string[] {
+	if (state.tasks.length === 0) return [];
+	const { done, total } = todoSummary(state);
+	const planned = total - state.tasks.filter((task) => task.status === TODO_STATUS.DROPPED).length;
+	const rows = [
+		renderPanelHeader(theme, width, { title: "Todos", count: `${done}/${planned}`, open: true, ascii }),
+		...state.tasks.map((task) => {
+			const closed = task.status === TODO_STATUS.DONE || task.status === TODO_STATUS.DROPPED;
+			const note = task.note && (task.status === TODO_STATUS.IN_PROGRESS || task.status === TODO_STATUS.BLOCKED) ? theme.fg("muted", ` · ${task.note}`) : "";
+			return renderPanelRow(width, `${theme.fg(MARK_ROLE[task.status], MARK[task.status])} ${theme.fg(closed ? "dim" : "text", task.title)}${note}`);
+		}),
+	];
+	return ascii ? rows.map(asciiText) : rows;
+}
 
 interface TodoSession {
 	state: TodoState;
@@ -147,18 +148,12 @@ interface TodoSession {
 	ownerChanged: boolean;
 	startNudged: boolean;
 	clearedByOwnerTurn: boolean;
-	collapsed: boolean;
 	/** A finished list stays on screen for the turn it finished in, then clears. */
 	clearOnNextTurn: boolean;
 	ui: ExtensionContext["ui"] | undefined;
-	host: { requestRender(): void } | undefined;
 	tui: TUI | undefined;
-	/** Resolve the visible host when the key is pressed, not when it renders. */
-	scrollTodo?: (lines: number) => void;
-	/** The session's id, for STATUS's selection of its LDD change. */
+	/** The session's id, for the LDD section's selection of its change. */
 	id: string;
-	/** Stops following that selection. */
-	unfollow?: () => void;
 	/** The last list block sent to the model, so an unchanged one is not sent again. */
 	lastBlock?: string;
 }
@@ -183,159 +178,34 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 	if (!todoEnabled(env)) return;
 	const child = inChild(env);
 	const sessions = new Map<string, TodoSession>();
-	const collapseKey = child ? undefined : todoCollapseKey();
 
 	const session = (ctx: ExtensionContext): TodoSession => {
 		const key = sessionKey(ctx);
 		let current = sessions.get(key);
 		if (!current) {
-			current = { state: emptyTodo(), turn: 0, toolTurnsSinceWrite: 0, reminded: false, wroteThisTurn: false, ownerToolTurns: 0, ownerChanged: false, startNudged: false, clearedByOwnerTurn: false, collapsed: false, clearOnNextTurn: false, ui: undefined, host: undefined, tui: undefined, id: key };
+			current = { state: emptyTodo(), turn: 0, toolTurnsSinceWrite: 0, reminded: false, wroteThisTurn: false, ownerToolTurns: 0, ownerChanged: false, startNudged: false, clearedByOwnerTurn: false, clearOnNextTurn: false, ui: undefined, tui: undefined, id: key };
 			sessions.set(key, current);
 		}
 		return current;
 	};
 
-	const toggle = (current: TodoSession) => {
-		current.collapsed = !current.collapsed;
-		if (current.tui) invalidateSidebar(current.tui);
-		current.host?.requestRender();
-	};
-
-	// The bottom widget keeps a spacer row under the card; the rail does not.
-	// The rail draws the Gentle Shell's panel section (header row, task rows, no
-	// closing rule), which the rail itself puts in a card or on its panel; the
-	// bottom widget keeps the card with its chrome, as G's gentle-todo.
-	const todoCard = (current: TodoSession, theme: Parameters<typeof renderTodoCard>[1], spacer: boolean): Component & { dispose(): void; digest(): string; scrollBy(lines: number): void; surface?: "panel"; summary?(): ReturnType<typeof todoWorkSummary> } => {
-		let hovered = false;
-		let body: string[] = [];
-		let collapsed = current.collapsed;
-		// Widgets are measured as leaves, so native layout cannot assign this
-		// body a viewport. Use native scroll state and explicitly slice its lines
-		// while keeping the collapse header and card footer outside the viewport.
-		const scroll = new ScrollView({ render: () => body, invalidate() {} }, { follow: "none", overscroll: "contain" });
-		const scrollBy = (lines: number) => {
-			if (current.collapsed) return;
-			scroll.scrollBy(lines);
-			if (current.tui) invalidateSidebar(current.tui);
-			current.host?.requestRender();
-		};
-		// The row the rendered card draws its header on: 0 for the outlined
-		// frame and the rail's section, 1 below the float panel's top padding row.
-		let headerRow = 0;
-		const card: Component = {
-			render(width: number) {
-				const stale = staleTurns(current.state, current.turn);
-				let head: string[];
-				let foot: string[];
-				if (spacer) {
-					headerRow = panelHeaderRow(theme, width, todoCardTone(stale));
-					const lines = renderTodoCard(current.state, theme, width, {
-						collapsed: current.collapsed,
-						staleTurns: stale,
-						...(collapseKey ? { collapseKey } : {}),
-						hovered,
-						scrollable: true,
-					});
-					const bodyStart = headerRow === 1 ? 3 : 1;
-					head = lines.slice(0, bodyStart);
-					body = lines.slice(bodyStart, -1);
-					foot = lines.slice(-1);
-				} else {
-					headerRow = 0;
-					const section = renderTodoSection(current.state, theme, width, { collapsed: current.collapsed, staleTurns: stale, hovered, ...(collapseKey ? { collapseKey } : {}) });
-					head = section.header ? [section.header] : [];
-					body = section.body;
-					foot = [];
-				}
-				if (collapsed !== current.collapsed) {
-					collapsed = current.collapsed;
-					scroll.scrollToStart();
-				}
-				// Above the prompt and in the rail alike, as Gentle Shell's: at most
-				// one third of the screen, capped at 16 rows (C10). Read height on
-				// every render so a narrow resize immediately releases chat space.
-				const terminalRows = current.tui?.terminal?.rows ?? 48;
-				const height = Math.min(16, Math.floor(terminalRows / 3));
-				if (head.length === 0) return [];
-				const overflow = !current.collapsed && head.length + body.length + foot.length + Number(spacer) > height;
-				const room = Math.max(1, height - head.length - foot.length - Number(spacer) - Number(overflow));
-				scroll.updateLayout(body.length, current.collapsed ? body.length : room, () => current.host?.requestRender());
-				const visible = scroll.render(width).slice(scroll.scrollTop, scroll.scrollTop + scroll.viewportHeight);
-				const output = [...head, ...visible, ...foot];
-				if (overflow) {
-					const position = `↑↓ ${scroll.scrollTop + 1}–${scroll.scrollTop + visible.length}/${body.length} · ${TODO_SCROLL_KEYS.hint}`;
-					output.push(spacer ? theme.fg("muted", truncateToWidth(position, width)) : renderPanelRow(width, theme.fg("muted", position)));
-				}
-				return spacer && output.length > 0 ? [...output, ""] : output;
-			},
-			invalidate() {
-				hovered = false;
-			},
-		};
-		const region = new NativePointerRegion(card, {
-			onHover(event) {
-				// The region spans the whole card, but only the header row is the
-				// clickable control, so a move elsewhere in the card clears hover
-				// exactly like leaving the region entirely would.
-				const next = event.y === headerRow;
-				// One hovered control across the shell: a move elsewhere clears this one.
-				if (current.tui) {
-					if (next) setSidebarHover(current.tui, region, () => { region.clearHover(); });
-					else setSidebarHover(current.tui);
-				}
-				if (next === hovered) return { handled: true };
-				hovered = next;
-				return { handled: true, render: true };
-			},
-			onLeave() {
-				if (!hovered) return;
-				hovered = false;
-				current.host?.requestRender();
-			},
-			onClick(event) {
-				if (event.button !== "left" || event.y !== headerRow) return undefined;
-				toggle(current);
-				return { handled: true, render: true };
-			},
-			onWheel(event) {
-				if (current.collapsed || body.length <= scroll.viewportHeight) return undefined;
-				scrollBy(event.wheelDelta ?? 0);
-				return { handled: true, render: true };
-			},
-		});
-		return {
-			scrollBy,
-			// Sidebar caches must observe height-only resizes and local viewport
-			// changes, even when terminal width and task content stay the same.
-			digest: () => JSON.stringify([current.tui?.terminal?.rows, current.collapsed, current.turn, hovered, scroll.scrollTop]),
-			render: (width) => region.render(width),
-			handleMouse: (event) => region.handleMouse(event),
-			invalidate: () => region.invalidate(),
-			dispose: () => region.dispose(),
-			// The rail part is a panel section and gives the narrow work row its digest (T15.12c).
-			...(spacer ? {} : { surface: "panel" as const, summary: () => todoWorkSummary(current.state, theme) }),
-		};
-	};
-
+	// The right pane's TODOS section, while the LDD section shows no change; a
+	// regular terminal and the narrow form show no list (T174, L1469).
 	const show = (current: TodoSession) => {
 		if (current.tui) invalidateSidebar(current.tui);
-		// A child's list is its own: no card, no rail part (T134).
+		// A child's list is its own: no section (T134).
 		if (!current.ui || child) return;
-		// An empty list stays mounted: the rail shows TODOS idle,
-		// as AGENTS (L175); the card above the prompt renders nothing.
 		const snapshot = current;
 		current.ui.setWidget(WIDGET_KEY, (tui, theme) => {
-			snapshot.host = tui;
 			snapshot.tui = tui;
-			const bottom = todoCard(snapshot, theme, true);
-			const rail = todoCard(snapshot, theme, false);
-			snapshot.scrollTodo = (lines) => {
-				// Cached rail lines do not re-render when a narrow→wide resize
-				// restores the sidebar. Select ownership from the live layout.
-				const state = tui.terminal ? sidebarState(tui) : undefined;
-				(state?.active && state.ownsHost?.() ? rail : bottom).scrollBy(lines);
-			};
-			return sidebarPart(tui, "todo", bottom, rail);
+			const hidden = () => selectedChange(snapshot.id) !== undefined;
+			const dispose = sidebarSlot(tui, "todo", {
+				surface: "panel",
+				digest: () => JSON.stringify([snapshot.state.tasks, hidden(), shellSettings().ascii()]),
+				render: (width) => hidden() ? [] : renderTodoRail(snapshot.state, theme, width, shellSettings().ascii()),
+				invalidate() {},
+			});
+			return { render: () => [], invalidate() {}, dispose };
 		});
 	};
 
@@ -383,22 +253,6 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		},
 	});
 
-	if (collapseKey) {
-		pi.registerShortcut(collapseKey as Parameters<ExtensionAPI["registerShortcut"]>[0], {
-			description: "Collapse or expand the plan",
-			handler: async (ctx) => {
-				toggle(session(ctx));
-			},
-		});
-	}
-
-	for (const [key, lines] of child ? [] : [[TODO_SCROLL_KEYS.up, -3], [TODO_SCROLL_KEYS.down, 3]] as const) {
-		pi.registerShortcut(key, {
-			description: `Scroll the plan ${lines < 0 ? "up" : "down"}`,
-			handler: async (ctx) => session(ctx).scrollTodo?.(lines),
-		});
-	}
-
 	pi.on("session_start", (_event, ctx) => {
 		const current = session(ctx);
 		// A list that was already finished when the session was left is history,
@@ -415,14 +269,10 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		current.clearedByOwnerTurn = false;
 		current.lastBlock = lastBlockOn(ctx.sessionManager.getBranch());
 		current.ui = ctx.hasUI ? ctx.ui : undefined;
-		// STATUS selects the change after its own read: the card follows it.
-		current.unfollow?.();
-		if (!child) current.unfollow = onSelection(() => show(current));
 		show(current);
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
-		sessions.get(sessionKey(ctx))?.unfollow?.();
 		sessions.delete(sessionKey(ctx));
 	});
 

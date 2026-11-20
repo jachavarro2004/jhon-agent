@@ -22,7 +22,7 @@ interface RegistryHost {
 	events: { emit(name: string, data: unknown): void };
 }
 // base (T132): the commit the root's HEAD was at when this session first
-// registered it; Changes compares the root against it. Optional: an entry
+// registered it, kept with the root. Optional: an entry
 // saved before it was kept, or a root with no commit yet, has none.
 interface Registration { sessionId: string; root: string; evidence: string; base?: string }
 
@@ -221,8 +221,8 @@ export class SessionWorktreeRegistry {
 
 /**
  * The `subagent` tool's registration (T132): the worktree it creates for a
- * child, or is given for one, joins the session's roots, so Changes counts
- * what the child does there, committed or not. Bookkeeping never refuses a
+ * child, or is given for one, joins the session's roots, where the LDD
+ * section looks for the change the child works on. Bookkeeping never refuses a
  * launch: a session that cannot record it registers nothing.
  */
 export function registerSubagentWorktree(host: Partial<RegistryHost>, session: Partial<SessionReader> | undefined, sessionCwd: string, childCwd: string): string | undefined {

@@ -696,8 +696,6 @@ export default function jhon(pi: any): void {
         ]);
         return { ...status, root: where.root, ...(where.worktree ? { worktree: where.worktree } : {}), ...(lanes.length ? { lanes } : {}), ...(risk?.tier ? { risk } : {}) };
       },
-      // d: the changes overlay (extensions/ui.ts) on the change's worktree, as /jhon:changes <root> opens it.
-      openDiff: (root) => pi.sendUserMessage?.(`/jhon:changes ${root}`, { expandPromptTemplates: true }),
       // o: tasks.md in the owner's editor, the panel closed around it; with no editor, the panel says its path.
       openFile: (path) => {
         if (!(process.env.VISUAL || process.env.EDITOR)?.trim()) return "No editor: set $VISUAL or $EDITOR.";
@@ -1202,7 +1200,7 @@ export default function jhon(pi: any): void {
       const base = at(ctx, params.cwd);
       const tree = params.worktree === true ? createWorktree(base, agent.name) : undefined;
       const cwd = tree?.cwd ?? base;
-      // T132: where the child works is one of the session's roots, so Changes counts what it does there, committed or not; the session's own folder adds nothing.
+      // T132: where the child works is one of the session's roots, where the LDD section looks for its change; the session's own folder adds nothing.
       registerSubagentWorktree(pi, sm, ctx?.cwd ?? process.cwd(), tree?.dir ?? base);
       // T134 (L1021 H1, H2): the decisions on record and the code map follow the brief, bounded; the scope guard still reads the brief.
       const shown = selectedChange(sm?.getSessionId?.() ?? "");

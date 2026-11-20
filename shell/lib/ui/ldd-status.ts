@@ -240,7 +240,7 @@ interface SelectionSlot {
 	session?: string;
 	status?: LddStatus;
 	refresh?: () => Promise<LddStatus | undefined>;
-	/** Who follows the selection as it moves: TODOS shows the change's slice (T49). */
+	/** Who follows the selection as it moves (T49). */
 	listeners?: Set<() => void>;
 }
 const SELECTION = Symbol.for("jhon-shell.ldd-selection");

@@ -416,21 +416,20 @@ test("Change and Tests say a run in one vocabulary: ✓ passed, ✗ N failed; th
   assert.match(many, /risk medium · a\.py \(code\) · b\.py \(code\) · c\.py \(code\) · \+2 more/, "the top three, and how many more");
 });
 
-test("the detail's keys act on its change: t runs its tests here, d opens the changes overlay on its worktree, o opens tasks.md or says where it is", async () => {
+test("the detail's keys act on its change: t runs its tests here, o opens tasks.md or says where it is; d does nothing (T174: the changes view is gone)", async () => {
   const started: string[] = [];
-  const diffs: string[] = [];
   const files: string[] = [];
   let closed = 0;
   let editor: string | undefined;
   const tests = { change: "abc-process-exercises", base: "main", projects: [{ project: "backend", tests: "own", modules: 2, checks: [] }] };
   const make = () => new JhonPanel({ theme: plain, runtime: "pi", view: "change", load: async () => data("default"), use: async () => undefined, loadChange: async () => status, height: () => 66, ...noGrants,
     loadTests: async () => tests, startTests: (d) => { started.push(`${d.change} ${d.base}`); return { id: "job-1", startedAt: 0 }; },
-    openDiff: (root) => diffs.push(root), openFile: (path) => { files.push(path); return editor; },
+    openFile: (path) => { files.push(path); return editor; },
     onClose() { closed++; }, requestRender() {} });
   let panel = make();
   panel.open();
   await flush();
-  assert.match(hintRow(panel.render(100)), /t tests {2}d diff {2}o tasks\.md {2}r refresh {2}esc close/);
+  assert.match(hintRow(panel.render(100)), /t tests {2}o tasks\.md {2}r refresh {2}esc close/);
 
   panel.handleInput("t");
   await flush(); await flush();
@@ -446,8 +445,7 @@ test("the detail's keys act on its change: t runs its tests here, d opens the ch
   panel.open();
   await flush();
   panel.handleInput("d");
-  assert.deepEqual(diffs, ["/p/acme"], "the overlay opens on the change's worktree");
-  assert.equal(closed, 1, "the panel gives way to the overlay");
+  assert.equal(closed, 0, "d opens nothing: the panel stays");
 
   panel = make();
   panel.open();
@@ -457,15 +455,15 @@ test("the detail's keys act on its change: t runs its tests here, d opens the ch
   assert.deepEqual(files, ["/p/acme/openspec/changes/abc-process-exercises/tasks.md"]);
   for (let i = 0; i < 40; i++) panel.handleInput("j");
   assert.match(panel.render(120).join("\n"), /tasks\.md is \/p\/acme\/openspec\/changes\/abc-process-exercises\/tasks\.md: No editor: set \$VISUAL or \$EDITOR\./, "with no editor, its path");
-  assert.equal(closed, 1, "with no editor the panel stays open");
+  assert.equal(closed, 0, "with no editor the panel stays open");
 
   const none = new JhonPanel({ theme: plain, runtime: "pi", view: "change", load: async () => data("default"), use: async () => undefined, loadChange: async () => ({ change: null }), height: () => 66, ...noGrants,
-    openDiff: (root) => diffs.push(root), openFile: (path) => { files.push(path); return undefined; }, onClose() { closed++; }, requestRender() {} });
+    openFile: (path) => { files.push(path); return undefined; }, onClose() { closed++; }, requestRender() {} });
   none.open();
   await flush();
   for (const k of ["t", "d", "o"]) none.handleInput(k);
   assert.doesNotMatch(hintRow(none.render(100)), /t tests|d diff|o tasks/, "no change, no actions");
-  assert.equal(diffs.length + files.length, 2, "nothing more ran");
+  assert.equal(files.length, 1, "nothing more ran");
   assert.equal(started.length, 1);
 });
 
@@ -520,11 +518,11 @@ test("o opens tasks.md only when the change has one: a change with no tasks.md h
   const noTasks = { ...status, artifacts: status.artifacts.map((a) => a.artifact === "tasks.md" ? { ...a, state: "missing" } : a) };
   for (const s of [noTasks, { ...noTasks, directory: null, folder: false }]) {
     const panel = new JhonPanel({ theme: plain, runtime: "pi", view: "change", load: async () => data("default"), use: async () => undefined, loadChange: async () => s, height: () => 66, ...noGrants,
-      openDiff() {}, openFile: (path) => { files.push(path); return undefined; }, onClose() {}, requestRender() {} });
+      openFile: (path) => { files.push(path); return undefined; }, onClose() {}, requestRender() {} });
     panel.open();
     await flush();
     assert.doesNotMatch(hintRow(panel.render(100)), /o tasks\.md/);
-    assert.match(hintRow(panel.render(100)), /t tests {2}d diff {2}r refresh/);
+    assert.match(hintRow(panel.render(100)), /t tests {2}r refresh/);
     panel.handleInput("o");
     panel.dispose();
   }

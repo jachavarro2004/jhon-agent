@@ -222,12 +222,10 @@ func schema() []spec {
 		// T167 (L1438): the key that opens /jhon:agents, shell.keys.tasks until
 		// v0.4 (retired.go moves an old value); its variable keeps its name.
 		{key: "shell.keys.agents", kind: kKey, def: "alt+s", env: "JHON_SHELL_TASKS_KEY", fromEnv: envKey},
-		{key: "shell.keys.todos", kind: kKey, def: "alt+t", env: "JHON_SHELL_TODO_KEY", fromEnv: envKey},
-		{key: "shell.keys.changes", kind: kKey, def: "alt+g", env: "JHON_SHELL_CHANGES_KEY", fromEnv: envKey},
-		// T167: alt+u opens /jhon:usage (T93); JHON_SHELL_USAGE_KEY was its only setting.
-		{key: "shell.keys.usage", kind: kKey, def: "alt+u", env: "JHON_SHELL_USAGE_KEY", fromEnv: envKey},
 		// T169 (L1438): shell.keys.rail and shell.keys.commands went with the
-		// panel sheet and the command palette (retired.go).
+		// panel sheet and the command palette; T174 (L1462): shell.keys.todos,
+		// changes and usage with the todo card, the changes view and the usage
+		// view (retired.go).
 	}...)
 	return s
 }

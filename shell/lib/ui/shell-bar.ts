@@ -2,9 +2,7 @@ import { basename } from "node:path";
 import { homedir } from "node:os";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { gaugeTone, paintGauge, renderGauge, type GaugeTone } from "./shell-gauge.ts";
-import { METER_WARN } from "./primitives/meter.ts";
 import { asciiText, glyph } from "./primitives/glyphs.ts";
-import { selectUsageLimit, type ProviderUsage } from "./shell-usage.ts";
 import { sanitizeTerminalText } from "./terminal-theme.ts";
 import { paintSurfaceRow, type CardTheme } from "./shell-card.ts";
 import { clipPanelText, fitPanelLine, PANEL_ROW_INDENT, panelSurfaceOpener, renderPanelHeader, renderPanelRow, sectionGap } from "./shell-panel.ts";
@@ -12,7 +10,6 @@ import type { Density } from "./visual-customization-policy.ts";
 import { changeCount, estadoLines, routeText, type LddStatus } from "./ldd-status.ts";
 import { STATES } from "./primitives/states.ts";
 import { THEME_NAME } from "./primitives/paint.ts";
-import { HOVER_ROLE } from "./shell-hover.ts";
 import { shellSettings, type ShellSettings } from "../settings.ts";
 
 export { gaugeTone, renderGauge, type GaugeTone };
@@ -27,18 +24,9 @@ export interface ShellBarModel {
 	ldd?: LddStatus;
 	/** A multiplexer host shows the path (jhon:host showsPath, lib/host.ts): the title row names the project alone. */
 	hostShowsPath?: boolean;
-	/** The TODOS card shows the agent's task list, the slice's tasks live: STATUS leaves them to it. */
-	planShown?: boolean;
 	profile?: string;
-	/**
-	 * headOnly: `<dir>: <why>` for each root read against HEAD, whose commits are not counted (T132).
-	 * failed: how many of the scanned roots Git could not read the status of.
-	 */
-	changes?: { files: number; added: number; deleted: number; notice?: string; headOnly?: readonly string[]; failed?: { roots: number; of: number } };
 	cwd: string;
 	branch: string | null;
-	/** The `±N` beside the branch: the files Changes lists, committed or not (T132), not only a dirty working tree. */
-	dirty: number | undefined;
 	sessionName: string | undefined;
 	modelId: string;
 	effort: string | undefined;
@@ -46,10 +34,6 @@ export interface ShellBarModel {
 	contextWindow: number;
 	costTotal: number;
 	subscription: boolean;
-	usage: ProviderUsage | undefined;
-	statuses: string[];
-	/** Each status's extension key, in the statuses' order: the regular bar sorts its jobs count and mode badge among them. */
-	statusKeys?: string[];
 	/** The owner's permission mode for the project (`jhon status --json`'s mode, S31); a badge when it is not normal. */
 	mode?: string;
 }
@@ -96,7 +80,6 @@ const ROLE = {
 	SEPARATOR: "dim",
 	PATH: "muted",
 	BRANCH: "text",
-	DIRTY: "warning",
 	MODEL: "text",
 	EFFORT: "syntaxFunction",
 	LABEL: "muted",
@@ -181,7 +164,7 @@ function contextSegment(contextPercent: number | null, theme: ShellBarTheme, con
 	const percentText = contextPercent === null ? "?%" : `${Math.round(contextPercent)}%`;
 	const compacts = compactionPercent(contextWindow);
 	const note = compacts !== undefined && contextPercent !== null && contextPercent >= compacts - COMPACTION_NOTE_BEFORE
-		? ` ${theme.fg(USAGE_HINT_ROLE, `· compacts at ${compacts}%`)}` : "";
+		? ` ${theme.fg("dim", `· compacts at ${compacts}%`)}` : "";
 	return `${theme.fg(ROLE.LABEL, "ctx")} ${paintGauge(contextPercent, theme)} ${theme.fg(ROLE.VALUE, percentText)}${note}`;
 }
 
@@ -200,13 +183,13 @@ function chromeAscii(rows: string[], ascii = shellSettings().ascii()): string[] 
 	return ascii ? rows.map(asciiText) : rows;
 }
 
-/** The rail's Status sections, in order (L153 answer 4): LDD, then Changes and Integrations; no Stats. LDD leads the rail as its own part (L174). */
-export const STATUS_SECTIONS = ["LDD", "CHANGES", "INTEGRATIONS"] as const;
+/** The rail's Status sections: LDD alone, which leads the rail (L174); T174 removed CHANGES and INTEGRATIONS (L1462). */
+export const STATUS_SECTIONS = ["LDD"] as const;
 export type StatusSection = (typeof STATUS_SECTIONS)[number];
-/** What the pointer is over in Status: a section's header, or the CHANGES row that opens /jhon:changes. */
-export type StatusHover = StatusSection | "open-changes";
-/** A click target in the Status sections, by row: a header folds its section, the CHANGES row opens /jhon:changes. */
-export type StatusTarget = { row: number; kind: "toggle"; section: StatusSection } | { row: number; kind: "open-changes" };
+/** What the pointer is over in Status: a section's header. */
+export type StatusHover = StatusSection;
+/** A click target in the Status sections, by row: a header folds its section. */
+export type StatusTarget = { row: number; kind: "toggle"; section: StatusSection };
 /** The Status sections' rows, their click targets, and each section's row range (one card each on a transparent rail). */
 export interface StatusLayout {
 	lines: string[];
@@ -217,21 +200,12 @@ export interface StatusLayout {
 // Sidebar groups use structured fields, never positional compact-bar segments
 // or inferred meanings from opaque extension status strings.
 /**
- * The rail's Status as the Gentle Shell draws it: sections, never one STATUS
- * card, one blank row between them. LDD is one block per change in progress,
- * the session's own first (the change detail, alt+j, shows the slices one by
- * one); its count is the route, or how many changes. CHANGES counts the
- * files that differ from where the session started, committed or not (each
- * of its roots against its base, T132), with `+a −d` and `/jhon:changes`
- * (the row opens it), or `none` over `no changes since session start`, or,
- * while a root is read against HEAD, over `no uncommitted changes vs HEAD`
- * and that root's reason (the reason also under other roots' counts), or
- * `unknown` over `Git status could not be read` when a status failed;
- * INTEGRATIONS says what a mode other than normal means, then lists what
- * extensions report. No key on a header (C6). Under a multiplexer too: it shows
- * nothing of LDD (L112).
+ * The rail's Status: the LDD section, one block per change in progress, the
+ * session's own first (the change detail, alt+j, shows the slices one by
+ * one); its count is the route, or how many changes. No key on a header
+ * (C6). Under a multiplexer too: it shows nothing of LDD (L112).
  */
-export function renderShellStatusLayout(model: ShellBarModel, theme: ShellBarTheme, width: number, folded: ReadonlySet<string> = new Set(), hovered?: StatusHover, only: readonly StatusSection[] = STATUS_SECTIONS, density?: Density): StatusLayout {
+export function renderShellStatusLayout(model: ShellBarModel, theme: ShellBarTheme, width: number, folded: ReadonlySet<string> = new Set(), hovered?: StatusHover, density?: Density): StatusLayout {
 	const ascii = shellSettings().ascii();
 	const value = (text: string) => theme.fg(ROLE.VALUE, theme.bold(text));
 	const label = (text: string) => theme.fg(ROLE.LABEL, text);
@@ -241,35 +215,9 @@ export function renderShellStatusLayout(model: ShellBarModel, theme: ShellBarThe
 	const count = changeCount(model.ldd);
 	const ldd = estadoLines(model.ldd, { value, label, fg: (role: string, text: string) => theme.fg(role, text) }, inner, { routeShown: count !== 1 })
 		.flatMap((line) => line === "" ? [""] : wrapTextWithAnsi(line, inner)).map((line) => row(line));
-	const changes = model.changes;
-	// Nothing to list: "since session start" only when every root was read and
-	// compared with its base. A status Git could not read is unknown, not no
-	// changes. A root read against HEAD is named with its reason, beside other
-	// roots' counts too: the count is not the session's total while its commits
-	// are not counted.
-	const headOnly = changes?.headOnly ?? [];
-	const unread = !changes?.files && changes?.failed?.roots ? changes.failed : undefined;
-	const changed = changes?.files ? `${theme.fg("success", `+${changes.added}`)} ${theme.fg("error", `−${changes.deleted}`)}`
-		: label(unread ? "Git status could not be read" : headOnly.length ? "no uncommitted changes vs HEAD" : "no changes since session start");
-	const headRows = [
-		...(unread ? [`in ${unread.roots} of ${unread.of} ${unread.of === 1 ? "root" : "roots"}`] : []),
-		...(changes?.files && headOnly.length ? ["commits not counted, read vs HEAD:"] : []),
-		...headOnly.map((why) => sanitizeStatus(why)),
-	].flatMap((text) => wrapTextWithAnsi(text, inner)).map((line) => row(label(line)));
-	const integrationRows = (text: string) => wrapTextWithAnsi(text, Math.max(1, inner - 2))
-		.map((line, index) => row(`${label(index === 0 ? "- " : "  ")}${line}`));
-	// The status bar shows the mode's badge; INTEGRATIONS says what it means,
-	// as the Gentle Shell's `permissions <detail>` row (T15.12c).
-	const detail = model.mode ? MODE_BADGES[model.mode]?.detail : undefined;
-	const permission = detail ? integrationRows(`${label("permissions")} ${theme.fg(ROLE.STATUS, detail)}`) : [];
-	const reported = model.statuses.length + (permission.length ? 1 : 0);
-	const command = theme.fg(hovered === "open-changes" ? HOVER_ROLE : ROLE.LABEL, "/jhon:changes");
-	const all: Array<{ title: StatusSection; header: string; rows: string[]; openChangesRow?: number }> = [
+	const sections: Array<{ title: StatusSection; header: string; rows: string[] }> = [
 		{ title: "LDD", header: header("LDD", model.ldd ? (count >= 2 ? `${count} changes` : routeText(model.ldd) || undefined) : undefined), rows: ldd },
-		{ title: "CHANGES", header: header("CHANGES", changes?.files ? `${changes.files} ${changes.files === 1 ? "file" : "files"}` : unread ? "unknown" : "none"), rows: [row(changed, command), ...headRows], openChangesRow: 0 },
-		{ title: "INTEGRATIONS", header: header("INTEGRATIONS", reported ? String(reported) : "none"), rows: [...permission, ...model.statuses.flatMap((status) => integrationRows(theme.fg(ROLE.STATUS, sanitizeStatus(status))))].concat(reported ? [] : [row(label("nothing reported"))]) },
 	];
-	const sections = all.filter((section) => only.includes(section.title));
 	const lines: string[] = [];
 	const targets: StatusTarget[] = [];
 	const groups: Array<{ start: number; end: number }> = [];
@@ -279,10 +227,7 @@ export function renderShellStatusLayout(model: ShellBarModel, theme: ShellBarThe
 		const start = lines.length;
 		targets.push({ row: start, kind: "toggle", section: section.title });
 		lines.push(section.header);
-		if (!folded.has(section.title)) {
-			if (section.openChangesRow !== undefined) targets.push({ row: lines.length + section.openChangesRow, kind: "open-changes" });
-			lines.push(...section.rows);
-		}
+		if (!folded.has(section.title)) lines.push(...section.rows);
 		groups.push({ start, end: lines.length });
 	});
 	return { lines: chromeAscii(lines, ascii), targets, groups };
@@ -466,37 +411,18 @@ export function agentsWorkSummary(jobs: readonly RunningJobDisplay[] | undefined
 	return live || failed ? { left: parts.join(theme.fg(META_ROLE, " · ")), priority: 1 } : undefined;
 }
 
-const USAGE_HINT_ROLE = "dim";
-
 // The split chrome as the Gentle Shell draws it (its lib/shell-bar.ts,
 // T15.12d slice 6, L153 answer 3): a title row with the project identity
 // above the transcript and the rail, and one status bar row below them. Both
 // sit on the panel surface when it is tinted (shell.appearance.surface).
 const STATUS_BAR_DIVIDER = "│";
 const COMPACT_BRANCH_WIDTH = 15;
-const WEEK_SECONDS = 604_800;
-const FIVE_HOUR_SECONDS = 18_000;
-/** The 5h window joins the status bar from the ladder's warn step on (S1). */
-const FIVE_HOUR_FROM = METER_WARN;
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const paintChromeRow = (theme: ShellBarTheme, row: string) => paintSurfaceRow(row, panelSurfaceOpener(theme as CardTheme));
 
 /** `~/code/jhon`: the folder with the home directory as `~`. */
 export function tildePath(path: string, home = homedir()): string {
 	const trimmed = path.replace(/\/+$/, "") || path;
 	return home && (trimmed === home || trimmed.startsWith(`${home}/`)) ? `~${trimmed.slice(home.length)}` : trimmed;
-}
-
-/** When a window resets, in the local week: «Thu 14:00». */
-export function resetText(at: number): string {
-	const d = new Date(at);
-	return `${WEEKDAYS[d.getDay()]} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-const TONE_RANK: Record<string, number> = { success: 0, warning: 1, error: 2 };
-/** The week's state role: the one meter ladder, ok below 70%, warn from 70%, bad from 90% (S1). */
-export function weekTone(percent: number): string {
-	return gaugeTone(percent);
 }
 
 // The project's name and its path, sanitized: `力 name  ~/path`. Under a
@@ -525,49 +451,6 @@ export function renderShellTitleRow(model: ShellBarModel, theme: ShellBarTheme, 
 	return chromeAscii([paintChromeRow(theme, ` ${fitPanelLine(identity.full, right, Math.max(0, target - 2))} `)], ascii)[0]!;
 }
 
-function toneGauge(percent: number, role: string, theme: ShellBarTheme): string {
-	const gauge = renderGauge(percent);
-	const filled = gauge.replace(/▱+$/, "");
-	return theme.fg(role, filled) + theme.fg("border", gauge.slice(filled.length));
-}
-
-// Jhon's subscription windows in G's usage slot (S3): the week (or a
-// provider's own first window when it reports no week), and 5h only once it
-// nears its limit (warn and up on the one ladder). The reset sits on the
-// window with the highest tone, the 5h one winning a tie: it is the one about
-// to bite. G's three shapes, narrowest last: every window with its gauge and
-// reset, every window as text, the first window alone.
-type UsageStage = "full" | "text" | "primary";
-function usageSegments(model: ShellBarModel, theme: ShellBarTheme, stage: UsageStage): string[] {
-	const limit = model.usage ? selectUsageLimit(model.usage, model.modelId) : undefined;
-	if (!limit || limit.windows.length === 0) return [];
-	const full = stage === "full";
-	const fiveHour = limit.windows.find((window) => window.windowSeconds === FIVE_HOUR_SECONDS);
-	const week = limit.windows.find((window) => window.windowSeconds === WEEK_SECONDS) ?? (fiveHour ? undefined : limit.windows[0]);
-	const out: string[] = [];
-	const shownFive = fiveHour && fiveHour.usedPercent >= FIVE_HOUR_FROM ? fiveHour : undefined;
-	const rank = (percent: number) => TONE_RANK[weekTone(percent)] ?? 0;
-	const resetOnFive = !!shownFive && (!week || rank(shownFive.usedPercent) >= rank(week.usedPercent));
-	if (shownFive) {
-		const role = weekTone(shownFive.usedPercent);
-		out.push([
-			theme.fg(role, `5h ${Math.round(shownFive.usedPercent)}%`),
-			...(full && resetOnFive && shownFive.resetAt ? [theme.fg(USAGE_HINT_ROLE, `· resets ${resetText(shownFive.resetAt)}`)] : []),
-		].join(" "));
-	}
-	if (week) {
-		const role = weekTone(week.usedPercent);
-		const label = week.windowSeconds === WEEK_SECONDS ? "week" : week.label || limit.name;
-		out.push([
-			theme.fg(ROLE.LABEL, label),
-			...(full ? [toneGauge(week.usedPercent, role, theme)] : []),
-			theme.fg(role, `${Math.round(week.usedPercent)}%`),
-			...(full && !resetOnFive && week.resetAt ? [theme.fg(USAGE_HINT_ROLE, `· resets ${resetText(week.resetAt)}`)] : []),
-		].join(" "));
-	}
-	return stage === "primary" ? out.slice(0, 1) : out;
-}
-
 export interface StatusBarExtras {
 	/** Without a rail the running jobs keep their compact count here. */
 	jobs?: boolean;
@@ -576,13 +459,12 @@ export interface StatusBarExtras {
 }
 
 /**
- * G's status bar: the branch, its `±N` (the files the session changed, committed or not) and a mode other than normal
- * (Jhon's badge, S31) on the left, `⧗ N jobs` with them without a rail;
- * model · effort · profile, the context meter (Jhon's 70/90 ladder and its
- * compaction note), the cost and Jhon's usage windows on the right, `│`
- * between. Narrowing, G's cascade: at each usage shape (reset and gauges,
- * text, the first window, none) the profile gives way before the next shape,
- * then the model goes; a long branch shortens before them; the badge stays last.
+ * G's status bar: the branch and a mode other than normal (Jhon's badge, S31)
+ * on the left, `⧗ N jobs` with them without a rail; model · effort · profile,
+ * the context meter (Jhon's 70/90 ladder and its compaction note) and the
+ * cost on the right, `│` between. Narrowing, G's cascade: the profile gives
+ * way, then the model goes; a long branch shortens before them; the badge
+ * stays last.
  */
 export function renderShellStatusBar(model: ShellBarModel, theme: ShellBarTheme, width: number, extras: StatusBarExtras = {}): ShellHeaderChrome {
 	const bar = statusBar(model, theme, width, extras);
@@ -595,9 +477,8 @@ function statusBar(model: ShellBarModel, theme: ShellBarTheme, width: number, ex
 	const room = target - 2;
 	const divider = ` ${theme.fg(ROLE.SEPARATOR, STATUS_BAR_DIVIDER)} `;
 	const join = (segments: string[]) => segments.filter(Boolean).join(divider);
-	const dirty = model.dirty ? theme.fg(ROLE.DIRTY, `±${model.dirty}`) : "";
 	const branchName = model.branch ? sanitizeStatus(model.branch) : "";
-	const branch = [branchName ? theme.fg(ROLE.BRANCH, branchName) : "", dirty].filter(Boolean).join(" ");
+	const branch = branchName ? theme.fg(ROLE.BRANCH, branchName) : "";
 	const mode = modeBadge(model.mode, theme) ?? "";
 	// G's jobs are the background commands and monitors: sub-agents lead the work row instead.
 	const runningJobs = extras.jobs ? (model.jobs?.filter((job) => job.endedAt === undefined && job.kind !== "agent").length ?? 0) : 0;
@@ -607,24 +488,22 @@ function statusBar(model: ShellBarModel, theme: ShellBarTheme, width: number, ex
 	const profile = profileName ? ` ${theme.fg(ROLE.LABEL, "·")} ${theme.fg(ROLE.LABEL, profileName)}` : "";
 	const exec = extras.modelDetails === false ? "" : executionSegment(model.modelId, model.effort, theme);
 	const counters = [contextSegment(model.contextPercent, theme, model.contextWindow), costSegment(model.costTotal, model.subscription, theme)];
-	const stages: Array<UsageStage | undefined> = ["full", "text", "primary", undefined];
 	const attempts = [
-		...stages.flatMap((stage) => [{ stage, withExec: true, withProfile: true }, ...(profile ? [{ stage, withExec: true, withProfile: false }] : [])]),
-		{ stage: undefined, withExec: false, withProfile: false },
+		{ withExec: true, withProfile: true },
+		...(profile ? [{ withExec: true, withProfile: false }] : []),
+		{ withExec: false, withProfile: false },
 	];
-	for (const { stage, withExec, withProfile } of attempts) {
-		const usage = stage ? join(usageSegments(model, theme, stage)) : "";
-		const right = join([withExec ? exec + (exec && withProfile ? profile : "") : "", ...counters, usage]);
+	for (const { withExec, withProfile } of attempts) {
+		const right = join([withExec ? exec + (exec && withProfile ? profile : "") : "", ...counters]);
 		let shownLeft = left;
 		if (visibleWidth(shownLeft) + (right ? RIGHT_PADDING : 0) + visibleWidth(right) > room) {
 			if (!branchName || visibleWidth(branchName) <= COMPACT_BRANCH_WIDTH) continue;
-			// Reserve the dirty count and the badges before clipping the branch
-			// itself; a recognizable prefix while usage shows, a shorter one after.
-			const protectedWidth = visibleWidth(join([dirty, tail])) + (dirty ? 1 : tail ? visibleWidth(divider) : 0);
+			// Reserve the badges before clipping the branch itself.
+			const protectedWidth = tail ? visibleWidth(tail) + visibleWidth(divider) : 0;
 			const branchRoom = room - visibleWidth(right) - (right ? RIGHT_PADDING : 0) - protectedWidth;
-			if (branchRoom < (stage ? COMPACT_BRANCH_WIDTH : 4)) continue;
+			if (branchRoom < 4) continue;
 			const shortened = theme.fg(ROLE.BRANCH, clipPanelText(branchName, branchRoom));
-			shownLeft = join([[shortened, dirty].filter(Boolean).join(" "), tail]);
+			shownLeft = join([shortened, tail]);
 			if (visibleWidth(shownLeft) + (right ? RIGHT_PADDING : 0) + visibleWidth(right) > room) continue;
 		}
 		return { rows: [paintChromeRow(theme, ` ${shownLeft}${" ".repeat(room - visibleWidth(shownLeft) - visibleWidth(right))}${right} `)], headerRow: 0 };
@@ -666,34 +545,23 @@ export function renderShellTitleRows(model: ShellBarModel, theme: ShellBarTheme,
 
 // The regular (not fullscreen) terminal's one bar, as G's renderShellBar:
 // every segment on one row, `⟡` between them, the session name at the right
-// while it fits. G's jobs count and permission mode are extension statuses
-// ("gentle-jobs", "gentle:mode") sorted by key with the others; Jhon's count
-// and badge take those places as "jhon-jobs" and "jhon:mode".
-const JOBS_STATUS_KEY = "jhon-jobs";
-const MODE_STATUS_KEY = "jhon:mode";
+// while it fits; the jobs count and the mode badge last (T174: no
+// extension statuses, the integrations are gone).
 export const SHELL_BAR_BRAND = `${glyph("brand")} jhon`;
 export const SHELL_BAR_SEPARATOR = "⟡";
 
 function compactBarSegments(model: ShellBarModel, theme: ShellBarTheme): string[] {
-	const dirty = model.dirty ? ` ${theme.fg(ROLE.DIRTY, `±${model.dirty}`)}` : "";
-	const location = model.branch ? `${theme.fg(ROLE.PATH, model.cwd)} ${theme.fg(ROLE.BRANCH, sanitizeStatus(model.branch))}${dirty}` : theme.fg(ROLE.PATH, model.cwd) + dirty;
-	const usage = usageSegments(model, theme, "full");
+	const location = model.branch ? `${theme.fg(ROLE.PATH, model.cwd)} ${theme.fg(ROLE.BRANCH, sanitizeStatus(model.branch))}` : theme.fg(ROLE.PATH, model.cwd);
 	const jobs = model.jobs?.filter((job) => job.endedAt === undefined && job.kind !== "agent").length ?? 0;
 	const mode = modeBadge(model.mode, theme);
-	// A status without a known key keeps its place after Jhon's own.
-	const statuses: Array<[string, string]> = [
-		...(jobs ? [[JOBS_STATUS_KEY, theme.fg(ROLE.STATUS, shellJobsCount(jobs))] as [string, string]] : []),
-		...(mode ? [[MODE_STATUS_KEY, mode] as [string, string]] : []),
-		...model.statuses.map((status, index): [string, string] => [model.statusKeys?.[index] ?? "\uffff", theme.fg(ROLE.STATUS, sanitizeStatus(status))]),
-	];
 	return [
 		theme.fg(ROLE.BRAND, shellSettings().ascii() ? glyph("brand", true) : SHELL_BAR_BRAND),
 		location,
 		executionSegment(model.modelId, model.effort, theme),
 		contextSegment(model.contextPercent, theme, model.contextWindow),
 		costSegment(model.costTotal, model.subscription, theme),
-		...(usage.length ? [usage.join(" ")] : []),
-		...statuses.map((entry, index) => [entry, index] as const).sort(([[a], i], [[b], j]) => a.localeCompare(b) || i - j).map(([[, segment]]) => segment),
+		...(jobs ? [theme.fg(ROLE.STATUS, shellJobsCount(jobs))] : []),
+		...(mode ? [mode] : []),
 	];
 }
 

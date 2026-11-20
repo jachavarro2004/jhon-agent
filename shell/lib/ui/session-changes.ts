@@ -2,14 +2,36 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { generateUnifiedPatch } from "@earendil-works/pi-coding-agent";
-import { changesModel, type ChangedFile, type WorktreeChanges } from "./shell-changes.ts";
 import { SESSION_WORKTREE_ENTRY, SUBAGENT_WORKTREE_EVIDENCE, isCommitId } from "./session-worktree-registry.ts";
 
-// Captured write/edit evidence of a session's own tool calls. It tells
-// /jhon:changes and the LDD selection which roots the session touched; the
-// files Changes lists always come from Git. A sub-agent's work is not
+// Captured write/edit evidence of a session's own tool calls. It tells the
+// LDD selection which roots the session touched. A sub-agent's work is not
 // captured here: the worktree it runs in is one of the session's roots
 // (session-worktree-registry.ts, T132).
+
+/** One file the session's own writes changed, with its line counts. */
+export interface ChangedFile {
+	path: string;
+	added: number;
+	deleted: number;
+	status: "modified" | "added" | "deleted";
+	countsUnavailable?: string;
+}
+/** A root's changed files, sorted by path, and their totals. */
+export interface ChangesModel {
+	files: ChangedFile[];
+	added: number;
+	deleted: number;
+}
+export interface WorktreeChanges {
+	root: string;
+	model: ChangesModel;
+}
+
+export function changesModel(changed: ChangedFile[]): ChangesModel {
+	const files = [...changed].sort((a, b) => a.path.localeCompare(b.path));
+	return { files, added: files.reduce((total, file) => total + file.added, 0), deleted: files.reduce((total, file) => total + file.deleted, 0) };
+}
 export const SESSION_CHANGE_ENTRY = "jhon-shell.session-change/v1";
 export const MAX_CHANGE_BYTES = 64 * 1024;
 const MAX_RECORDS = 256;
@@ -144,7 +166,7 @@ export class SessionChanges {
 	record(evidence: SessionChangeEvidence): boolean {
 		if (!isSessionChangeEvidence(evidence) || this.seen.has(evidence.id)) return false;
 		const bytes = Buffer.byteLength(JSON.stringify(evidence));
-		// Bounds session-file growth; Changes itself lists from Git without a cap.
+		// Bounds session-file growth.
 		if (this.seen.size >= MAX_RECORDS || this.bytes + bytes > MAX_SESSION_BYTES) return false;
 		this.seen.add(evidence.id);
 		this.bytes += bytes;

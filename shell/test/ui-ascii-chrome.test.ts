@@ -2,8 +2,8 @@
  * shell.appearance.ascii reaches every chrome piece forked from the Gentle
  * Shell (T15.12g, inventory row 79): the prompt rule and the card prompt, the
  * title row (力 reads jhon), the status bar and the regular bar with their
- * separators and meters, the LDD rows, the TODOS, JOBS and AGENTS sections,
- * a notice's title and the todo card draw nothing outside 0x20-0x7e, in the
+ * separators and meters, the LDD rows, the TODOS, JOBS and AGENTS sections
+ * and a notice's title draw nothing outside 0x20-0x7e, in the
  * forms design/system.md's glyph table gives, at 160 and 100 columns.
  *
  *   cd shell && node --experimental-strip-types --test test/ui-ascii-chrome.test.ts
@@ -15,9 +15,9 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { renderShellAgentsSection, renderShellBar, renderShellChromeBar, renderShellJobsSection, renderShellStatusBar, renderShellStatusSections, renderShellTitleRow, renderShellTitleRows, type ShellBarModel } from "../lib/ui/shell-bar.ts";
 import { CARD_STYLE, renderCard, setCardStyle, cardStyle, CARD_TONE } from "../lib/ui/shell-card.ts";
 import { framePromptLines, PROMPT_STATE, resolvePromptLayout } from "../lib/ui/shell-prompt.ts";
-import { renderTodoCard, renderTodoSection, type TodoState } from "../lib/ui/shell-todo.ts";
+import { renderTodoRail } from "../extensions/todo.ts";
+import type { TodoState } from "../lib/todo.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
-import type { ProviderUsage } from "../lib/ui/shell-usage.ts";
 import { useMemorySettings } from "./fake-jhon-settings.ts";
 
 const plain = { fg: (_r: string, t: string) => t, bold: (t: string) => t, bg: (_r: string, t: string) => `\x1b[48;5;236m${t}\x1b[49m`, strikethrough: (t: string) => t };
@@ -34,13 +34,6 @@ function ascii(t: TestContext): void {
 	useMemorySettings(t, { "shell.appearance.ascii": true });
 }
 
-const usage: ProviderUsage = {
-	provider: "claude-bridge", plan: undefined, fetchedAt: NOW,
-	limits: [{ name: "claude", limitReached: false, windows: [
-		{ label: "5h", usedPercent: 84, windowSeconds: 18_000, resetAt: NOW + 2 * 3_600_000 },
-		{ label: "week", usedPercent: 62, windowSeconds: 604_800, resetAt: NOW + 3 * 86_400_000 },
-	] }],
-};
 const jobs = [
 	{ id: "job-1", label: "npm test", startedAt: NOW - 65_000 },
 	{ id: "job-2", label: "lint", startedAt: NOW - 90_000, endedAt: NOW - 5_000, status: "exited" as const, exitCode: 0 },
@@ -51,9 +44,8 @@ const jobs = [
 	{ id: "ag-4", kind: "agent" as const, label: "explore: stop", startedAt: NOW - 95_000, endedAt: NOW - 4_000, status: "stopped" as const },
 ];
 const model = (overrides: Partial<ShellBarModel> = {}): ShellBarModel => ({
-	cwd: "/home/owner/code/jhon", branch: "feat/shell-gentle", dirty: 3, sessionName: "rail work", modelId: "claude-opus-5-5", effort: "high", profile: "jhon",
-	contextPercent: 85, contextWindow: 1_000_000, costTotal: 1.25, subscription: true, usage, statuses: ["MCP: 2 servers · ok"], mode: "yolo", jobs,
-	changes: { files: 2, added: 10, deleted: 4 },
+	cwd: "/home/owner/code/jhon", branch: "feat/shell-gentle", sessionName: "rail work", modelId: "claude-opus-5-5", effort: "high", profile: "jhon",
+	contextPercent: 85, contextWindow: 1_000_000, costTotal: 1.25, subscription: true, mode: "yolo", jobs,
 	ldd: {
 		change: "v0-1-release", slice: "Slice 2: launch", slices: ["done", "current", "pending"], route: "verified", next: "apply",
 		tests: { passed: false, failed: 2, at: new Date(NOW - 60_000).toISOString() },
@@ -63,11 +55,11 @@ const model = (overrides: Partial<ShellBarModel> = {}): ShellBarModel => ({
 });
 const todos = { tasks: [
 	{ id: 1, title: "Read the rail", status: "done" },
-	{ id: 2, title: "Cards → ASCII", status: "in_progress", note: "the todo card · its rows" },
-	{ id: 3, title: "Blocked one", status: "blocked" },
+	{ id: 2, title: "Cards → ASCII", status: "in_progress", note: "the todo rows · its notes" },
+	{ id: 3, title: "Blocked one", status: "blocked", note: "waiting" },
 	{ id: 4, title: "Later", status: "pending" },
 	{ id: 5, title: "Gone", status: "dropped" },
-] } as TodoState;
+], nextId: 6, updatedTurn: 1 } as TodoState;
 
 test("the prompt rule, the neon card prompt and the float card prompt draw in ASCII, idle and working", (t) => {
 	ascii(t);
@@ -122,19 +114,18 @@ test("the Status sections and the LDD rows draw in ASCII", (t) => {
 	for (const width of [46, 80, 100, 160]) pureAscii(`status sections ${width}`, renderShellStatusSections(model(), plain, width));
 });
 
-test("TODOS, JOBS and AGENTS draw their glyphs in ASCII, open and folded", (t) => {
+test("TODOS, JOBS and AGENTS draw their glyphs in ASCII, JOBS and AGENTS folded too", (t) => {
 	ascii(t);
 	for (const width of [46, 80, 100, 160]) {
 		for (const folded of [false, true]) {
-			const section = renderTodoSection(todos, plain, width, { collapsed: folded, staleTurns: 0 });
-			pureAscii(`TODOS ${width} ${folded}`, [section.header, ...section.body]);
+			if (!folded) pureAscii(`TODOS ${width}`, renderTodoRail(todos, plain, width, true));
 			pureAscii(`JOBS ${width} ${folded}`, renderShellJobsSection(jobs, plain, width, NOW, folded));
 			pureAscii(`AGENTS ${width} ${folded}`, renderShellAgentsSection(jobs, plain, width, NOW, folded));
 		}
 	}
 });
 
-test("a notice's title and the todo card above the editor draw in ASCII in both card styles", (t) => {
+test("a notice's title draws in ASCII in both card styles", (t) => {
 	ascii(t);
 	const previous = cardStyle();
 	t.after(() => setCardStyle(previous));
@@ -142,7 +133,6 @@ test("a notice's title and the todo card above the editor draw in ASCII in both 
 		setCardStyle(style);
 		for (const width of WIDTHS) {
 			pureAscii(`notice ${style} ${width}`, renderCard({ title: "Settings", body: ["saved"], tone: CARD_TONE.INFO }, plain, width, { expanded: true }));
-			for (const collapsed of [false, true]) pureAscii(`todo card ${style} ${width} ${collapsed}`, renderTodoCard(todos, plain, width, { collapsed, staleTurns: 0 }));
 		}
 	}
 });

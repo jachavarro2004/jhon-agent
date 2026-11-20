@@ -25,13 +25,13 @@ func TestT146gSmallChangeExemptInTheSameWords(t *testing.T) {
 	for name, text := range map[string]string{
 		"prose/orchestrator.md":         read("prose/orchestrator.md"),
 		"contracts/ldd.md Light verify": light,
-		"shell/lib/ui/shell-todo.ts":    read("shell/lib/ui/shell-todo.ts"),
+		"shell/lib/todo.ts":             read("shell/lib/todo.ts"),
 	} {
 		if !strings.Contains(strings.ToLower(text), strings.ToLower(smallKeepsNo)) {
 			t.Errorf("%s does not exempt a small change in the shared words %q", name, smallKeepsNo)
 		}
 	}
-	if s := read("shell/lib/ui/shell-todo.ts"); strings.Contains(s, "any change to code") {
+	if s := read("shell/lib/todo.ts"); strings.Contains(s, "any change to code") {
 		t.Error("pi's todo text still asks for a list at any change to code")
 	}
 }

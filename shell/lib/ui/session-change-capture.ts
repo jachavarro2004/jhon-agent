@@ -13,7 +13,7 @@ const unknown = (): ChangeSnapshot => ({ kind: "unavailable", reason: "No diff: 
 
 /**
  * Observe the session's own write/edit outcomes, never infer ownership from Git status or shell text.
- * The evidence names the roots /jhon:changes reads from Git and the LDD selection follows.
+ * The evidence names the roots the LDD selection follows.
  * A sub-agent records nothing: the worktree it runs in is one of its parent's roots (T132).
  */
 export function installSessionChangeCapture(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, resolver: WorktreeResolver = resolveSessionWorktree): void {

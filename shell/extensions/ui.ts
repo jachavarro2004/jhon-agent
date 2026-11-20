@@ -1,12 +1,11 @@
 import { CustomEditor, type ExtensionAPI, type ExtensionContext, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { isHomeOrBroadUserDirectory } from "../lib/ui/user-directories.ts";
 import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
-import { execFile, spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { existsSync, realpathSync, statSync, watch } from "node:fs";
-import { lstat, readFile } from "node:fs/promises";
 import * as os from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
-import { renderShellBar, renderShellChromeBar, renderShellStatusBar, renderShellStatusLayout, renderShellTitleRow, renderShellTitleRows, type StatusHover, type StatusSection, type StatusTarget, agentsWorkSummary, renderShellAgentsSection, renderShellJobsSection, JOBS_FINISHED_TTL_MS, shellEnabled, shellJobsCount, type ShellBarModel, type RunningJobDisplay } from "../lib/ui/shell-bar.ts";
+import { join } from "node:path";
+import { renderShellBar, renderShellChromeBar, renderShellStatusBar, renderShellStatusLayout, renderShellTitleRow, renderShellTitleRows, type StatusHover, type StatusTarget, agentsWorkSummary, renderShellAgentsSection, renderShellJobsSection, JOBS_FINISHED_TTL_MS, shellEnabled, shellJobsCount, type ShellBarModel, type RunningJobDisplay } from "../lib/ui/shell-bar.ts";
 import { SettingsView } from "../lib/ui/settings-view.ts";
 import { ROSE_INK } from "../lib/ui/customize/themes.ts";
 import { PALETTE_PATH } from "../lib/desktop-palette.ts";
@@ -16,44 +15,34 @@ import { completeWord } from "../lib/ui/jhon-commands.ts";
 import { backgroundTasksKey } from "../lib/background-tasks-tools.ts";
 import { changeMode, type ModeData } from "../lib/ui/jhon-panel-grants.ts";
 import { laneReads, lddLanes, lddOfSession, lddWatchTargets, permissionMode, readLddStatus, selectChange, shareSelection, type LddStatus } from "../lib/ui/ldd-status.ts";
-import { CHANGE_STATUS, DIFF_MAX_BYTES, DIFF_MAX_LINES, DIFF_TOO_LARGE, WorktreeChangesTracker, fallbackReason, noChangesText, renderChangesWidget, type ChangedFile, type ChangesModel, type TurnSummary, type FileRevision, type GitRunner, type LineCounter, type WorktreeChanges } from "../lib/ui/shell-changes.ts";
-import { WorktreeChangesView } from "../lib/ui/shell-changes-view.ts";
-import { openInExternalEditor, type ExternalEditorHost } from "../lib/ui/jhon-panel-editor.ts";
-import { SessionWorktreeRegistry, resolveSessionWorktree, worktreeGitEnvironment, type WorktreeResolver, type WorktreeIdentity } from "../lib/ui/session-worktree-registry.ts";
-import { gitReadEnv } from "../lib/git-read.ts";
-import { createNativeFullscreenInteraction } from "../lib/ui/native-fullscreen-interaction.ts";
+import { SessionWorktreeRegistry, resolveSessionWorktree, type WorktreeResolver } from "../lib/ui/session-worktree-registry.ts";
 import { cardStyle, renderCard, setCardStyle, type Card, type CardTheme } from "../lib/ui/shell-card.ts";
 import { resolveVisualSettings } from "../lib/ui/visual-customization-policy.ts";
 import { DOUBLE_ESC_CANCEL_HINT, floatPromptRow, framePromptLines, panelPromptRow, resolvePromptLayout, IDLE_ESC_CLEAR_HINT, PROMPT_HINT, PROMPT_STATE, SHELL_PULSE_MS, withPromptHint, type PromptState } from "../lib/ui/shell-prompt.ts";
 import { createApiWait } from "../lib/ui/api-wait.ts";
 import { createStallRecovery, stallContinueText, stallNotice, stallSeconds, stallThreshold, type Schedule } from "../lib/ui/stall-recovery.ts";
 import { activeProfileName } from "../lib/profiles.ts";
-import { SESSION_PROFILE_CHANGED, SessionProfile, sessionMark, sessionProfileOnBranch, type ProfilesJson } from "../lib/session-profile.ts";
-import { knownAgents, resolveAgent } from "../lib/agents.ts";
+import { SESSION_PROFILE_CHANGED, sessionMark, sessionProfileOnBranch } from "../lib/session-profile.ts";
 import { OPEN_TASKS_EVENT, TASKS_EVENT } from "../lib/events.ts";
-import { retiredNotice, shellSettings, type ShellSettings } from "../lib/settings.ts";
+import { retiredNotice, shellSettings } from "../lib/settings.ts";
 import { resolveAnimationPolicy, type AnimationPolicy } from "../lib/ui/animation-policy.ts";
 import {
 	DOUBLE_ESC_CANCEL_WINDOW_MS,
 	resolveDoubleEscCancelPolicy,
 	type DoubleEscCancelPolicy,
 } from "../lib/ui/double-esc-cancel-policy.ts";
-import { NAN_PROVIDER, NAN_QUOTA_URL, parseCodexRateLimitEvent, parseNanQuota, parseProviderUsage, parseUsageHeaders, parseUsageSource, usageScopeProviders, UsageSourceRegistry, UsageStore, USAGE_SOURCE_EVENT, type ProviderUsage, type UsageSource } from "../lib/ui/shell-usage.ts";
-import { UsageView } from "../lib/ui/shell-usage-view.ts";
 import { setSidebarHover, sidebarHeader, sidebarPart, sidebarSlot, sidebarState, VISUAL_SETTINGS_CHANGED, type SidebarRail } from "../lib/ui/shell-sidebar.ts";
 import { installSidebar, invalidateSidebar, SIDEBAR_BREAKPOINT } from "../lib/ui/shell-sidebar-layout.ts";
 import type { PanelSummary } from "../lib/ui/shell-panel.ts";
 import { renderWorkRow, setChromeSurface, workRowLead } from "../lib/ui/shell-panel.ts";
-import { recentSessionRoots, sessionChangeRoots, sessionRootBases, sessionSubagentRoots } from "../lib/ui/session-changes.ts";
+import { recentSessionRoots } from "../lib/ui/session-changes.ts";
 import { installSessionChangeCapture } from "../lib/ui/session-change-capture.ts";
 import { SelectionEngine } from "../lib/ui/selection-engine.ts";
-import { withOverlayRepaint } from "../lib/ui/overlay-repaint.ts";
 import { HOST_EVENT, hostShowsPath } from "../lib/host.ts";
-import { counted, recordUse } from "../lib/ui-use.ts";
+import { counted } from "../lib/ui-use.ts";
 
 // jhon-shell's UI: the visual layer Jhon puts on top of pi. It installs the
-// status bar, the prompt, the working-tree changes widget and overlay, the
-// subscription usage view, and customization.
+// status bar, the right pane, the prompt and customization.
 
 export interface ShellFooterData {
 	getGitBranch(): string | null;
@@ -71,18 +60,13 @@ interface BuildOptions {
 	jobs?: RunningJobDisplay[];
 	profile?: string;
 	home?: string;
-	dirty?: number;
-	usage?: ProviderUsage;
 }
 
 export interface ShellDeps {
 	activeProfile(): string | undefined;
-	fetch: typeof fetch;
 	now(): number;
 	resolveWorktree: WorktreeResolver;
-	/** maxBuffer bounds one diff; status and discovery stay unbounded. */
-	gitRunner(cwd: string, maxBuffer?: number): GitRunner;
-	/** A root Changes may scan: removed worktrees and leftover directories are skipped. */
+	/** A session root the LDD section may read: removed worktrees and leftover directories are skipped. */
 	rootExists(root: string): boolean;
 	/** The LDD change the session works on, through `jhon status` (lib/ui/ldd-status.ts). */
 	lddStatus(cwd: string): Promise<LddStatus | undefined>;
@@ -92,17 +76,6 @@ export interface ShellDeps {
 	watch?: typeof watch;
 	/** The stall recovery's one-shot timer (lib/ui/stall-recovery.ts); returns its cancel. */
 	schedule?: Schedule;
-	/** `jhon profile json`, parsed: a session profile's sub-agent models, for the usage scope (T149). */
-	profilesJson?(cwd: string): Promise<ProfilesJson>;
-}
-
-/** `jhon profile json`, read without blocking pi, as extensions/jhon.ts reads it for the session's profile. */
-function readProfilesJson(cwd: string): Promise<ProfilesJson> {
-	return new Promise((resolve, reject) =>
-		execFile(process.env.JHON_BIN || "jhon", ["profile", "json"], { cwd, encoding: "utf8", maxBuffer: 8 << 20, timeout: 10_000 }, (error, stdout) => {
-			if (error) return reject(error);
-			try { resolve(JSON.parse(stdout) as ProfilesJson); } catch (cause) { reject(cause); }
-		}));
 }
 
 export type ActiveProfileReader = (() => string | undefined) & {
@@ -130,7 +103,7 @@ export function createActiveProfileReader(read: () => string = activeProfileName
 	return reader;
 }
 
-const defaultShellDeps: Omit<ShellDeps, "activeProfile"> = { fetch: (input, init) => globalThis.fetch(input, init), now: () => Date.now(), resolveWorktree: resolveSessionWorktree, gitRunner: (cwd, maxBuffer) => shellGitRunner(cwd, process.env, execFile, maxBuffer), rootExists: (root) => existsSync(join(root, ".git")), lddStatus: (cwd) => readLddStatus(cwd), permissionMode, profilesJson: readProfilesJson };
+const defaultShellDeps: Omit<ShellDeps, "activeProfile"> = { now: () => Date.now(), resolveWorktree: resolveSessionWorktree, rootExists: (root) => existsSync(join(root, ".git")), lddStatus: (cwd) => readLddStatus(cwd), permissionMode };
 
 interface AssistantUsageEntry {
 	type: string;
@@ -196,14 +169,10 @@ export function buildShellBarModel(
 	const home = options.home ?? os.homedir();
 	const { usage, costTotal } = sessionStats(ctx);
 	const model = ctx.model;
-	const entries = Array.from(footerData.getExtensionStatuses().entries())
-		.sort(([a], [b]) => a.localeCompare(b));
-	const statuses = entries.map(([, text]) => text);
 	return {
 		cwd: shortenHome(ctx.sessionManager.getCwd(), home),
 		profile: options.profile,
 		branch: footerData.getGitBranch(),
-		dirty: options.dirty,
 		sessionName: ctx.sessionManager.getSessionName(),
 		modelId: model?.id ?? "no-model",
 		effort: model?.reasoning ? pi.getThinkingLevel() : undefined,
@@ -211,10 +180,7 @@ export function buildShellBarModel(
 		contextWindow: usage?.contextWindow ?? model?.contextWindow ?? 0,
 		costTotal,
 		subscription: model ? ctx.modelRegistry.isUsingOAuth(model) : false,
-		usage: options.usage,
 		...(options.jobs !== undefined ? { jobs: options.jobs } : {}),
-		statuses,
-		statusKeys: entries.map(([key]) => key),
 	};
 }
 
@@ -599,10 +565,10 @@ function narrowChrome(tui: TUI): boolean {
 	return !(state.active && state.ownsHost?.());
 }
 
-/** The live-work digests the work row folds, agents first then the todo list (the Gentle Shell's order). */
+/** The live-work digests the work row folds: the sub-agents (the todo list shows in the right pane only, T174). */
 function workParts(tui: TUI): Array<{ part: SidebarRail; summary: NonNullable<ReturnType<NonNullable<SidebarRail["summary"]>>> }> {
 	if (!tui.terminal) return [];
-	return ["agents", "todo"].flatMap((key) => {
+	return ["agents"].flatMap((key) => {
 		const part = sidebarState(tui).parts.get(key);
 		const summary = part?.summary?.();
 		return part && summary ? [{ part, summary }] : [];
@@ -649,165 +615,6 @@ const SETTINGS_MOVED: Record<string, string> = {
 	profile: "The model profile is chosen in /jhon:profile.",
 };
 
-const CHANGES_WIDGET_KEY = "jhon-shell-changes";
-const CHANGES_COMMAND_NAME = "jhon:changes";
-const CHANGES_POLL_DEFAULT_MS = 2000;
-const GIT_TIMEOUT_MS = 5000;
-
-export function shellGitRunner(cwd: string, env: NodeJS.ProcessEnv = process.env, run: typeof execFile = execFile, maxBuffer = Infinity): GitRunner {
-	// Pi exec cannot replace the inherited environment. Use argv directly and
-	// a complete sanitized environment for discovery, status, and lazy diffs.
-	const childEnv = gitReadEnv(worktreeGitEnvironment(env));
-	return (args) => new Promise((resolve) => {
-		run("git", ["-C", cwd, ...args], {
-			env: childEnv,
-			encoding: "utf8",
-			shell: false,
-			windowsHide: true,
-			timeout: GIT_TIMEOUT_MS,
-			// Pi exec accumulates output without a maxBuffer cap. In particular,
-			// large porcelain inventories must not become partial successful scans.
-			// Only a single diff passes a bound, and is told when it hit it.
-			maxBuffer,
-		}, (error, stdout) => {
-			if ((error as { code?: unknown } | null)?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return resolve({ stdout, code: 1, truncated: true });
-			resolve({ stdout, code: error ? typeof error.code === "number" ? error.code : 1 : 0 });
-		});
-	});
-}
-
-// A file's diff is against what its counts are against (T132): the session's
-// base for its root when the tracker compared with it, else HEAD.
-export async function loadFileDiff(git: GitRunner, file: ChangedFile): Promise<string> {
-	const args = file.status === CHANGE_STATUS.UNTRACKED ? ["diff", "--no-index", "--", "/dev/null", file.path] : ["diff", file.diffBase ?? "HEAD", "--", file.path];
-	const result = await git(args);
-	if (result.truncated || result.stdout.length > DIFF_MAX_BYTES || result.stdout.split("\n", DIFF_MAX_LINES + 2).length > DIFF_MAX_LINES + 1) return DIFF_TOO_LARGE;
-	return result.code === 0 || result.code === 1 ? result.stdout : "";
-}
-
-// Untracked files have no numstat; count their lines without reading past the diff bound.
-const untrackedLines = (root: string): LineCounter => async (path) => {
-	const target = join(root, path);
-	const info = await lstat(target);
-	if (!info.isFile() || info.size > DIFF_MAX_BYTES) return 0;
-	const text = await readFile(target, "utf8");
-	return text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
-};
-// Same-count edits still change size or mtime, so an open diff reloads.
-const fileRevision = (root: string): FileRevision => async (path) => {
-	const info = await lstat(join(root, path));
-	return `${info.size}:${info.mtimeMs}`;
-};
-
-// The editor launch is shared with the change detail's o (tasks.md); it lives beside it.
-export { openInExternalEditor, type ExternalEditorHost } from "../lib/ui/jhon-panel-editor.ts";
-
-/** The key that opens /jhon:changes, shell.keys.changes (JHON_SHELL_CHANGES_KEY overrides it), or off. */
-export function changesShortcut(settings: ShellSettings = shellSettings()): string | undefined {
-	return settings.key("changes");
-}
-
-/**
- * The key that opens /jhon:usage (T93, L659), shell.keys.usage (T167): alt+u,
- * another (JHON_SHELL_USAGE_KEY overrides it), or off.
- */
-export function usageShortcut(settings: ShellSettings = shellSettings()): string | undefined {
-	return settings.key("usage");
-}
-
-function positiveMs(value: string | undefined, fallback: number): number {
-	const parsed = Number.parseInt(value ?? "", 10);
-	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function changesPollMs(env: NodeJS.ProcessEnv): number {
-	return positiveMs(env.JHON_SHELL_CHANGES_POLL_MS, CHANGES_POLL_DEFAULT_MS);
-}
-
-// One bounded window per provider refresh: a credential lookup or fetch that
-// never answers must not hold the other providers — or the panel opening on
-// them — past it. Tunable (tests, slow networks); invalid values fall back.
-const USAGE_FETCH_TIMEOUT_DEFAULT_MS = 10_000;
-const usageFetchTimeoutMs = (env: NodeJS.ProcessEnv): number => positiveMs(env.JHON_SHELL_USAGE_TIMEOUT_MS, USAGE_FETCH_TIMEOUT_DEFAULT_MS);
-
-function changesFingerprint(model: ChangesModel): string {
-	return model.files.map((file) => `${file.path}:${file.status}:${file.added}:${file.deleted}:${file.diffRevision ?? ""}:${file.countsUnavailable ?? ""}`).join("|");
-}
-
-interface OverlayDeps {
-	loadDiff(root: string, file: ChangedFile): Promise<string>;
-	worktrees(): WorktreeChanges[];
-	refresh(): Promise<ChangesModel>;
-	apply(ctx: ExtensionContext, model: ChangesModel): void;
-	pollMs: number;
-	/** A folder whose worktree it opens on (/jhon:changes <dir>, the change detail's d). */
-	focus?: string;
-}
-
-// The overlay polls each root's Git state while it is open; diffs load lazily.
-async function showChangesOverlay(ctx: ExtensionContext, deps: OverlayDeps): Promise<void> {
-	let host: ExternalEditorHost | undefined;
-	let view: WorktreeChangesView | undefined;
-	const refresh = async () => {
-		const latest = await deps.refresh();
-		view?.update(deps.worktrees());
-		deps.apply(ctx, latest);
-	};
-	const poll = setInterval(() => void refresh().catch(() => {}), deps.pollMs);
-	poll.unref();
-	try {
-		const chosen = await ctx.ui.custom<{ root: string; file: ChangedFile } | null>(
-			(tui, theme, _keybindings, done) => {
-				const close = withOverlayRepaint(tui, done);
-				host = tui;
-				const opened = new WorktreeChangesView(deps.worktrees(), {
-					theme,
-					rows: () => Math.max(0, tui.terminal.rows),
-					loadDiff: deps.loadDiff,
-					onOpen: (root, file) => close({ root, file }),
-					onRefresh: () => void refresh().catch(() => {}),
-					onClose: () => close(null),
-					requestRender: () => tui.requestRender(),
-					ascii: shellSettings().ascii(),
-				});
-				// /jhon:changes <dir> (the change detail's d): that worktree alone.
-				if (deps.focus) opened.focus(deps.focus, true);
-				view = opened;
-				// As G's: the native fullscreen wrapper keeps keyboard, hover, click and wheel on the view.
-				const interaction = createNativeFullscreenInteraction({ keyboardTarget: opened, requestRender: () => tui.requestRender() });
-				interaction.addChild(opened);
-				return interaction;
-			},
-			// G's changes view: the whole terminal.
-			{ overlay: true, overlayOptions: { width: "100%", maxHeight: "100%", margin: 0, anchor: "center" } },
-		);
-		if (!chosen || !host) return;
-		const failed = openInExternalEditor(host, chosen.file.path, process.env, spawnSync, chosen.root);
-		if (failed) ctx.ui.notify(failed, "warning");
-	} finally {
-		clearInterval(poll);
-		view?.dispose();
-		view = undefined;
-	}
-}
-
-function showChanges(ctx: ExtensionContext, model: ChangesModel, visible = true, turn: () => TurnSummary | undefined = () => undefined): void {
-	if (!visible || model.files.length === 0) {
-		ctx.ui.setWidget(CHANGES_WIDGET_KEY, undefined);
-		return;
-	}
-	ctx.ui.setWidget(
-		CHANGES_WIDGET_KEY,
-		(tui, theme) => sidebarPart(tui, "changes", {
-			render(width: number) {
-				return renderChangesWidget(model, theme, width, turn());
-			},
-			invalidate() {},
-		}),
-		{ placement: "belowEditor" },
-	);
-}
-
 interface CardComponentOptions {
 	expanded: boolean;
 	previewRows?: number;
@@ -834,57 +641,6 @@ function spaced(component: { render(width: number): string[]; invalidate(): void
 	};
 }
 
-const USAGE_REFRESH_MS = 5 * 60_000;
-
-// The NaN Cloud quota endpoint is the one the official dashboard reads with the
-// same API key pi already holds. The key travels in the header only: the request
-// refuses redirects so it cannot be replayed to another origin, asks for no
-// stored copy, and nothing here logs, renders, or persists it.
-export async function fetchNanUsage(apiKey: string | undefined, fetchFn: typeof fetch, now: number): Promise<ProviderUsage | undefined> {
-	if (!apiKey) return undefined;
-	try {
-		const response = await fetchFn(NAN_QUOTA_URL, {
-			redirect: "error",
-			cache: "no-store",
-			headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json", "User-Agent": "jhon-shell" },
-		});
-		if (!response.ok) return undefined;
-		const parsed = parseNanQuota(await response.json(), now);
-		return parsed.limits.length > 0 ? parsed : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-// A registered source is foreign code running inside a fire-and-forget
-// refresh: it must degrade exactly like the built-in NaN fetcher above, never
-// throw past this call, and never leave an unhandled rejection behind.
-async function fetchFromSource(source: UsageSource, apiKey: string | undefined, fetchFn: typeof fetch, now: number): Promise<ProviderUsage | undefined> {
-	try {
-		const result = await source.fetch(apiKey, fetchFn, now);
-		return result === undefined ? undefined : parseProviderUsage(result, source.provider);
-	} catch {
-		return undefined;
-	}
-}
-
-// Changes refreshes started without awaiting (turn end, worktree registration)
-// are tracked so tests can wait for them instead of guessing a delay.
-const backgroundChangeRefreshes = new Set<Promise<void>>();
-function trackChangeRefresh(refresh: Promise<void>): void {
-	const tracked = refresh.catch(() => {}).finally(() => { backgroundChangeRefreshes.delete(tracked); });
-	backgroundChangeRefreshes.add(tracked);
-}
-
-/** Resolves once every background Changes refresh has finished, or after `timeoutMs` for one that never settles. */
-export async function backgroundChangeRefreshesSettled(timeoutMs = 2000): Promise<void> {
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	const deadline = new Promise<void>((resolve) => { timer = setTimeout(resolve, timeoutMs); });
-	const settled = (async () => { while (backgroundChangeRefreshes.size > 0) await Promise.all([...backgroundChangeRefreshes]); })();
-	await Promise.race([settled, deadline]);
-	clearTimeout(timer);
-}
-
 export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, overrides: Partial<ShellDeps> = {}): void {
 	// Its commands and shortcuts are counted (lib/ui-use.ts).
 	pi = counted(pi);
@@ -901,147 +657,9 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		profilePoll = undefined;
 		profileReader.reset();
 	};
-	const usage = new UsageStore();
-	// Providers jhon-shell has never heard of get a usage source too, when
-	// the extension that owns them registers one on pi.events; see the
-	// USAGE_SOURCE_EVENT subscription below.
-	const usageSources = new UsageSourceRegistry();
 	let renderHost: ShellRenderHost | undefined;
-	// The 5-minute rule is per provider: one provider's fetch cannot leave the
-	// next one waiting for an interval it never used.
-	const usageFetchedAt = new Map<string, number>();
-	// Providers whose latest settled refresh answered nothing, which the usage
-	// panel says; a snapshot recorded later clears them.
-	const usageFailures = new Set<string>();
-	// Monotonic per-provider generation: each dispatched refresh takes the next
-	// number, and only the newest one for a provider may mutate its state. Two
-	// overlapping refreshes of the SAME source (or of builtins) can otherwise
-	// let an older failure settle after a newer success and poison it.
-	const usageGenerations = new Map<string, number>();
-	const usageFetchTimeout = usageFetchTimeoutMs(env);
-	// The models Jhon's sub-agents run on (agents/<name>.md in the agent dir
-	// `jhon start pi` sets), so their providers' usage shows beside the
-	// session's own. Without that dir there are no Jhon sub-agents to read.
+	// The agent dir `jhon start pi` sets: Customize's Rose ink theme is written there.
 	const agentDir = env.PI_CODING_AGENT_DIR;
-	// T149 (L1339): a session on a profile of its own runs its sub-agents on that
-	// profile's models, not the rendered files' (lib/session-profile.ts), so the
-	// scope reads them the way extensions/jhon.ts launches them. The rows are read
-	// when the session's profile is known; a refresh waits for that read.
-	const routingProfile = new SessionProfile((cwd) => (deps.profilesJson ?? readProfilesJson)(cwd));
-	let routingRead: Promise<unknown> = Promise.resolve();
-	const followRoutingProfile = (name: string | undefined, cwd: string) => {
-		routingProfile.start(name);
-		routingRead = agentDir && name ? routingProfile.refresh(cwd).catch(() => undefined) : Promise.resolve();
-	};
-	const activeRoutingModels = (): Array<string | undefined> => agentDir ? knownAgents(agentDir).map((name) => {
-		try { return routingProfile.agent(resolveAgent(agentDir, name)).model; } catch { return undefined; }
-	}) : [];
-	// A bare model id names a provider only when exactly one provider in the
-	// registry carries that id; anything else stays untargeted rather than guessed.
-	const bareModelProvider = (ctx: ExtensionContext, modelId: string): string | undefined => {
-		try {
-			const providers = new Set(ctx.modelRegistry.getAll().filter((model) => model.id === modelId).map((model) => model.provider));
-			return providers.size === 1 ? [...providers][0] : undefined;
-		} catch {
-			return undefined;
-		}
-	};
-	const usageScopeFor = (ctx: ExtensionContext): string[] =>
-		usageScopeProviders(ctx.model?.provider, activeRoutingModels(), (modelId) => bareModelProvider(ctx, modelId));
-	// The scope is Git/filesystem work, so it is resolved once per refresh and
-	// per registration, never per render.
-	const resolveUsageScope = usageScopeFor;
-	// One notification per settled provider — snapshot or failure — so the
-	// shell and the open overlay repaint immediately instead of waiting for
-	// the whole refresh, whose slowest member is the bounded window itself.
-	const notifyUsageSettled = () => {
-		renderHost?.invalidateSidebar?.();
-		renderHost?.requestRender();
-	};
-	// One bounded, self-contained refresh per provider. Providers run
-	// concurrently: a stalled credential lookup or fetch for one can never hold
-	// the others — or the overlay opening on them — past its own window.
-	const refreshProvider = async (ctx: ExtensionContext, provider: string, source: UsageSource | undefined, force: boolean, now: number): Promise<boolean> => {
-		if (!source && provider !== NAN_PROVIDER) return false;
-		if (!force && now - (usageFetchedAt.get(provider) ?? 0) < USAGE_REFRESH_MS) return false;
-		usageFetchedAt.set(provider, now);
-		const generation = (usageGenerations.get(provider) ?? 0) + 1;
-		usageGenerations.set(provider, generation);
-		// The window covers credential resolution and the fetch together. The
-		// abort signal reaches the underlying fetch through the wrapped fetchFn —
-		// built-ins and registered sources alike — so an expired provider is
-		// actually cancelled when its caller honors the signal. The race is the
-		// only path to state mutation: whatever the work resolves after the
-		// window expired is a value nobody reads, so a late answer — success or
-		// failure — cannot mutate anything.
-		const controller = new AbortController();
-		let expire: (() => void) | undefined;
-		const expired = new Promise<"timeout">((resolve) => { expire = () => resolve("timeout"); });
-		const timer = setTimeout(() => {
-			controller.abort();
-			expire?.();
-		}, usageFetchTimeout);
-		// The window's signal composes with whatever the caller already carries —
-		// init.signal, or a Request input's own signal — instead of replacing it:
-		// either side aborting still aborts, exactly like a plain fetch. With no
-		// caller signal the window's signal passes through unchanged.
-		const boundedFetch: typeof fetch = (input, init) => {
-			const callerSignal = init?.signal ?? (typeof Request !== "undefined" && input instanceof Request ? input.signal : undefined);
-			return deps.fetch(input, {
-				...init,
-				signal: callerSignal ? AbortSignal.any([callerSignal, controller.signal]) : controller.signal,
-			});
-		};
-		const work = (async () => {
-			const apiKey = await ctx.modelRegistry.getApiKeyForProvider(provider).catch(() => undefined);
-			// The window may have expired while the credential was resolving: an
-			// aborted provider must not start its fetch at all.
-			if (controller.signal.aborted) return undefined;
-			return source ? fetchFromSource(source, apiKey, boundedFetch, deps.now()) : fetchNanUsage(apiKey, boundedFetch, deps.now());
-		})();
-		// The race's loser still runs to completion in the background: guard it so
-		// its rejection (a foreign source escaping its own catch) can never
-		// surface as unhandled, and clear the timer so nothing dangles.
-		const guarded = work.catch(() => undefined);
-		const settled = await Promise.race([guarded, expired]);
-		clearTimeout(timer);
-		// Discard before any state mutation: a generation mismatch means a newer
-		// refresh for this provider was dispatched and owns the state, and a
-		// replaced source's answer belongs to neither. A late success must not
-		// overwrite the newer snapshot, and a late failure must not mark the
-		// provider failed after its replacement succeeded.
-		if (usageGenerations.get(provider) !== generation) return false;
-		if (source && usageSources.get(provider) !== source) return false;
-		if (settled === "timeout" || !settled) {
-			usageFailures.add(provider);
-			notifyUsageSettled();
-			return false;
-		}
-		usage.record(settled);
-		usageFailures.delete(provider);
-		notifyUsageSettled();
-		return true;
-	};
-	const refreshUsage = async (ctx: ExtensionContext, force: boolean, only?: string) => {
-		await routingRead;
-		const scope = resolveUsageScope(ctx);
-		const now = deps.now();
-		// Concurrent per provider; each settle notifies the shell (and repaints
-		// the open overlay) on its own, so a fast provider never waits for the
-		// slowest one's window. A discarded late answer notifies nothing: the
-		// refresh that owns the state notifies at its own settle.
-		await Promise.all(
-			scope
-				.filter((provider) => only === undefined || provider === only)
-				.map((provider) => refreshProvider(ctx, provider, usageSources.get(provider), force, now)),
-		);
-	};
-	// Subscribed once, for the life of the extension: a registration can
-	// arrive before the first session_start (the owning extension's factory
-	// runs first) or after it (its own session_start fires later, or it
-	// registers lazily). Either order is fine: a registration for the
-	// currently active provider forces exactly one refresh, so the panel
-	// never waits for the 5-minute window or the next turn to notice it.
 	// A host announced late (jhon:host) may drop the title row's path: redraw.
 	pi.events.on(HOST_EVENT, () => { renderHost?.requestRender(); });
 	// T120: `u` in the profiles panel, or a session profile that is gone: the bar and the rail show it at once.
@@ -1051,80 +669,10 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		try { current = currentContext?.sessionManager.getSessionId(); } catch { current = undefined; }
 		if (!said || current === undefined || said.sessionId !== current) return;
 		sessionProfile = typeof said.profile === "string" && said.profile ? said.profile : undefined;
-		followRoutingProfile(sessionProfile, currentContext?.cwd ?? process.cwd());
 		if (!profileReader.refresh()) return;
 		renderHost?.invalidateSidebar?.();
 		renderHost?.requestRender();
 	});
-	pi.events.on(USAGE_SOURCE_EVENT, (payload) => {
-		const source = parseUsageSource(payload);
-		if (!source) return;
-		usageSources.register(source);
-		if (!currentContext) return;
-		// A registration is interesting when its provider is targeted at all —
-		// the session's own or a subagent route of the active profile — and then
-		// only that provider is forced, never the whole scope.
-		if (resolveUsageScope(currentContext).includes(source.provider)) void refreshUsage(currentContext, true, source.provider);
-	});
-	// pi's event names no provider. The one answering is the session's model's:
-	// anthropic itself, or claude-bridge re-emitting the same headers. Keyed
-	// any other way, the bar and the panel (which look the session's provider
-	// up) never find it.
-	const recordReplyUsage = (parsed: ProviderUsage | undefined) => {
-		if (!parsed) return;
-		usage.record(parsed);
-		usageFailures.delete(parsed.provider);
-		renderHost?.invalidateSidebar?.();
-		renderHost?.requestRender();
-	};
-	pi.on("after_provider_response", (event, ctx) => {
-		recordReplyUsage(parseUsageHeaders(event.headers, deps.now(), ctx?.model?.provider));
-	});
-	// T149: Codex's WebSocket transport (pi's default) sends no reply headers to
-	// after_provider_response; its windows come as a `codex.rate_limits` stream
-	// event, which names its provider. Every other event is one type check.
-	pi.on("provider_stream_event", (event, ctx) => {
-		recordReplyUsage(parseCodexRateLimitEvent(event.data, deps.now(), event.provider ?? ctx?.model?.provider));
-	});
-	// /jhon:usage and alt+u (T93, L659): every configured provider's windows and
-	// resets, the session's provider first with 力; it opens at once on what the
-	// store holds and repaints as the forced refresh settles.
-	const openUsage = (ctx: ExtensionContext) =>
-		ctx.ui.custom<null>(
-			(tui, theme, _keybindings, done) => {
-				let scope = resolveUsageScope(ctx);
-				const view = new UsageView(usage, {
-					theme,
-					now: () => deps.now(),
-					active: () => (ctx.model ? { provider: ctx.model.provider } : undefined),
-					registry: () => usageSources,
-					scope: () => ({ providers: scope, failed: new Set(usageFailures) }),
-					// The session profile's routes may still be reading: the scope follows them.
-					onRefresh: async () => {
-						await routingRead;
-						scope = resolveUsageScope(ctx);
-						await refreshUsage(ctx, true);
-					},
-					onClose: () => withOverlayRepaint(tui, done)(null),
-					requestRender: () => tui.requestRender(),
-					ascii: shellSettings().ascii(),
-				});
-				view.refresh();
-				return view;
-			},
-			{ overlay: true, overlayOptions: { anchor: "center", width: "70%", minWidth: 60, maxHeight: "85%" } },
-		);
-	pi.registerCommand("jhon:usage", {
-		description: "Every configured provider's subscription usage windows and resets; r refreshes",
-		handler: async (_args, ctx) => { await openUsage(ctx); },
-	});
-	const usageKey = usageShortcut(shellSettings(env));
-	if (usageKey) {
-		pi.registerShortcut(usageKey as Parameters<ExtensionAPI["registerShortcut"]>[0], {
-			description: "Shows every configured provider's subscription usage",
-			handler: async (ctx) => { await openUsage(ctx); },
-		});
-	}
 	let prompt: JhonPromptEditor | undefined;
 	// Set by abortAndDispatchQueued via dispatchQueuedText when an Esc aborts
 	// a turn with a non-empty queue; sent exactly once, from agent_settled,
@@ -1150,7 +698,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	// renderers read it live, so the saved level applies from the first render.
 	let visualSettings = resolveVisualSettings(animationOptions).settings;
 	let sidebarTui: TUI | undefined;
-	/** The rail cards folded by a click this session (STATUS, JOBS, AGENTS; TODOS folds with its own key). */
+	/** The rail cards folded by a click this session (LDD, JOBS, AGENTS). */
 	const railFolded = new Set<string>();
 	// The Gentle Shell's card style and chrome surface (L153 answers 1-2) live in
 	// process-wide slots every extension's cards and the rail read.
@@ -1161,16 +709,10 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	const refreshVisual = () => {
 		visualSettings = resolveVisualSettings(animationOptions).settings;
 		applyAppearance();
-		if (currentContext && changes) showChanges(currentContext, changes.model, true, () => lastTurn);
 		renderHost?.invalidateSidebar?.();
 		renderHost?.requestRender();
 	};
 	let doubleEscCancelPolicy: DoubleEscCancelPolicy = resolveDoubleEscCancelPolicy({ settings }).policy;
-	let changes: WorktreeChangesTracker | undefined;
-	// The session's finished turns, for the changes line: «turno 6 · 2m 14s».
-	let turns = 0;
-	let turnStartedAt: number | undefined;
-	let lastTurn: TurnSummary | undefined;
 	const apiWait = createApiWait(() => deps.now());
 	// Stall recovery (lib/ui/stall-recovery.ts): past the threshold the turn is
 	// aborted as Esc does, and the continue rides the queued-text path above,
@@ -1228,43 +770,15 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		renderHost?.invalidateSidebar?.();
 		renderHost?.requestRender();
 	});
-	let shown = "";
-	const applyChanges = (ctx: ExtensionContext, model: ChangesModel) => {
-		const fingerprint = changesFingerprint(model);
-		if (fingerprint === shown) return;
-		shown = fingerprint;
-		showChanges(ctx, model, true, () => lastTurn);
-	};
-	const gitForRoot = (root: string) => deps.gitRunner(root);
-	// Changes is the Git state of the session's roots that still exist, each
-	// against the base its registration holds (T132): read at turn end, on
-	// panel open and by the panel's poll, never at startup.
-	const changesTracker = (ctx: ExtensionContext) => {
-		const sessionId = ctx.sessionManager.getSessionId();
-		const roots = () => {
-			try { return sessionChangeRoots(sessionId, ctx.sessionManager.getEntries()).filter((root) => deps.rootExists(root) && !isHomeOrBroadUserDirectory(root)); }
-			catch { return []; }
-		};
-		const bases = () => sessionRootBases(sessionId, ctx.sessionManager.getEntries());
-		const subagents = () => sessionSubagentRoots(sessionId, ctx.sessionManager.getEntries());
-		return new WorktreeChangesTracker(gitForRoot(ctx.cwd), gitForRoot, untrackedLines, roots, fileRevision, bases, subagents);
-	};
-	const refreshChanges = async (ctx: ExtensionContext) => {
-		const tracker = changes;
-		if (!tracker || !ctx.hasUI || registry?.sessionId !== ctx.sessionManager.getSessionId()) return;
-		const model = await tracker.refresh();
-		if (changes === tracker) applyChanges(ctx, model);
-	};
 	pi.registerTool({
 		name: "session_worktree_register",
 		renderShell: "self",
 		label: "Add a session worktree",
-		description: "Add a worktree of this Git clone to the session: /jhon:changes then lists what changes there from now on, committed or not.",
+		description: "Add a worktree of this Git clone to the session: the LDD section reads the change there too.",
 		parameters: { type: "object", required: ["path"], additionalProperties: false, properties: { path: { type: "string", description: "Worktree path to include in this session." } } } as never,
 		async execute(_id, params, _signal, _onUpdate, ctx) {
 			if (!registry || registry.sessionId !== ctx.sessionManager.getSessionId()) throw new Error("This session has no worktree list yet.");
 			const root = registry.register((params as { path: string }).path, "explicit");
-			trackChangeRefresh(refreshChanges(ctx));
 			return { content: [{ type: "text", text: `${root} is now one of this session's worktrees.` }], details: { root, sessionId: registry.sessionId } };
 		},
 	});
@@ -1400,7 +914,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		stopProfilePoll();
 		registry?.close();
 		currentContext = ctx;
-		changes = undefined;
 		registry = new SessionWorktreeRegistry(pi, ctx.sessionManager, ctx.cwd, deps.resolveWorktree);
 		registry.start();
 		if (settingsLoadedOnce) settings.refresh();
@@ -1417,7 +930,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		applyAppearance();
 		if (!overrides.activeProfile) {
 			try { sessionProfile = sessionProfileOnBranch((ctx.sessionManager as { getBranch?(): unknown[] }).getBranch?.()); } catch { sessionProfile = undefined; }
-			followRoutingProfile(sessionProfile, ctx.cwd);
 			profileReader.bind(ctx.cwd, deps.resolveWorktree, ctx.sessionManager.getSessionId());
 			const sessionId = ctx.sessionManager.getSessionId();
 			profilePoll = setInterval(() => {
@@ -1428,13 +940,11 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			}, 2_000);
 			profilePoll.unref?.();
 		}
-		changes = changesTracker(ctx);
 		lanes = laneReads();
 		releaseSelection?.();
 		releaseSelection = shareSelection(ctx.sessionManager.getSessionId(), () => currentContext === ctx ? refreshLdd(ctx) : Promise.resolve(ldd));
 		void refreshLdd(ctx);
 		if (ctx.hasUI) watchLddSources(ctx);
-		const tracker = changes;
 		ctx.ui.setFooter((tui, theme, footerData) => {
 			sidebarTui = tui;
 			const host: ShellRenderHost = { requestRender: () => tui.requestRender(), invalidateSidebar: () => invalidateSidebar(tui) };
@@ -1447,31 +957,26 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			// part for: model, effort, context, cost, session name and extension
 			// statuses. The digest is what keeps the fullscreen memo honest.
 			const footerModel = (): ShellBarModel => ({
-				...buildShellBarModel(pi, ctx, footerData, { dirty: tracker.model.files.length, usage: usage.get(ctx.model?.provider ?? ""), profile: deps.activeProfile(), jobs: runningJobs }),
-				changes: { files: tracker.model.files.length, added: tracker.model.added, deleted: tracker.model.deleted, ...(tracker.headRoots.length ? { headOnly: tracker.headRoots.map(({ root, comparison }) => `${basename(root)}: ${fallbackReason(comparison)}.`) } : {}), ...(tracker.failedRoots.length ? { failed: { roots: tracker.failedRoots.length, of: tracker.scannedRootCount } } : {}) },
+				...buildShellBarModel(pi, ctx, footerData, { profile: deps.activeProfile(), jobs: runningJobs }),
 				...(ldd ? { ldd } : {}),
 				...(mode ? { mode } : {}),
 				...(hostShowsPath() ? { hostShowsPath: true } : {}),
-				// The rail's TODOS card (todo.ts) shows the agent's list: STATUS leaves the slice's tasks to it.
-				...(tui.terminal && sidebarState(tui).parts.has("todo") ? { planShown: true } : {}),
 			});
 			// The Gentle Shell's split chrome (L153 answer 3): a title row on top and the
 			// status bar at the bottom. Wide (the rail shown) each sits between two
 			// margin rows; without the rail in fullscreen exactly one status row, G's,
-			// with `⧗ N jobs` in it, the model in the title row, the integrations in
-			// the rail only. A regular terminal draws G's one
-			// compact bar instead.
+			// with `⧗ N jobs` in it, the model in the title row. A regular terminal
+			// draws G's one compact bar instead.
 			const fullscreen = () => (tui as TUI & { mode?: string }).mode === "fullscreen";
 			const wide = () => fullscreen() && (tui.terminal?.columns ?? 0) >= SIDEBAR_BREAKPOINT && visualSettings.statusPlacement !== "hidden";
-			// A regular terminal draws G's compact bar, integrations included (L160).
+			// A regular terminal draws G's compact bar (L160).
 			// Fullscreen, the footer always steps aside (the rail, or the statusbar row narrow).
 			const bottomBar = {
 				render: (width: number) => renderShellBar(footerModel(), theme, width),
 				invalidate() {},
 				dispose() { unsubscribeBranch(); },
 			};
-			// A click on a card's header folds or opens it; TODOS folds with its
-			// own key too. Kept for the session (T15.8).
+			// A click on a card's header folds or opens it. Kept for the session (T15.8).
 			const fold = (title: string) => {
 				if (railFolded.has(title)) railFolded.delete(title); else railFolded.add(title);
 				invalidateSidebar(tui);
@@ -1487,19 +992,17 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				invalidateSidebar(tui);
 				return { handled: true, render: true };
 			};
-			// The rail's Status sections, as the Gentle Shell's (L153), each folding
-			// on its own: LDD leads the rail as its own part (L174), CHANGES and
-			// INTEGRATIONS stay in the footer's place; the CHANGES row opens /jhon:changes.
-			const statusRail = (only: readonly StatusSection[]): SidebarRail => {
+			// The rail's LDD section, which leads it (L174) and folds on a click on its header.
+			const lddRail = (): SidebarRail => {
 				let statusAt: StatusTarget[] = [];
 				const statusGroups = new Map<number, Array<{ start: number; end: number }>>();
 				let statusHover: StatusHover | undefined;
 				const statusOwner = {};
 				return {
 					surface: "panel",
-					digest: () => JSON.stringify([footerModel(), tracker.model, visualSettings, [...railFolded], statusHover ?? ""]),
+					digest: () => JSON.stringify([footerModel(), visualSettings, [...railFolded], statusHover ?? ""]),
 					render: (width) => {
-						const layout = renderShellStatusLayout(footerModel(), theme, width, railFolded, statusHover, only, visualSettings.density);
+						const layout = renderShellStatusLayout(footerModel(), theme, width, railFolded, statusHover, visualSettings.density);
 						statusAt = layout.targets;
 						statusGroups.set(width, layout.groups);
 						return layout.lines;
@@ -1509,21 +1012,16 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 					handleMouse(event) {
 						const target = statusAt.find((candidate) => candidate.row === event.y);
 						if (event.type === "move" && event.button === "none") {
-							return hoverTo<StatusHover>(statusOwner, statusHover, !target ? undefined : target.kind === "toggle" ? target.section : "open-changes", (value) => { statusHover = value; });
+							return hoverTo<StatusHover>(statusOwner, statusHover, target?.section, (value) => { statusHover = value; });
 						}
 						if (event.type !== "click" || event.button !== "left" || !target) return undefined;
-						if (target.kind === "open-changes") {
-							// T171: the click is counted, as /jhon:changes is (lib/ui-use.ts).
-							recordUse(pi, "click changes");
-							void openChanges(ctx);
-							return { handled: true, render: true };
-						}
 						return fold(target.section);
 					},
 				};
 			};
-			const disposeLdd = sidebarSlot(tui, "ldd", statusRail(["LDD"]));
-			const part = sidebarPart(tui, "footer", bottomBar, statusRail(["CHANGES", "INTEGRATIONS"]));
+			const disposeLdd = sidebarSlot(tui, "ldd", lddRail());
+			// The footer has no rail section (T174: CHANGES and INTEGRATIONS are gone); it keeps the regular terminal's bar.
+			const part = sidebarPart(tui, "footer", bottomBar, { render: () => [], invalidate() {} });
 			// Background work gets its own rail sections, out of Status, each its own
 			// part as in Gentle Shell: JOBS (commands and monitors) and AGENTS (sub-agents) (L168).
 			const workPart = (key: string, title: string, render: typeof renderShellJobsSection, summary?: () => PanelSummary | undefined, open?: () => void) => {
@@ -1576,7 +1074,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				},
 				dispose() { disposeHeader(); disposeStatusbar(); disposeLdd(); uninstall(); jobsPart.dispose(); agentsPart.dispose(); part.dispose(); if (sidebarTui === tui) sidebarTui = undefined; } };
 		});
-		void refreshUsage(ctx, true);
 		const ownsPrompt = installPrompt(
 			ctx,
 			(created) => {
@@ -1585,7 +1082,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				prompt.setAnimationPolicy(animationPolicy);
 			},
 			{ now: () => deps.now(), doubleEscCancelEnabled: () => doubleEscCancelPolicy === "on", dispatchQueuedText: queueAfterSettle, workingLabel: () => apiWait.label(),
-				// Without the rail the work row above the rule folds TODOS and AGENTS.
+				// Without the rail the work row above the rule folds AGENTS.
 				// The editor joins the fullscreen chrome, rail or not; a regular terminal keeps the float or neon card, as G's.
 				panelChrome: (tui) => (tui as TUI & { mode?: string }).mode === "fullscreen" && Boolean(tui.terminal),
 				topRows: (tui, width, hovered) => {
@@ -1594,8 +1091,8 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 					return row ? [row] : [];
 				},
 				// A tap on the work row opens the leading section's own view (sub-agents
-				// open /jhon:agents); a section without one, such as the todo list,
-				// opens nothing (T169: the panel sheet is gone).
+				// open /jhon:agents); a section without one opens nothing (T169: the
+				// panel sheet is gone).
 				onTopRowClick: (tui, index) => {
 					if (!narrowChrome(tui) || index !== 0) return;
 					const parts = workParts(tui);
@@ -1605,9 +1102,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		// Hide native feedback only when our petal replaces it. Native transcript
 		// thinking blocks remain Pi-owned; this changes only the supported loader UI.
 		if (ownsPrompt) ctx.ui.setWorkingVisible(false);
-		if (changes !== tracker) return;
-		shown = "";
-		applyChanges(ctx, tracker.model);
 	});
 	pi.on("session_shutdown", (_event, ctx) => {
 		closeSettings?.();
@@ -1627,51 +1121,11 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		}
 		registry?.close();
 		registry = undefined;
-		changes = undefined;
 		currentContext = undefined;
-		turns = 0;
-		turnStartedAt = undefined;
-		lastTurn = undefined;
 		apiWait.end();
 		openPrompts = 0;
 		stall.sync();
 	});
-	const openChanges = async (ctx: ExtensionContext, focus?: string) => {
-		if (!changes) return;
-		const tracker = changes;
-		const model = await tracker.refresh();
-		if (changes !== tracker) return;
-		applyChanges(ctx, model);
-		// A failed root scan is unknown, never clean: say so whenever one failed.
-		const failed = tracker.failedRoots.length;
-		const roots = tracker.scannedRootCount;
-		const heads = tracker.headRoots;
-		if (model.files.length === 0) {
-			if (failed > 0 && failed === roots) ctx.ui.notify(`Could not read the Git status of ${failed} ${failed === 1 ? "root" : "roots"}; the session's changes are unknown.`, "error");
-			// A root read against HEAD never reads "since the session's start": its commits are not counted (T132).
-			else if (failed > 0) ctx.ui.notify(heads.length ? `${noChangesText(heads, roots - failed - heads.length)}\nThe Git status failed in ${failed} of ${roots} roots.` : `No changes since the session's start in the roots Git could read; the Git status failed in ${failed} of ${roots} roots.`, "warning");
-			else ctx.ui.notify(noChangesText(heads, roots - heads.length), "info");
-			return;
-		}
-		if (failed > 0) ctx.ui.notify(`The Git status failed in ${failed} ${failed === 1 ? "root" : "roots"}; their changes are not in the list.`, "warning");
-		// /jhon:changes <dir> on a sub-agent's root whose work another root lists (T132): say it, and open on that root.
-		const folded = focus ? tracker.foldedRoots.filter(({ root }) => focus === root || focus.startsWith(root.endsWith("/") ? root : `${root}/`)).sort((a, b) => b.root.length - a.root.length)[0] : undefined;
-		if (folded) ctx.ui.notify(`${folded.root} has no row of its own: its work is merged into ${folded.into} and is listed there.`, "info");
-		const open = folded?.into ?? focus;
-		// The view lists the roots with changes and, with no files, each root read against HEAD that has none.
-		await showChangesOverlay(ctx, { loadDiff: (root, file) => loadFileDiff(deps.gitRunner(root, DIFF_MAX_BYTES), file), worktrees: () => tracker.shownRoots, refresh: () => tracker.refresh(), apply: applyChanges, pollMs: changesPollMs(env), ...(open ? { focus: open } : {}) });
-	};
-	pi.registerCommand(CHANGES_COMMAND_NAME, {
-		description: "Git changes since the session's start, committed or not, in its worktrees",
-		handler: async (args, ctx) => openChanges(ctx, String(args ?? "").trim() || undefined),
-	});
-	const shortcut = changesShortcut(settings);
-	if (shortcut) {
-		pi.registerShortcut(shortcut as Parameters<ExtensionAPI["registerShortcut"]>[0], {
-			description: "Opens the session's Git changes, committed or not",
-			handler: async (ctx) => openChanges(ctx),
-		});
-	}
 	// One Customize overlay (T15.3; Settings until L174), G's Customization view:
 	// every kept setting, grouped; /jhon:customize <group> opens it on that group.
 	// Its categories, words and rows come from lib/ui/customize/registry.ts (T15.15).
@@ -1787,7 +1241,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		// is mid-turn, so the text simply waits and goes out, once, when that
 		// turn settles. It is never dropped.
 		prompt?.setWorking(true);
-		turnStartedAt = deps.now();
 		apiWait.start();
 		stall.sync();
 	});
@@ -1833,13 +1286,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	pi.on("agent_end", async (_event, ctx) => {
 		apiWait.end();
 		stall.sync();
-		if (turnStartedAt !== undefined) {
-			lastTurn = { n: ++turns, ms: deps.now() - turnStartedAt };
-			turnStartedAt = undefined;
-		}
-		// A slow or failing Git never holds the turn end.
-		trackChangeRefresh(refreshChanges(ctx));
-		void refreshUsage(ctx, false);
 		if (ctx.hasUI) refreshLdd(ctx);
 	});
 }

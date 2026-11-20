@@ -11,7 +11,7 @@ import { piReservedAction } from "../lib/ui/customize/keys.ts";
 import { memorySettings } from "./fake-jhon-settings.ts";
 
 const noop = () => {};
-const KEY_SETTINGS = ["shell.keys.panel", "shell.keys.todos", "shell.keys.agents", "shell.keys.changes", "shell.keys.usage"];
+const KEY_SETTINGS = ["shell.keys.panel", "shell.keys.agents"];
 
 function keyRows() {
 	const settings = memorySettings();
@@ -33,23 +33,23 @@ test("every Keys row refuses pi's ctrl+shift+up, naming pi's action, and writes 
 
 test("a Keys row refuses pi's editor and app keys, whatever their case or modifier order", async () => {
 	const { settings, rows } = keyRows();
-	const todos = rows.find((r) => r.key === "shell.keys.todos")!;
-	assert.equal(await todos.apply!("ctrl+o"), `ctrl+o is pi's key for "Collapse or expand tool output" (app.tools.expand); pick another key.`);
-	assert.equal(await todos.apply!("Shift+Ctrl+Down"), `Shift+Ctrl+Down is pi's key for "Jump to the next marked message" (tui.altScreen.nextPrompt); pick another key.`);
-	assert.equal(await todos.apply!(" alt+b "), `alt+b is pi's key for "Move cursor word left" (tui.editor.cursorWordLeft); pick another key.`);
-	assert.equal(await todos.apply!("ctrl+k"), `ctrl+k is pi's key for "Delete to line end" (tui.editor.deleteToLineEnd); pick another key.`);
-	assert.equal(settings.get("shell.keys.todos"), "alt+t");
+	const agents = rows.find((r) => r.key === "shell.keys.agents")!;
+	assert.equal(await agents.apply!("ctrl+o"), `ctrl+o is pi's key for "Collapse or expand tool output" (app.tools.expand); pick another key.`);
+	assert.equal(await agents.apply!("Shift+Ctrl+Down"), `Shift+Ctrl+Down is pi's key for "Jump to the next marked message" (tui.altScreen.nextPrompt); pick another key.`);
+	assert.equal(await agents.apply!(" alt+b "), `alt+b is pi's key for "Move cursor word left" (tui.editor.cursorWordLeft); pick another key.`);
+	assert.equal(await agents.apply!("ctrl+k"), `ctrl+k is pi's key for "Delete to line end" (tui.editor.deleteToLineEnd); pick another key.`);
+	assert.equal(settings.get("shell.keys.agents"), "alt+s");
 	assert.deepEqual(settings.jhon.sets, []);
 });
 
 test("a free key and off still save through jhon settings set (preserved)", async () => {
 	const { settings, rows } = keyRows();
-	const todos = rows.find((r) => r.key === "shell.keys.todos")!;
-	assert.equal(await todos.apply!("alt+x"), undefined);
-	assert.equal(settings.get("shell.keys.todos"), "alt+x");
-	assert.equal(await todos.apply!("off"), undefined);
-	assert.equal(settings.get("shell.keys.todos"), "off");
-	assert.deepEqual(settings.jhon.sets, [["shell.keys.todos", "alt+x"], ["shell.keys.todos", "off"]]);
+	const agents = rows.find((r) => r.key === "shell.keys.agents")!;
+	assert.equal(await agents.apply!("alt+x"), undefined);
+	assert.equal(settings.get("shell.keys.agents"), "alt+x");
+	assert.equal(await agents.apply!("off"), undefined);
+	assert.equal(settings.get("shell.keys.agents"), "off");
+	assert.deepEqual(settings.jhon.sets, [["shell.keys.agents", "alt+x"], ["shell.keys.agents", "off"]]);
 });
 
 test("piReservedAction reads pi 1.5.2's defaults, Windows and WSL variants apart", () => {

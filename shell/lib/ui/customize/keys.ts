@@ -7,8 +7,7 @@ import type { ShellKey } from "../../settings.ts";
 import { NEXT_START, saveSetting, textRow, type CustomizeCategory, type CustomizeRow } from "./row.ts";
 
 const OPENS: Record<ShellKey, string> = {
-	panel: "the LDD status", todos: "the todo list", agents: "the Agents view",
-	changes: "the changes view", usage: "the subscription usage",
+	panel: "the LDD status", agents: "the Agents view",
 };
 
 /**
@@ -109,13 +108,10 @@ const keyRow = (name: ShellKey, label: string): CustomizeRow => textRow(`shell.k
 });
 
 export const KEYS: CustomizeCategory = {
-	id: "keys", title: "Keys", summary: "The shell's keys: LDD status, todos, agents, changes, usage; reload",
+	id: "keys", title: "Keys", summary: "The shell's keys: LDD status, agents; reload",
 	rows: [
 		keyRow("panel", "LDD status"),
-		keyRow("todos", "Todos"),
 		keyRow("agents", "Agents"),
-		keyRow("changes", "Changes"),
-		keyRow("usage", "Usage"),
 		{
 			// G's "Reload now to apply keymap changes" (L198): pi's reload, no restart.
 			key: "reload", label: "Reload now", kind: "action",

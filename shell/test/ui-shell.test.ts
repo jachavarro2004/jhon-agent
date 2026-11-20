@@ -9,9 +9,8 @@ import { initTheme, type ExtensionAPI, type ExtensionContext, type SlashCommandI
 import { CURSOR_MARKER, matchesKey, visibleWidth, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { registerSubagentWorktree, resolveSessionWorktree } from "../lib/ui/session-worktree-registry.ts";
 import { SESSION_PROFILE_CHANGED, SESSION_PROFILE_ENTRY } from "../lib/session-profile.ts";
-import installShellUi, { backgroundChangeRefreshesSettled, buildShellBarModel, changesShortcut, createActiveProfileReader, extractQueuedText, fetchNanUsage, loadFileDiff, shellGitRunner, openInExternalEditor, JhonPromptEditor } from "../extensions/ui.ts";
-import { NAN_QUOTA_URL, USAGE_SOURCE_EVENT, USAGE_SOURCE_SCHEMA } from "../lib/ui/shell-usage.ts";
-import { CHANGE_STATUS, DIFF_MAX_BYTES, DIFF_MAX_LINES, DIFF_TOO_LARGE } from "../lib/ui/shell-changes.ts";
+import installShellUi, { buildShellBarModel, createActiveProfileReader, extractQueuedText, JhonPromptEditor } from "../extensions/ui.ts";
+import { openInExternalEditor } from "../lib/ui/jhon-panel-editor.ts";
 import { setSidebarHover, sidebarPart, sidebarState, type SidebarRail } from "../lib/ui/shell-sidebar.ts";
 import type { ShellBarTheme } from "../lib/ui/shell-bar.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
@@ -282,7 +281,7 @@ test("buildShellBarModel reads session, model, and footer data", () => {
 	assert.equal(built.contextPercent, 45);
 	assert.equal(built.costTotal, 0.75);
 	assert.equal(built.subscription, true);
-	assert.deepEqual(built.statuses, ["MCP: 3 servers enabled"]);
+	assert.equal("statuses" in built, false, "T174: the extension statuses (the integrations) are gone");
 });
 
 test("buildShellBarModel shortens the home directory and hides effort for non-reasoning models", () => {
@@ -302,9 +301,6 @@ test("buildShellBarModel shortens the home directory and hides effort for non-re
 	assert.equal(built.branch, null);
 });
 
-
-
-
 test("shellUi installs the footer on session_start when a UI exists", () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
@@ -323,13 +319,7 @@ test("shellUi installs the footer on session_start when a UI exists", () => {
 	assert.match(lines[0], /^力 jhon ⟡ \/repo main ⟡ claude-opus-5-5 · medium ⟡ ctx/, "a regular terminal: G's compact bar (renderShellBar)");
 });
 
-
-
-
-
-
-
-test("the fullscreen STATUS rail and the header carry live digests: a profile switch refreshes the header, a status the rail", async () => {
+test("the fullscreen LDD rail and the header carry live digests: a profile switch refreshes the header; an extension status shows nowhere (T174)", async () => {
 	const { pi, handlers } = fakePi();
 	let profile: string | undefined = "team";
 	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { activeProfile: () => profile });
@@ -342,9 +332,8 @@ test("the fullscreen STATUS rail and the header carry live digests: a profile sw
 	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, footerData: unknown) => { render(width: number): string[]; dispose(): void };
 	const component = factory(tui, plainTheme, liveFooterData);
 	try {
-		const rail = sidebarState(tui as unknown as TUI).parts.get("footer") as SidebarRail;
-		const live = () => rail.digest?.();
-		assert.equal(typeof rail.digest, "function", "the Status card paints live state and must declare a digest");
+		const rail = sidebarState(tui as unknown as TUI).parts.get("ldd") as SidebarRail;
+		assert.equal(typeof rail.digest, "function", "the LDD card paints live state and must declare a digest");
 		assert.doesNotMatch(rail.render(46).join("\n"), /claude-opus-5-5/, "model now lives in the header, not the Status card");
 
 		// The profile is the header's (beside the model): STATUS never repeats it.
@@ -356,11 +345,9 @@ test("the fullscreen STATUS rail and the header carry live digests: a profile sw
 		assert.notEqual(header.digest?.(), beforeProfile, "a profile switch refreshes the header");
 		assert.match(header.render(160).join("\n"), /other/);
 
-		const beforeStatus = live();
 		statuses.set("mcp", "MCP: 3 servers enabled");
-		assert.notEqual(live(), beforeStatus, "extension statuses have no event and must change the digest");
-		assert.match(rail.render(46).join("\n"), /MCP: 3 servers enabled/);
-		assert.equal(live(), live(), "an unchanged digest still reuses the prepared rail");
+		assert.doesNotMatch(rail.render(46).join("\n"), /MCP/, "no INTEGRATIONS: an extension's status is not drawn");
+		assert.equal(rail.digest?.(), rail.digest?.(), "an unchanged digest still reuses the prepared rail");
 	} finally {
 		component.dispose();
 	}
@@ -495,7 +482,6 @@ test("shellUi takes over the prompt: pi's Working row hidden, the petal in its r
 	editor.dispose();
 });
 
-
 test("sections, the default: the prompt under a rule line, one status line at the bottom, and no key line under the prompt (L97, L105)", async (t) => {
 	const home = mkdtempSync(join(tmpdir(), "jhon-sections-shell-"));
 	t.after(() => rmSync(home, { recursive: true, force: true }));
@@ -512,9 +498,8 @@ test("sections, the default: the prompt under a rule line, one status line at th
 		editor.setText("hola");
 		assert.match(editor.render(60).map(stripAnsi)[1], /^› hola +$/);
 		const footer = renderFooter(ui);
-		assert.match(footer, /^力 jhon ⟡ \/repo main ⟡ claude-opus-5-5 · medium ⟡ ctx ▰▰▰▰▱▱▱▱ 45% ⟡ \$0\.000 sub +Release notes$/, "no usage yet: the cost alone");
-		for (const handler of handlers.get("after_provider_response") ?? []) handler({ status: 200, headers: { "anthropic-ratelimit-unified-7d-utilization": "0.62" } }, ctx);
-		assert.match(renderFooter(ui), /⟡ \$0\.000 sub ⟡ week ▰▰▰▰▰▱▱▱ 62%/, "the week rides G's usage slot after the cost");
+		assert.match(footer, /^力 jhon ⟡ \/repo main ⟡ claude-opus-5-5 · medium ⟡ ctx ▰▰▰▰▱▱▱▱ 45% ⟡ \$0\.000 sub +Release notes$/, "the cost closes the bar");
+		assert.equal(handlers.has("after_provider_response"), false, "T174: no usage read from the replies");
 		// The README teaches the keys; the prompt keeps none (L105).
 		assert.equal(ui.widgets.has("jhon-shell-key-hints"), false);
 	} finally { editor.dispose(); }
@@ -542,7 +527,7 @@ test("the status line wears the owner's mode from STATUS's own status read, with
 	} finally { editor.dispose(); }
 });
 
-test("without the rail the status bar is exactly one row, as G's: the extension statuses stay in the rail and the sheet, never a second line (T15.12d)", async (t) => {
+test("without the rail the status bar is exactly one row, as G's: no extension status, never a second line (T15.12d, T174)", async (t) => {
 	const home = mkdtempSync(join(tmpdir(), "jhon-sections-statuses-"));
 	t.after(() => rmSync(home, { recursive: true, force: true }));
 	const { pi, handlers } = fakePi();
@@ -558,14 +543,14 @@ test("without the rail the status bar is exactly one row, as G's: the extension 
 	assert.deepEqual(footer.render(120), [], "the footer steps aside for the statusbar row");
 	const rows = statusRow();
 	assert.equal(rows.length, 1, rows.join("\n"));
-	assert.doesNotMatch(rows.join("\n"), /MCP/, "integrations live in the rail and the sheet only");
+	assert.doesNotMatch(rows.join("\n"), /MCP/, "the integrations are gone (T174)");
 	pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }] });
 	const busy = statusRow();
 	assert.equal(busy.length, 1);
 	assert.match(busy[0]!, /^ main │ ⧗ 1 job +ctx/, "G's ⧗ N jobs in the one row");
 });
 
-test("a regular (not fullscreen) terminal draws G's compact bar (renderShellBar): brand, location, model, ctx, cost, jobs, the mode and the integrations in one row, the session name at the right (T15.12e, L160)", async (t) => {
+test("a regular (not fullscreen) terminal draws G's compact bar (renderShellBar): brand, location, model, ctx, cost, jobs and the mode in one row, the session name at the right; no integrations (T15.12e, L160, T174)", async (t) => {
 	const home = mkdtempSync(join(tmpdir(), "jhon-regular-bar-"));
 	t.after(() => rmSync(home, { recursive: true, force: true }));
 	const { pi, handlers } = fakePi();
@@ -575,7 +560,7 @@ test("a regular (not fullscreen) terminal draws G's compact bar (renderShellBar)
 	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, data: unknown) => { render(width: number): string[] };
 	const rows = factory(fakeTui, plainTheme, { ...footerData, getExtensionStatuses: () => new Map([["mcp", "MCP: 2 servers"]]) }).render(160);
 	assert.equal(rows.length, 1, rows.join("\n"));
-	assert.match(rows[0]!, /^力 jhon ⟡ \S+ main ⟡ claude-opus-5-5 · medium ⟡ ctx \S+ 45% ⟡ \$0\.000 sub ⟡ MCP: 2 servers +Release notes$/, "G puts the integrations in the regular bar");
+	assert.match(rows[0]!, /^力 jhon ⟡ \S+ main ⟡ claude-opus-5-5 · medium ⟡ ctx \S+ 45% ⟡ \$0\.000 sub +Release notes$/, "T174: no integrations in the regular bar");
 	pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }] });
 	assert.match(factory(fakeTui, plainTheme, footerData).render(160)[0]!, /⟡ \$0\.000 sub ⟡ ⧗ 1 job +Release notes$/);
 });
@@ -612,8 +597,8 @@ test("the split chrome: wide, the title rows and the chrome bar with their margi
 
 // T15.12c slice 4: a fullscreen terminal without the rail (under 140
 // columns, or Status hidden) draws the Gentle Shell's narrow editor, with the
-// work row above its rule (` ▸ <lead> … <count>`) in place of the TODOS and
-// AGENTS cards. T169 (L1438): the panel sheet is gone, and the rule's
+// work row above its rule (` ▸ <lead> … <count>`) in place of the AGENTS
+// card (T174: the todo list is the right pane's alone). T169 (L1438): the panel sheet is gone, and the rule's
 // [ Panel ] button with it.
 function narrowShell(columns = 100) {
 	const { pi, handlers, shortcuts } = fakePi();
@@ -636,7 +621,7 @@ test("without the rail the editor rule carries no [ Panel ], and a click at its 
 	} finally { editor.dispose(); footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
-test("without the rail running sub-agents and the todo list fold into the work row above the editor rule; a tap opens the lead's own view: agents /jhon:agents, the todo list nothing (T15.12c, T15.12d, T169)", async () => {
+test("without the rail running sub-agents fold into the work row above the editor rule, the todo list never (it is the right pane's); a tap opens /jhon:agents (T15.12c, T15.12d, T169, T174)", async () => {
 	const { pi, ctx, ui, footer, editor, state, handlers } = narrowShell();
 	const opened: unknown[] = [];
 	pi.events.on("jhon-shell:open-tasks", (payload: unknown) => opened.push(payload));
@@ -645,17 +630,15 @@ test("without the rail running sub-agents and the todo list fold into the work r
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "agent-1", kind: "agent", label: "explore: callers", startedAt: 1 }] });
 		state.parts.set("todo", { render: () => [], invalidate() {}, summary: () => ({ left: "◐ write the sheet", right: "1/3", rightLabel: "todos" }) } as never);
 		const lines = editor.render(100).map(stripAnsi);
-		assert.match(lines[0]!, /^ ▸ ◐ 1 agent +1\/3 todos $/, "agents lead, the todo count at the right");
+		assert.match(lines[0]!, /^ ▸ ◐ 1 agent +$/, "agents alone: no todo count");
 		assert.match(lines[1]!, /^─ 力 ready for you ─+$/, "the rule under it, no [ Panel ] (T169)");
 		assert.equal(visibleWidth(lines[0]!), 100);
-		assert.equal(state.compactWork?.(), true, "the TODOS and AGENTS cards step aside");
+		assert.equal(state.compactWork?.(), true, "the AGENTS card steps aside");
 		assert.deepEqual(editor.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 100, height: lines.length } as never), { handled: true, render: true });
 		assert.equal(opened.length, 1, "agents lead: the tap opens /jhon:agents, as G's opens its agents view");
 		assert.equal(ui.overlayView, undefined, "not the sheet");
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [] });
-		assert.match(editor.render(100).map(stripAnsi)[0]!, /^ ▸ ◐ write the sheet +1\/3 $/, "the todo list leads now");
-		editor.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 100, height: lines.length } as never);
-		assert.equal(ui.overlayView, undefined, "the todo list has no view of its own: the tap opens nothing (T169: the sheet is gone)");
+		assert.equal(editor.render(100).map(stripAnsi).filter((line) => /▸/.test(line)).length, 0, "no agents: no work row, the todo list never leads it");
 		assert.equal(opened.length, 1);
 		state.active = true;
 		state.ownsHost = () => true;
@@ -692,13 +675,6 @@ test("an unknown or unreported phase falls back to the generic working label", (
 		editor.dispose();
 	}
 });
-
-
-
-
-
-
-
 
 // in ordinary editing another extension's alt+a shortcut
 // must win over prompt select-all, for empty and non-empty drafts alike.
@@ -1205,7 +1181,6 @@ test("the prompt has no vim mode: Esc then i types i even with shell.editor.vim 
 	} finally { editor.dispose(); }
 });
 
-
 test("the Animations setting switches the live pulse", async (t) => {
 	const configHome = scopedDoubleEscCancelConfigHome(t);
 	const delays: number[] = [];
@@ -1282,8 +1257,6 @@ test("the Animations setting reports a failed write and changes nothing", async 
 	assert.doesNotMatch(shown.join("\n"), /EPERM/, "not the Preview's headline");
 	assert.deepEqual(jhon.file, {});
 });
-
-
 
 // ---------------------------------------------------------------------------
 // double-esc-cancel: opt-in, off by default. While the prompt
@@ -1921,8 +1894,6 @@ test("idle draft: a bash-mode draft with leading whitespace still bypasses the i
 // The double-Esc preference, set from /jhon:customize.
 // ---------------------------------------------------------------------------
 
-
-
 test("the Double Esc setting writes on and off through the settings", async (t) => {
 	const configHome = scopedDoubleEscCancelConfigHome(t);
 	const { pi, commands } = fakePi();
@@ -1933,10 +1904,6 @@ test("the Double Esc setting writes on and off through the settings", async (t) 
 	await setViaSettings(commands, ctx, ui, "Double Esc", "off");
 	assert.equal(savedPolicy(configHome, "double-esc-cancel"), "off");
 });
-
-
-
-
 
 test("the Double Esc setting updates the in-memory policy so an already-installed prompt picks it up without re-reading the file", async (t) => {
 	const configHome = scopedDoubleEscCancelConfigHome(t);
@@ -2018,23 +1985,7 @@ function renderFooter(ui: FakeUi): string {
 	return factory(fakeTui, plainTheme, footerData).render(160)[0];
 }
 
-// Changes refreshes from Git off the turn-end path; let the fake scan land.
-const changesSettled = () => backgroundChangeRefreshesSettled();
-
-// Changes reads each root's Git state and nothing else: worktree labels,
-// status, and numstat against HEAD or, for a root whose session entry keeps
-// a base (T132), how far HEAD is from it and numstat and names against it;
-// for a sub-agent's clean root past its base, which listed branches hold its
-// HEAD; and a lazy diff of the selected file. Never a process per file.
-const gitStateOnly = (git: readonly string[][]) => git.length > 0 && git.every((args) => {
- const command = args[0] === "-C" ? args.slice(2) : args;
- return (command[0] === "worktree" && command[1] === "list") || (command[0] === "status" && command.includes("--porcelain=v1"))
-  || (command[0] === "diff" && (command.includes("HEAD") || command.some((arg) => /^[0-9a-f]{40,64}$/.test(arg)))) || command[0] === "symbolic-ref" || (command[0] === "rev-parse" && command.includes("--verify"))
-  || (command[0] === "rev-list" && command.includes("--count")) || (command[0] === "for-each-ref" && command.includes("--contains"));
-});
-
-// T132: a session over a real repository, with the shell's own resolver and
-// Git runner; every Git call the tracker makes is kept, with its root first.
+// T132: a session over a real repository, with the shell's own resolver.
 function realRepoSession(t: { after(fn: () => void): void }) {
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "changes-ui-")));
 	t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -2044,12 +1995,10 @@ function realRepoSession(t: { after(fn: () => void): void }) {
 	writeFileSync(join(repo, "a.txt"), "one\n");
 	git(repo, "add", ".");
 	git(repo, "commit", "-q", "-m", "init");
-	const calls: string[][] = [];
 	const install = () => {
 		const made = fakePi();
 		shellUi(made.pi, {}, {
 			resolveWorktree: resolveSessionWorktree,
-			gitRunner: (cwd, maxBuffer) => { const run = shellGitRunner(cwd, process.env, execFile, maxBuffer); return (args) => { calls.push([cwd, ...args]); return run(args); }; },
 			rootExists: (root) => existsSync(join(root, ".git")),
 			lddStatus: async () => undefined,
 		});
@@ -2058,297 +2007,22 @@ function realRepoSession(t: { after(fn: () => void): void }) {
 	const session = (cwd = repo, entries: unknown[] = []) => { const made = fakeContext({ entries }); (made.ctx as unknown as { cwd: string }).cwd = cwd; return made; };
 	const registrations = (ctx: ExtensionContext) => (ctx.sessionManager.getEntries() as Array<{ customType?: string; data?: { root?: string; evidence?: string; base?: string } }>).filter((entry) => entry.customType === "jhon-shell.session-worktree/v1").map((entry) => entry.data!);
 	// fakePi's own `git` (its scripted calls) is not this fixture's.
-	return { dir, repo, calls, install, session, registrations, ...install(), git };
+	return { dir, repo, install, session, registrations, ...install(), git };
 }
 async function waitFor(check: () => boolean): Promise<void> {
 	for (const deadline = Date.now() + 5000; !check(); await new Promise((resolve) => setTimeout(resolve, 10))) if (Date.now() > deadline) throw new Error("timed out waiting");
 }
-const changesWidget = (ui: FakeUi) => (ui.widgets.get("jhon-shell-changes") as any)(fakeTui, plainTheme).render(140)[0] as string;
-const railChanges = () => sidebarState(fakeTui as unknown as TUI).parts.get("footer")!.render(46).join("\n");
-
-test("Changes lists the session root's Git state at turn end, never at startup", async () => {
- const { pi, handlers, git } = fakePi([{numstat:"2\t0\tlib/b.ts\0",porcelain:" M lib/b.ts\0?? other.ts\0"},{numstat:"3\t0\tlib/b.ts\0",porcelain:" M lib/b.ts\0?? other.ts\0"}]);
- shellUi(pi,{});
- const {ctx,ui}=fakeContext();
- await fire(handlers,"session_start",ctx);
- assert.equal(git.length,0);
- assert.equal(ui.widgets.has("jhon-shell-changes"),false);
- await fire(handlers,"agent_end",ctx);
- await changesSettled();
- const factory=ui.widgets.get("jhon-shell-changes") as any;
- assert.match(factory(fakeTui,plainTheme).render(140)[0],/2 files · \+2 −0/, "files no agent wrote are listed too: Git decides");
- assert.match(renderFooter(ui),/main ±2/);
- const rail = sidebarState(fakeTui as unknown as TUI).parts.get("footer")!;
- assert.match(rail.render(46).join("\n"), /▾ CHANGES +2 files\n {2}\+2 −0 +\/jhon:changes/, "the rail's CHANGES section counts them, as the Gentle Shell's (L153)");
- await fire(handlers,"agent_end",ctx);
- await changesSettled();
- assert.match((ui.widgets.get("jhon-shell-changes") as any)(fakeTui,plainTheme).render(140)[0], /2 files · \+3 −0/, "same-count line changes refresh the line");
- assert.ok(gitStateOnly(git), JSON.stringify(git));
- assert.ok(git.every((args) => args[1] === "/repo"), "only the session's own root is scanned");
- await fire(handlers,"session_shutdown",ctx);
-});
-
-// T132 (L933) reversed what this test pinned ("committed work leaves the
-// widget"): a commit is still the session's change, counted against the
-// commit the session started on; only work back at that base leaves.
-test("committed work stays in the widget, the rail and the footer counter at the next turn end; work back at the session's base leaves them", async (t) => {
- const s = realRepoSession(t);
- const {ctx,ui}=s.session();
- await fire(s.handlers,"session_start",ctx);
- assert.equal(s.calls.length,0,"startup never scans");
- assert.deepEqual(s.registrations(ctx),[{sessionId:"shell-session",root:s.repo,evidence:"session:cwd",base:s.git(s.repo,"rev-parse","HEAD")}]);
- writeFileSync(join(s.repo,"a.txt"),"one\ntwo\n");
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.match(renderFooter(ui),/main ±1/);
- assert.match(changesWidget(ui),/1 file · \+1 −0 · a\.txt/);
- s.git(s.repo,"commit","-q","-am","the turn's work");
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.match(renderFooter(ui),/main ±1/,"the commit left git status clean and is still the session's change");
- assert.match(changesWidget(ui),/1 file · \+1 −0 · a\.txt/);
- assert.match(railChanges(),/▾ CHANGES +1 file\n {2}\+1 −0 +\/jhon:changes/);
- writeFileSync(join(s.repo,"b.txt"),"b\n");
- s.git(s.repo,"add","b.txt");
- s.git(s.repo,"commit","-q","-m","a second commit");
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.match(renderFooter(ui),/main ±2/);
- assert.match(changesWidget(ui),/2 files · \+2 −0 · a\.txt · b\.txt/);
- rmSync(join(s.repo,"b.txt"));
- writeFileSync(join(s.repo,"a.txt"),"one\n");
- s.git(s.repo,"commit","-q","-am","back to where the session started");
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.doesNotMatch(renderFooter(ui),/±/);
- assert.equal(ui.widgets.has("jhon-shell-changes"),false);
- assert.match(railChanges(),/▾ CHANGES +none\n {2}no changes since session start +\/jhon:changes/);
- assert.ok(gitStateOnly(s.calls.map((call) => call.slice(1))), JSON.stringify(s.calls));
- await fire(s.handlers,"session_shutdown",ctx);
-});
-
-test("a resumed session still counts what was committed before it closed, against the base its entry kept", async (t) => {
- const s = realRepoSession(t);
- const first=s.session();
- await fire(s.handlers,"session_start",first.ctx);
- writeFileSync(join(s.repo,"a.txt"),"one\ntwo\n");
- s.git(s.repo,"commit","-q","-am","before closing");
- await fire(s.handlers,"session_shutdown",first.ctx);
- const again=s.install();
- const resumed=s.session(s.repo,[...first.ctx.sessionManager.getEntries()]);
- await fire(again.handlers,"session_start",resumed.ctx);
- assert.equal(s.registrations(resumed.ctx).length,1,"the root is not registered again, so its base does not move");
- await fire(again.handlers,"agent_end",resumed.ctx);
- await changesSettled();
- assert.match(renderFooter(resumed.ui),/main ±1/);
- assert.match(changesWidget(resumed.ui),/1 file · \+1 −0 · a\.txt/);
- await fire(again.handlers,"session_shutdown",resumed.ctx);
-});
-
-test("/jhon:changes shows a committed file with its diff against the session's base", async (t) => {
- const s = realRepoSession(t);
- const {ctx,ui,overlayReady}=s.session();
- await fire(s.handlers,"session_start",ctx);
- const base=s.git(s.repo,"rev-parse","HEAD");
- writeFileSync(join(s.repo,"a.txt"),"one\ncommitted\n");
- s.git(s.repo,"commit","-q","-am","a slice");
- const opened=s.commands.get("jhon:changes")!.handler("",ctx);
- // Without a change to show no overlay opens: fail then, not at the test's timeout.
- await waitFor(() => ui.overlayView !== undefined || ui.notices.length > 0);
- assert.deepEqual(ui.notices,[]);
- await overlayReady;
- try {
-  ui.overlayView!.handleInput("\r");
-  ui.overlayView!.handleInput("j");
-  await waitFor(() => /\+committed/.test(ui.overlayView!.render(140).join("\n")));
-  assert.match(ui.overlayView!.render(140).join("\n"),/M a\.txt {2}\+1 -0/);
-  assert.ok(s.calls.some((call) => call.join(" ") === `${s.repo} diff ${base} -- a.txt`), JSON.stringify(s.calls));
- } finally { ui.closeOverlay?.(); await opened; await fire(s.handlers,"session_shutdown",ctx); }
-});
 
 // T132, GAP-1 (L943): a root read against HEAD with a clean working tree is
 // not "no changes since session start": its commits are not counted. The
 // rail and /jhon:changes say what was compared, and why, root by root.
 const railWords = () => railChanges().replace(/\s+/g, " ");
-test("an empty Changes never says \"since session start\" for a root whose base left its history: the rail and /jhon:changes say no uncommitted changes against HEAD, and why", async (t) => {
- const s = realRepoSession(t);
- const {ctx,ui}=s.session();
- await fire(s.handlers,"session_start",ctx);
- const base=s.git(s.repo,"rev-parse","HEAD").slice(0,7);
- s.git(s.repo,"commit","-q","--amend","-m","the base, rewritten");
- writeFileSync(join(s.repo,"a.txt"),"one\ntwo\n");
- s.git(s.repo,"commit","-q","-am","work the session cannot count");
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.doesNotMatch(renderFooter(ui),/±/);
- assert.match(railChanges(),/▾ CHANGES +none\n {2}no uncommitted changes vs HEAD +\/jhon:changes\n/);
- assert.ok(railWords().includes(`/jhon:changes app: the session's base ${base} is no longer an ancestor of this root's HEAD.`), railChanges());
- assert.doesNotMatch(railChanges(),/since session start/);
- for (const width of [24,46]) assert.ok(sidebarState(fakeTui as unknown as TUI).parts.get("footer")!.render(width).every((line) => visibleWidth(line) <= width));
- await s.commands.get("jhon:changes")!.handler("",ctx);
- assert.deepEqual(ui.notices,[`No uncommitted changes in ${s.repo}, compared with HEAD: the session's base ${base} is no longer an ancestor of this root's HEAD.`]);
- assert.equal(ui.overlay,undefined);
- await fire(s.handlers,"session_shutdown",ctx);
-});
 
-test("an empty Changes of a session saved before bases were kept says so for that root, and what its other root was compared with", async (t) => {
+test("session_worktree_register still registers a worktree of the session's clone, once, with its base", async (t) => {
  const s = realRepoSession(t);
  const linked=join(s.dir,"linked");
  s.git(s.repo,"worktree","add","-q","-b","linked",linked);
- const {ctx,ui}=s.session(s.repo,[{type:"custom",customType:"jhon-shell.session-worktree/v1",data:{sessionId:"shell-session",root:s.repo,evidence:"session:cwd"}}]);
- await fire(s.handlers,"session_start",ctx);
- await s.tools.get("session_worktree_register")!.execute("r",{path:linked},undefined,undefined,ctx);
- writeFileSync(join(s.repo,"a.txt"),"one\ntwo\n");
- s.git(s.repo,"commit","-q","-am","committed after the resume");
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.doesNotMatch(renderFooter(ui),/±/);
- const why="the session kept no base for this root (it was registered before bases were kept or before its first commit, or is known only from an edit)";
- assert.match(railChanges(),/▾ CHANGES +none\n {2}no uncommitted changes vs HEAD +\/jhon:changes\n/);
- assert.ok(railWords().includes(`/jhon:changes app: ${why}.`), railChanges());
- assert.doesNotMatch(railChanges(),/since session start|linked/, "only the root read against HEAD is named");
- await s.commands.get("jhon:changes")!.handler("",ctx);
- assert.deepEqual(ui.notices,[`No uncommitted changes in ${s.repo}, compared with HEAD: ${why}.\nThe session's other root has no changes against its base.`]);
- await fire(s.handlers,"session_shutdown",ctx);
-});
-
-test("an empty Changes of a session started in a repository with no commit yet says its root is read against HEAD, after its first commit too", async (t) => {
- const s = realRepoSession(t);
- const unborn=join(s.dir,"unborn");
- s.git(s.dir,"init","-q","--initial-branch=main",unborn);
- const {ctx,ui}=s.session(unborn);
- await fire(s.handlers,"session_start",ctx);
- assert.deepEqual(s.registrations(ctx),[{sessionId:"shell-session",root:unborn,evidence:"session:cwd"}],"no commit, so no base to keep");
- writeFileSync(join(unborn,"first.txt"),"1\n");
- s.git(unborn,"add","first.txt");
- s.git(unborn,"commit","-q","-m","the repository's first commit");
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.doesNotMatch(renderFooter(ui),/±/);
- assert.match(railChanges(),/▾ CHANGES +none\n {2}no uncommitted changes vs HEAD +\/jhon:changes\n/);
- assert.ok(railWords().includes("unborn: the session kept no base for this root (it was registered before bases were kept or before its first commit, or is known only from an edit)."), railChanges());
- await s.commands.get("jhon:changes")!.handler("",ctx);
- assert.deepEqual(ui.notices,[`No uncommitted changes in ${unborn}, compared with HEAD: the session kept no base for this root (it was registered before bases were kept or before its first commit, or is known only from an edit).`]);
- await fire(s.handlers,"session_shutdown",ctx);
-});
-
-// T132, GAP-2 (L943): a sub-agent's work merged into the session's branch is
-// counted once, in the root that holds it, while its own worktree is clean.
-test("a sub-agent's work merged into the session's branch is counted once: its clean worktree is not listed again; uncommitted work there, or a commit the session lacks, lists it as before", async (t) => {
- const s = realRepoSession(t);
- const child=join(s.dir,"child");
- const {ctx,ui}=s.session();
- await fire(s.handlers,"session_start",ctx);
- s.git(s.repo,"worktree","add","-q","-b","child",child);
- // As the `subagent` tool registers the worktree it runs a child in.
- assert.equal(registerSubagentWorktree(s.pi as never,ctx.sessionManager,s.repo,child),child);
- for (const name of ["own-1.txt","own-2.txt"]) writeFileSync(join(s.repo,name),"o\n");
- s.git(s.repo,"add","-A"); s.git(s.repo,"commit","-q","-m","the orchestrator's own");
- for (const name of ["c1.txt","c2.txt","c3.txt"]) writeFileSync(join(child,name),"c\n");
- s.git(child,"add","-A"); s.git(child,"commit","-q","-m","the child's slice");
- const turn=async()=>{ s.calls.length=0; await fire(s.handlers,"agent_end",ctx); await changesSettled(); return s.calls.filter((call) => call[1]==="for-each-ref"); };
- assert.deepEqual(await turn(),[],"before the merge the session's root lists none of the child's files: nothing to ask Git");
- assert.match(renderFooter(ui),/main ±5/,"before the merge: two files here, three there");
- s.git(s.repo,"merge","-q","--no-edit","child");
- assert.deepEqual(await turn(),[[child,"for-each-ref","--contains","HEAD","--format=%(refname)","refs/heads/main"]],"one call, in the clean child root, about the branch of the root that lists its files");
- assert.match(renderFooter(ui),/main ±5/,"after the merge the same five files, not eight");
- assert.match(changesWidget(ui),/5 files · \+5 −0 · c1\.txt · c2\.txt · c3\.txt · own-1\.txt · own-2\.txt/,"one root listed, so plain paths");
- assert.ok(gitStateOnly(s.calls.map((call) => call.slice(1))), JSON.stringify(s.calls));
- writeFileSync(join(child,"c1.txt"),"c\nuncommitted\n");
- assert.deepEqual(await turn(),[],"a child root with uncommitted work is listed without asking");
- assert.match(renderFooter(ui),/main ±8/);
- s.git(child,"commit","-q","-am","a commit the session's branch lacks");
- assert.equal((await turn()).length,1);
- assert.match(renderFooter(ui),/main ±8/,"clean, but ahead of the session's branch: listed as before");
- await fire(s.handlers,"session_shutdown",ctx);
-});
-
-// T132, GAP-B (L950): the count is not the session's total while a root is read against HEAD.
-test("a clean root read against HEAD is said in the rail and has its row in /jhon:changes while another root has changes", async (t) => {
- const s = realRepoSession(t);
- const linked=join(s.dir,"linked");
- s.git(s.repo,"worktree","add","-q","-b","linked",linked);
- const {ctx,ui,overlayReady}=s.session(s.repo,[{type:"custom",customType:"jhon-shell.session-worktree/v1",data:{sessionId:"shell-session",root:s.repo,evidence:"session:cwd"}}]);
- await fire(s.handlers,"session_start",ctx);
- await s.tools.get("session_worktree_register")!.execute("r",{path:linked},undefined,undefined,ctx);
- writeFileSync(join(s.repo,"a.txt"),"one\ntwo\n");
- s.git(s.repo,"commit","-q","-am","a commit the session cannot count");
- writeFileSync(join(linked,"l.txt"),"l\n");
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.match(renderFooter(ui),/main ±1/);
- assert.match(changesWidget(ui),/1 file · \+1 −0 · l\.txt/,"one counted root: plain paths");
- assert.match(railChanges(),/▾ CHANGES +1 file\n {2}\+1 −0 +\/jhon:changes\n {2}commits not counted, read vs HEAD: *\n {2}app: the session kept no base for this root/);
- const opened=s.commands.get("jhon:changes")!.handler("",ctx);
- await waitFor(() => ui.overlayView !== undefined || ui.notices.length > 0);
- await overlayReady;
- try {
-  const text=ui.overlayView!.render(160).join("\n");
-  assert.match(text,/✎ Changes · 2 worktrees/);
-  assert.match(text,/linked · linked/);
-  assert.match(text,/main · app · vs HEAD/);
- } finally { ui.closeOverlay?.(); await opened; await fire(s.handlers,"session_shutdown",ctx); }
-});
-
-test("/jhon:changes on a sub-agent's worktree whose work is shown under the root that holds it says so, and opens on that root", async (t) => {
- const s = realRepoSession(t);
- const child=join(s.dir,"child");
- const {ctx,ui,overlayReady}=s.session();
- await fire(s.handlers,"session_start",ctx);
- s.git(s.repo,"worktree","add","-q","-b","child",child);
- registerSubagentWorktree(s.pi as never,ctx.sessionManager,s.repo,child);
- writeFileSync(join(child,"c.txt"),"c\n");
- s.git(child,"add","-A"); s.git(child,"commit","-q","-m","the child's slice");
- s.git(s.repo,"merge","-q","--no-edit","child");
- const opened=s.commands.get("jhon:changes")!.handler(join(child,"."),ctx);
- await waitFor(() => ui.overlayView !== undefined);
- await overlayReady;
- try {
-  assert.deepEqual(ui.notices,[`${child} has no row of its own: its work is merged into ${s.repo} and is listed there.`]);
-  const text=ui.overlayView!.render(160).join("\n");
-  assert.match(text,/✎ Changes · app /,"the view opens on the root that holds it");
-  assert.match(text,/A c\.txt {2}\+1 -0/);
- } finally { ui.closeOverlay?.(); await opened; await fire(s.handlers,"session_shutdown",ctx); }
-});
-
-test("a status Git could not read is not \"no changes\": the rail's empty Changes says it could not be read", async () => {
- const { pi, handlers } = fakePi();
- shellUi(pi,{}, { gitRunner: () => async (args) => ({ stdout: "", code: args[0]==="status" ? 128 : 0 }) });
- const {ctx,ui}=fakeContext();
- await fire(handlers,"session_start",ctx);
- await fire(handlers,"agent_end",ctx);
- await changesSettled();
- assert.doesNotMatch(renderFooter(ui),/±/);
- assert.match(railChanges(),/▾ CHANGES +unknown\n {2}Git status could not be read +\/jhon:changes\n {2}in 1 of 1 root *\n/);
- assert.doesNotMatch(railChanges(),/since session start|no uncommitted/);
- await fire(handlers,"session_shutdown",ctx);
-});
-
-// T132, preserved: what the rule did not change, on real repositories.
-test("a session with no git repository shows nothing and runs no git", async (t) => {
- const s = realRepoSession(t);
- const plain=join(s.dir,"plain");
- mkdirSync(plain);
- writeFileSync(join(plain,"notes.md"),"n\n");
- const {ctx,ui}=s.session(plain);
- await fire(s.handlers,"session_start",ctx);
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- await s.commands.get("jhon:changes")!.handler("",ctx);
- assert.deepEqual(s.calls,[],"no root, so no Git at all");
- assert.deepEqual(s.registrations(ctx),[]);
- assert.doesNotMatch(renderFooter(ui),/±/);
- assert.equal(ui.widgets.has("jhon-shell-changes"),false);
- assert.equal(ui.overlay,undefined);
- assert.deepEqual(ui.notices,["No changes since the session's start in this session's repository or its sub-agents' worktrees."]);
- await fire(s.handlers,"session_shutdown",ctx);
-});
-
-test("session_worktree_register still registers a worktree of the session's clone, once, and its changes join the session's", async (t) => {
- const s = realRepoSession(t);
- const linked=join(s.dir,"linked");
- s.git(s.repo,"worktree","add","-q","-b","linked",linked);
- const {ctx,ui}=s.session();
+ const {ctx}=s.session();
  await fire(s.handlers,"session_start",ctx);
  const register=s.tools.get("session_worktree_register")!;
  const result=await register.execute("r",{path:linked},undefined,undefined,ctx) as { content: Array<{ text: string }>; details: unknown };
@@ -2356,10 +2030,6 @@ test("session_worktree_register still registers a worktree of the session's clon
  await register.execute("again",{path:linked},undefined,undefined,ctx);
  const head=s.git(s.repo,"rev-parse","HEAD");
  assert.deepEqual(s.registrations(ctx),[{sessionId:"shell-session",root:s.repo,evidence:"session:cwd",base:head},{sessionId:"shell-session",root:linked,evidence:"explicit",base:head}]);
- writeFileSync(join(linked,"a.txt"),"one\nlinked\n");
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.match(renderFooter(ui),/main ±1/);
  await fire(s.handlers,"session_shutdown",ctx);
 });
 
@@ -2374,29 +2044,6 @@ test("a worktree of another clone is still refused, and registers nothing", asyn
  await fire(s.handlers,"session_shutdown",ctx);
 });
 
-test("a registered root that no longer exists is dropped: its changes leave and Git is not asked about it", async (t) => {
- const s = realRepoSession(t);
- const linked=join(s.dir,"linked");
- s.git(s.repo,"worktree","add","-q","-b","linked",linked);
- const {ctx,ui}=s.session();
- await fire(s.handlers,"session_start",ctx);
- await s.tools.get("session_worktree_register")!.execute("r",{path:linked},undefined,undefined,ctx);
- writeFileSync(join(s.repo,"a.txt"),"one\nmain\n");
- writeFileSync(join(linked,"a.txt"),"one\nlinked\n");
- s.git(linked,"commit","-q","-am","in the worktree");
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.match(renderFooter(ui),/main ±2/);
- rmSync(linked,{recursive:true,force:true});
- s.calls.length=0;
- await fire(s.handlers,"agent_end",ctx);
- await changesSettled();
- assert.match(renderFooter(ui),/main ±1/);
- assert.match(changesWidget(ui),/1 file · \+1 −0 · a\.txt/);
- assert.ok(s.calls.length>0 && s.calls.every((call) => call[0]===s.repo), JSON.stringify(s.calls));
- await fire(s.handlers,"session_shutdown",ctx);
-});
-
 test("a turn end never waits for Git", async () => {
  const { pi, handlers } = fakePi();
  (pi as unknown as { exec: () => Promise<never> }).exec = () => new Promise<never>(() => {});
@@ -2407,7 +2054,7 @@ test("a turn end never waits for Git", async () => {
  await fire(handlers,"session_shutdown",ctx);
 });
 
-test("explicit registration validates the clone, and a clean registered root shows no Changes", async () => {
+test("explicit registration validates the clone", async () => {
 	const { pi, handlers, commands, tools } = fakePi();
 	let bootstrapped = false;
 	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, {
@@ -2425,26 +2072,9 @@ test("explicit registration validates the clone, and a clean registered root sho
 	await assert.rejects(register.execute("foreign", { path: "/foreign" }, undefined, undefined, ctx), /another repository cannot be one of its worktrees/);
 	assert.equal(ctx.sessionManager, manager);
 	assert.equal(ctx.sessionManager.getEntries().length, 1);
-	await commands.get("jhon:changes")!.handler("", ctx);
-	assert.match(ui.notices.join("\n"), /No uncommitted changes in \/repo, compared with HEAD: the session kept no base for this root/);
+	assert.equal(commands.has("jhon:changes"), false, "T174: no changes view");
 	assert.equal(ui.overlay, undefined);
 	await fire(handlers, "session_shutdown", ctx);
-});
-
-test("a registered worktree opens Changes as its own group", async () => {
- const {pi,handlers,commands,tools,git}=fakePi([{numstat:"",porcelain:" M file.ts\0?? dirty.ts\0"}]);
- shellUi(pi,{});
- const {ctx,ui,overlayReady}=fakeContext();
- await fire(handlers,"session_start",ctx);
- await tools.get("session_worktree_register")!.execute("r",{path:"/linked"},undefined,undefined,ctx);
- const opened=commands.get("jhon:changes")!.handler("",ctx);
- await overlayReady;
- try {
-  const rendered=ui.overlayView!.render(140).join("\n");
-  assert.match(rendered,/main · repo/);
-  assert.match(rendered,/detached · linked/, "a root outside the worktree list asks for its own HEAD");
-  assert.ok(gitStateOnly(git), JSON.stringify(git));
- } finally { ui.closeOverlay?.(); await opened; await fire(handlers,"session_shutdown",ctx); }
 });
 
 test("new sessions do not inherit another session's worktrees", async () => {
@@ -2456,59 +2086,9 @@ test("new sessions do not inherit another session's worktrees", async () => {
  const next=fakeContext({entries:[...first.ctx.sessionManager.getEntries()]});
  (next.ctx.sessionManager as any).getSessionId=()=>"new-session";
  await fire(h.handlers,"session_start",next.ctx);
- h.git.length=0;
- await fire(h.handlers,"agent_end",next.ctx);
- await changesSettled();
- assert.ok(h.git.length>0);
- assert.ok(h.git.every((args)=>args[1]==="/repo"), JSON.stringify(h.git));
+ const roots=(next.ctx.sessionManager.getEntries() as Array<{ customType?: string; data?: { sessionId?: string; root?: string } }>).filter((entry)=>entry.customType==="jhon-shell.session-worktree/v1"&&entry.data?.sessionId==="new-session").map((entry)=>entry.data!.root);
+ assert.ok(!roots.includes("/linked"), JSON.stringify(roots));
  await fire(h.handlers,"session_shutdown",next.ctx);
-});
-
-
-test("loadFileDiff asks git for a diff against the file's base, HEAD for a file without one, or a no-index diff for untracked files", async () => {
-	const calls: string[][] = [];
-	const git = async (args: string[]) => {
-		calls.push(args);
-		return { stdout: "@@ -0,0 +1 @@\n+hello", code: args.includes("--no-index") ? 1 : 0 };
-	};
-	assert.match(await loadFileDiff(git, { path: "lib/a.ts", added: 1, deleted: 0, status: CHANGE_STATUS.MODIFIED }), /\+hello/);
-	assert.match(await loadFileDiff(git, { path: "notes.md", added: 0, deleted: 0, status: CHANGE_STATUS.UNTRACKED }), /\+hello/);
-	const base = "0123456789abcdef0123456789abcdef01234567";
-	assert.match(await loadFileDiff(git, { path: "lib/b.ts", added: 1, deleted: 0, status: CHANGE_STATUS.ADDED, diffBase: base }), /\+hello/);
-	assert.deepEqual(calls, [
-		["diff", "HEAD", "--", "lib/a.ts"],
-		["diff", "--no-index", "--", "/dev/null", "notes.md"],
-		["diff", base, "--", "lib/b.ts"],
-	]);
-});
-
-test("loadFileDiff replaces one oversized diff with a short open-in-editor line", async () => {
-	const answer = (stdout: string, truncated?: boolean) => async () => ({ stdout, code: 0, ...(truncated ? { truncated } : {}) });
-	const file = { path: "big.ts", added: 1, deleted: 0, status: CHANGE_STATUS.MODIFIED };
-	// assert.ok keeps a failure from printing megabytes of diff.
-	assert.ok(await loadFileDiff(answer("+x\n".repeat(DIFF_MAX_LINES + 1)), file) === DIFF_TOO_LARGE, "too many lines");
-	assert.ok(await loadFileDiff(answer("+" + "x".repeat(DIFF_MAX_BYTES)), file) === DIFF_TOO_LARGE, "too many bytes");
-	assert.ok(await loadFileDiff(answer("+partial", true), file) === DIFF_TOO_LARGE, "a runner that hit its buffer bound");
-	assert.match(DIFF_TOO_LARGE, /too large.*o.*editor/i);
-	assert.equal(await loadFileDiff(answer("+x\n".repeat(10)), file), "+x\n".repeat(10));
-});
-
-test("shell Git runner hides initial and repeated background polling children", async () => {
-	const calls: Array<{ command: string; args: readonly string[]; options: Record<string, unknown> }> = [];
-	const run = ((command: string, args: readonly string[], options: Record<string, unknown>, callback: (error: Error | null, stdout: string, stderr: string) => void) => {
-		calls.push({ command, args, options });
-		callback(null, "", "");
-	}) as typeof import("node:child_process").execFile;
-	const git = shellGitRunner("/repo with spaces & metacharacters", { PATH: process.env.PATH }, run);
-	await git(["status", "--porcelain=v1", "-z"]);
-	await git(["status", "--porcelain=v1", "-z"]);
-	assert.equal(calls.length, 2, "the same safe runner serves startup and repeated polling");
-	for (const call of calls) {
-		assert.equal(call.command, "git");
-		assert.deepEqual(call.args, ["-C", "/repo with spaces & metacharacters", "status", "--porcelain=v1", "-z"]);
-		assert.equal(call.options.shell, false);
-		assert.equal(call.options.windowsHide, true);
-	}
 });
 
 test("openInExternalEditor stops the TUI around the editor and honors $VISUAL over $EDITOR", () => {
@@ -2546,578 +2126,9 @@ test("external editor receives the selected worktree as process cwd", () => {
 	assert.equal(cwd, "/linked");
 });
 
-test("changesShortcut defaults to alt+g and can be overridden or disabled", () => {
-	assert.equal(changesShortcut(envSettings({})), "alt+g");
-	assert.equal(changesShortcut(envSettings({ JHON_SHELL_CHANGES_KEY: "ctrl+shift+g" })), "ctrl+shift+g");
-	assert.equal(changesShortcut(envSettings({ JHON_SHELL_CHANGES_KEY: "off" })), undefined);
-	assert.equal(changesShortcut(envSettings({ JHON_SHELL_CHANGES_KEY: "" })), undefined);
-});
-
-test("shellUi binds the changes shortcut to the same handler as the command", async () => {
-	const { pi, handlers, shortcuts } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	const shortcut = shortcuts.get("alt+g");
-	assert.ok(shortcut, "alt+g not registered");
-	await shortcut.handler(ctx);
-	assert.match(ui.notices.join("\n"), /No uncommitted changes in \/repo, compared with HEAD: the session kept no base for this root/);
-
-	const silent = fakePi();
-	shellUi(silent.pi, { JHON_SHELL_CHANGES_KEY: "off" });
-	assert.equal(silent.shortcuts.has("alt+g"), false, "the changes shortcut must not register when disabled");
-});
-
-// T93 (L659): /jhon:usage and alt+u open the usage panel of every configured provider again.
-test("/jhon:usage and alt+u open the usage panel, the session's provider first with 力; JHON_SHELL_USAGE_KEY=off registers no key", async () => {
-	const { pi, handlers, commands, shortcuts } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	assert.ok(commands.has("jhon:usage"), "/jhon:usage is registered");
-	assert.match(commands.get("jhon:usage")!.description, /usage windows/);
-	for (const open of [() => commands.get("jhon:usage")!.handler("", ctx), () => shortcuts.get("alt+u")!.handler(ctx)]) {
-		const pending = open();
-		await new Promise((resolve) => setImmediate(resolve));
-		const view = ui.overlayView!;
-		assert.ok(view, "the panel opens");
-		const lines = view.render(80).map(stripAnsi);
-		assert.match(lines[0]!, /◆ Subscriptions/);
-		assert.match(lines.join("\n"), /力 anthropic · /);
-		view.handleInput("\x1b");
-		ui.overlayView = undefined;
-		await pending;
-	}
-	const silent = fakePi();
-	shellUi(silent.pi, { JHON_SHELL_USAGE_KEY: "off" });
-	assert.equal(silent.shortcuts.has("alt+u"), false);
-});
-
-test("Changes never polls Git in the background; external edits appear at turn end", async () => {
- const {pi,handlers,git}=fakePi([{numstat:"4\t2\texternal.ts\0",porcelain:" M external.ts\0"}]);
- shellUi(pi,{JHON_SHELL_CHANGES_WATCH_MS:"5"});
- const {ctx,ui}=fakeContext();
- await fire(handlers,"session_start",ctx);
- await new Promise(resolve=>setTimeout(resolve,30));
- assert.equal(git.length,0);
- assert.equal(ui.widgets.has("jhon-shell-changes"),false);
- await fire(handlers,"agent_end",ctx);
- await changesSettled();
- assert.match(renderFooter(ui),/±1/);
- await fire(handlers,"session_shutdown",ctx);
-});
-
-const NAN_QUOTA_PAYLOAD = {
-	periodEnd: "2026-10-01T00:00:00.000Z",
-	models: [
-		{
-			model: "glm5.3",
-			cap: 3_000_000_000,
-			fullCap: 3_000_000_000,
-			tokensUsed: 820_000_000,
-			windowHours: 4,
-			windowTokens: 400_000_000,
-			windowTokensUsed: 120_000_000,
-			windowResetsAt: 1_788_620_161,
-		},
-	],
-};
-
-function fakeFetch(payload: unknown = NAN_QUOTA_PAYLOAD, ok = true) {
-	const calls: Array<{ url: string; headers: Record<string, string>; init: RequestInit }> = [];
-	const fetchFn = (async (url: string | URL, init?: RequestInit) => {
-		calls.push({ url: String(url), headers: (init?.headers ?? {}) as Record<string, string>, init: init ?? {} });
-		return { ok, json: async () => payload } as Response;
-	}) as typeof fetch;
-	return { fetchFn, calls };
-}
-
-
-
-test("shellUi fetches NaN quota on session start and shows it in the bar", async () => {
-	const { pi, handlers } = fakePi();
-	const { fetchFn, calls } = fakeFetch(NAN_QUOTA_PAYLOAD);
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { fetch: fetchFn, now: () => 1_788_600_000_000 });
-	const { ctx, ui } = fakeContext({ token: "sk-nan-secret" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "nan";
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.equal(calls.length, 1);
-	assert.equal(calls[0].url, "https://cloud-api.nan.builders/api/usage/quota");
-	// The fixture's session model holds no NaN allowance of its own, so the
-	// account names the meter: a NaN payload of one model is still per-model data.
-	assert.match(renderFooter(ui), /⟡ nan total ▰+▱+ 27% +Release notes$/, "on a subscription the window replaces the cost");
-
-	await fire(handlers, "agent_end", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.equal(calls.length, 1, "agent_end must not refetch within the refresh window");
-});
-
-test("a failed NaN refresh keeps the last valid snapshot", async () => {
-	const { pi, handlers } = fakePi();
-	const calls: string[] = [];
-	let fail = false;
-	const fetchFn = (async (url: string | URL) => {
-		calls.push(String(url));
-		if (fail) throw new TypeError("network down");
-		return { ok: true, json: async () => NAN_QUOTA_PAYLOAD } as Response;
-	}) as typeof fetch;
-	let now = 1_788_600_000_000;
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { fetch: fetchFn, now: () => now });
-	const { ctx, ui } = fakeContext({ token: "sk-nan-secret" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "nan";
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.match(renderFooter(ui), /nan total ▰+▱+/);
-
-	fail = true;
-	now += 6 * 60_000;
-	await fire(handlers, "agent_end", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.equal(calls.length, 2, "the refresh window elapsed, so the retry was attempted");
-	assert.match(renderFooter(ui), /nan total ▰+▱+/, "a failed refresh cannot erase the last valid snapshot");
-});
-
-test("a provider switch refreshes the new provider inside the same window", async () => {
-	const { pi, handlers } = fakePi();
-	const { fetchFn, calls } = fakeFetch(NAN_QUOTA_PAYLOAD);
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { fetch: fetchFn, now: () => 1_788_600_000_000 });
-	let acmeCalls = 0;
-	pi.events.emit(USAGE_SOURCE_EVENT, acmeSource(() => { acmeCalls += 1; }));
-	const { ctx } = fakeContext({ token: "sk-nan-secret" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "nan";
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.equal(calls.length, 1);
-	assert.equal(acmeCalls, 0);
-
-	// The 5-minute rule is per provider: the timestamp one provider set cannot
-	// leave the next one waiting for a fetch it never made.
-	(ctx as unknown as { model: { provider: string } }).model.provider = "acme-cloud";
-	await fire(handlers, "agent_end", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.equal(acmeCalls, 1, "a provider switch is a reason to fetch, not to wait");
-	assert.equal(calls.length, 1);
-});
-
-// A generic hook: any extension can register a usage source for its own
-// provider on `pi.events`, and jhon-shell dispatches to it exactly like it
-// dispatches to the built-in NaN fetcher, without knowing the
-// provider's name ahead of time.
-
-function acmeSource(onFetch: (apiKey: string | undefined) => void, plan = "Acme cloud"): unknown {
-	return {
-		schema: USAGE_SOURCE_SCHEMA,
-		provider: "acme-cloud",
-		fetch: async (apiKey: string | undefined) => {
-			onFetch(apiKey);
-			return {
-				provider: "acme-cloud",
-				plan,
-				limits: [{ name: "acme-cloud", windows: [{ label: "week", usedPercent: 40, windowSeconds: 604_800, resetAt: null }], limitReached: false }],
-				fetchedAt: 0,
-			};
-		},
-	};
-}
-
-test("shellUi fetches usage through a source registered before session start", async () => {
-	const { pi, handlers } = fakePi();
-	const seen: Array<string | undefined> = [];
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { now: () => 1_788_600_000_000 });
-	pi.events.emit(USAGE_SOURCE_EVENT, acmeSource((apiKey) => seen.push(apiKey)));
-	const { ctx, ui } = fakeContext({ token: "acme-token" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "acme-cloud";
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.deepEqual(seen, ["acme-token"], "the registered fetch gets the api key modelRegistry resolves for its provider");
-	assert.match(renderFooter(ui), /⟡ week ▰▰▰▱▱▱▱▱ 40% +Release notes$/);
-});
-
-test("shellUi forces one refresh when a usage source registers after session start for the active provider", async () => {
-	const { pi, handlers } = fakePi();
-	let calls = 0;
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { now: () => 1_788_600_000_000 });
-	const { ctx, ui } = fakeContext({ token: "acme-token" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "acme-cloud";
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.doesNotMatch(renderFooter(ui), /acme-cloud/, "no source registered yet, nothing to show");
-
-	pi.events.emit(USAGE_SOURCE_EVENT, acmeSource(() => { calls += 1; }));
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.equal(calls, 1, "late registration for the active provider triggers one forced refresh, not a wait for the next turn");
-	assert.match(renderFooter(ui), /⟡ week ▰▰▰▱▱▱▱▱ 40% +Release notes$/);
-});
-
-test("a usage source registered for a different provider does not force a refresh", async () => {
-	const { pi, handlers } = fakePi();
-	let calls = 0;
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { now: () => 1_788_600_000_000 });
-	const { ctx, ui } = fakeContext({ token: "acme-token" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "anthropic";
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-
-	pi.events.emit(USAGE_SOURCE_EVENT, acmeSource(() => { calls += 1; }));
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.equal(calls, 0, "the active provider is anthropic, so an acme-cloud registration fetches nothing yet");
-	assert.doesNotMatch(renderFooter(ui), /acme-cloud/);
-});
-
-test("shellUi ignores a malformed usage-source registration payload", async () => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { now: () => 1_788_600_000_000 });
-	pi.events.emit(USAGE_SOURCE_EVENT, { schema: "wrong-schema", provider: "acme-cloud", fetch: async () => undefined });
-	pi.events.emit(USAGE_SOURCE_EVENT, { schema: USAGE_SOURCE_SCHEMA, provider: "acme-cloud", fetch: "not-a-function" });
-	pi.events.emit(USAGE_SOURCE_EVENT, "not-an-object");
-	pi.events.emit(USAGE_SOURCE_EVENT, undefined);
-	const { ctx, ui } = fakeContext({ token: undefined });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "acme-cloud";
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.doesNotMatch(renderFooter(ui), /acme-cloud/, "no malformed payload registered a usable source");
-});
-
-// A registered source is foreign code running inside a fire-and-forget
-// refresh (`void refreshUsage(...)`, both at session_start and on a late
-// registration): if its fetch rejects and nothing catches it, the rejection
-// is unhandled and, under Node's default policy, takes the whole process
-// down. The doc promises a foreign source is "ignored rather than crashing
-// the shell", so a throw must degrade exactly like a built-in fetcher's.
-test("a registered source's rejecting fetch never crashes the shell or poisons the store", async () => {
-	const { pi, handlers } = fakePi();
-	let calls = 0;
-	const rejectingSource = () => ({
-		schema: USAGE_SOURCE_SCHEMA,
-		provider: "acme-cloud",
-		fetch: async () => {
-			calls += 1;
-			throw new Error("acme is down");
-		},
-	});
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { now: () => 1_788_600_000_000 });
-	const { ctx, ui } = fakeContext({ token: "acme-token" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "acme-cloud";
-
-	const unhandled: unknown[] = [];
-	const onUnhandled = (reason: unknown) => unhandled.push(reason);
-	process.on("unhandledRejection", onUnhandled);
-	try {
-		// Registered before session start: session_start's own fire-and-forget
-		// refresh dispatches straight to the rejecting fetch.
-		pi.events.emit(USAGE_SOURCE_EVENT, rejectingSource());
-		await fire(handlers, "session_start", ctx);
-		await new Promise((resolve) => setTimeout(resolve, 0));
-		assert.equal(calls, 1);
-		assert.doesNotMatch(renderFooter(ui), /acme-cloud/, "a rejecting fetch must never be recorded as a snapshot");
-
-		// A second, late registration for the already-active provider dispatches
-		// through the USAGE_SOURCE_EVENT handler's own fire-and-forget refresh.
-		pi.events.emit(USAGE_SOURCE_EVENT, rejectingSource());
-		await new Promise((resolve) => setTimeout(resolve, 0));
-		assert.equal(calls, 2);
-		assert.doesNotMatch(renderFooter(ui), /acme-cloud/);
-	} finally {
-		process.off("unhandledRejection", onUnhandled);
-	}
-	assert.deepEqual(unhandled, [], "a foreign source's rejection must never surface as an unhandled rejection");
-});
-
-// A registered source's resolved value is foreign code's own object: it must
-// be validated like any other parsed payload (never trusted to name the
-// provider it actually is, never trusted to be well-formed), and a source
-// that gets replaced mid-flight must never let its late, stale answer land
-// after the replacement already recorded its own.
-
-test("a registered source resolving usage for another provider is rejected without overwriting that provider's snapshot", async () => {
-	const { pi, handlers } = fakePi();
-	const { fetchFn } = fakeFetch(NAN_QUOTA_PAYLOAD);
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { fetch: fetchFn, now: () => 1_788_600_000_000 });
-	const { ctx, ui } = fakeContext({ token: "sk-nan-secret" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "nan";
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.match(renderFooter(ui), /nan total ▰+▱+/, "the real nan snapshot recorded first");
-
-	(ctx as unknown as { model: { provider: string } }).model.provider = "acme-cloud";
-	pi.events.emit(USAGE_SOURCE_EVENT, {
-		schema: USAGE_SOURCE_SCHEMA,
-		provider: "acme-cloud",
-		fetch: async () => ({ provider: "nan", plan: undefined, limits: [], fetchedAt: 0 }),
-	});
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.doesNotMatch(renderFooter(ui), /acme-cloud/, "a resolution naming another provider must not surface as the active one");
-
-	(ctx as unknown as { model: { provider: string } }).model.provider = "nan";
-	assert.match(renderFooter(ui), /nan total ▰+▱+/, "the real nan snapshot must survive a mismatched acme-cloud resolution untouched");
-});
-
-test("shellUi records nothing when a registered source resolves a malformed usage", async () => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { now: () => 1_788_600_000_000 });
-	pi.events.emit(USAGE_SOURCE_EVENT, {
-		schema: USAGE_SOURCE_SCHEMA,
-		provider: "acme-cloud",
-		fetch: async () => ({ provider: "acme-cloud", plan: "Acme", fetchedAt: 0, limits: "nope" }),
-	});
-	const { ctx, ui } = fakeContext({ token: "acme-token" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "acme-cloud";
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.doesNotMatch(renderFooter(ui), /acme-cloud/, "a malformed result must never be recorded");
-});
-
-test("a slow fetch from a replaced source never records after its replacement resolves", async () => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { now: () => 1_788_600_000_000 });
-	const { ctx, ui } = fakeContext({ token: "acme-token" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "acme-cloud";
-
-	let resolveSlow!: (value: unknown) => void;
-	const slow = new Promise((resolve) => { resolveSlow = resolve; });
-	pi.events.emit(USAGE_SOURCE_EVENT, {
-		schema: USAGE_SOURCE_SCHEMA,
-		provider: "acme-cloud",
-		fetch: async () => {
-			await slow;
-			return { provider: "acme-cloud", plan: "Stale", fetchedAt: 0, limits: [{ name: "acme-cloud", limitReached: false, windows: [{ label: "week", usedPercent: 10, windowSeconds: 604_800, resetAt: null }] }] };
-		},
-	});
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.doesNotMatch(renderFooter(ui), /acme-cloud/, "the slow fetch has not resolved yet");
-
-	// Replace the source before the slow fetch resolves; the late registration
-	// forces its own refresh, which resolves immediately.
-	pi.events.emit(USAGE_SOURCE_EVENT, {
-		schema: USAGE_SOURCE_SCHEMA,
-		provider: "acme-cloud",
-		fetch: async () => ({ provider: "acme-cloud", plan: "Fresh", fetchedAt: 0, limits: [{ name: "acme-cloud", limitReached: false, windows: [{ label: "week", usedPercent: 40, windowSeconds: 604_800, resetAt: null }] }] }),
-	});
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.match(renderFooter(ui), /⟡ week ▰▰▰▱▱▱▱▱ 40% +Release notes$/, "the replacement's own refresh recorded first");
-
-	// Now let the stale fetch resolve; it must never overwrite the fresh record.
-	resolveSlow(undefined);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.match(renderFooter(ui), /⟡ week ▰▰▰▱▱▱▱▱ 40% +Release notes$/, "the stale refresh must never record after being replaced");
-});
-
-test("shellUi records rate-limit headers from provider responses", async () => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { fetch: fakeFetch({}, false).fetchFn, now: () => 0 });
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	for (const handler of handlers.get("after_provider_response") ?? []) {
-		handler({ status: 200, headers: { "anthropic-ratelimit-unified-5h-utilization": "0.25", "anthropic-ratelimit-unified-7d-utilization": "0.9" } }, ctx);
-	}
-	assert.match(renderFooter(ui), /⟡ week ▰▰▰▰▰▰▰▱ 90% +Release notes$/);
-});
-
-// pi-claude-bridge 0.9.3 (src/rate-limit.ts rateLimitResponse) rebuilds these
-// headers from Claude Code's SDK rate_limit_event: status, reset and
-// representative-claim from the top level, then one utilization/reset pair per
-// unifiedWindows entry, five_hour→5h and seven_day→7d, any other name as is.
-// Mirrored here byte for byte so the test feeds the bridge's exact shape.
-const BRIDGE_WINDOW_ABBREVIATIONS: Record<string, string> = { five_hour: "5h", seven_day: "7d", seven_day_overage_included: "7d_oi" };
-function bridgeRateLimitHeaders(info: { status?: string; resetsAt?: number; rateLimitType?: string; overageStatus?: string; overageResetsAt?: number; unifiedWindows?: Record<string, { utilization?: number; resetsAt?: number } | undefined> }): Record<string, string> {
-	const headers: Record<string, string> = {};
-	const set = (name: string, value: string | number | undefined) => {
-		if (value !== undefined) headers[`anthropic-ratelimit-unified-${name}`] = String(value);
-	};
-	set("status", info.status);
-	set("reset", info.resetsAt);
-	set("representative-claim", info.rateLimitType);
-	set("overage-status", info.overageStatus);
-	set("overage-reset", info.overageResetsAt);
-	for (const [name, window] of Object.entries(info.unifiedWindows ?? {})) {
-		const abbreviation = BRIDGE_WINDOW_ABBREVIATIONS[name] ?? name;
-		set(`${abbreviation}-utilization`, window?.utilization);
-		set(`${abbreviation}-reset`, window?.resetsAt);
-	}
-	return headers;
-}
-
-test("with provider claude-bridge, the status line shows the week window the bridge re-emits, with its reset", async () => {
-	const now = 1_788_600_000_000;
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { fetch: fakeFetch({}, false).fetchFn, now: () => now });
-	const { ctx, ui } = fakeContext();
-	(ctx as unknown as { model: { provider: string } }).model.provider = "claude-bridge";
-	await fire(handlers, "session_start", ctx);
-	const seconds = now / 1000;
-	const headers = bridgeRateLimitHeaders({
-		status: "allowed",
-		resetsAt: seconds + 4 * 3600,
-		rateLimitType: "five_hour",
-		unifiedWindows: { five_hour: { utilization: 0.25, resetsAt: seconds + 4 * 3600 }, seven_day: { utilization: 0.62, resetsAt: seconds + 3 * 86_400 + 2 * 3600 } },
-	});
-	for (const handler of handlers.get("after_provider_response") ?? []) handler({ status: 200, headers }, ctx);
-
-	assert.match(renderFooter(ui), /⟡ week ▰▰▰▰▰▱▱▱ 62% · resets /, "the line reads the session provider's usage");
-});
-
-test("shellUi ignores incomplete Anthropic headers and retains the last real quota without assuming 5h", async () => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { fetch: fakeFetch({}, false).fetchFn, now: () => 0 });
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	const respond = (headers: Record<string, string>) => {
-		for (const handler of handlers.get("after_provider_response") ?? []) handler({ status: 200, headers }, ctx);
-	};
-	respond({ "anthropic-ratelimit-unified-5h-reset": "1788620161" });
-	assert.doesNotMatch(renderFooter(ui), /claude (5h|week)|0m/, "a reset without utilization is not a real quota");
-	respond({ "anthropic-ratelimit-unified-7d-utilization": "0.31" });
-	const valid = renderFooter(ui);
-	assert.match(valid, /⟡ week .*31% +Release notes$/);
-	assert.doesNotMatch(valid, /5h|0m/);
-	for (const utilization of [undefined, "", "invalid"]) {
-		const headers: Record<string, string> = { "anthropic-ratelimit-unified-status": "allowed" };
-		if (utilization !== undefined) headers["anthropic-ratelimit-unified-5h-utilization"] = utilization;
-		respond(headers);
-		assert.equal(renderFooter(ui), valid, "a malformed response must not replace the known weekly quota");
-	}
-});
-
-// T149 (L1340 U1): a ChatGPT subscription's windows ride on its replies: the x-codex-* headers on
-// pi's SSE transport (after_provider_response), the codex.rate_limits event on its WebSocket one.
-test("T149: with provider openai-codex, the status line shows the windows of the Codex headers and of the codex.rate_limits event", async () => {
-	const now = 1_788_600_000_000;
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { fetch: fakeFetch({}, false).fetchFn, now: () => now });
-	const { ctx, ui } = fakeContext();
-	(ctx as unknown as { model: { provider: string } }).model.provider = "openai-codex";
-	await fire(handlers, "session_start", ctx);
-	const headers = { "x-codex-primary-used-percent": "75", "x-codex-primary-window-minutes": "300", "x-codex-secondary-used-percent": "62", "x-codex-secondary-window-minutes": "10080" };
-	for (const handler of handlers.get("after_provider_response") ?? []) handler({ status: 200, headers }, ctx);
-	assert.match(renderFooter(ui), /5h 75%/);
-	assert.match(renderFooter(ui), /week ▰▰▰▰▰▱▱▱ 62%/);
-	const event = { type: "provider_stream_event", provider: "openai-codex", api: "openai-codex-responses", model: "gpt-6.2-astra", data: { type: "codex.rate_limits", rate_limits: { primary: { used_percent: 10, window_minutes: 300 }, secondary: { used_percent: 25, window_minutes: 10080 } } } };
-	for (const handler of handlers.get("provider_stream_event") ?? []) handler(event, ctx);
-	assert.match(renderFooter(ui), /week ▰▰▱▱▱▱▱▱ 25%/);
-	for (const handler of handlers.get("provider_stream_event") ?? []) handler({ ...event, data: { type: "response.output_text.delta", delta: "hi" } }, ctx);
-	assert.match(renderFooter(ui), /week ▰▰▱▱▱▱▱▱ 25%/, "any other stream event leaves the windows as they were");
-});
-
-// L117 removed /jhon:usage and alt+u; L659 brings them back (T93): the status line still keeps the answering provider's windows.
-test("/jhon:stats stays gone; the status line keeps the answering provider's 5h and week windows, with no usage hint (L117, L659)", async () => {
-	const { pi, handlers, commands } = fakePi();
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { fetch: fakeFetch({}, false).fetchFn, now: () => 0 });
-	assert.equal(commands.has("jhon:stats"), false);
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	for (const handler of handlers.get("after_provider_response") ?? []) {
-		handler({ status: 200, headers: { "anthropic-ratelimit-unified-5h-utilization": "0.75", "anthropic-ratelimit-unified-7d-utilization": "0.62" } }, ctx);
-	}
-	const footer = renderFooter(ui);
-	assert.match(footer, /5h 75%/);
-	assert.match(footer, /week ▰▰▰▰▰▱▱▱ 62%/);
-	assert.doesNotMatch(footer, /usage · |alt\+u/);
-});
-
-// Targeted usage scope: the session's own provider plus every provider the
-// active profile's subagent routing names, honoring a repository pin over the
-// global active profile.
-
-
 async function settle(): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, 0));
 }
-
-
-
-
-
-
-// One stalled provider must not hold the panel hostage: refreshes run
-// concurrently per provider and each one is bounded, so the overlay opens
-// immediately, the healthy provider still lands its snapshot, the stalled one
-// degrades to the generic failure note when its window expires, and a late
-// answer can never mutate what the timeout already settled.
-
-// The fix for "healthy results record but nothing repaints until the slowest
-// timeout": each settled provider — snapshot or failure — notifies the shell
-// immediately, so the open overlay repaints per provider instead of waiting
-// for the whole refresh (whose slowest member is the bounded window itself).
-
-// The window's signal must compose with whatever the caller already carries —
-// init.signal, like a source passing its own cancellation — not replace it:
-// either side aborting still aborts, exactly like a plain fetch.
-test("the refresh timeout composes with a source's own abort signal instead of replacing it", async (t) => {
-	const home = mkdtempSync(join(tmpdir(), "shell-usage-signal-"));
-	t.after(() => rmSync(home, { recursive: true, force: true }));
-	const { pi, handlers } = fakePi();
-	let captured: AbortSignal | undefined;
-	const spyFetch = (async (_input: string | URL, init?: RequestInit) => {
-		captured = (init?.signal ?? undefined) as AbortSignal | undefined;
-		return await new Promise<Response>(() => {});
-	}) as typeof fetch;
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home, JHON_SHELL_CHANGES_WATCH_MS: "off", JHON_SHELL_USAGE_TIMEOUT_MS: "100" }, { fetch: spyFetch, now: () => 1_788_600_000_000 });
-	const hangingSource = (caller: AbortController): unknown => ({
-		schema: USAGE_SOURCE_SCHEMA,
-		provider: "acme-cloud",
-		fetch: async (_apiKey: string | undefined, fetchFn: typeof fetch) => {
-			await fetchFn("https://acme.example/usage", { signal: caller.signal });
-			return undefined;
-		},
-	});
-	const { ctx } = fakeContext({ token: "acme-token" });
-	(ctx as unknown as { model: { provider: string } }).model.provider = "acme-cloud";
-	const callerA = new AbortController();
-	pi.events.emit(USAGE_SOURCE_EVENT, hangingSource(callerA));
-	await fire(handlers, "session_start", ctx);
-	await settle();
-	assert.ok(captured, "the source's fetch reached the shell fetch");
-	assert.notEqual(captured, callerA.signal, "the window's signal composes with the caller's, it does not replace it");
-	callerA.abort();
-	assert.ok(captured!.aborted, "the caller's own abort still aborts the composed signal");
-
-	// A fresh, un-aborted caller must still be aborted by the window itself.
-	const callerB = new AbortController();
-	pi.events.emit(USAGE_SOURCE_EVENT, hangingSource(callerB));
-	await settle();
-	const capturedB = captured;
-	assert.ok(capturedB && !capturedB.aborted, "the second dispatch starts un-aborted");
-	await new Promise((resolve) => setTimeout(resolve, 250));
-	assert.ok(capturedB!.aborted, "the window's expiry aborts the composed signal too");
-});
-
-// A provider whose credential resolution outlives its window must never start
-// its fetch at all: the timeout bounds the whole operation, not just the wire.
-test("a provider aborted while its credential resolves never starts its fetch", async (t) => {
-	const home = mkdtempSync(join(tmpdir(), "shell-usage-credential-"));
-	t.after(() => rmSync(home, { recursive: true, force: true }));
-	const { pi, handlers } = fakePi();
-	let fetchCalls = 0;
-	const spyFetch = (async () => {
-		fetchCalls += 1;
-		return { ok: true, json: async () => ({}) } as Response;
-	}) as typeof fetch;
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home, JHON_SHELL_CHANGES_WATCH_MS: "off", JHON_SHELL_USAGE_TIMEOUT_MS: "25" }, { fetch: spyFetch, now: () => 1_788_600_000_000 });
-	pi.events.emit(USAGE_SOURCE_EVENT, {
-		schema: USAGE_SOURCE_SCHEMA,
-		provider: "acme-cloud",
-		fetch: async () => {
-			fetchCalls += 1;
-			return undefined;
-		},
-	});
-	const { ctx } = fakeContext({ token: "acme-token" });
-	let releaseCredential: (() => void) | undefined;
-	(ctx as unknown as { modelRegistry: unknown }).modelRegistry = {
-		isUsingOAuth: () => true,
-		getApiKeyForProvider: () => new Promise<string | undefined>((resolve) => { releaseCredential = () => resolve("acme-token"); }),
-	};
-	(ctx as unknown as { model: { provider: string } }).model.provider = "acme-cloud";
-	await fire(handlers, "session_start", ctx);
-	await new Promise((resolve) => setTimeout(resolve, 60));
-	releaseCredential!();
-	await settle();
-	assert.equal(fetchCalls, 0, "the window expired during credential resolution; the source must never be invoked");
-});
-
-
 
 test("the profile reader shows Jhon's active profile, refreshed on demand, and none for default", () => {
 	let active = "team";
@@ -3178,42 +2189,6 @@ test("T120: the status bar shows the session's profile from its branch at the st
 		pi.events.emit(SESSION_PROFILE_CHANGED, { sessionId: "shell-session" });
 		assert.match(bar(), /claude-opus-5-5 · medium · team │ ctx/, "back on the default: no mark");
 	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
-});
-
-// T149 (L1339, L1340 U2): a session on a profile of its own (`jhon-nan (session)`) runs its sub-agents
-// on that profile's models, not the rendered files' (lib/session-profile.ts), so their providers are in scope.
-test("T149: /jhon:usage scopes the providers the session's own profile routes its sub-agents to, from its branch and after a switch", async (t) => {
-	const agentDir = mkdtempSync(join(tmpdir(), "jhon-ui-routing-"));
-	t.after(() => rmSync(agentDir, { recursive: true, force: true }));
-	mkdirSync(join(agentDir, "agents"));
-	writeFileSync(join(agentDir, "agents", "jhon-worker.md"), "---\nname: jhon-worker\ndescription: worker\nmodel: claude-bridge/claude-sonnet-5-5\n---\nbody\n");
-	const profilesJson = async () => ({ profiles: [{ name: "jhon-nan", agents: [{ agent: "jhon-worker", runtime: "pi", model: "nan/glm5.3-flash@high" }] }] });
-	const panel = async (branch: unknown[], switchTo?: string) => {
-		const { pi, handlers, commands } = fakePi();
-		shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off", PI_CODING_AGENT_DIR: agentDir }, { fetch: fakeFetch().fetchFn, now: () => 1_788_600_000_000, profilesJson });
-		const { ctx, ui } = fakeContext({ token: "nan-token" });
-		(ctx as unknown as { model: { provider: string } }).model.provider = "openai-codex";
-		Object.assign(ctx.sessionManager, { getBranch: () => branch });
-		await fire(handlers, "session_start", ctx);
-		if (switchTo) pi.events.emit(SESSION_PROFILE_CHANGED, { sessionId: "shell-session", profile: switchTo });
-		const pending = commands.get("jhon:usage")!.handler("", ctx);
-		await new Promise((resolve) => setTimeout(resolve, 20));
-		const text = ui.overlayView!.render(100).map(stripAnsi).join("\n");
-		ui.overlayView!.handleInput("\x1b");
-		await pending;
-		await fire(handlers, "session_shutdown", ctx);
-		return text;
-	};
-	const onDefault = await panel([]);
-	assert.match(onDefault, /力 openai-codex · usage arrives with the first reply/);
-	assert.match(onDefault, /claude-bridge · usage arrives with the first reply/, "on the default, the rendered file's model");
-	assert.doesNotMatch(onDefault, /\bnan · /);
-	for (const text of [await panel([{ type: "custom", customType: SESSION_PROFILE_ENTRY, data: { profile: "jhon-nan" } }]), await panel([], "jhon-nan")]) {
-		assert.match(text, /力 openai-codex · usage arrives with the first reply/);
-		assert.match(text, /\bnan · updated just now/, "the session profile routes the worker to nan");
-		assert.match(text, /glm5\.3/);
-		assert.doesNotMatch(text, /claude-bridge/, "the rendered file's model is not the session's route");
-	}
 });
 
 test("the bar counts the running background tasks lib/background-tasks-tools.ts reports for this session", async () => {
@@ -3467,7 +2442,7 @@ test("a click on a Status section's header folds that section alone, and a secon
 	await fire(handlers, "session_start", ctx);
 	renderFooter(ui);
 	type Part = SidebarRail & { handleMouse(e: unknown): unknown };
-	// L174: LDD is its own part, first in the rail; the footer keeps CHANGES and INTEGRATIONS.
+	// L174: LDD is its own part, first in the rail; T174: the footer draws nothing in the rail.
 	const ldd = sidebarState(fakeTui as unknown as TUI).parts.get("ldd")! as Part;
 	const rail = sidebarState(fakeTui as unknown as TUI).parts.get("footer")! as Part;
 	const open = ldd.render(46).map(stripAnsi);
@@ -3477,48 +2452,10 @@ test("a click on a Status section's header folds that section alone, and a secon
 	assert.deepEqual(ldd.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 46, height: open.length }), { handled: true, render: true });
 	assert.deepEqual(ldd.render(46).map(stripAnsi).filter((line) => line.trim() !== "").map((line) => line.trim()).length, 1, "LDD is its header alone");
 	assert.match(stripAnsi(ldd.render(46)[0]!), /^▸ LDD/);
-	assert.doesNotMatch(rail.render(46).map(stripAnsi).join("\n"), /LDD/, "LDD is not in the footer");
-	assert.match(stripAnsi(rail.render(46)[0]!), /^▾ CHANGES /, "CHANGES stays open");
-	rail.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 46, height: 1 });
-	assert.ok(rail.render(46).map(stripAnsi).some((line) => /^▸ CHANGES /.test(line)));
+	assert.deepEqual(rail.render(46), [], "no CHANGES, no INTEGRATIONS: the footer's rail is empty");
 	ldd.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 46, height: 1 });
 	assert.match(stripAnsi(ldd.render(46)[0]!), /^▾ LDD/);
 	await fire(handlers, "session_shutdown", ctx);
-});
-
-// T15.12c slice 3: the CHANGES row opens /jhon:changes as the Gentle Shell's
-// does; every header paints its hover, and a move anywhere else clears it.
-test("a click on the CHANGES row opens /jhon:changes and is counted; a move over a header paints it in the hover role and a move off clears it (T15.12c, T171)", async () => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	const tui = { terminal: { rows: 40, columns: 120 }, requestRender() {} };
-	const tagged = { ...plainTheme, fg: (color: string, value: string) => `<${color}>${value}</${color}>` };
-	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, tagged, footerData);
-	try {
-		type Part = SidebarRail & { handleMouse(e: unknown): unknown };
-		const rail = sidebarState(tui as unknown as TUI).parts.get("footer") as Part;
-		const lines = rail.render(200);
-		const at = (y: number, type = "move") => rail.handleMouse({ type, button: type === "move" ? "none" : "left", x: 3, y, width: 200, height: lines.length });
-		const changesTop = lines.findIndex((line) => /CHANGES/.test(line) && line.includes("▾"));
-		assert.deepEqual(at(changesTop), { handled: true, render: true }, "a move over a header is the control's");
-		assert.match(rail.render(200)[changesTop]!, /<warning>▾<\/warning> <warning>CHANGES<\/warning>/);
-		assert.equal(rail.render(200).filter((line) => line.includes("<warning>")).length, 1, "only that header");
-		at(changesTop + 1);
-		assert.match(rail.render(200)[changesTop + 1]!, /<warning>\/jhon:ch/, "the CHANGES row is a control too");
-		assert.doesNotMatch(rail.render(200)[changesTop]!, /<warning>/);
-		setSidebarHover(tui as unknown as TUI);
-		assert.doesNotMatch(rail.render(200).join("\n"), /<warning>/, "a move elsewhere clears the hover");
-		assert.deepEqual(at(changesTop + 1, "click"), { handled: true, render: true });
-		await changesSettled();
-		await new Promise((resolve) => setTimeout(resolve, 0));
-		assert.ok(ui.notices.some((notice) => /No uncommitted changes in \/repo, compared with HEAD/.test(notice)) || ui.overlayView, `the click opened /jhon:changes: ${ui.notices.join(" | ")}`);
-		assert.ok(rail.render(200).some((line) => /▾<\/\w+> <\w+>CHANGES/.test(line)), "the row's click folds nothing");
-		// T171 (L1438): the click is counted, as commands and shortcuts are (lib/ui-use.ts); a move is not.
-		const uses = (ctx.sessionManager.getEntries() as Array<{ customType?: string; data?: unknown }>).filter((e) => e.customType === "jhon-ui-use");
-		assert.deepEqual(uses.map((e) => e.data), [{ feature: "click changes" }]);
-	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
 test("a move over the JOBS or AGENTS header paints it in the hover role; the keys stay off the headers (T15.12c, C6)", async () => {
@@ -3655,7 +2592,7 @@ test("/jhon:settings is not registered; /jhon:customize completes its categories
 	assert.deepEqual(await customize.getArgumentCompletions!(""), [
 		{ value: "appearance", label: "appearance", description: "Theme, animations, glyphs, tool icons, cards, surface, density, status line, reset" },
 		{ value: "behaviour", label: "behaviour", description: "Compaction, the fresh-session notice, stall recovery, double Esc" },
-		{ value: "keys", label: "keys", description: "The shell's keys: LDD status, todos, agents, changes, usage; reload" },
+		{ value: "keys", label: "keys", description: "The shell's keys: LDD status, agents; reload" },
 		{ value: "permissions", label: "permissions", description: "The project's permission mode" },
 	]);
 	assert.deepEqual((await customize.getArgumentCompletions!("pe"))!.map((item) => item.value), ["permissions"]);
@@ -3736,8 +2673,10 @@ test("the shell registers no command palette and no panel sheet: no /jhon:comman
 		shellUi(pi, env);
 		for (const name of ["jhon:commands", "jhon:panel"]) assert.equal(commands.has(name), false, `${name} with ${JSON.stringify(env)}`);
 		for (const key of ["alt+k", "alt+r", "ctrl+alt+r", "ctrl+p"]) assert.equal(shortcuts.has(key), false, `${key} with ${JSON.stringify(env)}`);
-		for (const name of ["jhon:usage", "jhon:changes", "jhon:customize"]) assert.ok(commands.has(name), name);
-		for (const key of ["alt+u", "alt+g"]) assert.ok(shortcuts.has(key), key);
+		assert.ok(commands.has("jhon:customize"));
+		// T174: the changes and usage views are gone too.
+		for (const name of ["jhon:usage", "jhon:changes"]) assert.equal(commands.has(name), false, name);
+		for (const key of ["alt+u", "alt+g"]) assert.equal(shortcuts.has(key), false, key);
 	}
 });
 

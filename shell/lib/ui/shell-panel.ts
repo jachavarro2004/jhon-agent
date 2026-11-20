@@ -126,5 +126,5 @@ export function renderWorkRow(summaries: readonly PanelSummary[], theme: PanelTh
 	return paintPanelSurface(theme, [` ${ascii ? asciiText(row) : row} `], target)[0];
 }
 
-/** The rail's parts in order: LDD first (L174), then G's todo, jobs, agents and the rest of Status (T169: no STATS). */
+/** The rail's parts in order: LDD first (L174), then the agent's todo list (while no change shows), jobs, agents and the footer's slot (T174: empty, CHANGES and INTEGRATIONS are gone). */
 export const RAIL_ORDER = ["ldd", "todo", "jobs", "agents", "footer"] as const;

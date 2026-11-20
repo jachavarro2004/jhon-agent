@@ -1036,7 +1036,7 @@ esac
   const text = await drawn(panels[0], /standard route/);
   assert.match(text, /LDD · c1 +│\n│ +│\n│ standard route +│\n│ risk medium · a\.txt \(code\) +│/, "the change named once, and the risk jhon risk --json gives");
   assert.match(text, /│ {2}LDD · c1 +│/, "the LDD detail, the change's name in the title row (L174)");
-  assert.match(text, /t tests {2}d diff {2}o tasks\.md {2}r refresh {2}esc close/, "with its actions");
+  assert.match(text, /t tests {2}o tasks\.md {2}r refresh {2}esc close/, "with its actions");
   await commands.get("jhon:status").handler(" other ", ctx);
   assert.match(await drawn(panels[1], /│ {2}LDD · other +│/), /other/, "a named change is the one shown");
   assert.deepEqual(shown, [], "no toast");
@@ -1627,7 +1627,7 @@ esac
   let text = "";
   for (let i = 0; i < 100 && !/LDD · c1 +│/.test(text); i++) { text = panels[0].render(100).join("\n"); await new Promise((r) => setTimeout(r, 30)); }
   assert.match(text, /c1/);
-  assert.match(text, /t tests {2}d diff/, "the LDD detail is open");
+  assert.match(text, /t tests {2}o tasks\.md/, "the LDD detail is open");
   // L174: a work view, near full screen as G's profiles view; /jhon:grants is the small card.
   assert.deepEqual(options[0], { overlay: true, overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%", margin: 0 } });
   await commands.get("jhon:grants").handler("", ctx);

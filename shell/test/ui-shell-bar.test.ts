@@ -11,13 +11,11 @@ import {
 	renderShellStatusLayout,
 	renderShellStatusSections,
 	renderShellStatusBar,
-	weekTone,
 	renderShellAgentsSection,
 	renderShellJobsSection,
 	elapsed,
 	shellEnabled,
 	type ShellBarModel,
-	type StatusSection,
 	type ShellBarTheme,
 } from "../lib/ui/shell-bar.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
@@ -52,7 +50,6 @@ function model(overrides: Partial<ShellBarModel> = {}): ShellBarModel {
 	return {
 		cwd: "~/work/jhon-demo",
 		branch: "main",
-		dirty: undefined,
 		sessionName: undefined,
 		modelId: "gpt-5.5",
 		effort: "medium",
@@ -60,19 +57,15 @@ function model(overrides: Partial<ShellBarModel> = {}): ShellBarModel {
 		contextWindow: 272_000,
 		costTotal: 9.49,
 		subscription: true,
-		usage: undefined,
-		statuses: [],
 		...overrides,
 	};
 }
 
 test("under a multiplexer that shows the path the rail draws STATUS as without one: the change is the shell's (L112)", () => {
 	const ldd = { change: "x", slice: "Slice 2: launch", slices: ["done", "current"], route: "standard" } as const;
-	for (const statuses of [[], ["indexing"]]) {
-		const inside = renderShellStatusSections(model({ ldd: { ...ldd, slices: [...ldd.slices] }, hostShowsPath: true, statuses }), plainTheme, 50);
-		assert.match(inside.join("\n"), /◆ x/);
-		assert.deepEqual(inside, renderShellStatusSections(model({ ldd: { ...ldd, slices: [...ldd.slices] }, statuses }), plainTheme, 50));
-	}
+	const inside = renderShellStatusSections(model({ ldd: { ...ldd, slices: [...ldd.slices] }, hostShowsPath: true }), plainTheme, 50);
+	assert.match(inside.join("\n"), /◆ x/);
+	assert.deepEqual(inside, renderShellStatusSections(model({ ldd: { ...ldd, slices: [...ldd.slices] } }), plainTheme, 50));
 });
 
 test("running tasks leave STATUS for the JOBS card, newest first, each with its id and its time to the second", () => {
@@ -97,7 +90,7 @@ test("Status title stays plain", () => {
 
 test("Status respects terminal width", () => {
 	for (const width of [8, 12, 16, 20, 32, 60]) {
-		const lines = renderShellStatusSections(model({ changes: { files: 2, added: 1, deleted: 1 } }), plainTheme, width);
+		const lines = renderShellStatusSections(model(), plainTheme, width);
 		for (const line of lines) assert.ok(visibleWidth(line) <= width, `${width}: ${line}`);
 		if (width >= 20) assert.match(lines[0], /^▾ LDD/);
 	}
@@ -117,7 +110,6 @@ test("gaugeTone reads the one meter ladder: ok under 70, warning from 70, error 
 	assert.equal(gaugeTone(89), "warning");
 	assert.equal(gaugeTone(90), "error");
 	assert.equal(gaugeTone(null), "dim");
-	assert.deepEqual([49, 50, 69, 70, 89, 90].map(weekTone), ["success", "success", "success", "warning", "warning", "error"], "the week reads the same ladder");
 });
 
 test("formatTokens and formatCost keep the bar compact", () => {
@@ -142,11 +134,11 @@ test("shellEnabled honors JHON_SHELL=0", () => {
 
 // T15.12c slice 3, T15.12d: the rail's section headers are the Gentle
 // Shell's renderPanelHeader: the fold glyph muted, the title upper-case in
-// text bold, the count muted at the right; no key on a header but TODOS' own
-// fold key, dim, before its count (C6); the rail draws them in their cards.
+// text bold, the count muted at the right; no key on a header (C6); the rail
+// draws them in their cards.
 const boldTheme: ShellBarTheme = { fg: (color: string, value: string) => `<${color}>${value}</${color}>`, bold: (value: string) => `<b>${value}</b>` };
 
-test("every rail section header is the Gentle Shell's: ▾ muted, the title text bold, the count muted, no key but TODOS' own (T15.12c)", () => {
+test("every rail section header is the Gentle Shell's: ▾ muted, the title text bold, the count muted, no key (T15.12c)", () => {
 	const jobs = [{ id: "job-1", label: "npm test", startedAt: 0, kind: "command" as const }, { id: "agent-1", label: "worker: slice 1", startedAt: 0, kind: "agent" as const }];
 	const ldd = { change: "rail", route: "verified", slices: ["current"], next: "apply" } as ShellBarModel["ldd"];
 	const cards = {
@@ -162,97 +154,59 @@ test("every rail section header is the Gentle Shell's: ▾ muted, the title text
 	}
 });
 
-test("hovering a rail header paints its glyph and title in the hover role; the CHANGES row's command too (T15.12c)", () => {
+test("hovering a rail header paints its glyph and title in the hover role (T15.12c)", () => {
 	const jobs = [{ id: "job-1", label: "npm test", startedAt: 0, kind: "command" as const }, { id: "agent-1", label: "worker: slice 1", startedAt: 0, kind: "agent" as const }];
 	const hovered = (lines: readonly string[], name: string) => assert.match(lines[0]!, new RegExp(`<warning>▾</warning> <warning><b>${name}</b></warning>`), name);
-	for (const name of ["LDD", "CHANGES", "INTEGRATIONS"] as const) {
+	for (const name of ["LDD"] as const) {
 		const lines = renderShellStatusSections(model(), boldTheme, 300, new Set(), name);
 		hovered([lines.find((line) => line.includes(`<b>${name}</b>`))!], name);
 		assert.equal(lines.filter((line) => line.includes("<warning>")).length, 1, `${name}: only its own header`);
 	}
 	hovered(renderShellJobsSection(jobs, boldTheme, 300, 1_000, false, true), "JOBS");
 	hovered(renderShellAgentsSection(jobs, boldTheme, 300, 1_000, false, true), "AGENTS");
-	const open = renderShellStatusSections(model(), boldTheme, 300, new Set(), "open-changes").join("\n");
-	assert.match(open, /<warning>\/jhon:ch/, "the CHANGES row's command paints as the control it is");
 	assert.doesNotMatch(renderShellStatusSections(model(), boldTheme, 300).join("\n"), /<warning>/, "no hover, no hover role");
 });
 
-test("the Status sections report each header's row and the CHANGES row, the click targets (T15.12c)", () => {
-	const data = model({ changes: { files: 2, added: 7, deleted: 3 } });
-	const { lines, targets } = renderShellStatusLayout(data, plainTheme, 46);
-	assert.deepEqual(targets.filter((target) => target.kind === "toggle").map((target) => [target.section, stripAnsi(lines[target.row]!).match(/▾ (\S+)/)?.[1]]), [["LDD", "LDD"], ["CHANGES", "CHANGES"], ["INTEGRATIONS", "INTEGRATIONS"]]);
-	const row = targets.find((target) => target.kind === "open-changes")!;
-	assert.match(lines[row.row]!, /\+7 −3 +\/jhon:changes/, "the CHANGES row opens /jhon:changes");
+test("the Status sections report the LDD header's row, the click target (T15.12c)", () => {
+	const { lines, targets } = renderShellStatusLayout(model(), plainTheme, 46);
+	assert.deepEqual(targets.map((target) => [target.kind, target.section, stripAnsi(lines[target.row]!).match(/▾ (\S+)/)?.[1]]), [["toggle", "LDD", "LDD"]]);
 });
 
-test("INTEGRATIONS says what a mode other than normal means, as the Gentle Shell's permissions row; the status line keeps the badge (T15.12c)", () => {
-	const yolo = renderShellStatusSections(model({ mode: "yolo", statuses: ["MCP connected"] }), plainTheme, 50).join("\n");
-	assert.match(yolo, /▾ INTEGRATIONS +2\n[\s\S]*- permissions nothing asks but destroy[\s\S]*- MCP connected/);
-	assert.match(renderShellStatusSections(model({ mode: "super-yolo" }), plainTheme, 60).join("\n"), /▾ INTEGRATIONS +1\n[\s\S]*- permissions nothing asks, destroy included/);
-	assert.doesNotMatch(renderShellStatusSections(model({ mode: "super-yolo" }), plainTheme, 60).join("\n"), /nothing reported/);
-	for (const mode of [undefined, "normal"]) assert.doesNotMatch(renderShellStatusSections(model({ mode }), plainTheme, 60).join("\n"), /permissions/);
+
+// T174 (L1462): no INTEGRATIONS section; the status line keeps the mode's badge.
+test("the integrations are gone from the rail; the status line keeps a mode's badge", () => {
+	const yolo = renderShellStatusSections(model({ mode: "yolo" }), plainTheme, 50).join("\n");
+	assert.doesNotMatch(yolo, /INTEGRATIONS|permissions|nothing reported/);
 	assert.match(renderShellStatusBar(model({ mode: "yolo" }), plainTheme, 160).rows[0]!, /YOLO/, "the status bar keeps its badge");
 });
 
-// L153 answer 4: Jhon's STATUS card becomes the rail's Status sections, as
-// the Gentle Shell draws them: LDD in Review's place, then Changes and
-// Integrations; no Stats (the dashboard's), no separate STATUS card.
-test("Status is the rail's sections LDD, CHANGES and INTEGRATIONS in that order, each its own group (one card each on a transparent rail); no STATUS card, no Stats", () => {
+
+// L153 answer 4, T174 (L1462): the rail's Status is the LDD section alone:
+// no CHANGES, no INTEGRATIONS, no Stats (the dashboard's), no STATUS card.
+test("Status is the rail's LDD section alone; no STATUS card, no CHANGES, INTEGRATIONS or Stats", () => {
 	const ldd = { change: "rail-redesign", route: "verified", slices: ["done", "current"], next: "apply" } as ShellBarModel["ldd"];
-	const data = model({ ldd, sessionName: "session", profile: "team", changes: { files: 2, added: 7, deleted: 3, notice: "capture warning" }, statuses: ["MCP connected"] });
+	const data = model({ ldd, sessionName: "session", profile: "team" });
 	const layout = renderShellStatusLayout(data, plainTheme, 46);
 	const lines = layout.lines;
-	const tops = layout.groups.map((group) => lines[group.start]!);
-	assert.deepEqual(tops.map((line) => line.match(/^▾ (\S+)/)?.[1]), ["LDD", "CHANGES", "INTEGRATIONS"]);
-	assert.match(tops[0]!, /^▾ LDD +verified route$/, "LDD keeps the route as its count, no key (C6)");
-	assert.match(tops[1]!, /^▾ CHANGES +2 files$/);
-	assert.match(tops[2]!, /^▾ INTEGRATIONS +1$/);
-	assert.deepEqual(layout.groups.slice(1).map((group, i) => lines[group.start - 1]!.trim() === "" && group.start === layout.groups[i]!.end + 1), [true, true], "one blank row between sections");
+	assert.deepEqual(layout.groups.map((group) => lines[group.start]!.match(/^▾ (\S+)/)?.[1]), ["LDD"]);
+	assert.match(lines[0]!, /^▾ LDD +verified route$/, "LDD keeps the route as its count, no key (C6)");
 	const text = lines.join("\n");
-	assert.match(text, /LDD[\s\S]*◆ rail-redesign[\s\S]*CHANGES[\s\S]*\+7 −3 +\/jhon:changes[\s\S]*INTEGRATIONS[\s\S]*- MCP connected/);
-	assert.doesNotMatch(text, /STATUS|STATS|Project|Branch|main|capture warning|Session|session|Profile|team/, "the header and the transcript say those");
+	assert.match(text, /LDD[\s\S]*◆ rail-redesign/);
+	assert.doesNotMatch(text, /STATUS|STATS|CHANGES|INTEGRATIONS|\/jhon:changes|Project|Branch|main|Session|session|Profile|team/, "the header and the transcript say those");
 	for (const width of [1, 8, 24, 46]) assert.ok(renderShellStatusSections(data, plainTheme, width).every((line) => visibleWidth(line) <= width));
-	const quiet = renderShellStatusSections(model(), plainTheme, 46).join("\n");
-	assert.match(quiet, /▾ LDD *\n {2}No active LDD change/);
-	// T132: the label says what is counted, every root against the commit the session first saw it at.
-	assert.match(quiet, /▾ CHANGES +none\n {2}no changes since session start +\/jhon:changes/);
-	assert.doesNotMatch(quiet, /captured/);
-	// A root read against HEAD is named with its reason, with nothing listed and beside other roots' counts too (L950, GAP-B).
-	const head = { headOnly: ["app: the session's base 0123456 no longer exists."] };
-	const fallback = renderShellStatusSections({ ...model(), changes: { files: 0, added: 0, deleted: 0, ...head } }, plainTheme, 46).join("\n");
-	assert.match(fallback, /▾ CHANGES +none\n {2}no uncommitted changes vs HEAD +\/jhon:changes\n {2}app: the session's base 0123456 no longer *\n {2}exists\./);
-	const counted = renderShellStatusSections({ ...model(), changes: { files: 2, added: 3, deleted: 1, ...head } }, plainTheme, 46).join("\n");
-	assert.match(counted, /▾ CHANGES +2 files\n {2}\+3 −1 +\/jhon:changes\n {2}commits not counted, read vs HEAD: *\n {2}app: the session's base 0123456 no longer *\n {2}exists\. *\n *\n/);
-	// A status that could not be read is not "no changes" (L950).
-	const unread = (failed: { roots: number; of: number }, extra = {}) => renderShellStatusSections({ ...model(), changes: { files: 0, added: 0, deleted: 0, failed, ...extra } }, plainTheme, 46).join("\n");
-	assert.match(unread({ roots: 1, of: 1 }), /▾ CHANGES +unknown\n {2}Git status could not be read +\/jhon:changes\n {2}in 1 of 1 root *\n *\n/);
-	assert.match(unread({ roots: 2, of: 3 }, head), /▾ CHANGES +unknown\n {2}Git status could not be read +\/jhon:changes\n {2}in 2 of 3 roots *\n {2}app: the session's base 0123456 no longer *\n {2}exists\./);
-	assert.doesNotMatch(unread({ roots: 1, of: 2 }), /since session start|CHANGES +none/);
-	for (const width of [1, 8, 24, 46]) assert.ok(renderShellStatusSections({ ...model(), changes: { files: 2, added: 3, deleted: 1, ...head, failed: { roots: 1, of: 2 } } }, plainTheme, width).every((line) => visibleWidth(line) <= width));
-	assert.match(quiet, /▾ INTEGRATIONS +none\n {2}nothing reported/);
-	// L174: LDD leads the rail on its own; the footer keeps CHANGES and INTEGRATIONS.
-	const only = (sections: readonly StatusSection[]) => { const l = renderShellStatusLayout(data, plainTheme, 46, new Set(), undefined, sections); return l.groups.map((g) => l.lines[g.start]!.match(/^▾ (\S+)/)?.[1]); };
-	assert.deepEqual(only(["LDD"]), ["LDD"]);
-	assert.deepEqual(only(["CHANGES", "INTEGRATIONS"]), ["CHANGES", "INTEGRATIONS"]);
-	const folded = renderShellStatusSections(data, plainTheme, 46, new Set(["CHANGES"]));
-	assert.ok(folded.some((line) => /^▸ CHANGES /.test(line)));
-	assert.doesNotMatch(folded.join("\n"), /\+7 −3/, "a folded section is its header alone");
+	assert.match(renderShellStatusSections(model(), plainTheme, 46).join("\n"), /▾ LDD *\n {2}No active LDD change/);
+	const folded = renderShellStatusSections(data, plainTheme, 46, new Set(["LDD"]));
+	assert.equal(folded.length, 1, "a folded section is its header alone");
+	assert.match(folded[0]!, /^▸ LDD +verified route$/);
 });
 
-test("the Status sections drop Model, Effort, Context, Cost and Usage, all the header's", () => {
-	const usage = {
-		provider: "anthropic",
-		plan: undefined,
-		fetchedAt: 0,
-		limits: [{ name: "claude", limitReached: false, windows: [{ label: "5h", usedPercent: 62, windowSeconds: 18_000, resetAt: null }] }],
-	};
-	const data = model({ profile: "team", sessionName: "session", usage, changes: { files: 1, added: 2, deleted: 1 }, statuses: ["MCP connected"] });
+test("the Status sections drop Model, Effort, Context and Cost, all the header's", () => {
+	const data = model({ profile: "team", sessionName: "session" });
 	const text = renderShellStatusSections(data, plainTheme, 60).join("\n");
-	for (const gone of [/Usage/, /Model/, /Effort/, /Context/, /Cost/, /\$9\.49/, /claude 5h/, /gpt-5\.5/]) assert.doesNotMatch(text, gone);
-	assert.match(text, /INTEGRATIONS[\s\S]*MCP connected/);
+	for (const gone of [/Usage/, /Model/, /Effort/, /Context/, /Cost/, /\$9\.49/, /gpt-5\.5/]) assert.doesNotMatch(text, gone);
 });
 
-test("a filling context says where pi compacts, and a usage window near its limit says when it resets", () => {
+test("a filling context says where pi compacts", () => {
 	assert.equal(compactionPercent(200_000), 60, "Jhon compacts the main session at 60%");
 	assert.equal(compactionPercent(200_000, null), 92, "with Jhon's off, pi's own");
 	assert.equal(compactionPercent(undefined), undefined);
