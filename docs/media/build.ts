@@ -23,10 +23,9 @@ import { BANNER, bannerSvg } from "./banner.ts";
 
 /** What each feature capture shows, under it. */
 export const FEATURE_CAPTIONS: Record<string, string> = {
-  "shell-bar": "The title row and the status bar: project, branch and changes, model and effort, context, cost, running jobs.",
+  "shell-bar": "The title row and the status bar: project, branch, model and effort, context, cost, running jobs.",
   "ldd-status": "The rail's LDD status: the change, its slices done of all, the route, the next step and the last test run.",
   "agents-jobs": "Sub-agents and background jobs, live in the rail: what each runs, its tokens and how long.",
-  changes: "Changes: every file the session touched and its diff, without leaving the terminal.",
   "ldd-question": "A repo with no LDD yet: at the first code change, the session asks once how to deliver and test.",
   "guard-refusal": "A writer's edit outside its edit surfaces, refused by scope-guard: the shell's tool card, then the engine's whole reason.",
   "route-refusal": "Under delivery: change, route-guard refuses the pull request while a task is unchecked: the card, then the reason.",

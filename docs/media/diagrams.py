@@ -141,7 +141,7 @@ class Svg:
 def ldd_flow(out):
     s = Svg("LDD: a change from its first slice to delivery",
             "A change is built in slices. Each slice gets a recorded failing run (RED), the code, a recorded passing run (GREEN), "
-            "and a slice commit that route-guard checks is the tested tree. A light verify, or verify and the 4R lenses on the "
+            "and a slice commit that route-guard checks is the tested tree. A light verify, or verify and the Prism facets on the "
             "verified route, comes before delivery, which jhon deliver check and route-guard gate.")
     s.header("LDD · Leapfrog-Driven Development", "A change, slice by slice", "value reaches the default branch proven")
     stages = [
@@ -149,7 +149,7 @@ def ldd_flow(out):
         ("02 · slice", "One slice", ["## Slice <n>: <name>", "Delivers: <criteria>", "spec delta if needed"]),
         ("03 · recorded run", "RED → GREEN", ["jhon executions run", "  RED before the code", "  --affected <base>", "pytest-testmon narrows"]),
         ("04 · slice commit", "Tested tree", ["commit = tested tree", "its scenarios named", "real-database reach", "(delivery: change)"]),
-        ("05 · check", "Verify · 4R", ["light verify (standard)", "verify-report.md +", "4R lenses (high risk)"]),
+        ("05 · check", "Verify · Prism", ["light verify (standard)", "verify-report.md +", "Prism facets (high risk)"]),
         ("06 · delivery", "Deliver", ["jhon deliver check", "PR: RED before GREEN", "and a passing verify"]),
     ]
     x, y, w, h, gap = 32, 128, 194, 186, 10
@@ -183,7 +183,7 @@ def ldd_flow(out):
     s.box(32, ry, 1216, 150, C["page"], shadow=False)
     s.kicker(52, ry + 34, "the record")
     s.text(1228, ry + 34, "the rigor rises with the risk; the record is always", BODY, C["faint"], UI, 400, "end")
-    rec = ["execution-record.json", "tasks.md", "spec deltas", "verify-report.md", "review-4r.md", "delivery.json", "Engram: ldd state"]
+    rec = ["execution-record.json", "tasks.md", "spec deltas", "verify-report.md", "review-prism.md", "delivery.json", "Engram: ldd state"]
     cx, cy = 52, ry + 56
     for r in rec:
         wid = round(len(r) * 16 * ADVANCE + 24)
@@ -197,9 +197,9 @@ def ldd_flow(out):
 
 def agents(out):
     s = Svg("Jhon's agents and their launch context",
-            "The orchestrator holds the conversation and launches focused sub-agents: explore, worker, verify, and the 4R "
-            "lenses with a refuter and a validator. Each launch carries the brief and, when found, the decisions on record "
-            "from Engram, a code map from CodeGraph, and for verify and the lenses the tests to judge.")
+            "The orchestrator holds the conversation and launches focused sub-agents: jhon-scout, jhon-builder, jhon-checker, "
+            "and the Prism facets with a challenger and an arbiter. Each launch carries the brief and, when found, the decisions "
+            "on record from Engram, a code map from CodeGraph, and for jhon-checker and the facets the tests to judge.")
     s.header("one orchestrator · focused agents", "Who works, and what each one is handed", "prose/agents.yaml")
     # orchestrator
     s.card(32, 136, 236, 258, "main session", "Orchestrator", [
@@ -214,7 +214,7 @@ def agents(out):
         ("## Allowed edit surfaces", "a writer's scope · scope-guard", C["warn"]),
         ("## Decisions on record", "Engram · jhon context --handoff", C["accent"]),
         ("## Code map", "CodeGraph query and callers", C["accentSoft"]),
-        ("## Tests to judge", "verify and 4R · jhon context --judge", C["ok"]),
+        ("## Tests to judge", "jhon-checker, Prism · jhon context --judge", C["ok"]),
     ]
     by = py + 46
     for title, sub, col in blocks:
@@ -226,9 +226,9 @@ def agents(out):
     # agents column
     ax, aw = 740, 508
     rows = [
-        ("explore", "reads, researches · writes only exploration.md or research.md", C["accentSoft"]),
-        ("worker", "writes the slice inside its edit surfaces", C["warn"]),
-        ("verify", "independent check · writes only its report", C["ok"]),
+        ("jhon-scout", "reads, researches · writes only exploration.md or research.md", C["accentSoft"]),
+        ("jhon-builder", "writes the slice inside its edit surfaces", C["warn"]),
+        ("jhon-checker", "independent check · writes only its report", C["ok"]),
     ]
     ay = 124
     for name, sub, col in rows:
@@ -237,22 +237,22 @@ def agents(out):
         s.text(ax + 16, ay + 50, sub, 14, C["soft"], UI)
         s.line(px + pw + 4, ay + 31, ax - 6, ay + 31, C["accent"], 1.6)
         ay += 76
-    # 4R
+    # Prism
     ry = ay
     s.box(ax, ry, aw, 132, edge=C["accent"])
-    s.text(ax + 16, ry + 26, "4R review", 19, C["ink"], DISPLAY, 500)
+    s.text(ax + 16, ry + 26, "Prism review", 19, C["ink"], DISPLAY, 500)
     s.text(ax + aw - 14, ry + 26, "read-only · inspect-guard", 14, C["faint"], MONO, 400, "end")
     cx = ax + 16
-    for lens in ("risk", "resilience", "reliability", "readability"):
-        cx += s.chip(cx, ry + 42, lens, C["accent"]) + 8
+    for facet in ("safety", "failure", "clarity", "behavior"):
+        cx += s.chip(cx, ry + 42, facet, C["accent"]) + 8
     cx = ax + 16
-    w1 = s.chip(cx, ry + 86, "refuter", C["soft"])
+    w1 = s.chip(cx, ry + 86, "challenger", C["soft"])
     s.line(cx + w1 + 4, ry + 100, cx + w1 + 26, ry + 100, C["soft"], 1.6, "arf")
     cx += w1 + 30
-    w2 = s.chip(cx, ry + 86, "validator", C["soft"])
+    w2 = s.chip(cx, ry + 86, "arbiter", C["soft"])
     s.line(cx + w2 + 4, ry + 100, cx + w2 + 26, ry + 100, C["soft"], 1.6, "arf")
     cx += w2 + 30
-    s.chip(cx, ry + 86, "review-4r.md", C["warn"])
+    s.chip(cx, ry + 86, "review-prism.md", C["warn"])
     s.line(px + pw + 4, ry + 66, ax - 6, ry + 66, C["accent"], 1.6)
     # sources
     sy = 520

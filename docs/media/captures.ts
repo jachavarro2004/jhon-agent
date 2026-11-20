@@ -15,8 +15,6 @@ import { SHELL } from "./paths.ts";
 import { ShellSettings, installShellSettings } from "../../shell/lib/settings.ts";
 import { renderShellStatusBar, renderShellTitleRows, renderShellStatusSections, renderShellAgentsSection, renderShellJobsSection, type ShellBarModel, type ShellBarTheme } from "../../shell/lib/ui/shell-bar.ts";
 import { lddFromStatus } from "../../shell/lib/ui/ldd-status.ts";
-import { ChangesView } from "../../shell/lib/ui/shell-changes-view.ts";
-import { CHANGE_STATUS, changesModel, type ChangedFile } from "../../shell/lib/ui/shell-changes.ts";
 import { AskView } from "../../shell/lib/ui/ask-view.ts";
 
 /** A fixed clock: 2026-11-16 10:00 UTC. */
@@ -51,9 +49,8 @@ export interface Capture {
 
 function model(extra: Partial<ShellBarModel> = {}): ShellBarModel {
   return {
-    cwd: `${HOME}/src/lumen`, branch: "feat/invoice-export", dirty: 4, sessionName: "export invoices as CSV",
-    modelId: "claude-opus-5-5", effort: "high", contextPercent: 38, contextWindow: 200_000, costTotal: 1.84, subscription: true,
-    usage: undefined, statuses: [], ...extra,
+    cwd: `${HOME}/src/lumen`, branch: "feat/invoice-export", sessionName: "export invoices as CSV",
+    modelId: "claude-opus-5-5", effort: "high", contextPercent: 38, contextWindow: 200_000, costTotal: 1.84, subscription: true, ...extra,
   };
 }
 
@@ -72,23 +69,12 @@ const LDD = lddFromStatus("invoice-csv-export", {
 })!;
 
 const JOBS: NonNullable<ShellBarModel["jobs"]> = [
-  { id: "agent-1", kind: "agent", label: "worker: stream to the response", startedAt: NOW - 252_000, tokens: 48_200, step: "bash · go test ./export/..." },
-  { id: "agent-2", kind: "agent", label: "explorer: where invoices are read", startedAt: NOW - 95_000, tokens: 12_900 },
+  { id: "agent-1", kind: "agent", label: "jhon-builder: stream to the response", startedAt: NOW - 252_000, tokens: 48_200, step: "bash · go test ./export/..." },
+  { id: "agent-2", kind: "agent", label: "jhon-scout: where invoices are read", startedAt: NOW - 95_000, tokens: 12_900 },
   { id: "agent-3", kind: "agent", label: "reviewer: slice 1", startedAt: NOW - 900_000, endedAt: NOW - 30_000, status: "completed", exitCode: 0 },
   { id: "job-1", kind: "command", label: "go test ./... -run Export", startedAt: NOW - 41_000 },
   { id: "job-2", kind: "monitor", label: "watch: tail -f logs/export.log", startedAt: NOW - 600_000 },
 ];
-
-const file = (path: string, added: number, deleted: number, status: ChangedFile["status"] = CHANGE_STATUS.MODIFIED): ChangedFile => ({ path, added, deleted, status });
-const FILES = [file("export/csv.go", 24, 6), file("export/stream.go", 41, 0, CHANGE_STATUS.ADDED), file("export/stream_test.go", 58, 0, CHANGE_STATUS.ADDED), file("api/invoices.go", 9, 3)];
-const DIFF = [
-  "diff --git a/api/invoices.go b/api/invoices.go", "index 3f1a2b4..9c0d1e7 100644", "--- a/api/invoices.go", "+++ b/api/invoices.go",
-  "@@ -40,11 +40,17 @@ func (h *Handler) routes(r *Router) {", " \tr.Get(\"/invoices\", h.list)", " \tr.Get(\"/invoices/{id}\", h.show)", "+\tr.Get(\"/invoices/export.csv\", h.exportCSV)", " }", "",
-  "-// list returns every invoice at once.", "-func (h *Handler) list(w http.ResponseWriter, r *http.Request) {", "-\twriteJSON(w, h.store.All())",
-  "+// exportCSV streams the invoices as CSV, a chunk at a time.", "+func (h *Handler) exportCSV(w http.ResponseWriter, r *http.Request) {",
-  "+\tw.Header().Set(\"Content-Type\", \"text/csv\")", "+\tout := export.NewWriter(w)", "+\tfor inv := range h.store.Each(r.Context()) {",
-  "+\t\tif err := out.Write(inv); err != nil {", "+\t\t\treturn", "+\t\t}", "+\t}", " }",
-].join("\n");
 
 /*
  * The engine's own words, for the screens that show them. Each was printed by
@@ -100,7 +86,7 @@ const DIFF = [
  * to the media clock (NOW); nothing else is changed. Recorded 2026-11-16:
  *   EXEC_RED / EXEC_GREEN  `jhon executions run invoice-csv-export --affected main`,
  *                          the test failing (Row without the amount), then passing
- *   SCOPE_REFUSAL          `jhon hook scope-guard --agent worker` on a worker's Edit of
+ *   SCOPE_REFUSAL          `jhon hook scope-guard --agent jhon-builder` on a jhon-builder's Edit of
  *                          api/invoices.go, its launch prompt allowing export/stream.go
  *                          and export/stream_test.go (as test/guards/scope_guard_test.go)
  *   ROUTE_REFUSAL          `jhon hook route-guard` on the session's `gh pr create --fill`
@@ -194,7 +180,7 @@ export async function captures(theme: MediaTheme): Promise<Capture[]> {
   const rail = 58;
   out.push({
     name: "ldd-status", title: "LDD status", cols: rail,
-    lines: renderShellStatusSections(model({ ldd: LDD, changes: { files: 4, added: 132, deleted: 9 } }), theme, rail),
+    lines: renderShellStatusSections(model({ ldd: LDD }), theme, rail),
   });
 
   out.push({
@@ -203,12 +189,6 @@ export async function captures(theme: MediaTheme): Promise<Capture[]> {
   });
 
   const pw = 84;
-  const changes = new ChangesView(changesModel(FILES), {
-    theme, rows: 20, loadDiff: async (f) => (f.path === "api/invoices.go" ? DIFF : ""), onOpen() {}, onClose() {}, requestRender() {},
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  out.push({ name: "changes", title: "changes", cols: wide, lines: changes.render(wide) });
-
   // A repo with no LDD yet: at the first code change the session asks once how
   // to deliver and test (prose/skills/ldd/references/init.md, step 3: one
   // batched question, each option naming the recommended one), through the
@@ -230,7 +210,7 @@ export async function captures(theme: MediaTheme): Promise<Capture[]> {
   out.push({
     name: "guard-refusal", title: "a refused tool call", cols: wide,
     lines: [...await refusedCard(theme, "edit", { path: `${HOME}/src/lumen/api/invoices.go`, edits: [{ oldText: "h.store.All()", newText: "h.store.Each(ctx)" }] }, SCOPE_REFUSAL.join("\n"), wide),
-      "", ...terminal(theme, wide, "jhon hook scope-guard --agent worker < call.json", SCOPE_REFUSAL)],
+      "", ...terminal(theme, wide, "jhon hook scope-guard --agent jhon-builder < call.json", SCOPE_REFUSAL)],
   });
   out.push({
     name: "route-refusal", title: "route-guard", cols: wide,

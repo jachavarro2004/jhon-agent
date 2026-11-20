@@ -19,7 +19,7 @@
 /** How a line is said: the mono marks dropped, names spelled as heard. */
 const SAY = [
   [/--for 30m/g, "for thirty minutes"], [/delivery: change/g, "delivery change"], [/\.git\//g, "dot git"],
-  [/alt\+k/g, "Alt K"], [/\bLDD\b/g, "L D D"], [/\b4R\b/g, "four R"], [/\bjhon\b/gi, "John"], [/\bpi\b/g, "pie"],
+  [/\bLDD\b/g, "L D D"], [/\bjhon\b/gi, "John"], [/\bpi\b/g, "pie"],
   [/\bRED\b/g, "red"], [/\bGREEN\b/g, "green"], [/route-guard/g, "route guard"], [/3\.4/g, "three point four"],
 ];
 export function spoken(text) {
@@ -68,7 +68,7 @@ export const SHOTS = [
     body: [["with the session.", "is gone"]],
     en: "And what was decided is gone with the session.",
     es: "Y lo que se decidió se pierde con la sesión." },
-  { id: "status", kind: "proof", src: F("ldd-status"), crop: panel(58, 10),
+  { id: "status", kind: "proof", src: F("ldd-status"), crop: panel(58, 4),
     marks: [{ at: "the change", r: cells(2, 1, 21) }, { at: "its slices", r: cells(4, 2, 47) }, { at: "the next step", r: cells(4, 3, 21) }, { at: "the last test run", r: cells(26, 3, 14) }],
     en: "With Jhon, the change stays in view: its slices, the next step, and the last test run.",
     es: "Con Jhon, el cambio queda a la vista: sus slices, el siguiente paso y la última ejecución de tests." },
@@ -83,7 +83,7 @@ export const SHOTS = [
     en: "Both runtimes call one engine: the jhon binary. The dashboard only reads what the binary serves.",
     es: "Los dos runtimes llaman a un solo motor: el binario `jhon`. El dashboard solo lee lo que sirve el binario." },
   { id: "bars", kind: "proof", src: F("shell-bar"), crop: panel(112, 4),
-    marks: [{ at: "the project", r: cells(1, 1, 21) }, { at: "branch", r: cells(1, 3, 22) }, { at: "model", r: cells(58, 3, 22) }, { at: "context", r: cells(83, 3, 16) }, { at: "cost", r: cells(102, 3, 9) }, { at: "and jobs", r: cells(26, 3, 8) }],
+    marks: [{ at: "the project", r: cells(1, 1, 21) }, { at: "branch", r: cells(1, 3, 19) }, { at: "model", r: cells(58, 3, 22) }, { at: "context", r: cells(83, 3, 16) }, { at: "cost", r: cells(102, 3, 9) }, { at: "and jobs", r: cells(23, 3, 8) }],
     en: "In pi, the shell's bars show the project, branch, model, context, cost and jobs.",
     es: "En pi, las barras del shell muestran el proyecto, la rama, el modelo, el contexto, el costo y los trabajos." },
 
@@ -138,20 +138,7 @@ export const SHOTS = [
     en: "Sub-agents and background jobs show live, with their tokens and time.",
     es: "Los sub-agentes y los trabajos en segundo plano se ven en vivo, con sus tokens y su tiempo." },
 
-  // ---------------------------------------------------------------- 7. The shell's tools
-  { id: "palette", kind: "card", chapter: "In the terminal", kicker: "Jhon's shell, in pi", title: ["`alt+k` *opens the palette.*"], body: [],
-    en: "In pi, alt+k opens the command palette.",
-    es: "En pi, `alt+k` abre la paleta de comandos." },
-  { id: "commands", kind: "proof", src: F("command-palette"), crop: panel(84, 22),
-    marks: [{ at: 0, r: cells(1, 4, 82, 3) }, { at: "in groups", r: cells(1, 8, 82, 7) }, { at: "their shortcuts", r: cells(1, 10, 82) }],
-    en: "The shell's commands, in groups, with their shortcuts.",
-    es: "Los comandos del shell, en grupos, con sus atajos." },
-  { id: "changes", kind: "proof", src: F("changes"), crop: panel(112, 20),
-    marks: [{ at: "every file", r: cells(1, 1, 39, 4) }, { at: "its diff", r: cells(41, 1, 70, 17) }],
-    en: "Changes shows every file the session touched, and its diff, without leaving the terminal.",
-    es: "Changes muestra cada archivo que tocó la sesión y su diff, sin salir de la terminal." },
-
-  // ---------------------------------------------------------------- 8. You decide
+  // ---------------------------------------------------------------- 7. You decide
   { id: "yours", kind: "card", chapter: "You decide", kicker: "You decide", title: ["A mode and a grant", "are *yours alone.*"], size: 100,
     body: [["An agent may read the mode, never set it.", "An agent"]],
     en: "A mode and a grant are yours alone. An agent may read the mode, never set it.",
@@ -173,7 +160,7 @@ export const SHOTS = [
     en: "A folder that is no repo has no mode: its calls are judged as in normal mode.",
     es: "Una carpeta que no es repo no tiene modo: sus llamadas se juzgan como en modo normal." },
 
-  // ---------------------------------------------------------------- 9. Measured
+  // ---------------------------------------------------------------- 8. Measured
   { id: "audit", kind: "card", chapter: "Measured", kicker: "Measured", title: ["`jhon audit` *reads a session.*"],
     body: [["Bypassed refusals. Untested delivery.", "It flags"], ["Edits before RED.", "edits before"]],
     en: "jhon audit reads a session afterwards, for what went wrong. It flags bypassed refusals, untested delivery and edits before RED.",
@@ -182,12 +169,12 @@ export const SHOTS = [
     marks: [{ at: 0, r: cells(2, 3, 41) }, { at: "a push to main", r: cells(13, 7, 36) }, { at: "no test run", r: cells(13, 5, 99, 2) }],
     en: "Here, a push to main with no test run on record.",
     es: "Aquí, un push a main sin ninguna ejecución de tests registrada." },
-  { id: "bench", kind: "numbers", kicker: "The bench · native 4R review",
-    figures: [["9 of 9", "seeded defects found, the same as the lens agents", "9 of 9"], ["3.4×", "fewer weighted tokens", "3.4 times"]],
-    en: "On seeded defects, the native 4R review found the same 9 of 9 as the lens agents, for about 3.4 times fewer weighted tokens.",
-    es: "Con defectos sembrados, la revisión 4R nativa encontró los mismos 9 de 9 que los agentes de lentes, con unas 3,4 veces menos tokens ponderados." },
+  { id: "bench", kind: "numbers", kicker: "The bench · native Prism review",
+    figures: [["9 of 9", "seeded defects found, the same as the facet agents", "9 of 9"], ["3.4×", "fewer weighted tokens", "3.4 times"]],
+    en: "On seeded defects, the native Prism review found the same 9 of 9 as the facet agents, for about 3.4 times fewer weighted tokens.",
+    es: "Con defectos sembrados, la revisión Prism nativa encontró los mismos 9 de 9 que los agentes de facetas, con unas 3,4 veces menos tokens ponderados." },
 
-  // ---------------------------------------------------------------- 10. Get started
+  // ---------------------------------------------------------------- 9. Get started
   { id: "start", kind: "list", chapter: "Get started",
     rows: [["Install", "the one-line script", "Install"], ["Set up", "`jhon setup`", "then run"], ["Check", "`jhon doctor`", "health checks"], ["Start", "`jhon start`", "Then jhon start"]],
     en: "Install with the one-line script, then run jhon setup. jhon doctor runs the health checks. Then jhon start, inside your project.",
