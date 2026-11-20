@@ -53,20 +53,20 @@ test("the rows come category by category in the registry's order; a hidden row h
 	assert.ok(!customizeRows(hooks).some((r) => r.group === "Permissions"), "the mode row hides without its hook, and Permissions with it");
 });
 
-// G's Density (L195) is an Appearance row: comfortable by default, set with
-// jhon settings set, applied at once (the chrome and the rail redraw).
-test("Appearance has G's Density row: comfortable, compact, minimal; enter saves shell.appearance.density and applies it", () => {
+// The pane's Density (L195) is an Appearance row: compact by default (L1498),
+// set with jhon settings set, applied at once (the chrome and the rail redraw).
+test("Appearance has a Density row: comfortable, compact, minimal; compact by default; enter saves shell.appearance.density and applies it", () => {
 	let applied = 0;
 	const settings = memorySettings();
 	const rows = customizeRows({ ...hooks, settings, appearance: () => { applied++; } });
 	const density = rows.find(({ label }) => label === "Density")!;
 	assert.equal(density.group, "Appearance");
 	assert.deepEqual(density.options, ["comfortable", "compact", "minimal"]);
-	assert.equal(density.value(), "comfortable");
-	assert.equal(density.apply("compact"), undefined);
-	assert.equal(settings.density(), "compact");
-	assert.equal(settings.get("shell.appearance.density"), "compact");
 	assert.equal(density.value(), "compact");
+	assert.equal(density.apply("comfortable"), undefined);
+	assert.equal(settings.density(), "comfortable");
+	assert.equal(settings.get("shell.appearance.density"), "comfortable");
+	assert.equal(density.value(), "comfortable");
 	assert.equal(applied, 1);
 });
 

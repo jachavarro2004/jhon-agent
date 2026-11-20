@@ -52,7 +52,7 @@ export const SETTINGS_DEFAULTS: Readonly<Record<string, SettingValue>> = Object.
 	"shell.appearance.status": "auto",
 	"shell.appearance.cards": "float",
 	"shell.appearance.surface": "transparent",
-	"shell.appearance.density": "comfortable",
+	"shell.appearance.density": "compact",
 	"shell.behaviour.compact_at": 60,
 	"shell.behaviour.compact_tokens": 200000,
 	"shell.behaviour.child_backstop_tokens": 80000,
@@ -249,8 +249,8 @@ export class ShellSettings {
 	cards(): CardsSetting { return this.string("shell.appearance.cards") === "neon" ? "neon" : "float"; }
 	/** The chrome surface: transparent (each rail section its own card) or tinted (one painted panel). */
 	surface(): SurfaceSetting { return this.string("shell.appearance.surface") === "tinted" ? "tinted" : "transparent"; }
-	/** G's Density: comfortable pads the chrome and spaces the rail; compact and minimal do not. */
-	density(): DensitySetting { const v = this.string("shell.appearance.density"); return v === "compact" || v === "minimal" ? v : "comfortable"; }
+	/** The pane's density: compact (the default, L1498) draws the sections flat a blank row apart, comfortable boxes each one, minimal stacks them. */
+	density(): DensitySetting { const v = this.string("shell.appearance.density"); return v === "comfortable" || v === "minimal" ? v : "compact"; }
 	/** The share of the window at which the main session compacts; 100 leaves it to pi. */
 	compactAt(): number { return this.int("shell.behaviour.compact_at"); }
 	/** The context tokens past which the main session compacts, whichever is first with compact_at; 0 is no budget, and turns every token rung of the ladder off. */

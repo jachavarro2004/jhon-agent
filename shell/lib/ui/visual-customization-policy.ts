@@ -12,7 +12,7 @@ export type StatusPlacement = (typeof STATUS_PLACEMENT)[keyof typeof STATUS_PLAC
 export const CHROME_SURFACE = { TRANSPARENT: "transparent", TINTED: "tinted" } as const;
 export type ChromeSurface = (typeof CHROME_SURFACE)[keyof typeof CHROME_SURFACE];
 
-/** The Gentle Shell's Density (L195): comfortable by default, as G's. */
+/** The pane's density (L195): compact by default, the owner's choice (L1498). */
 export const DENSITY = { COMFORTABLE: "comfortable", COMPACT: "compact", MINIMAL: "minimal" } as const;
 export type Density = (typeof DENSITY)[keyof typeof DENSITY];
 
@@ -21,7 +21,7 @@ export interface VisualSettings {
 	surface: ChromeSurface;
 	density: Density;
 }
-export const DEFAULT_VISUAL_SETTINGS: VisualSettings = { statusPlacement: STATUS_PLACEMENT.AUTO, surface: CHROME_SURFACE.TRANSPARENT, density: DENSITY.COMFORTABLE };
+export const DEFAULT_VISUAL_SETTINGS: VisualSettings = { statusPlacement: STATUS_PLACEMENT.AUTO, surface: CHROME_SURFACE.TRANSPARENT, density: DENSITY.COMPACT };
 interface VisualOptions { settings?: ShellSettings }
 export interface VisualResolution {
 	settings: VisualSettings;

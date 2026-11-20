@@ -105,7 +105,7 @@ func TestDefaultsWithNoFile(t *testing.T) {
 		"shell.appearance.status":                "auto",
 		"shell.appearance.cards":                 "float",
 		"shell.appearance.surface":               "transparent",
-		"shell.appearance.density":               "comfortable",
+		"shell.appearance.density":               "compact", // the owner's choice (L1498)
 		"shell.behaviour.compact_at":             60,
 		"shell.behaviour.compact_tokens":         200000,
 		"shell.behaviour.child_backstop_tokens":  80000,

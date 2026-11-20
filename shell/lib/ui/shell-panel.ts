@@ -25,14 +25,14 @@ export function panelSurfaceOpener(theme: CardTheme): string {
 	return chromeSurface() === "transparent" ? "" : surfaceOpener(theme, PANEL_SURFACE_ROLE);
 }
 
-/** The pane's two forms (L1495): comfortable draws each section in its own box (the default). */
+/** The pane's two forms (L1495): comfortable draws each section in its own box. */
 export function sectionBoxes(density: string | undefined): boolean {
-	return density === undefined || density === "comfortable";
+	return density === "comfortable";
 }
 
-/** Compact keeps a blank row between the pane's sections (01's); minimal none; comfortable's boxes need none. */
+/** Compact (the default, L1498) keeps a blank row between the pane's sections (01's); minimal none; comfortable's boxes need none. */
 export function sectionGap(density: string | undefined): boolean {
-	return density === "compact";
+	return density === undefined || density === "compact";
 }
 
 /** Columns a panel row is indented under its header. */

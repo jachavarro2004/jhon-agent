@@ -11,16 +11,17 @@ const KEY = "shell.appearance.status";
 test("missing settings show the status line where it fits", (t) => {
 	const { settings } = fakeSettings(t);
 	const resolved = resolveVisualSettings({ settings });
-	assert.deepEqual(resolved.settings, { statusPlacement: "auto", surface: "transparent", density: "comfortable" });
+	assert.deepEqual(resolved.settings, { statusPlacement: "auto", surface: "transparent", density: "compact" });
 	assert.equal(resolved.source, "default");
-	assert.deepEqual(DEFAULT_VISUAL_SETTINGS, { statusPlacement: "auto", surface: "transparent", density: "comfortable" });
+	assert.deepEqual(DEFAULT_VISUAL_SETTINGS, { statusPlacement: "auto", surface: "transparent", density: "compact" });
 });
 
-// L195: G's Density is shell.appearance.density, comfortable by default.
-test("the density reads shell.appearance.density: comfortable by default, compact or minimal", () => {
+// L195: the pane's density is shell.appearance.density, compact by default (L1498).
+test("the density reads shell.appearance.density: compact by default, comfortable or minimal", () => {
 	assert.deepEqual(Object.values(DENSITY), ["comfortable", "compact", "minimal"]);
-	for (const density of ["compact", "minimal"]) assert.equal(resolveVisualSettings({ settings: memorySettings({ "shell.appearance.density": density }) }).settings.density, density);
-	assert.equal(resolveVisualSettings({ settings: memorySettings({ "shell.appearance.density": "tight" }) }).settings.density, "comfortable");
+	assert.equal(resolveVisualSettings({ settings: memorySettings() }).settings.density, "compact");
+	for (const density of ["comfortable", "compact", "minimal"]) assert.equal(resolveVisualSettings({ settings: memorySettings({ "shell.appearance.density": density }) }).settings.density, density);
+	assert.equal(resolveVisualSettings({ settings: memorySettings({ "shell.appearance.density": "tight" }) }).settings.density, "compact");
 });
 
 // T15.12d (L153 answer 2): the chrome surface is shell.appearance.surface.
@@ -33,7 +34,7 @@ test("each status value survives a write and read", () => {
 	const settings = memorySettings();
 	for (const statusPlacement of Object.values(STATUS_PLACEMENT)) {
 		writeVisualSettings({ statusPlacement }, { settings });
-		assert.deepEqual(resolveVisualSettings({ settings }).settings, { statusPlacement, surface: "transparent", density: "comfortable" });
+		assert.deepEqual(resolveVisualSettings({ settings }).settings, { statusPlacement, surface: "transparent", density: "compact" });
 		assert.equal(settings.jhon.file[KEY], statusPlacement);
 	}
 });

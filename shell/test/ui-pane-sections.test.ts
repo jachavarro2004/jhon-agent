@@ -268,6 +268,7 @@ test("minimal stacks the sections; comfortable draws each in its own box, in the
 		["jobs", { render: (width) => renderJobsSection(WORK, plainTheme, width, { now: NOW }), invalidate() {} }],
 	]);
 	const minimal = paneRows(parts, "minimal", W).rows.map(stripAnsi);
+	assert.deepEqual(paneRows(parts, undefined, W).rows, paneRows(parts, "compact", W).rows, "no density draws the default, compact (L1498)");
 	assert.deepEqual(minimal.slice(17, 19), ["  42 tests · 11.8s · 3f2a9c1", "Agents  2 running"], "minimal: no blank row");
 	const box = (rows: string[]) => [`╭${"─".repeat(W - 2)}╮`, ...rows.map((row) => `│ ${padded(row, W - 4)} │`), `╰${"─".repeat(W - 2)}╯`];
 	const inner = W - 4;

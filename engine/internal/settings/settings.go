@@ -194,8 +194,8 @@ func schema() []spec {
 		// T15.12d (L153 answers 1-2): the Gentle Shell's card style and chrome surface, its defaults first.
 		{key: "shell.appearance.cards", kind: kEnum, def: "float", enum: []string{"float", "neon"}},
 		{key: "shell.appearance.surface", kind: kEnum, def: "transparent", enum: []string{"transparent", "tinted"}},
-		// L195: the Gentle Shell's Density, comfortable by default as G's.
-		{key: "shell.appearance.density", kind: kEnum, def: "comfortable", enum: []string{"comfortable", "compact", "minimal"}},
+		// L195: the pane's density; compact by default, the owner's choice (L1498).
+		{key: "shell.appearance.density", kind: kEnum, def: "compact", enum: []string{"comfortable", "compact", "minimal"}},
 		// T155 (L1377, L1394): the context ladder is these two keys. The main
 		// session compacts at compact_at of its window or past compact_tokens,
 		// whichever is first (T115a, T121); the fresh-session notice comes ten
