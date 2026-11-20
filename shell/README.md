@@ -125,17 +125,20 @@ Customize → Keys shows them. `keys.tasks` reads as `keys.agents`;
 `alt+a` stays the prompt's select-all alias, so the Agents view takes `alt+s`.
 
 The chrome wears Jhon's brand (`力`, rose ink) and has only Jhon's options
-(L146). In a fullscreen terminal a title row sits on top
-(` 力 <project>  <~path>`, the session name at the right; the project alone
-when a multiplexer host that shows the path is announced, `jhon:host`) and the
-status bar at the bottom: on the left the branch, the permission mode when
-it is not normal (`YOLO` in amber, `SUPER YOLO` in red and bold) and, without
-the rail, `⧗ N jobs`; on the right `model · effort · profile`, the context on
-its 70/90 meter with `· compacts at N%` near it, and the cost. Narrowing, the
-profile goes, then the model; a long branch shortens; the mode badge goes
-last. Under 140 columns the title row carries `model · effort · profile` and
-the status bar is one row. A regular (not fullscreen) terminal draws one
-compact bar instead, whose segments go from the end as it overflows.
+(L146). In a fullscreen terminal the top row holds the project and its path
+and nothing else (` 力 <project>  <~path>`; the project alone when a
+multiplexer host that shows the path is announced, `jhon:host`), and the
+status bar sits at the bottom: on the left `⎇ <branch>`, `sandbox on|off`
+(the session's `sandbox.mode`) and the permission mode when it is not normal
+(`YOLO` in amber, `SUPER YOLO` in red and bold); on the right
+`model · effort · profile`, `ctx` with its 70/90 meter, the percent and
+`· compacts at N%` near it, and the cost, thin `│` dividers between.
+Running agents and jobs are not on the bar. Under 140 columns the status
+bar takes its narrow form: no meter, the branch cut to 18 cells. Narrowing
+further, the branch shortens first (to 8 cells); then the meter, the
+profile, the compaction note, model · effort, sandbox, the branch, ctx and
+the mode badge go in that order; the cost goes last. A regular (not
+fullscreen) terminal shows the status bar alone, as its footer.
 `shell.appearance.status = "hidden"` hides it.
 
 Cards come in two styles, `shell.appearance.cards`: `float` (the default: a
@@ -147,12 +150,11 @@ reads `jhon`).
 
 The surface, `shell.appearance.surface`: `transparent` (the default) draws
 each rail section as its own card on the terminal's background; `tinted`
-paints them all on one panel down to the bottom, and paints the title row,
+paints them all on one panel down to the bottom, and paints the top row,
 the status bar and the narrow work row on it too.
 
 The density, `shell.appearance.density`: `comfortable` (the default) draws a
-margin row above and below the title row and the status bar and a blank row
-between the rail's sections; `compact` draws none of them; `minimal` spaces
+blank row between the rail's sections; `compact` draws none; `minimal` spaces
 like `compact` and keeps bash tool cards quiet (`↳ ✓ N lines` and a short
 preview, no output tail or duration); tool calls are otherwise full cards (a
 bash card shows its whole command, the last five output lines with the

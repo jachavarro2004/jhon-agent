@@ -15,7 +15,7 @@
  * which keeps its one rule: super-yolo only after the owner's Yes.
  */
 import { Key, matchesKey } from "@earendil-works/pi-tui";
-import { MODE_BADGES } from "./shell-bar.ts";
+import { MODE_BADGES } from "./bars.ts";
 import { renderChoiceRow, renderListRow, themePainter } from "./primitives/index.ts";
 
 /** The label column of the Duration row. */

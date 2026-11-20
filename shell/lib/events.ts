@@ -14,3 +14,10 @@ export const TASKS_EVENT = "jhon-shell:tasks";
  * agents view), asked on pi.events rather than sent as a message.
  */
 export const OPEN_TASKS_EVENT = "jhon-shell:open-tasks";
+
+/**
+ * The session's sandbox pin (lib/sandbox.ts), for the status bar:
+ * `{ mode: "on" | "off" }` once `jhon sandbox status --json` answered,
+ * `{ mode: undefined }` when it did not.
+ */
+export const SANDBOX_EVENT = "jhon-shell:sandbox";

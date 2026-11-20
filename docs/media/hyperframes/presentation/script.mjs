@@ -83,8 +83,8 @@ export const SHOTS = [
     marks: [{ at: 0, r: [26, 118, 1232, 194] }, { at: "one engine", r: [26, 346, 1232, 162] }, { at: "The dashboard", r: [862, 542, 396, 140] }],
     en: "Both runtimes call one engine: the jhon binary. The dashboard only reads what the binary serves.",
     es: "Los dos runtimes llaman a un solo motor: el binario `jhon`. El dashboard solo lee lo que sirve el binario." },
-  { id: "bars", kind: "proof", src: F("shell-bar"), crop: panel(112, 4),
-    marks: [{ at: "the project", r: cells(1, 1, 21) }, { at: "branch", r: cells(1, 3, 19) }, { at: "model", r: cells(58, 3, 22) }, { at: "context", r: cells(83, 3, 16) }, { at: "cost", r: cells(102, 3, 9) }, { at: "and jobs", r: cells(23, 3, 8) }],
+  { id: "bars", kind: "proof", src: F("shell-bar"), crop: panel(112, 3),
+    marks: [{ at: "the project", r: cells(1, 0, 21) }, { at: "branch", r: cells(1, 2, 17) }, { at: "model", r: cells(67, 2, 22) }, { at: "context", r: cells(92, 2, 7) }, { at: "cost", r: cells(102, 2, 9) }],
     en: "In pi, the shell's bars show the project, branch, model, context, cost and jobs.",
     es: "En pi, las barras del shell muestran el proyecto, la rama, el modelo, el contexto, el costo y los trabajos." },
 

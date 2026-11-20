@@ -139,7 +139,7 @@ What the shell does with `jhon:host`, heard at any time of the session:
 - `alerts: true` — the host plays its own alert while the owner is waited
   for (`jhon:owner-wait`). The shell plays no sounds, so it changes nothing
   in the shell.
-- `showsPath: true` — the host shows the path, so the title row names the
+- `showsPath: true` — the host shows the path, so the top row names the
   project alone (` 力 <project>`); otherwise ` 力 <project>  <~path>`.
 - `name` (1 to 128 characters) identifies the host: an announcement with
   the same name replaces the earlier one; several hosts add up (any

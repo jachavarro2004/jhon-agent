@@ -1,44 +1,24 @@
-import { basename } from "node:path";
-import { homedir } from "node:os";
-import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { meterTone, paintMeter, paintSurface, renderMeter, type CardTheme, type MeterTone } from "./primitives/index.ts";
-import { asciiText, glyph } from "./primitives/glyphs.ts";
+import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { asciiText } from "./primitives/glyphs.ts";
 import { sanitizeTerminalText } from "./terminal-theme.ts";
-import { clipPanelText, fitPanelLine, PANEL_ROW_INDENT, panelSurfaceOpener, renderPanelHeader, renderPanelRow, sectionGap } from "./shell-panel.ts";
+import { PANEL_ROW_INDENT, renderPanelHeader, renderPanelRow, sectionGap } from "./shell-panel.ts";
 import type { Density } from "./visual-customization-policy.ts";
 import { changeCount, estadoLines, routeText, type LddStatus } from "./ldd-status.ts";
 import { STATES } from "./primitives/states.ts";
-import { THEME_NAME } from "./primitives/paint.ts";
-import { shellSettings, type ShellSettings } from "../settings.ts";
+import { formatTokens } from "./bars.ts";
+import { shellSettings } from "../settings.ts";
 
-// The context meter is the primitives' Meter (primitives/meter.ts).
-export { meterTone as gaugeTone, renderMeter as renderGauge, type MeterTone as GaugeTone };
+// The rail's sections (LDD, JOBS, AGENTS), until the right pane replaces
+// them (T174-S5). The top row and the status bar are lib/ui/bars.ts (S3).
 
-// jhon-shell status bar: one line of segments that replaces pi's built-in
-// three-line footer. Everything here is pure so the bar can be rendered and
-// verified without a live TUI.
-
+/** What the rail's sections draw. */
 export interface ShellBarModel {
-	jobs?: RunningJobDisplay[];
 	/** The LDD change the session works on (lib/ui/ldd-status.ts). */
 	ldd?: LddStatus;
-	/** A multiplexer host shows the path (jhon:host showsPath, lib/host.ts): the title row names the project alone. */
-	hostShowsPath?: boolean;
-	profile?: string;
-	cwd: string;
-	branch: string | null;
-	sessionName: string | undefined;
-	modelId: string;
-	effort: string | undefined;
-	contextPercent: number | null;
-	contextWindow: number;
-	costTotal: number;
-	subscription: boolean;
-	/** The owner's permission mode for the project (`jhon status --json`'s mode, S31); a badge when it is not normal. */
-	mode?: string;
+	jobs?: RunningJobDisplay[];
 }
 
-/** A running background task (a job or a sub-agent) as the bar shows it (lib/background-tasks-tools.ts). */
+/** A running background task (a job or a sub-agent) as the rail shows it (lib/background-tasks-tools.ts). */
 export interface RunningJobDisplay {
 	id: string;
 	/** What runs: a shell command, a monitor, or a sub-agent. */
@@ -57,15 +37,9 @@ export interface RunningJobDisplay {
 
 export const JOB_GLYPH = "⧗";
 
-/** G's compact jobs count, `⧗ N jobs`: the status bar's without a rail. */
+/** G's compact jobs count, `⧗ N jobs`: the regular footer's while Status is hidden. */
 export function shellJobsCount(count: number): string {
 	return `${JOB_GLYPH} ${count} job${count === 1 ? "" : "s"}`;
-}
-
-/** A chrome bar's rows and the row its content sits on (G's ShellHeaderChrome). */
-export interface ShellHeaderChrome {
-	rows: string[];
-	headerRow: number;
 }
 
 export interface ShellBarTheme {
@@ -73,22 +47,11 @@ export interface ShellBarTheme {
 	bold(text: string): string;
 }
 
-// Theme roles the bar paints with. Keys are pi theme colors; the Jhon themes
-// map them to the rose palette (accent = rose, syntaxFunction = powder blue).
+// Theme roles the rail paints with.
 const ROLE = {
-	BRAND: "accent",
-	SEPARATOR: "dim",
-	PATH: "muted",
-	BRANCH: "text",
-	MODEL: "text",
-	EFFORT: "syntaxFunction",
 	LABEL: "muted",
 	VALUE: "text",
-	STATUS: "muted",
-	SESSION: "dim",
 } as const;
-
-const RIGHT_PADDING = 2;
 
 export function shellEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 	if (env.JHON_PI_CHILD === "1") return false;
@@ -96,80 +59,10 @@ export function shellEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 	return !(value === "0" || value === "false" || value === "off");
 }
 
-export function formatTokens(count: number): string {
-	if (count < 1000) return count.toString();
-	if (count < 10_000) return `${(count / 1000).toFixed(1)}k`;
-	if (count < 1_000_000) return `${Math.round(count / 1000)}k`;
-	if (count < 10_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-	return `${Math.round(count / 1_000_000)}M`;
-}
-
-export function formatCost(total: number, subscription = false): string {
-	const amount = total >= 1 ? total.toFixed(2) : total.toFixed(3);
-	return subscription ? `$${amount} sub` : `$${amount}`;
-}
-
 // Extensions may paint their status themselves (pi-mcp-adapter does); the bar
 // owns the palette, so their escapes go and the text takes the status role.
 function sanitizeStatus(text: string): string {
 	return sanitizeTerminalText(text.replace(/[\r\n\t]/g, " ")).replace(/ +/g, " ").trim();
-}
-
-/** pi's thinking levels in the owner's words. */
-export const EFFORT_WORDS: Record<string, string> = { off: "no reasoning", minimal: "minimal", low: "low", medium: "medium", high: "high", xhigh: "extra high", max: "max" };
-
-/** The badge each mode other than normal wears (S31): YOLO in the warning role, SUPER YOLO in the bad one, bold. */
-export const MODE_BADGES: Record<string, { text: string; role: string; bold?: boolean; detail: string }> = {
-	yolo: { text: "YOLO", role: THEME_NAME[STATES.working.role], detail: "nothing asks but destroy" },
-	"super-yolo": { text: "SUPER YOLO", role: THEME_NAME[STATES.failed.role], bold: true, detail: "nothing asks, destroy included" },
-};
-
-/** The owner's mode as the bars show it, or undefined for normal, none, or a mode the shell does not know. */
-export function modeBadge(mode: string | undefined, theme: ShellBarTheme): string | undefined {
-	const badge = mode ? MODE_BADGES[mode] : undefined;
-	if (!badge) return undefined;
-	const painted = theme.fg(badge.role, badge.text);
-	return badge.bold ? theme.bold(painted) : painted;
-}
-
-function executionSegment(modelId: string, effort: string | undefined, theme: ShellBarTheme): string {
-	return effort
-		? `${theme.fg(ROLE.MODEL, modelId)} ${theme.fg(ROLE.LABEL, "·")} ${theme.fg(ROLE.EFFORT, EFFORT_WORDS[effort] ?? effort)}`
-		: theme.fg(ROLE.MODEL, modelId);
-}
-
-/** pi's default free context below which it compacts (its compaction.reserveTokens). */
-export const COMPACTION_RESERVE_TOKENS = 16384;
-/** The gauge says where the session compacts from this many points before it. */
-const COMPACTION_NOTE_BEFORE = 10;
-/**
- * The share of the context window at which Jhon compacts the main session
- * (shell.behaviour.compact_at, 60 by default; 100, or JHON_SHELL_COMPACT_AT=off,
- * leaves it to pi alone): every turn re-reads the whole context, so a
- * lighter one answers sooner.
- */
-export function compactAt(settings: ShellSettings = shellSettings()): number | undefined {
-	const at = settings.compactAt();
-	return at >= 100 ? undefined : at;
-}
-
-/** The share of a context window at which the session compacts: Jhon's, or pi's own if sooner; undefined for an unknown window. */
-export function compactionPercent(contextWindow: number | undefined, at: number | null = compactAt() ?? null): number | undefined {
-	if (!contextWindow || contextWindow <= COMPACTION_RESERVE_TOKENS) return undefined;
-	const pis = Math.round((contextWindow - COMPACTION_RESERVE_TOKENS) / contextWindow * 100);
-	return at === null ? pis : Math.min(at, pis);
-}
-
-function contextSegment(contextPercent: number | null, theme: ShellBarTheme, contextWindow?: number): string {
-	const percentText = contextPercent === null ? "?%" : `${Math.round(contextPercent)}%`;
-	const compacts = compactionPercent(contextWindow);
-	const note = compacts !== undefined && contextPercent !== null && contextPercent >= compacts - COMPACTION_NOTE_BEFORE
-		? ` ${theme.fg("dim", `· compacts at ${compacts}%`)}` : "";
-	return `${theme.fg(ROLE.LABEL, "ctx")} ${paintMeter(contextPercent, theme)} ${theme.fg(ROLE.VALUE, percentText)}${note}`;
-}
-
-function costSegment(costTotal: number, subscription: boolean, theme: ShellBarTheme): string {
-	return theme.fg(ROLE.VALUE, formatCost(costTotal, subscription));
 }
 
 // The rail's sections as the Gentle Shell draws them (its lib/shell-bar.ts
@@ -409,181 +302,4 @@ export function agentsWorkSummary(jobs: readonly RunningJobDisplay[] | undefined
 		failed ? theme.fg("error", `${AGENT_LOOK.failed.glyph} ${failed}`) : "",
 	].filter(Boolean);
 	return live || failed ? { left: parts.join(theme.fg(META_ROLE, " · ")), priority: 1 } : undefined;
-}
-
-// The split chrome as the Gentle Shell draws it (its lib/shell-bar.ts,
-// T15.12d slice 6, L153 answer 3): a title row with the project identity
-// above the transcript and the rail, and one status bar row below them. Both
-// sit on the panel surface when it is tinted (shell.appearance.surface).
-const STATUS_BAR_DIVIDER = "│";
-const COMPACT_BRANCH_WIDTH = 15;
-const paintChromeRow = (theme: ShellBarTheme, row: string) => paintSurface(row, panelSurfaceOpener(theme as CardTheme));
-
-/** `~/code/jhon`: the folder with the home directory as `~`. */
-export function tildePath(path: string, home = homedir()): string {
-	const trimmed = path.replace(/\/+$/, "") || path;
-	return home && (trimmed === home || trimmed.startsWith(`${home}/`)) ? `~${trimmed.slice(home.length)}` : trimmed;
-}
-
-// The project's name and its path, sanitized: `力 name  ~/path`. Under a
-// multiplexer host that shows each space's path, the name alone (L112).
-function projectIdentity(model: Pick<ShellBarModel, "cwd" | "hostShowsPath">, theme: ShellBarTheme, home: string, ascii: boolean): { name: string; full: string } {
-	const path = sanitizeStatus(tildePath(model.cwd, home));
-	const name = sanitizeStatus(basename(model.cwd.replace(/\/+$/, "")) || model.cwd);
-	// ASCII drops the brand: its `jhon` before the name would read `jhon jhon` (L165).
-	const label = `${ascii ? "" : `${theme.fg(ROLE.BRAND, glyph("brand"))} `}${theme.fg(ROLE.VALUE, theme.bold(name))}`;
-	return { name: label, full: model.hostShowsPath ? label : `${label}  ${theme.fg(ROLE.PATH, path)}` };
-}
-
-/** ` 力 name  path` left; the session name, or narrow the model · effort · profile, right. */
-export function renderShellTitleRow(model: ShellBarModel, theme: ShellBarTheme, width: number, home = homedir(), options: { model?: boolean } = {}): string {
-	const target = Math.max(0, Math.floor(width));
-	const ascii = shellSettings().ascii();
-	const identity = projectIdentity(model, theme, home, ascii);
-	// Narrow: the status bar leaves the model out, so the title row carries it
-	// with the agent profile; wide, the status bar carries both and this row keeps the session.
-	const profileName = model.profile ? sanitizeStatus(model.profile) : "";
-	const profile = profileName ? ` ${theme.fg(ROLE.SEPARATOR, "·")} ${theme.fg(ROLE.LABEL, profileName)}` : "";
-	const right = options.model
-		? `${executionSegment(model.modelId, model.effort, theme)}${profile}`
-		: model.sessionName ? theme.fg(ROLE.VALUE, sanitizeStatus(model.sessionName)) : "";
-	// As G's: the right side stays whole and the path is clipped, never dropped.
-	return chromeAscii([paintChromeRow(theme, ` ${fitPanelLine(identity.full, right, Math.max(0, target - 2))} `)], ascii)[0]!;
-}
-
-export interface StatusBarExtras {
-	/** Without a rail the running jobs keep their compact count here. */
-	jobs?: boolean;
-	/** False drops model · effort · profile (narrow: the title row carries them). */
-	modelDetails?: boolean;
-}
-
-/**
- * G's status bar: the branch and a mode other than normal (Jhon's badge, S31)
- * on the left, `⧗ N jobs` with them without a rail; model · effort · profile,
- * the context meter (Jhon's 70/90 ladder and its compaction note) and the
- * cost on the right, `│` between. Narrowing, G's cascade: the profile gives
- * way, then the model goes; a long branch shortens before them; the badge
- * stays last.
- */
-export function renderShellStatusBar(model: ShellBarModel, theme: ShellBarTheme, width: number, extras: StatusBarExtras = {}): ShellHeaderChrome {
-	const bar = statusBar(model, theme, width, extras);
-	return { ...bar, rows: chromeAscii(bar.rows) };
-}
-
-function statusBar(model: ShellBarModel, theme: ShellBarTheme, width: number, extras: StatusBarExtras): ShellHeaderChrome {
-	const target = Math.max(0, Math.floor(width));
-	if (target < 2) return { rows: [paintChromeRow(theme, " ".repeat(target))], headerRow: 0 };
-	const room = target - 2;
-	const divider = ` ${theme.fg(ROLE.SEPARATOR, STATUS_BAR_DIVIDER)} `;
-	const join = (segments: string[]) => segments.filter(Boolean).join(divider);
-	const branchName = model.branch ? sanitizeStatus(model.branch) : "";
-	const branch = branchName ? theme.fg(ROLE.BRANCH, branchName) : "";
-	const mode = modeBadge(model.mode, theme) ?? "";
-	// G's jobs are the background commands and monitors: sub-agents lead the work row instead.
-	const runningJobs = extras.jobs ? (model.jobs?.filter((job) => job.endedAt === undefined && job.kind !== "agent").length ?? 0) : 0;
-	const tail = join([mode, runningJobs ? theme.fg(ROLE.STATUS, shellJobsCount(runningJobs)) : ""]);
-	const left = join([branch, tail]);
-	const profileName = model.profile ? sanitizeStatus(model.profile) : "";
-	const profile = profileName ? ` ${theme.fg(ROLE.LABEL, "·")} ${theme.fg(ROLE.LABEL, profileName)}` : "";
-	const exec = extras.modelDetails === false ? "" : executionSegment(model.modelId, model.effort, theme);
-	const counters = [contextSegment(model.contextPercent, theme, model.contextWindow), costSegment(model.costTotal, model.subscription, theme)];
-	const attempts = [
-		{ withExec: true, withProfile: true },
-		...(profile ? [{ withExec: true, withProfile: false }] : []),
-		{ withExec: false, withProfile: false },
-	];
-	for (const { withExec, withProfile } of attempts) {
-		const right = join([withExec ? exec + (exec && withProfile ? profile : "") : "", ...counters]);
-		let shownLeft = left;
-		if (visibleWidth(shownLeft) + (right ? RIGHT_PADDING : 0) + visibleWidth(right) > room) {
-			if (!branchName || visibleWidth(branchName) <= COMPACT_BRANCH_WIDTH) continue;
-			// Reserve the badges before clipping the branch itself.
-			const protectedWidth = tail ? visibleWidth(tail) + visibleWidth(divider) : 0;
-			const branchRoom = room - visibleWidth(right) - (right ? RIGHT_PADDING : 0) - protectedWidth;
-			if (branchRoom < 4) continue;
-			const shortened = theme.fg(ROLE.BRANCH, clipPanelText(branchName, branchRoom));
-			shownLeft = join([shortened, tail]);
-			if (visibleWidth(shownLeft) + (right ? RIGHT_PADDING : 0) + visibleWidth(right) > room) continue;
-		}
-		return { rows: [paintChromeRow(theme, ` ${shownLeft}${" ".repeat(room - visibleWidth(shownLeft) - visibleWidth(right))}${right} `)], headerRow: 0 };
-	}
-	// Still too wide: the branch gives way before context and cost, which give
-	// way last, context after cost. Keep the badges when only they fit.
-	const tailWidth = tail ? visibleWidth(tail) + (branch ? visibleWidth(divider) : 0) : 0;
-	for (const right of [join(counters), counters[0] ?? "", ""]) {
-		const leftRoom = room - visibleWidth(right) - (right ? RIGHT_PADDING : 0);
-		const branchRoom = leftRoom - tailWidth;
-		if (branch && branchRoom < 4 && right) continue;
-		if (branch && branchRoom < 1 && !right && tail) return { rows: [paintChromeRow(theme, ` ${fitPanelLine(tail, "", room)} `)], headerRow: 0 };
-		const fitted = join([branch ? clipPanelText(branch, Math.max(1, branchRoom)) : "", tail]);
-		if (visibleWidth(fitted) > leftRoom && right) continue;
-		return { rows: [paintChromeRow(theme, ` ${fitPanelLine(fitted, right, room)} `)], headerRow: 0 };
-	}
-	return { rows: [paintChromeRow(theme, ` ${fitPanelLine(left, "", room)} `)], headerRow: 0 };
-}
-
-/** One blank row on the chrome surface: the margin a chrome bar keeps toward the content (G's comfortable density). */
-export function renderShellChromePad(theme: ShellBarTheme, width: number): string {
-	return paintChromeRow(theme, " ".repeat(Math.max(0, Math.floor(width))));
-}
-
-/** The wide chrome bar: in comfortable density the status bar between two margin rows, as G's; compact and minimal draw the row alone. */
-export function renderShellChromeBar(model: ShellBarModel, theme: ShellBarTheme, width: number, extras: StatusBarExtras = {}, density: Density = "comfortable"): ShellHeaderChrome {
-	const bar = renderShellStatusBar(model, theme, width, extras);
-	if (density !== "comfortable") return bar;
-	const pad = renderShellChromePad(theme, width);
-	return { ...bar, rows: [pad, ...bar.rows, pad], headerRow: bar.headerRow + 1 };
-}
-
-/** The wide title rows: in comfortable density the title row between two margin rows, as G's; compact and minimal draw it alone. */
-export function renderShellTitleRows(model: ShellBarModel, theme: ShellBarTheme, width: number, home = homedir(), density: Density = "comfortable"): string[] {
-	if (density !== "comfortable") return [renderShellTitleRow(model, theme, width, home)];
-	const pad = renderShellChromePad(theme, width);
-	return [pad, renderShellTitleRow(model, theme, width, home), pad];
-}
-
-// The regular (not fullscreen) terminal's one bar, as G's renderShellBar:
-// every segment on one row, `⟡` between them, the session name at the right
-// while it fits; the jobs count and the mode badge last (T174: no
-// extension statuses, the integrations are gone).
-export const SHELL_BAR_BRAND = `${glyph("brand")} jhon`;
-export const SHELL_BAR_SEPARATOR = "⟡";
-
-function compactBarSegments(model: ShellBarModel, theme: ShellBarTheme): string[] {
-	const location = model.branch ? `${theme.fg(ROLE.PATH, model.cwd)} ${theme.fg(ROLE.BRANCH, sanitizeStatus(model.branch))}` : theme.fg(ROLE.PATH, model.cwd);
-	const jobs = model.jobs?.filter((job) => job.endedAt === undefined && job.kind !== "agent").length ?? 0;
-	const mode = modeBadge(model.mode, theme);
-	return [
-		theme.fg(ROLE.BRAND, shellSettings().ascii() ? glyph("brand", true) : SHELL_BAR_BRAND),
-		location,
-		executionSegment(model.modelId, model.effort, theme),
-		contextSegment(model.contextPercent, theme, model.contextWindow),
-		costSegment(model.costTotal, model.subscription, theme),
-		...(jobs ? [theme.fg(ROLE.STATUS, shellJobsCount(jobs))] : []),
-		...(mode ? [mode] : []),
-	];
-}
-
-// When the line overflows, the location gives way first: the path shrinks to
-// its last segment and a long branch is clipped, then segments go from the end.
-export function renderShellBar(model: ShellBarModel, theme: ShellBarTheme, width: number): string[] {
-	const join = (segments: string[]) => segments.join(` ${theme.fg(ROLE.SEPARATOR, SHELL_BAR_SEPARATOR)} `);
-	let segments = compactBarSegments(model, theme);
-	let left = join(segments);
-	const right = model.sessionName ? theme.fg(ROLE.SESSION, sanitizeStatus(model.sessionName)) : undefined;
-	if (right && visibleWidth(left) + RIGHT_PADDING + visibleWidth(right) <= width) {
-		return chromeAscii([left + " ".repeat(width - visibleWidth(left) - visibleWidth(right)) + right]);
-	}
-	if (visibleWidth(left) > width) {
-		const cwd = model.cwd.split("/").filter((part) => part.length > 0).pop() ?? model.cwd;
-		const branch = model.branch && visibleWidth(model.branch) > COMPACT_BRANCH_WIDTH ? clipPanelText(model.branch, COMPACT_BRANCH_WIDTH) : model.branch;
-		segments = compactBarSegments({ ...model, cwd, branch }, theme);
-		left = join(segments);
-	}
-	while (segments.length > 1 && visibleWidth(left) > width) {
-		segments.pop();
-		left = join(segments);
-	}
-	return chromeAscii([truncateToWidth(left, width, "…")]);
 }

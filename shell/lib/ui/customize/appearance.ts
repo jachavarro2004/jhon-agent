@@ -81,7 +81,7 @@ export const APPEARANCE: CustomizeCategory = {
 		},
 		{
 			key: "shell.appearance.surface", label: "Surface", kind: "choice", values: ["transparent", "tinted"],
-			note: "The rail, the title row and the status bar: on the terminal's background, or one painted panel.",
+			note: "The rail, the top row and the status bar: on the terminal's background, or one painted panel.",
 			// G's two surfaces (L153 answer 2): every rail section its own card, or one painted panel.
 			preview: (v, ascii) => ({
 				caption: "the rail",
@@ -94,13 +94,13 @@ export const APPEARANCE: CustomizeCategory = {
 		},
 		{
 			key: "shell.appearance.density", label: "Density", kind: "choice", values: ["comfortable", "compact", "minimal"],
-			note: "Spacing: comfortable pads the title row and the status bar and spaces the rail's sections; compact and minimal draw none. Minimal also keeps tool cards quiet: bash collapses to ↳ ✓ N lines instead of its output tail and duration.",
-			// G's Density (L195): its margin rows and section gaps.
+			note: "Spacing: comfortable spaces the rail's sections with a blank row; compact and minimal draw none. The top row and the status bar are one row each at every density. Minimal also keeps tool cards quiet: bash collapses to ↳ ✓ N lines instead of its output tail and duration.",
+			// The rail's section gaps (L195); the bars have no margin rows (T174-S3, design/shell-tui 01).
 			preview: (v, ascii) => ({
-				caption: "the title row",
+				caption: "the rail",
 				lines: v === "comfortable"
-					? ["a margin row", `${ascii ? "jhon" : "力 jhon"}  ~/code/jhon`, "a margin row"]
-					: [`${ascii ? "jhon" : "力 jhon"}  ~/code/jhon`, "the transcript right under it"],
+					? [`${ascii ? "v" : "▾"} LDD`, "a blank row", `${ascii ? "v" : "▾"} AGENTS`]
+					: [`${ascii ? "v" : "▾"} LDD`, `${ascii ? "v" : "▾"} AGENTS`, "the sections one under another"],
 			}),
 			read: (h) => h.settings.density(),
 			live: appearance,

@@ -9,7 +9,9 @@ import { initTheme, type ExtensionAPI, type ExtensionContext, type SlashCommandI
 import { CURSOR_MARKER, matchesKey, visibleWidth, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { registerSubagentWorktree, resolveSessionWorktree } from "../lib/ui/session-worktree-registry.ts";
 import { SESSION_PROFILE_CHANGED, SESSION_PROFILE_ENTRY } from "../lib/session-profile.ts";
-import installShellUi, { buildShellBarModel, createActiveProfileReader, extractQueuedText, JhonPromptEditor } from "../extensions/ui.ts";
+import installShellUi, { createActiveProfileReader, extractQueuedText, JhonPromptEditor } from "../extensions/ui.ts";
+import { barModel, renderTopRow } from "../lib/ui/bars.ts";
+import { SANDBOX_EVENT } from "../lib/events.ts";
 import { openInExternalEditor } from "../lib/ui/jhon-panel-editor.ts";
 import { setSidebarHover, sidebarPart, sidebarState, type SidebarRail } from "../lib/ui/shell-sidebar.ts";
 import type { ShellBarTheme } from "../lib/ui/shell-bar.ts";
@@ -261,7 +263,7 @@ function assistantEntry(usage: { input: number; output: number; cost: number }) 
 	};
 }
 
-test("buildShellBarModel reads session, model, and footer data", () => {
+test("barModel reads the session, the model and the footer data (T174-S3)", () => {
 	const { pi } = fakePi();
 	const { ctx } = fakeContext({
 		entries: [assistantEntry({ input: 1000, output: 200, cost: 0.5 }), assistantEntry({ input: 500, output: 100, cost: 0.25 }), { type: "message", message: { role: "user" } }],
@@ -272,10 +274,10 @@ test("buildShellBarModel reads session, model, and footer data", () => {
 		getAvailableProviderCount: () => 1,
 		onBranchChange: () => () => {},
 	};
-	const built = buildShellBarModel(pi, ctx, footerData, { home: "/home/alan" });
+	const built = barModel(pi, ctx, footerData);
 	assert.equal(built.cwd, "/repo");
 	assert.equal(built.branch, "main");
-	assert.equal(built.sessionName, "Release notes");
+	assert.equal("sessionName" in built, false, "the session name is on no bar");
 	assert.equal(built.modelId, "claude-opus-5-5");
 	assert.equal(built.effort, "medium");
 	assert.equal(built.contextPercent, 45);
@@ -284,7 +286,7 @@ test("buildShellBarModel reads session, model, and footer data", () => {
 	assert.equal("statuses" in built, false, "T174: the extension statuses (the integrations) are gone");
 });
 
-test("buildShellBarModel shortens the home directory and hides effort for non-reasoning models", () => {
+test("barModel keeps the folder whole for the top row, which shows the home as ~; no effort for a non-reasoning model", () => {
 	const { pi } = fakePi();
 	const { ctx } = fakeContext();
 	(ctx as unknown as { model: { reasoning: boolean } }).model.reasoning = false;
@@ -295,8 +297,9 @@ test("buildShellBarModel shortens the home directory and hides effort for non-re
 		getAvailableProviderCount: () => 1,
 		onBranchChange: () => () => {},
 	};
-	const built = buildShellBarModel(pi, ctx, footerData, { home: "/home/alan" });
-	assert.equal(built.cwd, "~/work/jhon-demo");
+	const built = barModel(pi, ctx, footerData);
+	assert.equal(built.cwd, "/home/alan/work/jhon-demo");
+	assert.match(stripAnsi(renderTopRow(built, plainTheme, 60, { home: "/home/alan" })), /^ 力 jhon-demo {2}~\/work\/jhon-demo +$/);
 	assert.equal(built.effort, undefined);
 	assert.equal(built.branch, null);
 });
@@ -316,10 +319,10 @@ test("shellUi installs the footer on session_start when a UI exists", () => {
 	);
 	const lines = component.render(120);
 	assert.equal(lines.length, 1);
-	assert.match(lines[0], /^力 jhon ⟡ \/repo main ⟡ claude-opus-5-5 · medium ⟡ ctx/, "a regular terminal: G's compact bar (renderShellBar)");
+	assert.match(lines[0], /^ ⎇ main +claude-opus-5-5 · medium │ ctx 45% │ \$0\.000 sub $/, "a regular terminal: the status bar alone, its narrow form under 140 columns");
 });
 
-test("the fullscreen LDD rail and the header carry live digests: a profile switch refreshes the header; an extension status shows nowhere (T174)", async () => {
+test("the fullscreen LDD rail and the bars carry live digests: a profile switch refreshes the status bar, never the top row; an extension status shows nowhere (T174)", async () => {
 	const { pi, handlers } = fakePi();
 	let profile: string | undefined = "team";
 	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { activeProfile: () => profile });
@@ -334,16 +337,18 @@ test("the fullscreen LDD rail and the header carry live digests: a profile switc
 	try {
 		const rail = sidebarState(tui as unknown as TUI).parts.get("ldd") as SidebarRail;
 		assert.equal(typeof rail.digest, "function", "the LDD card paints live state and must declare a digest");
-		assert.doesNotMatch(rail.render(46).join("\n"), /claude-opus-5-5/, "model now lives in the header, not the Status card");
+		assert.doesNotMatch(rail.render(46).join("\n"), /claude-opus-5-5/, "the model is the status bar's, not the Status card's");
 
-		// The profile is the header's (beside the model): STATUS never repeats it.
+		// The profile is the status bar's (beside the model): STATUS and the top row never show it.
 		const header = sidebarState(tui as unknown as TUI).parts.get("header") as SidebarRail;
+		const bar = sidebarState(tui as unknown as TUI).parts.get("statusbar") as SidebarRail;
 		assert.doesNotMatch(rail.render(46).join("\n"), /team/);
-		assert.match(header.render(160).join("\n"), /team/);
-		const beforeProfile = header.digest?.();
+		assert.doesNotMatch(header.render(160).join("\n"), /team|claude/, "the top row is the project and its path alone");
+		assert.match(bar.render(160).join("\n"), /claude-opus-5-5 · medium · team │/);
+		const beforeProfile = bar.digest?.();
 		profile = "other";
-		assert.notEqual(header.digest?.(), beforeProfile, "a profile switch refreshes the header");
-		assert.match(header.render(160).join("\n"), /other/);
+		assert.notEqual(bar.digest?.(), beforeProfile, "a profile switch refreshes the status bar");
+		assert.match(bar.render(160).join("\n"), /· other │/);
 
 		statuses.set("mcp", "MCP: 3 servers enabled");
 		assert.doesNotMatch(rail.render(46).join("\n"), /MCP/, "no INTEGRATIONS: an extension's status is not drawn");
@@ -498,7 +503,7 @@ test("sections, the default: the prompt under a rule line, one status line at th
 		editor.setText("hola");
 		assert.match(editor.render(60).map(stripAnsi)[1], /^› hola +$/);
 		const footer = renderFooter(ui);
-		assert.match(footer, /^力 jhon ⟡ \/repo main ⟡ claude-opus-5-5 · medium ⟡ ctx ▰▰▰▰▱▱▱▱ 45% ⟡ \$0\.000 sub +Release notes$/, "the cost closes the bar");
+		assert.match(footer, /^ ⎇ main +claude-opus-5-5 · medium │ ctx ▰▰▰▰▱▱▱▱ 45% │ \$0\.000 sub $/, "the cost closes the bar");
 		assert.equal(handlers.has("after_provider_response"), false, "T174: no usage read from the replies");
 		// The README teaches the keys; the prompt keeps none (L105).
 		assert.equal(ui.widgets.has("jhon-shell-key-hints"), false);
@@ -517,7 +522,7 @@ test("the status line wears the owner's mode from STATUS's own status read, with
 	const editor = installedPrompt(ctx, ui, handlers);
 	try {
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		assert.match(renderFooter(ui), /^力 jhon ⟡ \/repo main ⟡ .* ⟡ SUPER YOLO +Release notes$/, "the badge where G's permission status sits");
+		assert.match(renderFooter(ui), /^ ⎇ main │ SUPER YOLO +claude-opus-5-5 · medium │ .* │ \$0\.000 sub $/, "the badge after the branch, on the left");
 		assert.ok(asked.every((cwd) => cwd === "/repo"), "the session's folder, the one STATUS reads");
 		mode = "normal";
 		clock += 60_000;
@@ -527,7 +532,7 @@ test("the status line wears the owner's mode from STATUS's own status read, with
 	} finally { editor.dispose(); }
 });
 
-test("without the rail the status bar is exactly one row, as G's: no extension status, never a second line (T15.12d, T174)", async (t) => {
+test("without the rail the status bar is exactly one row: no extension status, no jobs, never a second line (T15.12d, T174)", async (t) => {
 	const home = mkdtempSync(join(tmpdir(), "jhon-sections-statuses-"));
 	t.after(() => rmSync(home, { recursive: true, force: true }));
 	const { pi, handlers } = fakePi();
@@ -547,10 +552,11 @@ test("without the rail the status bar is exactly one row, as G's: no extension s
 	pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }] });
 	const busy = statusRow();
 	assert.equal(busy.length, 1);
-	assert.match(busy[0]!, /^ main │ ⧗ 1 job +ctx/, "G's ⧗ N jobs in the one row");
+	assert.equal(busy[0], rows[0], "a running job is the right pane's, not the bar's (T174-S3)");
+	assert.match(rows[0]!, /^ ⎇ main +claude-opus-5-5 · medium │ ctx 45% │ \$0\.000 sub $/, "120 columns: the narrow form");
 });
 
-test("a regular (not fullscreen) terminal draws G's compact bar (renderShellBar): brand, location, model, ctx, cost, jobs and the mode in one row, the session name at the right; no integrations (T15.12e, L160, T174)", async (t) => {
+test("a regular (not fullscreen) terminal's footer is the status bar alone: branch and sandbox, model, ctx and cost; no session name, jobs or integrations (T174-S3)", async (t) => {
 	const home = mkdtempSync(join(tmpdir(), "jhon-regular-bar-"));
 	t.after(() => rmSync(home, { recursive: true, force: true }));
 	const { pi, handlers } = fakePi();
@@ -559,16 +565,21 @@ test("a regular (not fullscreen) terminal draws G's compact bar (renderShellBar)
 	await fire(handlers, "session_start", ctx);
 	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, data: unknown) => { render(width: number): string[] };
 	const rows = factory(fakeTui, plainTheme, { ...footerData, getExtensionStatuses: () => new Map([["mcp", "MCP: 2 servers"]]) }).render(160);
-	assert.equal(rows.length, 1, rows.join("\n"));
-	assert.match(rows[0]!, /^力 jhon ⟡ \S+ main ⟡ claude-opus-5-5 · medium ⟡ ctx \S+ 45% ⟡ \$0\.000 sub +Release notes$/, "T174: no integrations in the regular bar");
+	assert.deepEqual(rows, [" ⎇ main" + " ".repeat(96) + "claude-opus-5-5 · medium │ ctx ▰▰▰▰▱▱▱▱ 45% │ $0.000 sub "]);
 	pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }] });
-	assert.match(factory(fakeTui, plainTheme, footerData).render(160)[0]!, /⟡ \$0\.000 sub ⟡ ⧗ 1 job +Release notes$/);
+	assert.doesNotMatch(factory(fakeTui, plainTheme, footerData).render(160)[0]!, /⧗|job|Release notes/);
+	pi.events.emit(SANDBOX_EVENT, { mode: "on" });
+	assert.match(factory(fakeTui, plainTheme, footerData).render(160)[0]!, /^ ⎇ main │ sandbox on +claude/, "the session's sandbox pin");
+	pi.events.emit(SANDBOX_EVENT, { mode: "off" });
+	assert.match(factory(fakeTui, plainTheme, footerData).render(160)[0]!, /^ ⎇ main │ sandbox off +claude/);
+	pi.events.emit(SANDBOX_EVENT, { mode: undefined });
+	assert.match(factory(fakeTui, plainTheme, footerData).render(160)[0]!, /^ ⎇ main +claude/, "unread: no segment");
 });
 
-// T15.12d slice 6 (L153 answer 3): the split chrome as G's. Wide, the title
-// row and the status bar each sit between two margin rows; narrow, the title
-// row carries the model and the one status row leaves it out.
-test("the split chrome: wide, the title rows and the chrome bar with their margins; narrow, the title row with the model and one status row without it", async () => {
+// Design 01 and 04 (T174-S3): the top row and the status bar are one row
+// each at every width and density; under 140 columns the status bar takes
+// its narrow form and the footer steps aside for it.
+test("the chrome: the top row and the status bar one row each; under 140 columns the narrow form", async () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {}, { activeProfile: () => "jhon" });
 	const { ctx, ui } = fakeContext();
@@ -577,21 +588,12 @@ test("the split chrome: wide, the title rows and the chrome bar with their margi
 	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, plainTheme, footerData);
 	try {
 		const parts = sidebarState(tui as unknown as TUI).parts;
-		const wideHeader = parts.get("header")!.render(160).map(stripAnsi);
-		assert.equal(wideHeader.length, 3, "a margin row, the title row, a margin row");
-		assert.match(wideHeader[1]!, /^ 力 \S+ /);
-		assert.doesNotMatch(wideHeader[1]!, /claude/, "wide: the model is the status bar's");
-		const wideBar = parts.get("statusbar")!.render(160).map(stripAnsi);
-		assert.equal(wideBar.length, 3);
-		assert.match(wideBar[1]!, /^ main +claude-opus-5-5 · medium · jhon │ ctx/);
+		assert.deepEqual(parts.get("header")!.render(160).map(stripAnsi), [" 力 repo  /repo".padEnd(159)], "the project and its path, nothing else");
+		assert.deepEqual(parts.get("statusbar")!.render(160).map(stripAnsi), [" ⎇ main" + " ".repeat(89) + "claude-opus-5-5 · medium · jhon │ ctx ▰▰▰▰▱▱▱▱ 45% │ $0.000 sub "]);
 		tui.terminal.columns = 100;
-		const narrowHeader = parts.get("header")!.render(100).map(stripAnsi);
-		assert.equal(narrowHeader.length, 1);
-		assert.match(narrowHeader[0]!, /claude-opus-5-5 · medium · jhon $/, "narrow: the title row carries the model");
-		assert.deepEqual(footer.render(100), [], "narrow: the footer steps aside, as G's");
-		const row = parts.get("statusbar")!.render(100).map(stripAnsi);
-		assert.equal(row.length, 1, "exactly one status row, the statusbar part's");
-		assert.doesNotMatch(row[0]!, /claude/);
+		assert.deepEqual(parts.get("header")!.render(100).map(stripAnsi), [" 力 repo  /repo".padEnd(99)]);
+		assert.deepEqual(footer.render(100), [], "the footer steps aside for the statusbar row");
+		assert.deepEqual(parts.get("statusbar")!.render(100).map(stripAnsi), [" ⎇ main" + " ".repeat(38) + "claude-opus-5-5 · medium · jhon │ ctx 45% │ $0.000 sub "], "the narrow form: no meter");
 	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
@@ -2179,7 +2181,7 @@ test("T120: the status bar shows the session's profile from its branch at the st
 	await fire(handlers, "session_start", ctx);
 	const tui = { mode: "fullscreen", terminal: { rows: 40, columns: 160 }, requestRender() {} };
 	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, plainTheme, { getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} });
-	const bar = () => sidebarState(tui as unknown as TUI).parts.get("statusbar")!.render(160).map(stripAnsi)[1]!;
+	const bar = () => sidebarState(tui as unknown as TUI).parts.get("statusbar")!.render(160).map(stripAnsi)[0]!;
 	try {
 		assert.match(bar(), /claude-opus-5-5 · medium · fast \(session\) │ ctx/);
 		pi.events.emit(SESSION_PROFILE_CHANGED, { sessionId: "another-session", profile: "slow" });
@@ -2191,7 +2193,7 @@ test("T120: the status bar shows the session's profile from its branch at the st
 	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
-test("the bar counts the running background tasks lib/background-tasks-tools.ts reports for this session", async () => {
+test("the bar never counts the background tasks lib/background-tasks-tools.ts reports: the right pane holds them (T174-S3)", async () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
 	const { ctx, ui } = fakeContext();
@@ -2201,16 +2203,11 @@ test("the bar counts the running background tasks lib/background-tasks-tools.ts 
 		getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {},
 	});
 	try {
-		assert.doesNotMatch(footer.render(180).join("\n"), /task/);
+		const idle = footer.render(180);
 		const sessionId = ctx.sessionManager.getSessionId();
-		pi.events.emit("jhon-shell:tasks", { sessionId: "another", tasks: [{ id: "x", label: "theirs", startedAt: 1 }] });
-		assert.doesNotMatch(footer.render(180).join("\n"), /task/, "another session's tasks are not this one's");
 		pi.events.emit("jhon-shell:tasks", { sessionId, tasks: [{ id: "job-1", label: "build", startedAt: 1 }, { id: "agent-1", label: "explore: callers", startedAt: 2 }] });
-		assert.match(footer.render(180).join("\n"), /⧗ 2 jobs/);
-		pi.events.emit("jhon-shell:tasks", { sessionId, tasks: [{ id: "agent-1", label: "explore: callers", startedAt: 2 }] });
-		assert.match(footer.render(180).join("\n"), /⧗ 1 job\b/);
-		pi.events.emit("jhon-shell:tasks", { sessionId, tasks: [] });
-		assert.doesNotMatch(footer.render(180).join("\n"), /task/);
+		assert.deepEqual(footer.render(180), idle);
+		assert.doesNotMatch(footer.render(180).join("\n"), /⧗|job|agent/);
 	} finally { footer.dispose(); }
 });
 
@@ -2787,7 +2784,7 @@ esac
 		view.handleInput("\x1b[C");
 		view.handleInput("\r");
 		for (let i = 0; i < 200 && !/YOLO/.test(renderFooter(ui)); i++) await new Promise((r) => setTimeout(r, 10));
-		assert.match(renderFooter(ui), /⟡ YOLO/, "the badge follows the Customize change");
+		assert.match(renderFooter(ui), /│ YOLO/, "the badge follows the Customize change");
 		view.handleInput("\x1b"); if (ui.overlayView) view.handleInput("\x1b"); await pending;
 	} finally { editor.dispose(); }
 });

@@ -19,7 +19,7 @@
  */
 import { Key, matchesKey, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { asciiText } from "./primitives/index.ts";
-import { EFFORT_WORDS } from "./shell-bar.ts";
+import { EFFORT_WORDS } from "./bars.ts";
 
 /** One agent's model in one runtime, as `jhon profile json` gives it. */
 export interface ProfileRow {

@@ -67,11 +67,10 @@ export function sidebarPart<T extends Component & { dispose?(): void }>(tui: TUI
 }
 
 /**
- * Register the fullscreen header rail: the one row above the hstack that
- * carries the brand, session identity, and the per-frame counters. There is
- * no narrow-mode bottom counterpart — the compact bar already carries this
- * data when the sidebar is inactive — so this only ever writes the "header"
- * slot in sidebarState(tui).parts, and returns its own disposer.
+ * Register the fullscreen header rail: the top row above the hstack, the
+ * project and its path (lib/ui/bars.ts). It has no bottom counterpart, so
+ * this only ever writes the "header" slot in sidebarState(tui).parts, and
+ * returns its own disposer.
  */
 export function sidebarHeader(tui: TUI, rail: SidebarRail): () => void {
 	return sidebarSlot(tui, "header", rail);

@@ -3,9 +3,9 @@ import { isHomeOrBroadUserDirectory } from "../lib/ui/user-directories.ts";
 import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import { execFile } from "node:child_process";
 import { existsSync, realpathSync, statSync, watch } from "node:fs";
-import * as os from "node:os";
 import { join } from "node:path";
-import { renderShellBar, renderShellChromeBar, renderShellStatusBar, renderShellStatusLayout, renderShellTitleRow, renderShellTitleRows, type StatusHover, type StatusTarget, agentsWorkSummary, renderShellAgentsSection, renderShellJobsSection, JOBS_FINISHED_TTL_MS, shellEnabled, shellJobsCount, type ShellBarModel, type RunningJobDisplay } from "../lib/ui/shell-bar.ts";
+import { renderShellStatusLayout, type StatusHover, type StatusTarget, agentsWorkSummary, renderShellAgentsSection, renderShellJobsSection, JOBS_FINISHED_TTL_MS, shellEnabled, shellJobsCount, type RunningJobDisplay } from "../lib/ui/shell-bar.ts";
+import { barModel, renderStatusBar, renderTopRow, type BarModel } from "../lib/ui/bars.ts";
 import { SettingsView } from "../lib/ui/settings-view.ts";
 import { ROSE_INK } from "../lib/ui/customize/themes.ts";
 import { PALETTE_PATH } from "../lib/desktop-palette.ts";
@@ -23,7 +23,7 @@ import { createApiWait } from "../lib/ui/api-wait.ts";
 import { createStallRecovery, stallContinueText, stallNotice, stallSeconds, stallThreshold, type Schedule } from "../lib/ui/stall-recovery.ts";
 import { activeProfileName } from "../lib/profiles.ts";
 import { SESSION_PROFILE_CHANGED, sessionMark, sessionProfileOnBranch } from "../lib/session-profile.ts";
-import { OPEN_TASKS_EVENT, TASKS_EVENT } from "../lib/events.ts";
+import { OPEN_TASKS_EVENT, SANDBOX_EVENT, TASKS_EVENT } from "../lib/events.ts";
 import { retiredNotice, shellSettings } from "../lib/settings.ts";
 import { resolveAnimationPolicy, type AnimationPolicy } from "../lib/ui/animation-policy.ts";
 import {
@@ -32,7 +32,7 @@ import {
 	type DoubleEscCancelPolicy,
 } from "../lib/ui/double-esc-cancel-policy.ts";
 import { setSidebarHover, sidebarHeader, sidebarPart, sidebarSlot, sidebarState, VISUAL_SETTINGS_CHANGED, type SidebarRail } from "../lib/ui/shell-sidebar.ts";
-import { installSidebar, invalidateSidebar, SIDEBAR_BREAKPOINT } from "../lib/ui/shell-sidebar-layout.ts";
+import { installSidebar, invalidateSidebar } from "../lib/ui/shell-sidebar-layout.ts";
 import type { PanelSummary } from "../lib/ui/shell-panel.ts";
 import { renderWorkRow, setChromeSurface, workRowLead } from "../lib/ui/shell-panel.ts";
 import { recentSessionRoots } from "../lib/ui/session-changes.ts";
@@ -54,12 +54,6 @@ export interface ShellFooterData {
 interface ShellRenderHost {
 	requestRender(): void;
 	invalidateSidebar?(): void;
-}
-
-interface BuildOptions {
-	jobs?: RunningJobDisplay[];
-	profile?: string;
-	home?: string;
 }
 
 export interface ShellDeps {
@@ -104,85 +98,6 @@ export function createActiveProfileReader(read: () => string = activeProfileName
 }
 
 const defaultShellDeps: Omit<ShellDeps, "activeProfile"> = { now: () => Date.now(), resolveWorktree: resolveSessionWorktree, rootExists: (root) => existsSync(join(root, ".git")), lddStatus: (cwd) => readLddStatus(cwd), permissionMode };
-
-interface AssistantUsageEntry {
-	type: string;
-	message?: {
-		role?: string;
-		usage?: {
-			cost?: { total?: number };
-		};
-	};
-}
-
-function shortenHome(cwd: string, home: string | undefined): string {
-	if (home && cwd.startsWith(home)) return `~${cwd.slice(home.length)}`;
-	return cwd;
-}
-
-function sessionCost(ctx: ExtensionContext): number {
-	let total = 0;
-	for (const entry of ctx.sessionManager.getEntries() as AssistantUsageEntry[]) {
-		if (entry.type !== "message" || entry.message?.role !== "assistant") continue;
-		total += entry.message.usage?.cost?.total ?? 0;
-	}
-	return total;
-}
-
-type ShellSessionStats = { costTotal: number; usage: ReturnType<ExtensionContext["getContextUsage"]> };
-const shellSessionStats = new WeakMap<object, {
-	sessionId: string | undefined;
-	leafId: string | null;
-	entryCount: number | undefined;
-	model: ExtensionContext["model"];
-	contextWindow: number | undefined;
-	stats: ShellSessionStats;
-}>();
-
-function sessionStats(ctx: ExtensionContext): ShellSessionStats {
-	const manager = ctx.sessionManager as ExtensionContext["sessionManager"] & { getEntryCount?(): number };
-	const compute = (): ShellSessionStats => ({ costTotal: sessionCost(ctx), usage: ctx.getContextUsage() });
-	// Append-only session entries move the leaf, including compaction and branch
-	// switches. A virtual model's routed physical model comes from the latest
-	// response, which is appended as an entry, so the leaf covers it as well.
-	// Older/test hosts without that identity must stay uncached.
-	if (typeof manager.getLeafId !== "function") return compute();
-	const sessionId = manager.getSessionId();
-	const leafId = manager.getLeafId();
-	const entryCount = manager.getEntryCount?.();
-	const model = ctx.model;
-	const contextWindow = model?.contextWindow;
-	const cached = shellSessionStats.get(manager);
-	if (cached && cached.sessionId === sessionId && cached.leafId === leafId &&
-		cached.entryCount === entryCount && cached.model === model && cached.contextWindow === contextWindow) return cached.stats;
-	const stats = compute();
-	shellSessionStats.set(manager, { sessionId, leafId, entryCount, model, contextWindow, stats });
-	return stats;
-}
-
-export function buildShellBarModel(
-	pi: ExtensionAPI,
-	ctx: ExtensionContext,
-	footerData: ShellFooterData,
-	options: BuildOptions = {},
-): ShellBarModel {
-	const home = options.home ?? os.homedir();
-	const { usage, costTotal } = sessionStats(ctx);
-	const model = ctx.model;
-	return {
-		cwd: shortenHome(ctx.sessionManager.getCwd(), home),
-		profile: options.profile,
-		branch: footerData.getGitBranch(),
-		sessionName: ctx.sessionManager.getSessionName(),
-		modelId: model?.id ?? "no-model",
-		effort: model?.reasoning ? pi.getThinkingLevel() : undefined,
-		contextPercent: usage?.percent ?? null,
-		contextWindow: usage?.contextWindow ?? model?.contextWindow ?? 0,
-		costTotal,
-		subscription: model ? ctx.modelRegistry.isUsingOAuth(model) : false,
-		...(options.jobs !== undefined ? { jobs: options.jobs } : {}),
-	};
-}
 
 interface PromptEditorDeps {
 	fg: (color: string, text: string) => string;
@@ -660,8 +575,15 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	let renderHost: ShellRenderHost | undefined;
 	// The agent dir `jhon start pi` sets: Customize's Rose ink theme is written there.
 	const agentDir = env.PI_CODING_AGENT_DIR;
-	// A host announced late (jhon:host) may drop the title row's path: redraw.
+	// A host announced late (jhon:host) may drop the top row's path: redraw.
 	pi.events.on(HOST_EVENT, () => { renderHost?.requestRender(); });
+	// sandbox.mode as extensions/jhon.ts pinned it for the session (lib/sandbox.ts), for the status bar.
+	let sandbox: BarModel["sandbox"];
+	pi.events.on(SANDBOX_EVENT, (payload) => {
+		const said = (payload as { mode?: unknown } | undefined)?.mode;
+		sandbox = said === "on" || said === "off" ? said : undefined;
+		renderHost?.requestRender();
+	});
 	// T120: `u` in the profiles panel, or a session profile that is gone: the bar and the rail show it at once.
 	pi.events.on(SESSION_PROFILE_CHANGED, (payload) => {
 		const said = payload as { sessionId?: unknown; profile?: unknown } | undefined;
@@ -953,26 +875,22 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				host.invalidateSidebar?.();
 				host.requestRender();
 			});
-			// The Status card paints live session state that no event re-registers a
-			// part for: model, effort, context, cost, session name and extension
-			// statuses. The digest is what keeps the fullscreen memo honest.
-			const footerModel = (): ShellBarModel => ({
-				...buildShellBarModel(pi, ctx, footerData, { profile: deps.activeProfile(), jobs: runningJobs }),
-				...(ldd ? { ldd } : {}),
+			// The bars paint live session state no event re-registers a part for:
+			// model, effort, context, cost, profile, mode, sandbox. Their digests
+			// keep the fullscreen memo honest.
+			const bars = (): BarModel => barModel(pi, ctx, footerData, {
+				...(deps.activeProfile() ? { profile: deps.activeProfile() } : {}),
+				...(sandbox ? { sandbox } : {}),
 				...(mode ? { mode } : {}),
 				...(hostShowsPath() ? { hostShowsPath: true } : {}),
 			});
-			// The Gentle Shell's split chrome (L153 answer 3): a title row on top and the
-			// status bar at the bottom. Wide (the rail shown) each sits between two
-			// margin rows; without the rail in fullscreen exactly one status row, G's,
-			// with `⧗ N jobs` in it, the model in the title row. A regular terminal
-			// draws G's one compact bar instead.
-			const fullscreen = () => (tui as TUI & { mode?: string }).mode === "fullscreen";
-			const wide = () => fullscreen() && (tui.terminal?.columns ?? 0) >= SIDEBAR_BREAKPOINT && visualSettings.statusPlacement !== "hidden";
-			// A regular terminal draws G's compact bar (L160).
-			// Fullscreen, the footer always steps aside (the rail, or the statusbar row narrow).
+			// Design 01 (T174-S3): the top row above everything and the status bar
+			// at the bottom, one row each; the status bar takes its narrow form
+			// under 140 columns. A regular terminal has no top row: its footer is
+			// the status bar alone. Fullscreen, the footer steps aside for the
+			// statusbar row.
 			const bottomBar = {
-				render: (width: number) => renderShellBar(footerModel(), theme, width),
+				render: (width: number) => [renderStatusBar(bars(), theme, width)],
 				invalidate() {},
 				dispose() { unsubscribeBranch(); },
 			};
@@ -1000,9 +918,9 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				const statusOwner = {};
 				return {
 					surface: "panel",
-					digest: () => JSON.stringify([footerModel(), visualSettings, [...railFolded], statusHover ?? ""]),
+					digest: () => JSON.stringify([ldd, visualSettings, [...railFolded], statusHover ?? ""]),
 					render: (width) => {
-						const layout = renderShellStatusLayout(footerModel(), theme, width, railFolded, statusHover, visualSettings.density);
+						const layout = renderShellStatusLayout({ ...(ldd ? { ldd } : {}) }, theme, width, railFolded, statusHover, visualSettings.density);
 						statusAt = layout.targets;
 						statusGroups.set(width, layout.groups);
 						return layout.lines;
@@ -1044,22 +962,17 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			const jobsPart = workPart("jobs", "JOBS", renderShellJobsSection, undefined, () => { pi.events.emit(OPEN_TASKS_EVENT, { ctx, view: "jobs" }); });
 			// The work row's lead while sub-agents run, as the Gentle Shell's: `◐ N agents`.
 			const agentsPart = workPart("agents", "AGENTS", renderShellAgentsSection, () => agentsWorkSummary([...(runningJobs ?? []), ...finishedJobs], theme, deps.now()), () => { pi.events.emit(OPEN_TASKS_EVENT, { ctx }); });
-			// The status line spans the width under the rail (L97); the rail has
-			// no key line, "/ commands" is the prompt's alone (L143). Narrow, it is
-			// G's one status row, `⧗ N jobs` in it and the model in the title row,
-			// a sibling row under the native layout while the footer steps aside.
+			// The status bar spans the width under the rail (L97); the rail has no
+			// key line, "/ commands" is the prompt's alone (L143).
 			const disposeStatusbar = sidebarSlot(tui, "statusbar", {
-				digest: () => JSON.stringify([footerModel(), visualSettings, fullscreen() && !wide()]),
-				render: (width) => visualSettings.statusPlacement === "hidden" ? []
-					: fullscreen() && !wide() ? renderShellStatusBar(footerModel(), theme, width, { jobs: true, modelDetails: false }).rows
-					: renderShellChromeBar(footerModel(), theme, width, {}, visualSettings.density).rows,
+				digest: () => JSON.stringify([bars(), visualSettings, tui.terminal?.columns]),
+				render: (width) => visualSettings.statusPlacement === "hidden" ? [] : [renderStatusBar(bars(), theme, width)],
 				invalidate() {},
 			});
-			// The title row: the brand, the project and its path, the session name;
-			// narrow, the model · effort · profile in the session name's place.
+			// The top row: the project's name and its path, nothing else.
 			const disposeHeader = sidebarHeader(tui, {
-				digest: () => JSON.stringify([footerModel(), visualSettings, tui.terminal?.columns]),
-				render: (width) => wide() ? renderShellTitleRows(footerModel(), theme, width, undefined, visualSettings.density) : [renderShellTitleRow(footerModel(), theme, width, undefined, { model: true })],
+				digest: () => JSON.stringify([ctx.sessionManager.getCwd(), hostShowsPath(), visualSettings, tui.terminal?.columns]),
+				render: (width) => [renderTopRow(bars(), theme, width)],
 				invalidate() {},
 			});
 			const uninstall = installSidebar(tui, theme, () => visualSettings.statusPlacement, () => visualSettings.density);

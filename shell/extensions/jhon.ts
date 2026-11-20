@@ -97,7 +97,7 @@ import { completeWord, lddChanges, PROFILE_ACTIONS } from "../lib/ui/jhon-comman
 import { LDD_SKILL, lddCompletions, lddPrompt } from "../lib/ldd-command.ts";
 import { ModelChoice, settingsDefaults, UNCHOSEN_ENDED, UNCHOSEN_HINT, UNCHOSEN_NO, UNCHOSEN_YES, unchosenQuestion } from "../lib/model-choice.ts";
 import { JhonPanel, jhonPanelKey, modelsOffered, registryModels, type ProfilesData, type View } from "../lib/ui/jhon-panel.ts";
-import { compactAt } from "../lib/ui/shell-bar.ts";
+import { compactAt } from "../lib/ui/bars.ts";
 import { FRESH_SESSION_ENTRY, FreshSessionLatch } from "../lib/fresh-session.ts";
 import { MainCompaction } from "../lib/compaction.ts";
 import { BACKSTOP_ENTRY, ContextBackstop } from "../lib/context-backstop.ts";

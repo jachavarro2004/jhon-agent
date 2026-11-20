@@ -157,7 +157,7 @@ shot, the hard lines' "no grant covers").
 | 42.0–48.8 s | | proof | `ldd-status.png`: the change → its slices → the next step → tests passed | With Jhon, the change stays in view: its slices, the next step, and the last test run. |
 | 48.8–56.4 s | Two ways in | list | `jhon start` → Claude Code; `jhon start pi` → pi, with Jhon's shell | There are two ways in: jhon start opens Claude Code, and jhon start pi opens pi, with Jhon's shell. |
 | 56.4–64.2 s | | proof | `runtimes-engine.svg`: the two runtimes → the engine → the dashboard | Both runtimes call one engine: the jhon binary. The dashboard only reads what the binary serves. |
-| 64.2–71.3 s | | proof | `shell-bar.png`: project → branch → model → context → cost → jobs | In pi, the shell's bars show the project, branch, model, context, cost and jobs. |
+| 64.2–71.3 s | | proof | `shell-bar.png`: project → branch → model → context → cost | In pi, the shell's bars show the project, branch, model, context, cost and jobs. |
 | 71.3–76.5 s | A repo with no LDD yet | card | Read-only work *just happens.* | In a repo with no LDD yet, read-only work just happens. |
 | 76.5–82.4 s | | proof | `ldd-question.png`: the question → the recommended choice | At the first code change, the session asks you once how to deliver and test. |
 | 82.4–88.2 s | Seven guards | card | Every tool call, *judged.* | Seven guards judge every tool call, in order, the same in both runtimes. |
