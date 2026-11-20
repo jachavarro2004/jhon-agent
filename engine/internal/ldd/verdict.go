@@ -71,17 +71,16 @@ func testedTree(root, change string, run *execution.LastRun, tree string) Tested
 }
 
 // outsideRecord is the paths that differ between trees a and b in root, but
-// for change's record files, its judgments/ and the rest of its own folder,
+// for change's record files and the rest of its own folder,
 // written after the run (T150); ok is false when a tree does not resolve.
 func outsideRecord(root, change, a, b string) ([]string, bool) {
 	diff, ok := vcs.TreeDiff(root, a, b)
 	exempt := execution.ChangeRecordPaths(root, change)
 	folder := execution.ChangeDirInRepo(root, change) + "/"
-	judged := layout.For(root).Artifact(change, "judgments") + "/"
 	outside := []string{}
 	for _, p := range diff {
 		own := change != "" && strings.HasPrefix(p, folder)
-		if !exempt[p] && !own && !strings.HasPrefix(p, judged) && !strings.Contains(p, "/"+judged) {
+		if !exempt[p] && !own {
 			outside = append(outside, p)
 		}
 	}

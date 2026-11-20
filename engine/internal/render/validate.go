@@ -213,7 +213,6 @@ var (
 	fence        = lazyre.New("^" + js.Space + "*(```|~~~)")
 	namedJhon    = lazyre.New("`jhon ([a-z][a-z-]*)")
 	runJhon      = lazyre.New(`^` + js.Space + `*(?:\$` + js.Space + `+)?jhon ([a-z][a-z-]*)`)
-	judgmentLine = lazyre.New(`JUDGMENT:` + js.Space + `*([A-Z_]+)`)
 	whitespace   = lazyre.New(js.Space + `+`)
 	fixtureName  = lazyre.New(`^[\w.-]+$`)
 )
@@ -248,14 +247,6 @@ func slashCommands(line string) []string {
 		}
 	}
 	return out
-}
-
-// sameSet is whether a and b hold the same items, as their sorted joins.
-func sameSet(a, b []string) bool {
-	x, y := slices.Clone(a), slices.Clone(b)
-	sortJS(x)
-	sortJS(y)
-	return strings.Join(x, ",") == strings.Join(y, ",")
 }
 
 // validate judges the repository alone; it passes on a machine where
@@ -469,9 +460,6 @@ func (e *engine) validate() []problem {
 			}
 		}
 	}
-
-	// 23. The judgment contract's lists agree with one another.
-	e.judgmentProblems(&text, add)
 
 	// 26a. The always-on template places every group and names no other.
 	if tpl := e.claudeMdTemplate(); !exists(tpl) {
@@ -724,75 +712,6 @@ func (e *engine) jhonCommands(text *manifest.Map[string], add func(string, int, 
 				if len(known) > 0 && !known[sub] {
 					add(file, i+1, "jhon-command", fmt.Sprintf("'jhon %s' is not a subcommand jhon dispatches", sub))
 				}
-			}
-		}
-	}
-}
-
-// judgmentProblems holds contracts/judgment.md's lists to one another, and
-// the judgment-day skill's closing verdicts to them.
-func (e *engine) judgmentProblems(text *manifest.Map[string], add func(string, int, string, string)) {
-	jFile := filepath.Join(e.prose, "contracts/judgment.md")
-	src, _ := text.Get(jFile)
-	bad := func(msg string) { add(jFile, 0, "judgment-vocab", msg) }
-	list := func(k string) []string { return contract.List(src, k) }
-	modes, events := list("judgment_modes"), list("judgment_events")
-	verdictKeys, verdicts := contract.Map(src, "judgment_verdicts")
-	limitKeys, limits := contract.Map(src, "judgment_round_limit")
-	for _, k := range []string{"judgment_modes", "judgment_judges", "judgment_events", "judgment_positions", "judgment_point_status",
-		"judgment_human_outcomes", "judgment_severities", "judgment_severe", "judgment_next_action", "judgment_escalation_reason"} {
-		if len(list(k)) == 0 {
-			bad(k + " is empty")
-		}
-	}
-	if !sameSet(verdictKeys, modes) {
-		bad(fmt.Sprintf("judgment_verdicts covers {%s}, not the modes {%s}", strings.Join(verdictKeys, ", "), strings.Join(modes, ", ")))
-	}
-	if !sameSet(limitKeys, modes) {
-		bad(fmt.Sprintf("judgment_round_limit covers {%s}, not the modes {%s}", strings.Join(limitKeys, ", "), strings.Join(modes, ", ")))
-	}
-	for _, m := range verdictKeys {
-		if len(contract.InlineList(verdicts[m])) != 2 {
-			bad(fmt.Sprintf("judgment_verdicts.%s must list two verdicts, consensus then escalation", m))
-		}
-	}
-	for _, m := range limitKeys {
-		if !positiveInt.MatchString(limits[m]) {
-			bad(fmt.Sprintf("judgment_round_limit.%s is '%s', not a positive integer", m, limits[m]))
-		}
-	}
-	positions := list("judgment_positions")
-	byRole := unique(append(list("judgment_owner_positions"), list("judgment_opponent_positions")...))
-	if !sameSet(byRole, positions) {
-		bad(fmt.Sprintf("owner and opponent positions {%s} are not judgment_positions {%s}", strings.Join(byRole, ", "), strings.Join(positions, ", ")))
-	}
-	for _, o := range list("judgment_human_outcomes") {
-		if !slices.Contains(list("judgment_point_status"), o) {
-			bad(fmt.Sprintf("judgment_human_outcomes names '%s', which is not a judgment_point_status", o))
-		}
-	}
-	severities := list("judgment_severities")
-	for _, s := range list("judgment_severe") {
-		if !slices.Contains(severities, s) {
-			bad(fmt.Sprintf("judgment_severe names '%s', which is not a judgment_severity", s))
-		}
-	}
-	if !slices.ContainsFunc(events, func(e string) bool { return strings.Contains(e, "<n>") }) {
-		bad("judgment_events declares no R<n> round template")
-	}
-
-	// The skill's closing line names a verdict; one the contract does not
-	// declare would be refused only at CLOSE, mid-review.
-	var all []string
-	for _, m := range verdictKeys {
-		all = append(all, contract.InlineList(verdicts[m])...)
-	}
-	skill := filepath.Join(e.prose, "skills/judgment-day/SKILL.md")
-	skillText, _ := text.Get(skill)
-	for i, line := range lines(skillText) {
-		for _, m := range judgmentLine.FindAllStringSubmatch(line, -1) {
-			if !slices.Contains(all, m[1]) {
-				add(skill, i+1, "judgment-vocab", fmt.Sprintf("'JUDGMENT: %s' is not a verdict contracts/judgment.md declares", m[1]))
 			}
 		}
 	}

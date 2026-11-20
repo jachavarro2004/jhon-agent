@@ -41,7 +41,6 @@ tree through `JHON_ROOT`.
 | `execution` | Runs and records a change's test runs (`jhon executions`): which projects `--affected` selects, and how pytest-testmon, Nx, and Vitest narrow them. |
 | `requirements` | The structure of a spec file. |
 | `compose` | Applies a delta spec to a main spec (`jhon compose`). |
-| `judgment` | Judgment-day records: validates and appends events (`jhon judgment`). |
 | `mutate` | The mutation witness for existing behaviour (`jhon mutate`). |
 | `vcs` | The VCS state of a project root. |
 | `audit` | `jhon audit`: reads a session after the fact (Claude Code transcripts, pi sessions in `pi.go`), sub-agents included, and reports safety findings and outcomes. |

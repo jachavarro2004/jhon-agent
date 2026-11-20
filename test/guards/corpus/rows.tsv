@@ -17,7 +17,7 @@ ldd,repo	none	*	Bash	"gh pr create --fill"	route: a PR
 ldd,repo	none	*	Bash	"gh pr merge 1 --rebase"	route: a merge with rebase
 ldd,repo	none	*	Bash	"gh pr merge 1 --merge"	route: a merge without rebase
 ldd,repo	none	*	Agent	"{\"prompt\":\"x\",\"subagent_type\":\"review-risk\"}"	route: a reviewer nobody asked for
-ldd,repo	none	*	Agent	"{\"prompt\":\"x\",\"subagent_type\":\"jd-judge-a\"}"	route: a Judgment Day judge
+ldd,repo	none	*	Agent	"{\"prompt\":\"x\",\"subagent_type\":\"review-refuter\"}"	route: a refuter nobody asked for
 ldd,repo	none	*	Agent	"{\"prompt\":\"x\",\"subagent_type\":\"verify\"}"	route: verify
 ldd,repo	none	*	Agent	"{\"prompt\":\"Fix it.\",\"subagent_type\":\"worker\"}"	route: a writer without its surfaces
 ldd,repo	none	*	Agent	"{\"prompt\":\"Fix it.\\n\\n## Allowed edit surfaces\\n- src/app.py\\n\",\"subagent_type\":\"worker\"}"	route: a writer with its surfaces

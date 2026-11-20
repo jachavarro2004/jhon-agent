@@ -3,8 +3,8 @@
 // refused, and a change that alters behaviour opens its PR only with it; a
 // change whose diff reaches the verified tier (risk high) waits for verify
 // before its PR, and size alone only gets a note (S25). The verify agent may
-// always be launched (S22); 4R and Judgment Day reviewers run only with the
-// owner's permission, and `delivery: change` opens one PR per change and
+// always be launched (S22); 4R reviewers run only with the owner's
+// permission, and `delivery: change` opens one PR per change and
 // merges with rebase.
 
 package guards
@@ -258,7 +258,7 @@ func TestRouteGuardDesignSpans(t *testing.T) {
 func TestRouteGuardBoundedWriterNeedsItsScope(t *testing.T) {
 	t.Parallel()
 	launch := func(dir, kind, prompt string) support.Result {
-		return hook(t, nil, "route-guard", []string{"--agent", "jhon-orchestrator", "worker", "jd-fix-agent"},
+		return hook(t, nil, "route-guard", []string{"--agent", "jhon-orchestrator", "worker"},
 			map[string]any{"tool_name": "Agent", "tool_input": map[string]any{"subagent_type": kind, "prompt": prompt}, "cwd": dir, "permission_mode": "default"})
 	}
 	scoped := "Do 1.1.\n\n## Allowed edit surfaces\n\n- src/app.py\n"
@@ -269,7 +269,6 @@ func TestRouteGuardBoundedWriterNeedsItsScope(t *testing.T) {
 		res := launch(dir, "worker", "Do 1.1.")
 		code(t, res, 2, "a worker with no scope")
 		matches(t, res.Stderr, "launched with its scope", "the refusal names the heading")
-		code(t, launch(dir, "jd-fix-agent", "Fix it."), 2, "the fix actor with no scope")
 		code(t, launch(dir, "worker", scoped), 0, "a worker with its scope")
 		code(t, launch(dir, "explore", "Look."), 0, "an agent that is not bounded")
 	}
@@ -291,7 +290,7 @@ func TestRouteGuardWriterSurfacesExist(t *testing.T) {
 		prompt := "Do 1.1.\n\n## Allowed edit surfaces\n\n- " + strings.Join(surfaces, "\n- ") + "\n"
 		payload := map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Agent", "cwd": dir, "session_id": "s", "permission_mode": "default",
 			"tool_input": map[string]any{"subagent_type": "worker", "description": "d", "prompt": prompt}}
-		return hook(t, r.env, "pre-tool", []string{"--agent", "jhon-orchestrator", "route-guard", "worker", "jd-fix-agent"}, payload)
+		return hook(t, r.env, "pre-tool", []string{"--agent", "jhon-orchestrator", "route-guard", "worker"}, payload)
 	}
 	for label, surfaces := range map[string][]string{
 		"an existing file":                    {"src/app.py"},
@@ -347,7 +346,7 @@ func TestRouteGuardWriterSurfacesExist(t *testing.T) {
 func TestRouteGuardReviewers(t *testing.T) {
 	t.Parallel()
 	r := newRG(t, "")
-	for _, kind := range []string{"review-risk", "jd-judge-a"} {
+	for _, kind := range []string{"review-risk", "review-refuter"} {
 		input := map[string]any{"subagent_type": kind, "prompt": "x"}
 		top := r.call(t, "Agent", input, true)
 		code(t, top, 0, kind+": the owner is asked")
@@ -355,6 +354,13 @@ func TestRouteGuardReviewers(t *testing.T) {
 			t.Errorf("%s: no ask for review: %q", kind, top.Stdout)
 		}
 		code(t, r.call(t, "Agent", input, false), 2, kind+": a sub-agent is refused")
+	}
+	// Judgment Day is removed (T172): a jd-* agent is no reviewer the guard
+	// asks for; no runtime renders one to launch.
+	for _, top := range []bool{true, false} {
+		if res := r.call(t, "Agent", map[string]any{"subagent_type": "jd-judge-a", "prompt": "x"}, top); res.Code != 0 || res.Stdout != "" {
+			t.Errorf("a removed Judgment Day agent is no reviewer: %d %q", res.Code, res.Stdout)
+		}
 	}
 	writeGrant(t, r.grants, "review", r.p, 30, nil)
 	code(t, r.call(t, "Agent", map[string]any{"subagent_type": "review-risk", "prompt": "x"}, false), 2, "a review grant is retired: a sub-agent's reviewer is still refused")
@@ -378,7 +384,7 @@ func TestRouteGuardRetiredGrants(t *testing.T) {
 
 	code(t, r.call(t, "Bash", cmd("gh pr create --title x --body y"), true), 0, "a standard route's PR under a retired verified grant")
 
-	for _, kind := range []string{"review-risk", "jd-judge-a", "jd-fix-agent"} {
+	for _, kind := range []string{"review-risk", "review-refuter"} {
 		input := map[string]any{"subagent_type": kind, "prompt": "Fix it.\n\n## Allowed edit surfaces\n\n- src/app.py\n"}
 		if d, why, ok := decision(t, r.call(t, "Agent", input, true).Stdout); !ok || d != "ask" || !strings.HasPrefix(why, "review") {
 			t.Errorf("%s under a retired review grant is still asked for", kind)
@@ -419,9 +425,9 @@ func TestRouteGuardOutsideSDD(t *testing.T) {
 }
 
 // A PR on the verified route opens only once the branch's change carries
-// its independent verification: a verify-report.md that passes, or a
-// Judgment Day closed APPROVED. The refusal names the route and how to
-// verify; a standard route opens its PR as before.
+// its independent verification: a verify-report.md that passes; a Judgment
+// Day record is none (T172). The refusal names the route and how to verify;
+// a standard route opens its PR as before.
 func TestRouteGuardVerifyDueBeforeThePR(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
@@ -445,7 +451,7 @@ func TestRouteGuardVerifyDueBeforeThePR(t *testing.T) {
 	support.Write(t, jd.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "alter table a drop column b;\n"})
 	support.Write(t, jd.p, record)
 	support.Write(t, jd.p, map[string]string{"openspec/changes/c1/judgments/2026-11-03.md": "## CLOSE\n\n```json\n{\"verdict\":\"APPROVED\"}\n```\n"})
-	code(t, jd.call(t, "Bash", pr, true), 0, "a Judgment Day closed APPROVED")
+	code(t, jd.call(t, "Bash", pr, true), 2, "a Judgment Day record verifies nothing (T172)")
 
 	std := newRG(t, "")
 	support.Write(t, std.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"})
@@ -651,11 +657,10 @@ func TestRouteGuardSliceCommitOverTheAdvisorySize(t *testing.T) {
 }
 
 // On a risk-high route 4R is due with verify (S17, L9): the PR waits for a
-// passing review-4r.md (or a Judgment Day closed APPROVED) as well as the
-// verification, and a 4R reviewer runs without asking the owner, who
-// approved it in L9. A large change is not verified by its size (S25) and
-// needs neither, a standard route still asks before a reviewer, and a
-// Judgment Day judge is asked for always.
+// passing review-4r.md as well as the verification, and a 4R reviewer runs
+// without asking the owner, who approved it in L9. A large change is not
+// verified by its size (S25) and needs neither, and a standard route still
+// asks before a reviewer.
 func TestRouteGuardFourRByRisk(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
@@ -683,12 +688,6 @@ func TestRouteGuardFourRByRisk(t *testing.T) {
 			t.Errorf("no ask for a 4R reviewer on a risk-high route: %q", res.Stdout)
 		}
 	}
-	jd := r.call(t, "Agent", map[string]any{"subagent_type": "jd-judge-a", "prompt": "x"}, true)
-	code(t, jd, 0, "a judge on a risk-high route")
-	if d, why, ok := decision(t, jd.Stdout); !ok || d != "ask" || !strings.HasPrefix(why, "review") {
-		t.Errorf("a judge is asked for on any route: %q", jd.Stdout)
-	}
-	code(t, r.call(t, "Agent", map[string]any{"subagent_type": "jd-judge-a", "prompt": "x"}, false), 2, "a judge launched by a sub-agent")
 
 	size := newRG(t, "")
 	support.Write(t, size.p, map[string]string{"src/big.py": strings.Repeat("x = 1\n", 500), "tests/test_app.py": "def test_a(): pass\n"})
@@ -708,9 +707,9 @@ func TestRouteGuardFourRByRisk(t *testing.T) {
 }
 
 // review_required in openspec/config.yaml always wins over the route (S11,
-// L9): a Judgment Day it names for the change runs without asking and the
-// PR waits for it closed APPROVED, even on a standard route; an area applies
-// when the diff touches a path its glob matches, and not otherwise.
+// L9): a verify it names for the change holds the PR until its report
+// passes, even on a standard route; an area applies when the diff touches a
+// path its glob matches, and not otherwise.
 func TestRouteGuardReviewRequired(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
@@ -718,30 +717,20 @@ func TestRouteGuardReviewRequired(t *testing.T) {
 	record := map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/execution-record.json": redGreenRecord}
 	small := map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"}
 
-	r := newRG(t, "review_required:\n  - change: c1\n    review: jd\n")
+	r := newRG(t, "review_required:\n  - change: c1\n    review: verify\n")
 	support.Write(t, r.p, small)
 	support.Write(t, r.p, record)
-	res := r.call(t, "Agent", map[string]any{"subagent_type": "jd-judge-a", "prompt": "x"}, true)
-	code(t, res, 0, "a required Judgment Day")
-	if res.Stdout != "" {
-		t.Errorf("a Judgment Day review_required names runs without asking: %q", res.Stdout)
-	}
-	res = r.call(t, "Bash", pr, true)
-	code(t, res, 2, "a standard route whose change requires a Judgment Day")
-	matches(t, res.Stderr, `^route-guard: a Judgment Day is due before delivery \(review_required: change c1\): `, "the refusal names the rule")
-	matches(t, res.Stderr, `close it APPROVED under openspec/changes/c1/judgments/`, "the refusal says how")
-	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n", "openspec/changes/c1/review-4r.md": "lenses: risk\nverdict: pass\n"})
-	code(t, r.call(t, "Bash", pr, true), 2, "verify and 4R are not a Judgment Day")
-	support.Write(t, r.p, map[string]string{"openspec/changes/c1/judgments/2026-11-03.md": "## CLOSE\n\n```json\n{\"verdict\":\"APPROVED\"}\n```\n"})
-	code(t, r.call(t, "Bash", pr, true), 0, "the Judgment Day closed APPROVED")
+	res := r.call(t, "Bash", pr, true)
+	code(t, res, 2, "a standard route whose change requires verify")
+	matches(t, res.Stderr, `^route-guard: verify is due before delivery \(review_required: change c1\): `, "the refusal names the rule")
+	matches(t, res.Stderr, "record its verify-report.md \\(`verdict: pass`\\) under openspec/changes/c1/ before the PR \\(contracts/ldd.md", "the refusal says how")
+	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
+	code(t, r.call(t, "Bash", pr, true), 0, "the required verify on record")
 
-	other := newRG(t, "review_required:\n  - change: c2\n    review: jd\n")
+	other := newRG(t, "review_required:\n  - change: c2\n    review: verify\n")
 	support.Write(t, other.p, small)
 	support.Write(t, other.p, record)
 	code(t, other.call(t, "Bash", pr, true), 0, "a rule for another change")
-	if d, _, ok := decision(t, other.call(t, "Agent", map[string]any{"subagent_type": "jd-judge-a", "prompt": "x"}, true).Stdout); !ok || d != "ask" {
-		t.Errorf("a judge for a change review_required does not name is asked for")
-	}
 
 	area := newRG(t, "review_required:\n  - area: \"src/**\"\n    review: 4r\n")
 	support.Write(t, area.p, small)
@@ -770,42 +759,10 @@ func TestRouteGuardReviewRequired(t *testing.T) {
 	matches(t, res.Stderr, `^route-guard: verify is due before delivery \(review_required: area src/\*\*\)`, "the refusal names the area")
 }
 
-// jd-fix-agent serves Judgment Day only (L19): when 4R is due, by risk or
-// by review_required naming 4r, it is asked for like the judges; the 4R
-// correction is a worker's.
-func TestRouteGuardFixAgentWhenFourRDue(t *testing.T) {
-	t.Parallel()
-	fix := map[string]any{"subagent_type": "jd-fix-agent", "prompt": "Fix it.\n\n## Allowed edit surfaces\n\n- src/app.py\n"}
-	r := newRG(t, "")
-	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
-	res := r.call(t, "Agent", fix, true)
-	code(t, res, 0, "the fix agent on a risk-high route")
-	if d, why, ok := decision(t, res.Stdout); !ok || d != "ask" || !strings.HasPrefix(why, "review") {
-		t.Errorf("the fix agent is asked for when 4R is due by risk: %q", res.Stdout)
-	}
-	code(t, r.call(t, "Agent", fix, false), 2, "the fix agent launched by a sub-agent when 4R is due")
-	judge := r.call(t, "Agent", map[string]any{"subagent_type": "jd-judge-a", "prompt": "x"}, true)
-	if d, why, ok := decision(t, judge.Stdout); !ok || d != "ask" || !strings.HasPrefix(why, "review") {
-		t.Errorf("a judge on a risk-high route is asked for: %q", judge.Stdout)
-	}
-
-	area := newRG(t, "review_required:\n  - area: \"src/**\"\n    review: 4r\n")
-	support.Write(t, area.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"})
-	if d, why, ok := decision(t, area.call(t, "Agent", fix, true).Stdout); !ok || d != "ask" || !strings.HasPrefix(why, "review") {
-		t.Errorf("the fix agent is asked for when review_required names 4r")
-	}
-
-	std := newRG(t, "")
-	support.Write(t, std.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"})
-	if d, _, ok := decision(t, std.call(t, "Agent", fix, true).Stdout); !ok || d != "ask" {
-		t.Errorf("the fix agent is asked for when no 4R is due")
-	}
-}
-
 // review_required is read in the YAML forms a person writes: a list at
 // column 0, trailing comments, a flow mapping, and review names in any case
-// (L17). Each holds the PR of a standard-route change until its Judgment
-// Day closes APPROVED.
+// (L17). Each holds the PR of a standard-route change until its verify
+// report passes.
 func TestRouteGuardReviewRequiredYAMLForms(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
@@ -813,24 +770,25 @@ func TestRouteGuardReviewRequiredYAMLForms(t *testing.T) {
 	record := map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/execution-record.json": redGreenRecord}
 	small := map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"}
 	for _, config := range []string{
-		"review_required:\n- change: c1\n  review: jd\n",
-		"review_required:\n  - change: c1 # billing\n    review: jd  # owner\n",
-		"review_required:\n  - {change: c1, review: jd}\n",
-		"review_required:\n  - change: c1\n    review: JD\n",
+		"review_required:\n- change: c1\n  review: verify\n",
+		"review_required:\n  - change: c1 # billing\n    review: verify  # owner\n",
+		"review_required:\n  - {change: c1, review: verify}\n",
+		"review_required:\n  - change: c1\n    review: VERIFY\n",
 	} {
 		r := newRG(t, config)
 		support.Write(t, r.p, small)
 		support.Write(t, r.p, record)
 		res := r.call(t, "Bash", pr, true)
 		code(t, res, 2, "review_required "+strings.ReplaceAll(config, "\n", `\n`))
-		matches(t, res.Stderr, `^route-guard: a Judgment Day is due before delivery \(review_required: change c1\): `, "the refusal names the rule")
-		support.Write(t, r.p, map[string]string{"openspec/changes/c1/judgments/2026-11-03.md": "## CLOSE\n\n```json\n{\"verdict\":\"APPROVED\"}\n```\n"})
-		code(t, r.call(t, "Bash", pr, true), 0, "the Judgment Day closed APPROVED, "+strings.ReplaceAll(config, "\n", `\n`))
+		matches(t, res.Stderr, `^route-guard: verify is due before delivery \(review_required: change c1\): `, "the refusal names the rule")
+		support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
+		code(t, r.call(t, "Bash", pr, true), 0, "the verify report passes, "+strings.ReplaceAll(config, "\n", `\n`))
 	}
 }
 
 // An entry of review_required jhon cannot read is never ignored: the PR is
-// refused naming its line and why (L17).
+// refused naming its line and why (L17); `jd` is no review since Judgment
+// Day was removed (T172).
 func TestRouteGuardReviewRequiredUnreadable(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
@@ -840,8 +798,9 @@ func TestRouteGuardReviewRequiredUnreadable(t *testing.T) {
 	for config, line := range map[string]string{
 		"review_required:\n  - change: c1\n    review: 5r\n":            `line 3: review: 5r`,
 		"review_required:\n  - change: c1\n    this is not yaml\n":      `line 3: this is not yaml`,
-		"review_required:\n  - review: jd\n":                            `line 2: - review: jd`,
-		"review_required:\n  - change: c2\n    review: jd\n  garbage\n": `line 4: garbage`,
+		"review_required:\n  - change: c1\n    review: jd\n":            `line 3: review: jd`,
+		"review_required:\n  - review: 4r\n":                            `line 2: - review: 4r`,
+		"review_required:\n  - change: c2\n    review: 4r\n  garbage\n": `line 4: garbage`,
 	} {
 		r := newRG(t, config)
 		support.Write(t, r.p, small)
@@ -862,21 +821,6 @@ func TestRouteGuardReviewRequiredRootedArea(t *testing.T) {
 	res := r.call(t, "Bash", cmd("gh pr create --title x --body y"), true)
 	code(t, res, 2, "a rooted area the diff touches")
 	matches(t, res.Stderr, `^route-guard: 4R is due before delivery \(review_required: area /src/\*\*\)`, "the refusal names the area")
-}
-
-// jd-fix-agent serves Judgment Day only: when review_required names jd it
-// runs without an ask, like the judges (L19, L22).
-func TestRouteGuardFixAgentWhenJDRequired(t *testing.T) {
-	t.Parallel()
-	r := newRG(t, "review_required:\n  - change: c1\n    review: jd\n")
-	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n", "openspec/changes/c1/tasks.md": "## Slice 1: a\n- [ ] 1.1 a\n"})
-	fix := map[string]any{"subagent_type": "jd-fix-agent", "prompt": "Fix it.\n\n## Allowed edit surfaces\n\n- src/app.py\n"}
-	if res := r.call(t, "Agent", fix, true); res.Code != 0 || res.Stdout != "" {
-		t.Errorf("the fix agent runs without an ask when review_required names jd: %d %q", res.Code, res.Stdout)
-	}
-	if res := r.call(t, "Agent", map[string]any{"subagent_type": "jd-judge-a", "prompt": "x"}, true); res.Code != 0 || res.Stdout != "" {
-		t.Errorf("a judge review_required names runs without an ask: %d %q", res.Code, res.Stdout)
-	}
 }
 
 // verify confirms a 4R (S18, L19): when 4R is due it runs on any route,

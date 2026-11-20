@@ -25,10 +25,10 @@ agents:
     vars:
       tier: not-this
       quoted: "a, b"
-  - name: jd-judge-b
+  - name: review-b
     note: x
     tier: strong
-    template: jd-judge
+    template: review-lens
   - name: untiered
 runtimes: [claude-code, other, pi] # three
 `
@@ -48,7 +48,7 @@ runtimes: [claude-code, other, pi] # three
 	if !reflect.DeepEqual(m.InspectAllow, []string{"git diff", "git show"}) {
 		t.Errorf("inspect_allow = %v", m.InspectAllow)
 	}
-	if !reflect.DeepEqual(m.AgentNames(), []string{"worker", "jd-judge-b", "untiered"}) {
+	if !reflect.DeepEqual(m.AgentNames(), []string{"worker", "review-b", "untiered"}) {
 		t.Fatalf("agents = %v", m.AgentNames())
 	}
 	w := m.Agents[0]

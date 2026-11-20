@@ -47,9 +47,7 @@ import (
 //   - The verify agent may always be launched, on any route. 4R reviewers run
 //     without asking when 4R is due (risk at the verified tier, or
 //     review_required naming 4r), which the owner approved; its correction
-//     is a worker's. Judgment Day agents (jd-*, jd-fix-agent with them) run
-//     without asking when review_required names jd. Otherwise a reviewer
-//     is asked for at the top level, where the owner answers, and refused
+//     is a worker's. Otherwise a reviewer is asked for at the top level, where the owner answers, and refused
 //     from a sub-agent; no grant stands in for that answer, but the
 //     owner's yolo or super-yolo mode passes it with a note (L154). A review_required entry jhon cannot read refuses the PR
 //     until it is fixed. On the verified route (risk at the verified tier;
@@ -157,12 +155,8 @@ func RouteGuard(args []string, io IO) int {
 				return ask("review", "the "+lens+" lens is not pertinent to this change: its diff calls for ("+strings.Join(pertinent, ", ")+") (contracts/review-4r.md, \"Lenses\")")
 			}
 			return 0
-		case strings.HasPrefix(kind, "jd-") && owes(reviewsOf(), ldd.ReviewJD):
-			// The owner approved 4R by risk (L9) and configured review_required;
-			// jd-fix-agent serves Judgment Day only (L19).
-			return 0
-		case strings.HasPrefix(kind, "review-") || strings.HasPrefix(kind, "jd-"):
-			return ask("review", "a "+kind+" reviewer runs only when the owner asks for a 4R review or a Judgment Day")
+		case strings.HasPrefix(kind, "review-"):
+			return ask("review", "a "+kind+" reviewer runs only when the owner asks for a 4R review")
 		}
 		return 0
 	case "Bash":
@@ -340,7 +334,7 @@ func memberRefusal(member, primary, command string, routeOf func() ldd.Route) (w
 	case r.Level == ldd.RouteStandard && !execution.LightVerified(primary, change):
 		return "", lightVerifyNote(change)
 	case r.Level == ldd.RouteVerified:
-		if v, _ := ldd.IndependentVerification(primary, change, nil); v == nil {
+		if ldd.IndependentVerification(primary, change) == nil {
 			return lead + "has no independent verification on record: the route is verified (" + strings.Join(r.Reasons, "; ") + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) for " + change + " in " + primary + " before the PR (contracts/ldd.md, \"Delivery\")." + route, ""
 		}
 	}
@@ -530,7 +524,7 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		}
 	}
 	if why, due := verifyDue(top, routeOf()); due {
-		return "the route is verified (" + why + "): verify is due before delivery: launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/<change>/ before the PR; a Judgment Day closed APPROVED counts too (contracts/ldd.md, \"Delivery\").", ""
+		return "the route is verified (" + why + "): verify is due before delivery: launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/<change>/ before the PR (contracts/ldd.md, \"Delivery\").", ""
 	}
 	change := "<change>"
 	if active, _ := ldd.BranchChanges(top); len(active) == 1 {
@@ -550,11 +544,9 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		case ldd.ReviewUnreadable:
 			return v.Line(), ""
 		case ldd.ReviewVerify:
-			return "verify is due before delivery (" + why + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/" + change + "/ before the PR; a Judgment Day closed APPROVED counts too (contracts/ldd.md, \"Delivery\").", ""
+			return "verify is due before delivery (" + why + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/" + change + "/ before the PR (contracts/ldd.md, \"Delivery\").", ""
 		case ldd.ReviewFourR:
-			return "4R is due before delivery (" + why + "): run the pertinent lenses (" + strings.Join(r.Lenses, ", ") + ") with the native review (`jhon_review` in pi, `jhon review run` in Claude Code; the lens agents when it cannot run), only those its diff calls for (contracts/review-4r.md, \"Lenses\"), and record openspec/changes/" + change + "/review-4r.md with the lenses it ran (`lenses: " + strings.Join(r.Lenses, ", ") + "`) and `verdict: pass` before the PR; a Judgment Day closed APPROVED counts too.", ""
-		case ldd.ReviewJD:
-			return "a Judgment Day is due before delivery (" + why + "): openspec/config.yaml requires it; run it (contracts/judgment.md) and close it APPROVED under openspec/changes/" + change + "/judgments/ before the PR.", ""
+			return "4R is due before delivery (" + why + "): run the pertinent lenses (" + strings.Join(r.Lenses, ", ") + ") with the native review (`jhon_review` in pi, `jhon review run` in Claude Code; the lens agents when it cannot run), only those its diff calls for (contracts/review-4r.md, \"Lenses\"), and record openspec/changes/" + change + "/review-4r.md with the lenses it ran (`lenses: " + strings.Join(r.Lenses, ", ") + "`) and `verdict: pass` before the PR.", ""
 		}
 	}
 	return "", note

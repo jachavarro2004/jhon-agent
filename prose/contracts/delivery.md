@@ -6,7 +6,7 @@ Act on `jhon risk`'s tier:
 |---|---|---|---|
 | passive | read the diff back | not asked | none |
 | medium | run the affected tests and show the result | asked only on a question trigger (`contracts/routing.md`) | only when asked |
-| high | an independent verification on record: the `verify` agent's passing `verify-report.md`, or a Judgment Day record closed `APPROVED`; `jhon deliver check` is not ready without one | told the tier's reasons when delivery is asked for | `verify` and an automatic 4R with only the pertinent lenses, recorded in `review-4r.md`; `review_required` always wins; Judgment Day only when the owner asks |
+| high | an independent verification on record: the `verify` agent's passing `verify-report.md`; `jhon deliver check` is not ready without one | told the tier's reasons when delivery is asked for | `verify` and an automatic 4R with only the pertinent lenses, recorded in `review-4r.md`; `review_required` always wins |
 
 A session no one can answer proceeds and reports the tier and its reasons
 instead of asking. **The record is always; the rigor is the change's, not
@@ -45,13 +45,9 @@ record: read them there. For a wide or long run, tell the owner the
 a guess from the files changed.
 
 A 4R's correction is one bounded `worker`, then `verify` confirms
-(`contracts/review-4r.md`). Ask the owner only before a 4R or a Judgment
-Day that is not due and the owner did not ask for; when the owner asked,
-run it: the guard's own confirmation is the single ask.
-Judgment Day (`contracts/judgment.md`) runs only when the owner asks, or
-`review_required` names it.
+(`contracts/review-4r.md`). Ask the owner only before a 4R that is not
+due and the owner did not ask for; when the owner asked, run it: the
+guard's own confirmation is the single ask.
 
-One review per code change: 4R reviews code; Judgment Day judges a design
-decision or a docket, and on code only when a severe 4R finding stays
-contested. A due review's record gates the PR; only blocking findings
+A due review's record gates the PR; only blocking findings
 warrant a fix: an advisory never starts a correction, in verify as in 4R.

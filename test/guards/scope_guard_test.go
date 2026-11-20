@@ -1,5 +1,4 @@
-// scope-guard and the surfaces reader: a bounded writer (worker,
-// jd-fix-agent) is kept to the files its launch prompt lists under
+// scope-guard and the surfaces reader: a bounded writer (worker) is kept to the files its launch prompt lists under
 // `## Allowed edit surfaces` (contracts/efficiency.md, "Writer scope").
 //
 // The guard is spawned as Claude Code runs it: the payload on stdin,

@@ -134,7 +134,7 @@ func TestFolderlessHighRiskDeliverNamesTheFolder(t *testing.T) {
 	equal(t, jhonGit(t, root, "executions", "run", smallChange, "--json").Code, 0)
 	d := jhonGit(t, root, "deliver", "check", smallChange, "--json")
 	equal(t, d.Code, 1, d.Out())
-	equal(t, anyMatch(object(t, d.Stdout)["reasons"], `^the change is high risk \(a/b\.go: .*\) and has no folder: risk high needs its tasks\.md, so write it under openspec/changes/feat-small-fix/ and record there a verify-report\.md stating verdict: pass \(the verify agent\), or a Judgment Day under openspec/changes/feat-small-fix/judgments/ closed APPROVED$`), true, d.Stdout)
+	equal(t, anyMatch(object(t, d.Stdout)["reasons"], `^the change is high risk \(a/b\.go: .*\) and has no folder: risk high needs its tasks\.md, so write it under openspec/changes/feat-small-fix/ and record there a verify-report\.md stating verdict: pass \(the verify agent\)$`), true, d.Stdout)
 }
 
 // T68 (L550): the folderless change's branch name is taken as its name, so

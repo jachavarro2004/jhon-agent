@@ -95,7 +95,7 @@ missing; never stop with the work undone.
   neither settles.
 - **Delivery.** Before delivering a change (a commit the owner
   will push, a merge, a release), before its delivery test run, and before
-  a 4R or a Judgment Day, run `jhon risk` in its tree and read
+  a 4R, run `jhon risk` in its tree and read
   `contracts/delivery.md`. A 4R is one call to the native review
   ({{runtime:native-review}}), the lens agents only when it cannot run.
 
