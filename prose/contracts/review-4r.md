@@ -14,9 +14,7 @@ work. Independence stays with `verify`.
 | risk at the verified tier (`high` by default) | automatic, with `verify`, only the pertinent lenses, without asking the owner |
 
 `review_required` in `openspec/config.yaml` always wins: a `4r` it names for
-the change, or for an area its diff touches, is due on any route. Judgment
-Day runs only when the owner asks, or `review_required` names `jd`; it is
-never automatic. `jhon status` reports 4R due (`route.reviews`) until its
+the change, or for an area its diff touches, is due on any route. `jhon status` reports 4R due (`route.reviews`) until its
 record exists, and the route guard opens the PR only once it does.
 
 ## The record
@@ -37,7 +35,6 @@ verdict: pass
 `lenses:` names at least one of `risk`, `resilience`, `reliability`,
 `readability`, and no other; `verdict: pass` once no severe finding remains,
 `verdict: fail` otherwise. A record without a lens, or with `fail`, is no 4R.
-A Judgment Day closed `APPROVED` counts as the 4R too.
 
 ## Native review
 

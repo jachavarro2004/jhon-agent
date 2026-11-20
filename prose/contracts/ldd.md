@@ -325,8 +325,7 @@ check), with no push after it; a red or pending check is no ready CI.
 
 A change `jhon risk` reads as `high` is delivered only after an independent
 verification: `verify-report.md` stating `verdict: pass` (the `verify`
-agent), or a Judgment Day record under the change's `judgments/` closed
-`APPROVED`. `jhon deliver check` is not ready without one; `jhon audit`
+agent). `jhon deliver check` is not ready without one; `jhon audit`
 reports a high-risk delivery made without one. The tier only rises: a ready
 check records it in `delivery.json`, and a later slice whose own diff reads
 lower is checked at the highest tier the change delivered.
@@ -334,32 +333,31 @@ lower is checked at the highest tier the change delivered.
 On a change whose risk reaches the verified tier, 4R is due too: the route
 guard opens its PR only once the change carries `review-4r.md` naming the
 lenses it ran (`lenses: risk, reliability`, at least one of `risk`,
-`resilience`, `reliability`, `readability`) and stating `verdict: pass`, or
-a Judgment Day closed `APPROVED` (`contracts/review-4r.md`). `jhon status`
+`resilience`, `reliability`, `readability`) and stating `verdict: pass`
+(`contracts/review-4r.md`). `jhon status`
 reports each review the change owes (`route.reviews`), due or done.
 
 `review_required` in `openspec/config.yaml` names the reviews a change or an
 area needs whatever its route: each entry has a `change` (its name) or an
 `area` (a path glob, `**` across directories, matching a path the change's
 diff touches or a directory holding it), and its `review`: `verify`, `4r`,
-`jd`, or a list of them.
+or a list of them.
 
 ```yaml
 review_required:
   - change: billing-rewrite
-    review: jd
+    review: verify
   - area: "src/payments/**"
     review: [verify, 4r]
 ```
 
 It always wins: `jhon status` reports the reviews that apply to the
 selected change and which are missing, the route guard refuses the PR until
-each is on record (a `jd` is a Judgment Day closed `APPROVED`), and a
+each is on record, and a
 reviewer it names runs without asking the owner, who configured it. The 4R
 correction is a `worker` with its `## Allowed edit surfaces`, and `verify`
 confirms it, so `verify` runs whenever 4R is due (`contracts/review-4r.md`,
-"Reduction"). `jd-fix-agent` serves Judgment Day only: it runs without
-asking when an entry names `jd`, and is asked for otherwise.
+"Reduction").
 
 An entry jhon cannot read is never ignored: it shows in `jhon status`
 (`route.reviews`, with its line and why) and holds the PR until fixed; the

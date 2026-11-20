@@ -123,9 +123,9 @@ func TestCheckDeliveryReady(t *testing.T) {
 	root := deliverRepo(t)
 	tree := deliverGit(t, root, "rev-parse", "HEAD^{tree}")
 	deliverTested(t, root, "pass", "")
-	// A verify report and a Judgment Day record written after the run are no difference.
+	// A verify report and another file of the change's folder written after the run are no difference.
 	write(t, filepath.Join(root, deliverDir, "verify-report.md"), "verdict: fail\n")
-	write(t, filepath.Join(root, deliverDir, "judgments", "x.md"), "draft\n")
+	write(t, filepath.Join(root, deliverDir, "notes", "x.md"), "draft\n")
 	deliverCommit(t, root)
 	c := deliverRun(t, root)
 	if !c.Ready || len(c.Reasons) != 0 || c.TestedTree == nil || *c.TestedTree != tree || c.VerifiedBy != nil || c.Risk.Tier == High {
@@ -197,7 +197,7 @@ func TestCheckDeliveryHighRisk(t *testing.T) {
 	deliverCommit(t, root)
 	deliverTested(t, root, "pass", "")
 	c := deliverRun(t, root)
-	if c.Ready || !deliverReason(c, `^the change is high risk \(a/a\.go: code changed and no test touched\) and has no independent verification: .* under openspec/changes/v/judgments/ closed APPROVED$`) {
+	if c.Ready || !deliverReason(c, `^the change is high risk \(a/a\.go: code changed and no test touched\) and has no independent verification: a verify-report\.md stating verdict: pass \(the verify agent\)$`) {
 		t.Errorf("unverified: %+v", c.Reasons)
 	}
 	write(t, filepath.Join(root, deliverDir, "verify-report.md"), "**Verdict**: PASS\n")

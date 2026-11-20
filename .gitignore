@@ -5,8 +5,6 @@ node_modules
 # Agent bodies that earlier renders generated from prose/agents/templates/. The
 # renderer no longer writes them (it expands each template in memory); these entries keep
 # leftover copies out of git. Edit the template, never the file.
-prose/agents/jd-judge-a.md
-prose/agents/jd-judge-b.md
 prose/agents/review-risk.md
 prose/agents/review-resilience.md
 prose/agents/review-readability.md

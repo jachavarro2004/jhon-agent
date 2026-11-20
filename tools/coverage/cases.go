@@ -65,7 +65,7 @@ var cases = []defectCase{
 
 	// agent-template — the manifest's vars and the template's placeholders agree
 	defect("agent-template", "agents.yaml", "agents/templates/review-lens.md", "## Scope", "## Scope for {{audience}}"),
-	defect("agent-template", "agents.yaml", "agents.yaml", "      judge: A", "      judge: A\n      colour: red"),
+	defect("agent-template", "agents.yaml", "agents.yaml", "      code: R1\n", "      code: R1\n      colour: red\n"),
 
 	// top-level-tools — session memory is the top-level agent's alone, judged on the
 	// projected tool sets, whichever capability grants a tool
@@ -87,17 +87,11 @@ var cases = []defectCase{
 	defect("jhon-command", "contracts", "contracts/ldd.md", "`jhon status <change> --json` reads it", "`jhon derive <change>` reads it"),
 	defect("jhon-command", "orchestr", "orchestrator.md", "lets `jhon deliver check` deliver", "lets `jhon ship` deliver"),
 	defect("jhon-command", "README", "README.md", "| `jhon compose` |", "| `jhon merge` |"),
-	defect("jhon-command", "skills", "skills/judgment-day/SKILL.md", "`jhon judgment append <record> <event-file>`", "`jhon judgement append <record> <event-file>`"),
 
 	// spec-delta — the delta contract is self-consistent and the spec template teaches every section
 	defect("spec-delta", "contracts", "contracts/spec-delta.md", "  REMOVED: [Reason]", "  REMOVED: [Rationale]"),
 	defect("spec-delta", "contracts", "contracts/spec-delta.md", "delta_heading_only: [REMOVED, RENAMED]", "delta_heading_only: [REMOVED, RETIRED]"),
 	defect("spec-delta", "skills", "skills/ldd/references/spec.md", "## RENAMED Requirements", "## RENAMED Reqs"),
-
-	// judgment-vocab — the contract's lists agree, and the skill's verdict line is one of them
-	defect("judgment-vocab", "skills", "skills/judgment-day/SKILL.md", "`JUDGMENT: CLOSED ✅`", "`JUDGMENT: RESOLVED ✅`"),
-	defect("judgment-vocab", "contracts", "contracts/judgment.md", "judgment_human_outcomes: [confirmed, dropped]", "judgment_human_outcomes: [confirmed, overruled]"),
-	defect("judgment-vocab", "contracts", "contracts/judgment.md", "  docket: 6", "  docket: 0"),
 
 	// claude-md-template — the CLAUDE.md block template places every ALWAYS_ON group
 	defect("claude-md-template", "templates", "templates/claude-md-block.md", "{{routing}}", "{{routes}}"),

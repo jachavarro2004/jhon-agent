@@ -87,7 +87,7 @@ func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 	}
 
 	// Out of pi's prompt: Claude Code's tool lines; behind a pointer on both
-	// runtimes: the remote list, the 4R and Judgment Day table, the CI-watch
+	// runtimes: the remote list, the 4R table, the CI-watch
 	// and estimate detail.
 	for _, gone := range []string{"(Read, Grep, Glob, Edit)", "- Ambient SSH agents", "| Tool | Pays when | Where |",
 		"`gh run watch <run-id> --exit-status`", "`--dry-run` estimate"} {
@@ -99,14 +99,13 @@ func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 		"contracts/asked-operations.md": e.atInstall(contractsRoot + "asked-operations.md"),
 		"contracts/delivery.md":         "read `contracts/delivery.md`",
 		"contracts/review-4r.md":        "(`contracts/review-4r.md`",
-		"contracts/judgment.md":         "Judgment Day (`contracts/judgment.md`)",
 		"contracts/ldd.md":              "`contracts/ldd.md`",
 	} {
 		if !exists(filepath.Join(e.prose, ref)) {
 			t.Errorf("%s does not resolve", ref)
 		}
 		holder := got
-		if ref == "contracts/review-4r.md" || ref == "contracts/judgment.md" {
+		if ref == "contracts/review-4r.md" {
 			holder = mustReadText(filepath.Join(e.prose, "contracts/delivery.md"))
 		}
 		if !strings.Contains(flatText(holder), pointer) {

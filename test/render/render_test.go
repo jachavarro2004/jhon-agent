@@ -975,7 +975,7 @@ func TestRenderAgentTools(t *testing.T) {
 	t.Run("a bounded writer carries scope-guard on its writes and Bash; no other agent does", func(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
-		for _, name := range []string{"worker", "jd-fix-agent"} {
+		for _, name := range []string{"worker"} {
 			var h []hookEntry
 			for _, x := range preToolUse(t, frontmatter(claudeAgent(t, home, name))) {
 				if guardName(x.command) == "scope-guard" {
@@ -1365,11 +1365,11 @@ func TestRenderRoster(t *testing.T) {
 	})
 
 	// The lean roster: three executors carry every delegated LDD phase, beside
-	// the reviewers, the judges, the fix actor, and the primary agent.
+	// the reviewers and the primary agent; Judgment Day's are removed (T172).
 	t.Run("the manifest holds the lean roster and none of the retired agents", func(t *testing.T) {
 		t.Parallel()
 		equal(t, sorted(allManifestAgents(t)), []string{
-			"explore", "jd-fix-agent", "jd-judge-a", "jd-judge-b", "jhon-orchestrator",
+			"explore", "jhon-orchestrator",
 			"review-readability", "review-refuter", "review-reliability", "review-resilience", "review-risk",
 			"review-validator", "verify", "worker",
 		})
@@ -1418,36 +1418,6 @@ func TestRenderRoster(t *testing.T) {
 			}
 			if slices.ContainsFunc(claudeTools(frontmatter(claudeAgent(t, home, name))), func(s string) bool { return strings.HasPrefix(s, "mcp__claude_ai_") }) {
 				t.Error(name)
-			}
-		}
-	})
-
-	// The judges cite changed-hunk proof, which needs `git diff`/`git show` on
-	// the frozen candidate; they get the guarded inspectors and nothing wider.
-	t.Run("the judges may inspect through the guarded Bash and still write nothing", func(t *testing.T) {
-		t.Parallel()
-		home := renderedHome(t)
-		for _, name := range []string{"jd-judge-a", "jd-judge-b"} {
-			for _, c := range []string{"read", "inspect", "memory", "codegraph"} {
-				if !contains(manifestCaps(t, name), c) {
-					t.Errorf("%s lacks %s", name, c)
-				}
-			}
-			fm := frontmatter(claudeAgent(t, home, name))
-			tools := lineTools(t, fm)
-			if !contains(tools, "Bash") || contains(tools, "Edit") || contains(tools, "Write") {
-				t.Errorf("%s: %v", name, tools)
-			}
-			// The inspect guard, the safety guard every agent with Bash
-			// carries, and the framework guard every agent carries (docket AV2).
-			matchers := []string{}
-			for _, h := range preToolUse(t, fm) {
-				matchers = append(matchers, h.matcher)
-			}
-			equal(t, matchers, []string{"Bash", "Bash", "Edit|MultiEdit|Write|Bash", "Read|Grep|Glob|Edit|MultiEdit|Write|NotebookEdit", "Edit|MultiEdit|Write|NotebookEdit|Bash|Agent"}, name)
-			// Gaining inspect must not grant what the judge lacked before.
-			if contains(tools, "WebFetch") {
-				t.Errorf("%s: %v", name, tools)
 			}
 		}
 	})
@@ -1617,7 +1587,7 @@ func TestRenderManifest(t *testing.T) {
 		}
 		// Docket AX1: no role defaults to frontier; frontier is a per-review opt-in.
 		// Every role defaults to Opus at medium effort (the owner's choice, 2026-10-28).
-		strong := []string{"explore", "worker", "verify", "jd-judge-a", "jd-judge-b", "jd-fix-agent",
+		strong := []string{"explore", "worker", "verify",
 			"review-risk", "review-resilience", "review-readability", "review-reliability", "review-refuter", "review-validator", "jhon-orchestrator"}
 		mid := []string{}
 		cheap := []string{}
@@ -1739,9 +1709,9 @@ func TestRenderManifest(t *testing.T) {
 
 	t.Run("a manifest var the template never uses fails validation", func(t *testing.T) {
 		t.Parallel()
-		r := validateEdited(t, "agents.yaml", rep("      judge: A\n", "      judge: A\n      colour: red\n"))
+		r := validateEdited(t, "agents.yaml", rep("      code: R1\n", "      code: R1\n      colour: red\n"))
 		wantCode(t, r, 1)
-		match(t, r.Out(), `agent-template\s+.*jd-judge-a: var 'colour' is not used by template jd-judge`)
+		match(t, r.Out(), `agent-template\s+.*review-risk: var 'colour' is not used by template review-lens`)
 	})
 
 	t.Run("a defect in a template is reported against every agent it generates", func(t *testing.T) {
@@ -1934,7 +1904,7 @@ func TestRenderGuards(t *testing.T) {
 				equal(t, len(gs), 0, name+" cannot write and must carry no VCS guard")
 			}
 		}
-		if writers < 5 || others < 5 {
+		if writers < 4 || others < 5 {
 			t.Errorf("writers %d, others %d", writers, others)
 		}
 	})
@@ -1970,7 +1940,7 @@ func TestRenderGuards(t *testing.T) {
 	t.Run("only the reviewers carry the read-only inspect guard", func(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
-		reviewers := []string{"review-risk", "review-resilience", "review-readability", "review-reliability", "review-refuter", "review-validator", "jd-judge-a", "jd-judge-b"}
+		reviewers := []string{"review-risk", "review-resilience", "review-readability", "review-reliability", "review-refuter", "review-validator"}
 		for _, name := range allManifestAgents(t) {
 			want := 0
 			if contains(reviewers, name) {
@@ -2324,7 +2294,7 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		delivery := flat(support.Read(t, treePath(repoRoot, "contracts/delivery.md")))
 		delegation := flat(support.Read(t, treePath(repoRoot, "contracts/delegation.md")))
 		match(t, delivery, "`verify` and an automatic 4R with only the pertinent lenses", "L9: risk high gets verify and a 4R by need")
-		match(t, delivery, "`review_required` always wins; Judgment Day only when the owner asks", "L9, S17: review_required wins, Judgment Day only on request")
+		match(t, delivery, "`review_required` always wins", "L9, S17: review_required wins")
 		match(t, delivery, `The record is always; the rigor is the change's, not\s+yours`, "LDD: the record goes with every change; the route sets only the rigor")
 		match(t, delegation, `the owner's request verbatim`, "handoffs carry the request")
 		match(t, delegation, `also fails on the base is reported as pre-existing`, "blockers are measured against the base")
@@ -2373,7 +2343,7 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		for _, name := range []string{"jhon-orchestrator"} {
 			match(t, claudeFull(t, home), `## Response Length Contract`, name)
 		}
-		for _, name := range []string{"verify", "review-risk", "jd-judge-a", "explore"} {
+		for _, name := range []string{"verify", "review-risk", "explore"} {
 			md := claudeAgent(t, home, name)
 			noMatch(t, md, `## Response Length Contract`, name+" carries the persona")
 			match(t, md, `\*\*A safety refusal is a stop\.\*\*`, name+" lacks the contracts")
@@ -2822,16 +2792,16 @@ func TestRenderProfiles(t *testing.T) {
 
 	t.Run("the active profile moves a rendered agent's model in every runtime; its own override beats the role's effort", func(t *testing.T) {
 		t.Parallel()
-		// jd-fix-agent declares its own effort, which the profile's override for it replaces.
+		// worker declares its own effort, which the profile's override for it replaces.
 		repo := support.CopyRepo(t)
-		editFile(t, filepath.Join(repo, "prose", "agents.yaml"), "  - name: jd-fix-agent\n    tier: strong\n", "  - name: jd-fix-agent\n    tier: strong\n    effort: low\n")
+		editFile(t, filepath.Join(repo, "prose", "agents.yaml"), "  - name: worker\n    tier: strong\n", "  - name: worker\n    tier: strong\n    effort: low\n")
 		home := t.TempDir()
 		if err := os.MkdirAll(filepath.Join(home, ".pi"), 0o777); err != nil {
 			t.Fatal(err)
 		}
-		write(t, filepath.Join(home, ".config", "jhon", "profiles.json"), `{"active":"x","profiles":{"x":{"tiers":{"pi":{"strong":"claude-bridge/claude-fable-5-1@high"}},"agents":{"jd-fix-agent":{"claude-code":"claude-opus-5-5@max"}}}}}`)
+		write(t, filepath.Join(home, ".config", "jhon", "profiles.json"), `{"active":"x","profiles":{"x":{"tiers":{"pi":{"strong":"claude-bridge/claude-fable-5-1@high"}},"agents":{"worker":{"claude-code":"claude-opus-5-5@max"}}}}}`)
 		wantCode(t, install(t, home, repo), 0)
-		match(t, frontmatter(claudeAgent(t, home, "jd-fix-agent")), `(?m)^model: claude-opus-5-5\neffort: max$`)
+		match(t, frontmatter(claudeAgent(t, home, "worker")), `(?m)^model: claude-opus-5-5\neffort: max$`)
 		match(t, support.Read(t, filepath.Join(home, ".pi", "jhon", "agents", "verify.md")), `(?m)^model: claude-bridge/claude-fable-5-1\nthinking: high$`)
 	})
 
@@ -2900,9 +2870,6 @@ func TestRenderSimplifiedFourR(t *testing.T) {
 	match(t, reduction, "one bounded correction by a `worker`", "the correction is a worker's")
 	match(t, reduction, "`## Allowed edit surfaces`", "the worker is held to its scope")
 	match(t, reduction, "`verify` confirms", "verify confirms the correction")
-	if strings.Contains(reduction, "jd-fix-agent") {
-		t.Error("the 4R reduction names jd-fix-agent, which serves Judgment Day only")
-	}
 }
 
 // The 4R is native first: one tool call, tool-less lens completions, a

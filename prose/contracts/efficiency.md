@@ -1,7 +1,7 @@
 # Efficiency
 
-How a writer keeps the change the size the task needs. It binds every
-writer: the worker and the Judgment Day fix actor.
+How a writer keeps the change the size the task needs. It binds the
+writer: the worker.
 
 ## Writer scope
 

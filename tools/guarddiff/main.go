@@ -578,7 +578,7 @@ func (t *tree) args(b *binary, gs ...judged) []string {
 func (t *tree) guardArgs(g string, b *binary) []string {
 	switch g {
 	case "route-guard":
-		return []string{"worker", "jd-fix-agent"}
+		return []string{"worker"}
 	case "vcs-guard":
 		return b.vcsDirs
 	case "framework-guard":

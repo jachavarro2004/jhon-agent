@@ -27,7 +27,6 @@ internal/cli -> internal/hook
 internal/cli -> internal/integrations
 internal/cli -> internal/isodate
 internal/cli -> internal/js
-internal/cli -> internal/judgment
 internal/cli -> internal/lazyre
 internal/cli -> internal/ldd
 internal/cli -> internal/ldd/layout
@@ -103,15 +102,11 @@ internal/hook -> internal/session
 internal/hook -> internal/settings
 internal/hook -> internal/sh
 internal/hook -> internal/workspace
-internal/judgment -> internal/contract
-internal/judgment -> internal/js
-internal/judgment -> internal/lazyre
 internal/ldd -> internal/contract
 internal/ldd -> internal/discover
 internal/ldd -> internal/execution
 internal/ldd -> internal/isodate
 internal/ldd -> internal/js
-internal/ldd -> internal/judgment
 internal/ldd -> internal/lazyre
 internal/ldd -> internal/ldd/layout
 internal/ldd -> internal/project

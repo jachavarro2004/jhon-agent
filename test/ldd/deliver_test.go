@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -179,34 +178,13 @@ func TestDeliverHighRiskNeedsVerification(t *testing.T) {
 	equal(t, v.Code, 0, v.Out())
 	equal(t, v.json["verified_by"], "verify-report.md (verdict: pass)")
 
-	// A Judgment Day record closed APPROVED stands in for the report.
+	// A Judgment Day record verifies nothing: Judgment Day was removed (T172).
 	if err := os.Remove(filepath.Join(root, deliverDir, "verify-report.md")); err != nil {
 		t.Fatal(err)
 	}
-	fix := support.Fixture("judgment", "defect-close")
-	if err := os.Mkdir(filepath.Join(root, deliverDir, "judgments"), 0o777); err != nil {
-		t.Fatal(err)
-	}
-	rec := filepath.Join(root, deliverDir, "judgments", "2026-10-24-limit.md")
-	entries, err := os.ReadDir(fix)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var names []string
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".json") {
-			names = append(names, e.Name())
-		}
-	}
-	slices.Sort(names)
-	for _, f := range names {
-		a := jhonGit(t, root, "judgment", "append", rec, filepath.Join(fix, f))
-		equal(t, a.Code, 0, a.Stderr)
-	}
+	support.Write(t, root, map[string]string{deliverDir + "/judgments/2026-10-24-limit.md": "## CLOSE\n\n```json\n{\"verdict\":\"APPROVED\"}\n```\n"})
 	commit(t, root, "judgment")
-	j := check(t, root)
-	equal(t, j.Code, 0, j.Out())
-	equal(t, j.json["verified_by"], "judgments/2026-10-24-limit.md (APPROVED)")
+	equal(t, check(t, root).Code, 1, "a Judgment Day record is no verification")
 }
 
 func TestDeliverBelowHighRisk(t *testing.T) {

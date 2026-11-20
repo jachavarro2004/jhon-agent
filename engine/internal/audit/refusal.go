@@ -36,7 +36,7 @@ var (
 )
 
 // ReviewAgents are the agents whose delegation is a review: the inspect guard binds these.
-var ReviewAgents = []string{"review-risk", "review-resilience", "review-readability", "review-reliability", "jd-judge-a", "jd-judge-b", "review-refuter", "review-validator"}
+var ReviewAgents = []string{"review-risk", "review-resilience", "review-readability", "review-reliability", "review-refuter", "review-validator"}
 
 // SafetyGuards are the guards of the safety layer whose refusals refusal-bypass reads.
 var SafetyGuards = []string{"safety-guard", "vcs-guard", "framework-guard", "secrets-guard", "inspect-guard"}

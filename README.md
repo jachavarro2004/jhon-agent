@@ -109,7 +109,7 @@ medium, high) from the paths a change touches, and the route follows it:
 | Route | When | Verification | 4R |
 |---|---|---|---|
 | `standard` | risk under the verified tier, whatever its size | the affected tests of each slice; a light verify is an advisory | when you ask, or `review_required` names it |
-| `verified` | risk at the verified tier (`high`), or `review_required` names `verify` | an independent verification before delivery (`verify-report.md` or Judgment Day) | automatic, with only the pertinent lenses |
+| `verified` | risk at the verified tier (`high`), or `review_required` names `verify` | an independent verification before delivery (`verify-report.md`) | automatic, with only the pertinent lenses |
 
 **What the slice commit is checked for**, under `delivery: change`:
 
@@ -136,7 +136,7 @@ counts what each one costs).
 
 | Guard | Judges | Covers |
 |---|---|---|
-| `inspect-guard` | Bash | a reviewer changing what it reviews: 4R and Judgment Day reviewers stay read-only |
+| `inspect-guard` | Bash | a reviewer changing what it reviews: 4R reviewers stay read-only |
 | `safety-guard` | Bash | a destructive or irreversible command (refused), a write or delete of a credentials file (refused), an outward-facing one without your consent (asked), a sub-agent's unbounded wait; a read, a write outside the project or one it cannot resolve is not limited (the sandbox bounds it) |
 | `vcs-guard` | Edit, Write | a write into `.git/` or the grants, an agent writing Claude Code's settings, a write outside the project (asked at the top level); explore's write beyond its record runs with a note |
 | `framework-guard` | Edit, Write, Bash | an agent editing Jhon or its installed release while it runs on it (Edit, Write), or running Jhon's own code by hand (Bash); a Bash write or git there is the sandbox's, where they are read-only |
@@ -220,7 +220,6 @@ most about 20 lines per request).
 | `worker` | builds a slice, or one layer of it | only the edit surfaces its handoff names |
 | `verify` | checks a slice or a change independently, from tests that actually ran; fixes nothing | only verify-report.md |
 | 4R lenses | review a frozen diff through risk, resilience, reliability and readability; a refuter and a validator then challenge the findings | nothing: the verdict goes to `review-4r.md` |
-| Judgment Day | two judges, each blind to the other, then a fix agent for the confirmed findings; only when you ask or `review_required` names it | the judges nothing; the fix agent only the confirmed fixes |
 
 In pi the 4R runs natively in one tool call (`jhon review start`, then
 every pertinent lens at once, then the refuter and validator, then
@@ -302,7 +301,7 @@ own terminal in pi).
 | Mode (`jhon mode`) | Passes without asking |
 |---|---|
 | `normal` | nothing beyond your live grants: the guards as they are |
-| `yolo` | every grant class but `destroy`, and a 4R or Judgment Day reviewer you did not ask for |
+| `yolo` | every grant class but `destroy`, and a 4R reviewer you did not ask for |
 | `super-yolo` | that, plus `destroy` and a command the guard cannot read |
 
 | Grant class (`jhon grant <class> --for 30m`) | Covers |
@@ -403,7 +402,6 @@ own help.
 | `jhon context` | one delegation's launch context as JSON |
 | `jhon compose` | apply a delta spec to a main spec, atomically |
 | `jhon archive` | move a change into the archive and verify it |
-| `jhon judgment` | append to or read a Judgment Day record |
 | `jhon audit` | audit one session, or every recent one with `--all` |
 | `jhon dashboard` | the read-only dashboard |
 | `jhon mode`, `jhon grant` | your permission mode and timed grants |

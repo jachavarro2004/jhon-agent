@@ -26,7 +26,7 @@ func returnShapeEvent(kv ...any) map[string]any {
 
 func returnShape(t *testing.T, payload any) support.Result {
 	t.Helper()
-	return hook(t, nil, "return-shape", []string{"worker", "jd-fix-agent"}, payload)
+	return hook(t, nil, "return-shape", []string{"worker"}, payload)
 }
 
 func TestReturnShapeNotesProseAndLetsItStop(t *testing.T) {
@@ -142,7 +142,7 @@ func TestReturnShapePluginDeclaresBoundedWriters(t *testing.T) {
 	if !reflect.DeepEqual(args, bounded) {
 		t.Errorf("hook args %v; bounded agents %v", args, bounded)
 	}
-	if !reflect.DeepEqual(bounded, []string{"jd-fix-agent", "worker"}) {
-		t.Errorf("bounded = %v; want [jd-fix-agent worker]", bounded)
+	if !reflect.DeepEqual(bounded, []string{"worker"}) {
+		t.Errorf("bounded = %v; want [worker]", bounded)
 	}
 }

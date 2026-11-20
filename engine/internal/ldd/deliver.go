@@ -17,7 +17,6 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/contract"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/execution"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
-	"github.com/jachavarro2004/jhon-agent/engine/internal/judgment"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 )
 
@@ -37,16 +36,14 @@ import (
 // Identity is the tree, never the commit: a squash or a rebase that yields
 // the same tree is the same revision. The change's own record files
 // (verify-report.md, the execution record, delivery.json) are written after
-// the run and never count as a difference, committed or not; a committed
-// Judgment Day record under its judgments/ does not either, nor any other
-// committed file under the change's own folder (tasks.md, the proposal, the
+// the run and never count as a difference, committed or not; nor does any
+// other committed file under the change's own folder (tasks.md, the proposal, the
 // design, the spec deltas): the change's record, never project input, as
 // `--affected` reads it (T150). Another change's folder still counts.
 //
 // A high-risk change (risk.go) also carries an independent verification
-// (verification.go): a verify-report.md stating `verdict: pass`, or a
-// Judgment Day record closed APPROVED. A 4R review leaves no record, so it
-// cannot stand in for one.
+// (verification.go): a verify-report.md stating `verdict: pass`. A 4R
+// review leaves no record, so it cannot stand in for one.
 
 // actions are the deliver_action values, merge first, on first use.
 var actions = sync.OnceValue(func() []string { return contract.MustVocabulary("deliver_action", 3) })
@@ -139,8 +136,7 @@ const deliverOrder = "; order: a passing run (`jhon executions run`), commit the
 
 // CheckDelivery is whether the revision at HEAD in root is the change's last
 // tested revision, and why not. artifact is nil when none is named. The
-// error is a record, a risk config, or a judgments/ that exists and cannot be
-// read.
+// error is a record or a risk config that cannot be read.
 func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck, error) {
 	run, err := execution.ReadLastRun(root, change)
 	if err != nil {
@@ -295,11 +291,7 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 	}
 	var verified *string
 	if risk.Tier == High {
-		v, err := IndependentVerification(t.home, change, judgment.VerdictOf)
-		if err != nil {
-			return DeliverCheck{}, err
-		}
-		if v != nil {
+		if v := IndependentVerification(t.home, change); v != nil {
 			verified = orNull(v.By)
 		}
 		var high []string
@@ -316,13 +308,13 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 		folder := filepath.Join(execution.ChangesOf(t.home), change)
 		if st, err := os.Stat(filepath.Join(t.home, folder)); verified == nil && (err != nil || !st.IsDir()) {
 			// A change with no folder: risk high needs tasks.md, and so one.
-			reasons = append(reasons, fmt.Sprintf("the change is high risk (%s) and has no folder: risk high needs its tasks.md, so write it under %s/ and record there a verify-report.md stating verdict: pass (the verify agent), or a Judgment Day under %s/ closed APPROVED",
-				listed(high), folder, filepath.Join(folder, "judgments")))
+			reasons = append(reasons, fmt.Sprintf("the change is high risk (%s) and has no folder: risk high needs its tasks.md, so write it under %s/ and record there a verify-report.md stating verdict: pass (the verify agent)",
+				listed(high), folder))
 		} else if verified != nil {
 			notes = append(notes, "high risk, independently verified by "+*verified)
 		} else {
-			reasons = append(reasons, fmt.Sprintf("the change is high risk (%s) and has no independent verification: a verify-report.md stating verdict: pass (the verify agent), or a Judgment Day record under %s/ closed APPROVED",
-				listed(high), filepath.Join(execution.ChangesOf(t.home), change, "judgments")))
+			reasons = append(reasons, fmt.Sprintf("the change is high risk (%s) and has no independent verification: a verify-report.md stating verdict: pass (the verify agent)",
+				listed(high)))
 		}
 	}
 	// Each scenario of the change's delta specs is named by a test, as status counts them.

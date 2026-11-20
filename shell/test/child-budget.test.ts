@@ -200,7 +200,7 @@ const bash = (command: string, text = "x") => result("bash", text, { command });
 
 test("a worker child with CodeGraph hears the worker read budget once past 12 lookups, read-only bash included", async (t) => {
   clock(t);
-  for (const agent of ["worker", "jd-fix-agent", "gentle-ai-worker"]) {
+  for (const agent of ["worker", "gentle-ai-worker"]) {
     const { fire } = load({ ...WORKER, JHON_PI_AGENT: agent });
     const { ctx } = usage(1_000_000);
     const heard = async (event: any) => appended(await fire("tool_result", event, ctx)).filter((n) => n.startsWith("Read budget"));

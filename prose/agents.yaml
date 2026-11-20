@@ -12,8 +12,7 @@ version: 1
 # Model selection is the user's. No role defaults to frontier (docket AX1):
 # frontier is a per-review opt-in for a judgment. Every role sits at strong by
 # default (the owner's choice, 2026-10-28); cheap and mid stay for a profile.
-# Both Judgment Day judges, each a fresh agent blind to the other, sit at
-# strong too. A value is `model` or `model@effort` (docket AX2).
+# A value is `model` or `model@effort` (docket AX2).
 # The claude-code row pins exact model IDs, not family aliases: an alias can
 # inherit the parent session's exact model, and a trial must be reproducible.
 # Its effort renders as each agent's `effort:` frontmatter, from the values
@@ -187,25 +186,6 @@ agents:
     tier: strong
     caps: [read, write, bash, memory, codegraph, todo]
     description: "Independent verifier: checks an implementation against its specs, design, and tasks, or a change against its stated outcome, from tests that actually ran. Writes only verify-report.md; fixes nothing"
-  - name: jd-judge-a
-    tier: strong
-    caps: [read, inspect, memory, codegraph]
-    template: jd-judge
-    vars:
-      judge: A
-    description: "Adversarial code reviewer \u2014 blind judge A for judgment-day parallel review protocol. Triggered by the orchestrator when judgment-day is invoked. Reviews code for correctness, edge cases, security, performance, and project standards"
-  - name: jd-judge-b
-    tier: strong
-    caps: [read, inspect, memory, codegraph]
-    template: jd-judge
-    vars:
-      judge: B
-    description: "Adversarial code reviewer \u2014 blind judge B for judgment-day parallel review protocol. Triggered by the orchestrator when judgment-day is invoked. Reviews code for correctness, edge cases, security, performance, and project standards"
-  - name: jd-fix-agent
-    tier: strong
-    bounded: true
-    caps: [read, write, bash, memory, codegraph]
-    description: "Surgical fix agent for judgment-day protocol. Applies only confirmed fixes from the verdict synthesis. Triggered by the orchestrator after judges agree on issues"
   - name: review-risk
     tier: strong
     caps: [inspect, codegraph]

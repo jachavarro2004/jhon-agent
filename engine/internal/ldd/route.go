@@ -352,10 +352,10 @@ func ProjectBrief(dir string) string {
 		if OneLineRecord(r.Tier) {
 			record = "its record (its RED and GREEN runs in `jhon executions`; a small change (`jhon status` says so) " + SmallKeepsNo + "; else tasks.md only when the work cannot be resumed from the diff, below high risk a one-line `## Intent` and `Delivers:`; a spec delta only when a main spec changes or is added),"
 		}
-		lines = append(lines, "- Route, from the change's diff now: "+r.String()+". The method is LDD (contracts/ldd.md): every change that alters behaviour carries "+record+" and a PR without it is refused; the route sets only the rigor, which rises with the diff's risk (size alone is a note); a proposal or design is written when the change needs one or the owner asks, verify may always run, and a 4R or Judgment Day the route does not ask for is asked of the owner.")
+		lines = append(lines, "- Route, from the change's diff now: "+r.String()+". The method is LDD (contracts/ldd.md): every change that alters behaviour carries "+record+" and a PR without it is refused; the route sets only the rigor, which rises with the diff's risk (size alone is a note); a proposal or design is written when the change needs one or the owner asks, verify may always run, and a 4R the route does not ask for is asked of the owner.")
 	}
 	lines = append(lines,
-		"- Reviews by risk (contracts/review-4r.md): a change at the verified tier gets verify and an automatic 4R with only the lenses it touches, recorded in review-4r.md (`lenses:`, `verdict: pass`); `review_required` in this file always wins; Judgment Day runs only when the owner asks or `review_required` names it.",
+		"- Reviews by risk (contracts/review-4r.md): a change at the verified tier gets verify and an automatic 4R with only the lenses it touches, recorded in review-4r.md (`lenses:`, `verdict: pass`); `review_required` in this file always wins.",
 		"- This file and the framework's contracts outrank every memory: a memory that contradicts them is stale; correct it, never follow it.")
 	if v := contract.Scalar(config, "executions_inert"); v != "" {
 		lines = append(lines, "- executions_inert: "+v)

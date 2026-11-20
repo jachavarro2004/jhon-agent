@@ -65,20 +65,17 @@ func TestStatusFourRDueOnRiskHigh(t *testing.T) {
 // its diff's paths, and which are missing (S11).
 func TestStatusReviewRequired(t *testing.T) {
 	t.Parallel()
-	config := "schema: spec-driven\nreview_required:\n  - change: c1\n    review: jd\n  - area: \"src/billing/**\"\n    review: 4r\n  - area: \"src/pay/**\"\n    review: verify\n"
+	config := "schema: spec-driven\nreview_required:\n  - change: c1\n    review: verify\n  - area: \"src/billing/**\"\n    review: 4r\n  - area: \"src/pay/**\"\n    review: verify\n"
 	root := reviewRepo(t, config, map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [ ] 1.1 a\n",
 		"src/billing/charge.py": "X = 2\n", "tests/test_login.py": "def test_a(): pass\n"})
 	r := reviews(t, root)
-	equal(t, r["jd"], map[string]any{"review": "jd", "by": []any{"review_required: change c1"}, "done": false}, "jd by name")
+	equal(t, r["verify"], map[string]any{"review": "verify", "by": []any{"review_required: change c1"}, "done": false}, "verify by name; the src/pay/** area the diff does not touch applies nothing")
 	equal(t, r["4r"], map[string]any{"review": "4r", "by": []any{"review_required: area src/billing/**"}, "done": false}, "4R by area")
-	if _, ok := r["verify"]; ok {
-		t.Errorf("an area the diff does not touch applies nothing: %v", r)
-	}
 	h := jhonGit(t, root, "status").Stdout
-	match(t, h, `(?m)^review      Judgment Day due \(review_required: change c1\): run it and close it APPROVED under judgments/$`)
+	match(t, h, "(?m)^review      verify due \\(review_required: change c1\\): launch the verify agent and record verify-report.md with `verdict: pass`$")
 	match(t, h, `(?m)^review      4R due \(review_required: area src/billing/\*\*\)`)
-	support.Write(t, root, map[string]string{"openspec/changes/c1/judgments/2026-11-03.md": "## CLOSE\n\n```json\n{\"verdict\":\"APPROVED\"}\n```\n"})
-	equal(t, reviews(t, root)["jd"]["done"], true, "a Judgment Day closed APPROVED")
+	support.Write(t, root, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
+	equal(t, reviews(t, root)["verify"]["done"], true, "a passing verify report")
 
 	other := reviewRepo(t, config, map[string]string{"openspec/changes/c2/tasks.md": "## Slice 1: a\n- [ ] 1.1 a\n",
 		"src/other.py": "X = 2\n", "tests/test_other.py": "def test_a(): pass\n"})
@@ -97,6 +94,6 @@ func TestStatusReviewRequiredUnreadable(t *testing.T) {
 	root := reviewRepo(t, "schema: spec-driven\nreview_required:\n  - change: c1\n    review: 5r\n", map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [ ] 1.1 a\n",
 		"src/other.py": "X = 2\n", "tests/test_other.py": "def test_a(): pass\n"})
 	equal(t, reviews(t, root)["review_required"], map[string]any{"review": "review_required", "by": []any{"line 4: review: 5r"}, "done": false,
-		"why": "`5r` is not a review: verify, 4r, or jd"}, "the unreadable entry")
-	match(t, jhonGit(t, root, "status").Stdout, "(?m)^review      review_required in openspec/config.yaml has an entry jhon cannot read \\(line 4: review: 5r\\): `5r` is not a review: verify, 4r, or jd; fix it before the PR$")
+		"why": "`5r` is not a review: verify or 4r"}, "the unreadable entry")
+	match(t, jhonGit(t, root, "status").Stdout, "(?m)^review      review_required in openspec/config.yaml has an entry jhon cannot read \\(line 4: review: 5r\\): `5r` is not a review: verify or 4r; fix it before the PR$")
 }

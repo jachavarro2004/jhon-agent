@@ -382,10 +382,6 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
   jhon archive <change-name> <YYYY-MM-DD>
                            move a change into openspec/changes/archive, with
                            git mv or a rename, and verify it (project root)
-  jhon judgment append <record> <event-file|->
-                           validate one judgment event and append it, atomically
-  jhon judgment status <record> [--json]
-                           derived state and next action of a judgment record
   jhon grant <class>… [--for <n>{s|m|h|d}] [--root <path>]
                            authorize one or more outward-facing classes (push,
                            gh-write, publish, remote, deploy, outside-write),

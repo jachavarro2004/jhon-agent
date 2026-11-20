@@ -2050,7 +2050,7 @@ test("a worker child's argv carries --skill for the skills its definition names 
   const dir = agentDir(), cwd = project();
   const skillsRoot = tempDir("jhon-pi-skills-");
   const skill = (name: string) => { mkdirSync(join(skillsRoot, name), { recursive: true }); const f = join(skillsRoot, name, "SKILL.md"); writeFileSync(f, `---\nname: ${name}\n---\n`); return f; };
-  const ldd = skill("ldd"), jd = skill("judgment-day"), extra = skill("archify");
+  const ldd = skill("ldd"), other = skill("release-notes"), extra = skill("archify");
   mkdirSync(join(dir, "agents"), { recursive: true });
   writeFileSync(join(dir, "agents", "worker.md"), "---\nname: worker\ndescription: \"Implement\"\nmodel: anthropic/claude-sonnet-4-5\ntools:\n  - read\n  - edit\nbounded: true\n---\nFor an LDD apply, follow `~/.local/share/jhon/current/prose/skills/ldd/references/apply.md`; a project skill lives in `.claude/skills/<name>/SKILL.md`.\n");
   const argvFile = join(dir, "argv.json");
@@ -2059,7 +2059,7 @@ test("a worker child's argv carries --skill for the skills its definition names 
   chmodSync(fakePi, 0o755);
   const env = { JHON_PI_BIN: fakePi };
   const { handlers, tools } = loadedTools(dir, { sendMessage: () => {}, events: { emit: () => {}, on: () => () => {} } }, env);
-  const options = { appendSystemPrompt: "", sections: {} as Record<string, string>, skills: [{ name: "ldd", description: "LDD.", filePath: ldd }, { name: "judgment-day", description: "JD.", filePath: jd }, { name: "archify", description: "Diagrams.", filePath: extra }] };
+  const options = { appendSystemPrompt: "", sections: {} as Record<string, string>, skills: [{ name: "ldd", description: "LDD.", filePath: ldd }, { name: "release-notes", description: "Notes.", filePath: other }, { name: "archify", description: "Diagrams.", filePath: extra }] };
   await handlers.get("before_agent_start")!({ systemPromptOptions: options }, { cwd });
   const saved = { ...process.env };
   Object.assign(process.env, { PI_CODING_AGENT_DIR: dir, ...env });

@@ -120,10 +120,10 @@ export class ChildReadBudget {
   }
 }
 
-/** The read budget's kind for a child agent: explore, a worker-type writer (worker, jd-fix-agent, *-worker), or none. */
+/** The read budget's kind for a child agent: explore, a worker-type writer (worker, *-worker), or none. */
 export function readBudgetKind(agent: string | undefined): "explore" | "worker" | undefined {
   if (agent === "explore") return "explore";
-  if (agent === "worker" || agent === "jd-fix-agent" || /-worker$/.test(agent ?? "")) return "worker";
+  if (agent === "worker" || /-worker$/.test(agent ?? "")) return "worker";
   return undefined;
 }
 

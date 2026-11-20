@@ -18,7 +18,7 @@ jhon-shell's tests in `shell/test/`, and the coverage matrix), or one area with
 | `render/` | The renderer: what `jhon sync` writes for Claude Code and pi, the validation rules, the runtime matrix, and the model profiles. |
 | `release/` | `jhon sync`, `publish`, `start`, `sessions`, and `doctor`, in scratch homes over a scratch source repository. |
 | `hooks/` | The repository's own git hooks: `tools/git-hooks/pre-push` runs its checks once per sha. |
-| `audit/` | `jhon audit` on recorded sessions, the dashboard, the MCP server, and `judgment`. |
+| `audit/` | `jhon audit` on recorded sessions, the dashboard, and the MCP server. |
 | `dashboard/` | `jhon dashboard --port` on a held port: an older Jhon dashboard replaced, one from this release left running, anything not proven Jhon's reported and untouched. |
 | `support/` | What the Go tests share: the binary (built once per run), the process runner, git fixtures, and a copy of the repository for tests that edit it. |
 | `testdata/` | The data the tests read (below). |
@@ -32,7 +32,6 @@ Inputs, not code. Each set is shaped like what the engine reads in real use.
 | `audit/` | Recorded sessions of Claude Code and pi (`pi-*`), with their sub-agents and `source.json` metadata; those marked `"real": true` are real sessions (personal paths and instructions redacted), the others built to shape. | `jhon audit` finds each violation it must and passes the clean sessions. `prose/contracts/vocabulary.yaml` names the real ones as each audit rule's evidence. |
 | `status/` | LDD projects in every state: proposals, specs, designs, tasks, and test records under `openspec/`. | `jhon status` and `jhon context` derive the phase and the next action. |
 | `compose/` | Main specs, delta specs, and the expected result, byte for byte. | `jhon compose` merges a delta exactly. |
-| `judgment/` | Judgment-day records, valid and deliberately broken, one event per file. | `jhon judgment` accepts or refuses each event. |
 | `spikes/` | Records of live runs against Claude Code and pi: what was called, what the runtime decided, and the control case. | The evidence `prose/agents.yaml` cites when it marks a runtime capability `verified`; `jhon validate` checks each record's shape. |
 | `claude-md/` | `CLAUDE.md` files with Jhon's managed block. | The install keeps the owner's text and replaces only its own block. |
 

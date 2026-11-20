@@ -45,7 +45,7 @@ scope, destructive actions or outward actions. Never weaken a failing test.
   the next edit.
 - Before a sub-agent:
   `~/.local/share/jhon/current/prose/contracts/delegation.md`.
-- A push, a merge, a PR, a 4R or a Judgment Day:
+- A push, a merge, a PR or a 4R:
   `~/.local/share/jhon/current/prose/contracts/delivery.md`.
 - Testing behaviour that already exists:
   `~/.local/share/jhon/current/prose/contracts/witness.md`.

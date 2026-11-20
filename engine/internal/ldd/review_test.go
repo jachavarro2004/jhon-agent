@@ -7,7 +7,7 @@ import (
 )
 
 // A 4R record is review-4r.md naming at least one lens, only the four, and
-// `verdict: pass`; a Judgment Day closed APPROVED counts as 4R too (L9, L15).
+// `verdict: pass` (L9, L15); a Judgment Day record is none (T172).
 func TestFourRRecord(t *testing.T) {
 	for src, want := range map[string]bool{
 		"# 4R\n\nlenses: risk\nverdict: pass\n":                   true,
@@ -37,17 +37,17 @@ func TestFourRRecord(t *testing.T) {
 	}
 	jd, _ := filepath.EvalSymlinks(t.TempDir())
 	write(t, filepath.Join(jd, "openspec/changes/c1/judgments/2026-11-03.md"), closed)
-	if got := FourRDone(jd, "c1"); got != "judgments/2026-11-03.md (APPROVED)" {
-		t.Errorf("a Judgment Day closed APPROVED: %q", got)
+	if got := FourRDone(jd, "c1"); got != "" {
+		t.Errorf("a Judgment Day record is no 4R: %q", got)
 	}
 }
 
 // review_required in openspec/config.yaml names a change or an area (a
 // path glob) and the reviews it requires.
 func TestRequiredReviews(t *testing.T) {
-	config := "schema: spec-driven\nreview_required:\n  - change: c1\n    review: jd\n  - area: \"src/auth/**\"\n    review: [verify, 4r]\n  - area: src/pay\n    review: 4r\n  - change: c2\n    review: nonsense\nother: x\n"
+	config := "schema: spec-driven\nreview_required:\n  - change: c1\n    review: verify\n  - area: \"src/auth/**\"\n    review: [verify, 4r]\n  - area: src/pay\n    review: 4r\n  - change: c2\n    review: nonsense\nother: x\n"
 	got := RequiredReviews(config)
-	want := []Required{{Change: "c1", Reviews: []string{"jd"}}, {Area: "src/auth/**", Reviews: []string{"verify", "4r"}}, {Area: "src/pay", Reviews: []string{"4r"}}}
+	want := []Required{{Change: "c1", Reviews: []string{"verify"}}, {Area: "src/auth/**", Reviews: []string{"verify", "4r"}}, {Area: "src/pay", Reviews: []string{"4r"}}}
 	if len(got) != len(want) {
 		t.Fatalf("RequiredReviews = %#v", got)
 	}
@@ -107,23 +107,23 @@ func TestReviewsOf(t *testing.T) {
 		t.Errorf("a standard route without review_required owes none: %#v", got)
 	}
 
-	write(t, filepath.Join(root, "openspec/config.yaml"), "review_required:\n  - change: c1\n    review: jd\n  - area: \"src/auth/**\"\n    review: 4r\n  - area: \"src/pay/**\"\n    review: verify\n")
+	write(t, filepath.Join(root, "openspec/config.yaml"), "review_required:\n  - change: c1\n    review: verify\n  - area: \"src/auth/**\"\n    review: 4r\n  - area: \"src/pay/**\"\n    review: verify\n")
 	got = ReviewsOf(root, []string{"c1"}, standard)
-	if !slices.Equal(kinds(got), []string{"4r", "jd"}) || !got[0].Done || got[1].Done ||
-		!slices.Equal(got[0].By, []string{"review_required: area src/auth/**"}) || !slices.Equal(got[1].By, []string{"review_required: change c1"}) {
+	if !slices.Equal(kinds(got), []string{"verify", "4r"}) || got[0].Done || !got[1].Done ||
+		!slices.Equal(got[0].By, []string{"review_required: change c1"}) || !slices.Equal(got[1].By, []string{"review_required: area src/auth/**"}) {
 		t.Fatalf("review_required on a standard route: %#v", got)
 	}
-	if line := got[1].Line(); line != "Judgment Day due (review_required: change c1): run it and close it APPROVED under judgments/" {
-		t.Errorf("the jd line: %q", line)
+	if line := got[0].Line(); line != "verify due (review_required: change c1): launch the verify agent and record verify-report.md with `verdict: pass`" {
+		t.Errorf("the verify line: %q", line)
 	}
 	if got := ReviewsOf(root, []string{"c2"}, Route{Level: RouteStandard, Tier: Medium, VerifiedTier: High, files: []string{"src/other.py"}}); len(got) != 0 {
 		t.Errorf("another change, outside every area: %#v", got)
 	}
 	write(t, filepath.Join(root, "openspec/changes/c1/judgments/2026-11-03.md"), closed)
-	if got := ReviewsOf(root, []string{"c1"}, standard); !got[1].Done {
-		t.Errorf("a Judgment Day closed APPROVED: %#v", got)
+	if got := ReviewsOf(root, []string{"c1"}, standard); got[0].Done {
+		t.Errorf("a Judgment Day record is no verification: %#v", got)
 	}
-	if got := ReviewsOf(root, []string{"archive/c1"}, standard); !slices.Equal(kinds(got), []string{"4r", "jd"}) {
+	if got := ReviewsOf(root, []string{"archive/c1"}, standard); !slices.Equal(kinds(got), []string{"verify", "4r"}) {
 		t.Errorf("an archived change goes by its name: %#v", got)
 	}
 }
@@ -132,15 +132,15 @@ func TestReviewsOf(t *testing.T) {
 // jhon cannot read is reported with its line and why, never dropped (L17).
 func TestReadRequired(t *testing.T) {
 	for config, want := range map[string][]Required{
-		"review_required:\n- change: c1\n  review: jd\n":                                                                 {{Change: "c1", Reviews: []string{"jd"}}},
-		"review_required:\n  - change: c1 # billing\n    review: jd  # owner\n":                                          {{Change: "c1", Reviews: []string{"jd"}}},
-		"review_required:\n  - {change: c1, review: jd}\n":                                                               {{Change: "c1", Reviews: []string{"jd"}}},
-		"review_required:\n  - change: c1\n    review: JD\n":                                                             {{Change: "c1", Reviews: []string{"jd"}}},
+		"review_required:\n- change: c1\n  review: 4r\n":                                                                 {{Change: "c1", Reviews: []string{"4r"}}},
+		"review_required:\n  - change: c1 # billing\n    review: 4r  # owner\n":                                          {{Change: "c1", Reviews: []string{"4r"}}},
+		"review_required:\n  - {change: c1, review: 4r}\n":                                                               {{Change: "c1", Reviews: []string{"4r"}}},
+		"review_required:\n  - change: c1\n    review: VERIFY\n":                                                         {{Change: "c1", Reviews: []string{"verify"}}},
 		"review_required: # owner\n    - change: 'c1'\n      review: [Verify, \"4R\"]\n":                                 {{Change: "c1", Reviews: []string{"verify", "4r"}}},
-		"review_required:\n  - area: \"src/#a/**\"\n    review:\n      - verify\n      - jd\n":                           {{Area: "src/#a/**", Reviews: []string{"verify", "jd"}}},
+		"review_required:\n  - area: \"src/#a/**\"\n    review:\n      - verify\n      - 4r\n":                           {{Area: "src/#a/**", Reviews: []string{"verify", "4r"}}},
 		"review_required:\n-\n  change: c1\n  review:\n  - 4r\n# done\nother: x\n":                                       {{Change: "c1", Reviews: []string{"4r"}}},
-		"review_required:\n  - {area: /src/**, review: [verify, 4r]}\n\n  # a comment\n  - change: c2\n    review: jd\n": {{Area: "/src/**", Reviews: []string{"verify", "4r"}}, {Change: "c2", Reviews: []string{"jd"}}},
-		"review_required: [{change: c1, review: jd}]\n":                                                                  {{Change: "c1", Reviews: []string{"jd"}}},
+		"review_required:\n  - {area: /src/**, review: [verify, 4r]}\n\n  # a comment\n  - change: c2\n    review: 4r\n": {{Area: "/src/**", Reviews: []string{"verify", "4r"}}, {Change: "c2", Reviews: []string{"4r"}}},
+		"review_required: [{change: c1, review: 4r}]\n":                                                                  {{Change: "c1", Reviews: []string{"4r"}}},
 		"review_required: []\nother: x\n":                                                                                {},
 		"schema: spec-driven\n":                                                                                          {},
 	} {
@@ -156,14 +156,15 @@ func TestReadRequired(t *testing.T) {
 		}
 	}
 	for config, want := range map[string]Unreadable{
-		"review_required:\n  - change: c1\n    review: 5r\n":            {Line: 3, Text: "review: 5r", Why: "`5r` is not a review: verify, 4r, or jd"},
+		"review_required:\n  - change: c1\n    review: 5r\n":            {Line: 3, Text: "review: 5r", Why: "`5r` is not a review: verify or 4r"},
+		"review_required:\n  - change: c1\n    review: jd\n":            {Line: 3, Text: "review: jd", Why: "`jd` is not a review: verify or 4r"},
 		"review_required:\n  - change: c1\n    this is not yaml\n":      {Line: 3, Text: "this is not yaml", Why: "it is not `change:`, `area:`, or `review:` of an entry"},
-		"review_required:\n  - review: jd\n":                            {Line: 2, Text: "- review: jd", Why: "the entry names neither `change` nor `area`"},
+		"review_required:\n  - review: 4r\n":                            {Line: 2, Text: "- review: 4r", Why: "the entry names neither `change` nor `area`"},
 		"review_required:\n  - change: c1\n":                            {Line: 2, Text: "- change: c1", Why: "the entry names no review"},
-		"review_required:\n  - change: c2\n    review: jd\n  garbage\n": {Line: 4, Text: "garbage", Why: "it is not an entry of the list (`- change: ...` or `- area: ...`)"},
-		"review_required:\n  - {change: c1, review: jd\n":               {Line: 2, Text: "- {change: c1, review: jd", Why: "the flow mapping does not close"},
+		"review_required:\n  - change: c2\n    review: 4r\n  garbage\n": {Line: 4, Text: "garbage", Why: "it is not an entry of the list (`- change: ...` or `- area: ...`)"},
+		"review_required:\n  - {change: c1, review: 4r\n":               {Line: 2, Text: "- {change: c1, review: 4r", Why: "the flow mapping does not close"},
 		"review_required: c1\n":                                         {Line: 1, Text: "review_required: c1", Why: "it is not a list of entries"},
-		"review_required:\n  - change: c1\n    reviewer: jd\n":          {Line: 3, Text: "reviewer: jd", Why: "it is not `change:`, `area:`, or `review:` of an entry"},
+		"review_required:\n  - change: c1\n    reviewer: 4r\n":          {Line: 3, Text: "reviewer: 4r", Why: "it is not `change:`, `area:`, or `review:` of an entry"},
 	} {
 		_, bad := ReadRequired(config)
 		if len(bad) != 1 || bad[0] != want {
@@ -184,7 +185,7 @@ func TestReviewsOfUnreadable(t *testing.T) {
 	if len(got) != 1 || got[0].Review != ReviewUnreadable || got[0].Done {
 		t.Fatalf("an unreadable entry: %#v", got)
 	}
-	if line := got[0].Line(); line != "review_required in openspec/config.yaml has an entry jhon cannot read (line 3: review: 5r): `5r` is not a review: verify, 4r, or jd; fix it before the PR" {
+	if line := got[0].Line(); line != "review_required in openspec/config.yaml has an entry jhon cannot read (line 3: review: 5r): `5r` is not a review: verify or 4r; fix it before the PR" {
 		t.Errorf("the line: %q", line)
 	}
 }
@@ -192,16 +193,16 @@ func TestReviewsOfUnreadable(t *testing.T) {
 // A flow mapping or list reads only between its own brackets: one missing
 // its opening bracket is no mapping or list (it fails closed).
 func TestFlowFormsNeedBothBrackets(t *testing.T) {
-	if _, ok := flowMapping("change: c1, review: jd}", 1, "x"); ok {
+	if _, ok := flowMapping("change: c1, review: 4r}", 1, "x"); ok {
 		t.Error("a mapping without its opening brace was read")
 	}
 	if _, ok := flowList("verify, 4r]", 1, "x"); ok {
 		t.Error("a list without its opening bracket was read")
 	}
-	if out, bad := flowEntries("{change: c1, review: jd}]", 1, "x"); out != nil || len(bad) != 1 {
+	if out, bad := flowEntries("{change: c1, review: 4r}]", 1, "x"); out != nil || len(bad) != 1 {
 		t.Errorf("entries without their opening bracket: %+v, %+v", out, bad)
 	}
-	if _, ok := flowMapping("{change: c1, review: jd}", 1, "x"); !ok {
+	if _, ok := flowMapping("{change: c1, review: 4r}", 1, "x"); !ok {
 		t.Error("a whole flow mapping is read")
 	}
 }

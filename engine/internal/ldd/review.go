@@ -18,29 +18,26 @@ import (
 // This file is the reviews a change owes before delivery (contracts/ldd.md,
 // "Delivery"), each with whether it is on record:
 //
-//   - verify, on the verified route: verify-report.md (`verdict: pass`) or a
-//     Judgment Day closed APPROVED (IndependentVerification);
+//   - verify, on the verified route: verify-report.md (`verdict: pass`)
+//     (IndependentVerification);
 //   - 4R, when the change's risk reaches the verified tier (not by size
 //     alone), with only the lenses the change touches: review-4r.md naming
-//     them on a `lenses:` line and stating `verdict: pass`, or a Judgment
-//     Day closed APPROVED (contracts/review-4r.md);
+//     them on a `lenses:` line and stating `verdict: pass`
+//     (contracts/review-4r.md);
 //   - what `review_required` in openspec/config.yaml names for the change,
-//     by its name or by an area (a path glob) its diff touches: verify, 4r,
-//     or jd (a Judgment Day closed APPROVED). It always wins over the route.
-//
-// A Judgment Day runs otherwise only when the owner asks.
+//     by its name or by an area (a path glob) its diff touches: verify or
+//     4r. It always wins over the route.
 
 // The reviews, in the order a change owes them.
 const (
 	ReviewVerify = "verify"
 	ReviewFourR  = "4r"
-	ReviewJD     = "jd"
 	// ReviewUnreadable is a review_required entry jhon cannot read: never
 	// done, it holds the PR until it is fixed.
 	ReviewUnreadable = "review_required"
 )
 
-var reviewKinds = []string{ReviewVerify, ReviewFourR, ReviewJD}
+var reviewKinds = []string{ReviewVerify, ReviewFourR}
 
 // Lenses are the 4R lenses a review-4r.md may name.
 var Lenses = []string{"risk", "resilience", "reliability", "readability"}
@@ -62,7 +59,7 @@ func (v Review) Line() string {
 	if v.Review == ReviewUnreadable {
 		return "review_required in openspec/config.yaml has an entry jhon cannot read (" + strings.Join(v.By, "; ") + "): " + v.Why + "; fix it before the PR"
 	}
-	name := map[string]string{ReviewVerify: "verify", ReviewFourR: "4R", ReviewJD: "Judgment Day"}[v.Review]
+	name := map[string]string{ReviewVerify: "verify", ReviewFourR: "4R"}[v.Review]
 	why := strings.Join(v.By, "; ")
 	if v.Done {
 		return name + " done (" + why + "): " + v.Record
@@ -70,7 +67,6 @@ func (v Review) Line() string {
 	return name + " due (" + why + "): " + map[string]string{
 		ReviewVerify: "launch the verify agent and record verify-report.md with `verdict: pass`",
 		ReviewFourR:  "pick the pertinent lenses (" + strings.Join(Lenses, ", ") + ") by what the change touches and record them in review-4r.md with `lenses:` and `verdict: pass`",
-		ReviewJD:     "run it and close it APPROVED under judgments/",
 	}[v.Review]
 }
 
@@ -83,7 +79,7 @@ var (
 
 // FourRDone is what holds the change's 4R, "" when nothing does: its
 // review-4r.md naming at least one lens, only the four, and stating
-// `verdict: pass` (ReportVerdict), or a Judgment Day closed APPROVED. A
+// `verdict: pass` (ReportVerdict). A
 // record with a `subject:` line (`jhon review record`) holds only while a
 // fresh freeze against its `base:` gives that subject: a candidate changed
 // since the review is a stale record. One without it is read as before.
@@ -99,9 +95,6 @@ func FourRDone(root, change string) string {
 				return "review-4r.md (lenses: " + strings.Join(named, ", ") + "; verdict: pass)"
 			}
 		}
-	}
-	if f := approvedJudgment(dir, nil); f != "" {
-		return "judgments/" + f + " (APPROVED)"
 	}
 	return ""
 }
@@ -147,8 +140,8 @@ func RequiredReviews(config string) []Required {
 
 // ReadRequired reads the `review_required` block of an openspec/config.yaml:
 // a list (at any consistent indentation, column 0 too) of mappings, block
-// or flow (`{change: c1, review: jd}`), each naming a `change` or an `area`
-// and its `review`: verify, 4r or jd in any case, as a scalar, a flow list
+// or flow (`{change: c1, review: 4r}`), each naming a `change` or an `area`
+// and its `review`: verify or 4r in any case, as a scalar, a flow list
 // (`[verify, 4r]`) or a block list. Values may be quoted and lines carry
 // `# comments`. A line it cannot read, an entry naming neither a change nor
 // an area, or no review or another one, is unreadable: it fails closed.
@@ -302,7 +295,7 @@ func requiredOf(fields map[string][]value, n int, text string) (Required, *Unrea
 	for _, v := range fields["review"] {
 		kind := strings.ToLower(v.s)
 		if !slices.Contains(reviewKinds, kind) {
-			return r, &Unreadable{v.n, v.text, "`" + v.s + "` is not a review: verify, 4r, or jd"}
+			return r, &Unreadable{v.n, v.text, "`" + v.s + "` is not a review: verify or 4r"}
 		}
 		if !slices.Contains(r.Reviews, kind) {
 			r.Reviews = append(r.Reviews, kind)
@@ -321,7 +314,7 @@ func flowEntries(v string, n int, text string) (out []Required, bad []Unreadable
 	for _, part := range splitFlow(inner) {
 		m, ok := flowMapping(part, n, text)
 		if !ok {
-			return nil, []Unreadable{{n, text, "an entry is not a flow mapping (`{change: c1, review: jd}`)"}}
+			return nil, []Unreadable{{n, text, "an entry is not a flow mapping (`{change: c1, review: 4r}`)"}}
 		}
 		r, u := requiredOf(m, n, text)
 		if u != nil {
@@ -472,7 +465,7 @@ func AreaMatches(area, path string) bool {
 // ReviewsOf is the reviews the route r and the project's review_required
 // ask of changes (directories under openspec/changes/ of the repository
 // whose top level is top, an archived one as archive/<name>), in the order
-// verify, 4r, jd; each is done when one of the changes has it on record.
+// verify, 4r; each is done when one of the changes has it on record.
 // Each review_required entry jhon cannot read comes first, as a
 // ReviewUnreadable that is never done: it may name any change.
 func ReviewsOf(top string, changes []string, r Route) []Review {
@@ -528,15 +521,11 @@ func ReviewsOf(top string, changes []string, r Route) []Review {
 func recordOf(top, change, kind string) string {
 	switch kind {
 	case ReviewVerify:
-		if v, _ := IndependentVerification(top, change, nil); v != nil {
+		if v := IndependentVerification(top, change); v != nil {
 			return v.By
 		}
 	case ReviewFourR:
 		return FourRDone(top, change)
-	case ReviewJD:
-		if f := approvedJudgment(layout.At(top, layout.For(top).ChangeDir(change)), nil); f != "" {
-			return "judgments/" + f + " (APPROVED)"
-		}
 	}
 	return ""
 }
