@@ -1,7 +1,7 @@
 /**
  * shell.appearance.ascii reaches every overlay (T15.11, L121): Settings, the
- * change detail, /jhon:grants, /jhon:profile, the palette, the ask view,
- * /jhon:agents, /jhon:changes and the rail sheet draw their frame, header,
+ * change detail, /jhon:grants, /jhon:profile, the ask view, /jhon:agents
+ * and /jhon:changes draw their frame, header,
  * footer and rows in plain ASCII, nothing outside 0x20-0x7e.
  *
  *   cd shell && node --experimental-strip-types --test test/ui-ascii-overlays.test.ts
@@ -10,14 +10,12 @@ import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AskView } from "../lib/ui/ask-view.ts";
-import { CommandPalette } from "../lib/ui/command-palette.ts";
 import { JhonPanel, type ProfilesData } from "../lib/ui/jhon-panel.ts";
 import { customizeRows as settingsRows } from "../lib/ui/customize/registry.ts";
 import { SettingsView } from "../lib/ui/settings-view.ts";
 import { renderShellAgentsSection, renderShellJobsSection } from "../lib/ui/shell-bar.ts";
 import { changesModel, CHANGE_STATUS } from "../lib/ui/shell-changes.ts";
 import { WorktreeChangesView } from "../lib/ui/shell-changes-view.ts";
-import { renderPanelSheet } from "../lib/ui/shell-panel.ts";
 import { renderTodoCard, type TodoState } from "../lib/ui/shell-todo.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { TasksView } from "../lib/background-tasks-view.ts";
@@ -83,17 +81,6 @@ for (const view of ["change", "grants", "profiles"] as const) {
 	});
 }
 
-test("the palette draws in ASCII, with its scroll marks", () => {
-	const groups = [{ title: "Session", items: Array.from({ length: 30 }, (_, i) => ({ command: `c${i}`, label: `Command ${i}`, shortcut: "alt+k" })) }];
-	const palette = new CommandPalette(groups, () => {}, plain, () => 20, true);
-	for (const width of [160, 100, 80, 60]) pureAscii(`palette ${width}`, palette.render(width));
-	for (let i = 0; i < 15; i++) palette.handleInput("\x1b[B");
-	for (const width of [160, 100, 80, 60]) pureAscii(`palette scrolled ${width}`, palette.render(width));
-	palette.handleInput("x");
-	palette.handleInput("q");
-	for (const width of [160, 100, 80, 60]) pureAscii(`palette with no match ${width}`, palette.render(width));
-});
-
 test("the ask view draws in ASCII", () => {
 	const ask = new AskView({ step: 1, total: 2, title: "Route", question: "Which route?", multi: false, theme: plain, done() {}, ascii: true,
 		items: [{ value: "A", label: "A", description: "the first" }, { value: "B", label: "B" }] });
@@ -130,19 +117,4 @@ test("/jhon:changes draws in ASCII", async () => {
 	for (let i = 0; i < 4; i++) await flush();
 	for (const width of [160, 100, 80, 50]) pureAscii(`changes on a long path ${width}`, view.render(width));
 	view.dispose();
-});
-
-test("the rail sheet draws in ASCII", (t) => {
-	useMemorySettings(t, { "shell.appearance.ascii": true });
-	const jobs = [
-		{ id: "bg-1", kind: "command" as const, label: "npm test", startedAt: NOW - 65_000 },
-		{ id: "ag-1", kind: "agent" as const, label: "explorer: map the rail", startedAt: NOW - 95_000, tokens: 48_200 },
-	];
-	const todos = { tasks: [{ id: 1, title: "Read the rail", status: "done" }, { id: 2, title: "Cards", status: "in_progress" }] } as TodoState;
-	const parts = new Map([
-		["todo", { render: (w: number) => renderTodoCard(todos, { ...plain, strikethrough: (t: string) => t }, w, { collapsed: false, staleTurns: 0, scrollable: true }) }],
-		["jobs", { render: (w: number) => renderShellJobsSection(jobs, plain, w, NOW) }],
-		["agents", { render: (w: number) => renderShellAgentsSection(jobs, plain, w, NOW) }],
-	]);
-	pureAscii("panel sheet", renderPanelSheet(parts, plain, 44, { rows: 30, scrollTop: 0, ascii: true }).lines);
 });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
+import * as prompt from "../lib/ui/shell-prompt.ts";
 import {
 	framePromptLines as frame,
 	resolvePromptLayout,
@@ -97,22 +98,18 @@ test("framePromptLines paints the rule with the editor border color, the petal w
 	assert.match(lines[1], /^<accent>\*›\*<\/accent> /);
 });
 
-// T15.12c slice 4: without the rail the editor rule carries the Gentle Shell's
-// [ Panel ] button at its right end, which opens the panel sheet.
-test("framePromptLines draws [ Panel ] at the rule's right end when asked, accent at rest and the hover role under the pointer, every line at width (T15.12c)", () => {
-	const plain = framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t, panelButton: true })).map(stripAnsi);
-	assert.match(plain[0]!, /^─ 力 waiting for input─+ \[ Panel \] ─$/);
+// T169 (L1438): the panel sheet is gone, and the rule's [ Panel ] button with it.
+test("framePromptLines draws the panel editor's rule with no [ Panel ], idle, working and with a hint, every line at width (T169)", () => {
+	const plain = framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t })).map(stripAnsi);
+	assert.match(plain[0]!, /^─ 力 waiting for input ─+$/);
 	for (const width of [10, 14, 20, 40, 60, 100]) {
-		for (const line of framePromptLines(editorLines(Math.max(10, width)), width, options({ fg: (_c, t) => t, panelButton: true }))) assert.equal(visibleWidth(line), width, `${width}: ${stripAnsi(line)}`);
+		for (const line of framePromptLines(editorLines(Math.max(10, width)), width, options({ fg: (_c, t) => t }))) assert.equal(visibleWidth(line), width, `${width}: ${stripAnsi(line)}`);
 	}
-	assert.match(framePromptLines(editorLines(60), 60, options({ panelButton: true }))[0]!, /<accent>\[ Panel \]<\/accent>/);
-	assert.match(framePromptLines(editorLines(60), 60, options({ panelButton: true, panelHovered: true }))[0]!, /<warning>\[ Panel \]<\/warning>/);
-	assert.doesNotMatch(framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t })).map(stripAnsi)[0]!, /Panel/, "no button unless asked");
-	const working = framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t, panelButton: true, state: PROMPT_STATE.WORKING })).map(stripAnsi);
-	assert.match(working[0]!, /^─ \S working…─+ \[ Panel \] ─$/);
-	const hinted = framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t, panelButton: true, escHint: "esc again to clear" })).map(stripAnsi);
-	assert.match(hinted[0]!, /^─ 力 waiting for input─+ \[ Panel \] esc again to clear ─$/, "the hint follows the button, as G's narrow editor");
+	assert.match(framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t, state: PROMPT_STATE.WORKING })).map(stripAnsi)[0]!, /^─ \S working… ─+$/);
+	const hinted = framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t, escHint: "esc again to clear" })).map(stripAnsi);
+	assert.match(hinted[0]!, /^─ 力 waiting for input ─+ esc again to clear ─$/);
 	assert.equal(hinted[2], " ".repeat(60));
+	assert.equal("PANEL_BUTTON" in prompt, false, "no [ Panel ] button to draw");
 });
 
 test("petalTone rests bright, walks the rose ramp while working, and turns to warning when queued", () => {

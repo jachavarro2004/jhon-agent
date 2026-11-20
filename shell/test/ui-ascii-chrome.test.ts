@@ -77,11 +77,10 @@ test("the prompt rule, the neon card prompt and the float card prompt draw in AS
 		const lines = ["─".repeat(width), "hello → there", "─".repeat(width)];
 		for (const state of [PROMPT_STATE.IDLE, PROMPT_STATE.WORKING, PROMPT_STATE.QUEUED]) {
 			const options = { state, tick: 1, borderColor: (s: string) => s, fg: plain.fg, bold: plain.bold, bg: plain.bg };
-			const panel = framePromptLines(lines, width, { ...options, panelButton: true }, resolvePromptLayout(width, undefined, undefined, true));
+			const panel = framePromptLines(lines, width, options, resolvePromptLayout(width, undefined, undefined, true));
 			pureAscii(`prompt rule ${state} ${width}`, panel.slice(0, 1));
 			assert.match(stripAnsi(panel[1]!), /^> hello/, "the mark reads >");
 			assert.match(stripAnsi(panel[0]!), /^- \* /, "the petal reads * (L165)");
-			pureAscii(`prompt rule without the button ${state} ${width}`, framePromptLines(lines, width, options, resolvePromptLayout(width, undefined, undefined, true)).slice(0, 1));
 			const neon = framePromptLines(lines, width, { ...options, style: CARD_STYLE.NEON });
 			pureAscii(`neon prompt chrome ${state} ${width}`, [neon[0]!, neon.at(-1)!, stripAnsi(neon[1]!).replace("hello → there", "")]);
 			const float = framePromptLines(lines, width, { ...options, style: CARD_STYLE.FLOAT }, resolvePromptLayout(width, CARD_STYLE.FLOAT, plain.bg));

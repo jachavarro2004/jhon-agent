@@ -219,11 +219,15 @@ func schema() []spec {
 		{key: "shell.behaviour.thinking_stall_seconds", kind: kInt, def: 300, min: 0, max: -1, env: "JHON_SHELL_THINKING_STALL_SECONDS", fromEnv: envStall},
 		{key: "shell.behaviour.double_esc_cancel", kind: kBool, def: false, env: "JHON_SHELL_DOUBLE_ESC_CANCEL", fromEnv: envOnOff},
 		{key: "shell.keys.panel", kind: kKey, def: "alt+j", env: "JHON_SHELL_JHON_KEY", fromEnv: envKey},
-		{key: "shell.keys.tasks", kind: kKey, def: "alt+s", env: "JHON_SHELL_TASKS_KEY", fromEnv: envKey},
+		// T167 (L1438): the key that opens /jhon:agents, shell.keys.tasks until
+		// v0.4 (retired.go moves an old value); its variable keeps its name.
+		{key: "shell.keys.agents", kind: kKey, def: "alt+s", env: "JHON_SHELL_TASKS_KEY", fromEnv: envKey},
 		{key: "shell.keys.todos", kind: kKey, def: "alt+t", env: "JHON_SHELL_TODO_KEY", fromEnv: envKey},
 		{key: "shell.keys.changes", kind: kKey, def: "alt+g", env: "JHON_SHELL_CHANGES_KEY", fromEnv: envKey},
-		{key: "shell.keys.rail", kind: kKey, def: "alt+r", env: "JHON_SHELL_RAIL_KEY", fromEnv: envKey},
-		{key: "shell.keys.commands", kind: kKey, def: "alt+k", env: "JHON_SHELL_COMMANDS_KEY", fromEnv: envKey},
+		// T167: alt+u opens /jhon:usage (T93); JHON_SHELL_USAGE_KEY was its only setting.
+		{key: "shell.keys.usage", kind: kKey, def: "alt+u", env: "JHON_SHELL_USAGE_KEY", fromEnv: envKey},
+		// T169 (L1438): shell.keys.rail and shell.keys.commands went with the
+		// panel sheet and the command palette (retired.go).
 	}...)
 	return s
 }

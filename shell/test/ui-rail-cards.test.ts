@@ -15,7 +15,7 @@ import test, { type TestContext } from "node:test";
 import { ScrollView, visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusLayout, renderShellStatusSections, type ShellBarModel } from "../lib/ui/shell-bar.ts";
 import { CARD_STYLE, cardStyle, setCardStyle } from "../lib/ui/shell-card.ts";
-import { chromeSurface, renderPanelSheet, setChromeSurface } from "../lib/ui/shell-panel.ts";
+import { chromeSurface, setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { installSidebar } from "../lib/ui/shell-sidebar-layout.ts";
 import { sidebarPart } from "../lib/ui/shell-sidebar.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
@@ -153,17 +153,4 @@ test("ASCII: the fold is v or >, neon cards draw + - |", (t) => {
 test("under a multiplexer that shows the path the Status sections are the same (L112)", (t) => {
 	look(t, "float", "transparent");
 	assert.deepEqual(renderShellStatusSections(status(true), plain, 48), renderShellStatusSections(status(false), plain, 48));
-});
-
-test("the panel sheet holds the same sections, under ` 力 Panel … esc back` (T15.12c)", (t) => {
-	look(t, "float", "transparent");
-	const parts = new Map([
-		["jobs", { render: (w: number) => renderShellJobsSection(jobs, plain, w, NOW) }],
-		["footer", { render: (w: number) => renderShellStatusSections(status(), plain, w) }],
-	]);
-	const sheet = renderPanelSheet(parts, plain, 44, { rows: 20, scrollTop: 0 }).lines.map(stripAnsi);
-	assert.match(sheet[0]!, /^ 力 Panel +esc back $/);
-	assert.match(sheet[2]!, /^ ▾ JOBS +1 running $/);
-	assert.ok(sheet.some((line) => /^ ▾ LDD/.test(line)));
-	for (const line of sheet) assert.equal(visibleWidth(line), 44, line);
 });

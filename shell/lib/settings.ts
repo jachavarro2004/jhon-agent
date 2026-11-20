@@ -60,11 +60,10 @@ export const SETTINGS_DEFAULTS: Readonly<Record<string, SettingValue>> = Object.
 	"shell.behaviour.thinking_stall_seconds": 300,
 	"shell.behaviour.double_esc_cancel": false,
 	"shell.keys.panel": "alt+j",
-	"shell.keys.tasks": "alt+s",
+	"shell.keys.agents": "alt+s",
 	"shell.keys.todos": "alt+t",
 	"shell.keys.changes": "alt+g",
-	"shell.keys.rail": "alt+r",
-	"shell.keys.commands": "alt+k",
+	"shell.keys.usage": "alt+u",
 });
 
 /**
@@ -80,7 +79,7 @@ export const SETTINGS_DEFAULTS: Readonly<Record<string, SettingValue>> = Object.
 export const ENGINE_ONLY_SETTINGS: readonly string[] = Object.freeze(["integrations.context7", "agents.act_on_announce", "sandbox.mode", "sandbox.allow_write"]);
 
 export type SettingsKey = keyof typeof SETTINGS_DEFAULTS & string;
-export type ShellKey = "panel" | "tasks" | "todos" | "changes" | "rail" | "commands";
+export type ShellKey = "panel" | "agents" | "todos" | "changes" | "usage";
 export type AnimationsSetting = "full" | "off";
 export type IconsSetting = "geometric" | "emoji";
 export type StatusSetting = "auto" | "hidden";

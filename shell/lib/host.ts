@@ -4,7 +4,8 @@
  * event bus as `jhon:host` `{ name, alerts?, showsPath? }`, at its own start
  * and in answer to the shell's `jhon:host?` query at session start, so the
  * load order does not matter. `alerts: true` says the host plays its own
- * alert while the owner is waited for (the shell plays no sound);
+ * alert while the owner is waited for (the shell plays no sound, so nothing
+ * reads it; CONTRACT.md keeps the field);
  * `showsPath: true` drops the path from the title row (the host shows it).
  * shell/CONTRACT.md, "Events for other extensions".
  */
@@ -44,10 +45,6 @@ export function listenForHosts(events: HostBus | undefined): void {
 /** Asks every bridge already loaded to announce its host. */
 export function askHosts(events: HostBus | undefined): void {
 	events?.emit(HOST_QUERY_EVENT, {});
-}
-
-export function hostAlerts(): boolean {
-	return [...hosts().values()].some((h) => h.alerts === true);
 }
 
 export function hostShowsPath(): boolean {

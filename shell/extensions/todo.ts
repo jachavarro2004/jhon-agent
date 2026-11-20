@@ -116,9 +116,9 @@ export function todoEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 
 /**
  * The key that folds the todo card, shell.keys.todos (JHON_SHELL_TODO_KEY
- * overrides it), or off. alt+t by default, beside the shell's alt+k, alt+g,
- * alt+j, alt+r and alt+s: terminals take ctrl+shift+t for a new tab (Ghostty
- * does), so it never reached pi.
+ * overrides it), or off. alt+t by default, beside the shell's alt+g, alt+j,
+ * alt+s and alt+u: terminals take ctrl+shift+t for a new tab (Ghostty does),
+ * so it never reached pi.
  */
 export function todoCollapseKey(settings: ShellSettings = shellSettings()): string | undefined {
 	return settings.key("todos");
@@ -321,7 +321,7 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		if (current.tui) invalidateSidebar(current.tui);
 		// A child's list is its own: no card, no rail part (T134).
 		if (!current.ui || child) return;
-		// An empty list stays mounted: the rail and the sheet show TODOS idle,
+		// An empty list stays mounted: the rail shows TODOS idle,
 		// as AGENTS (L175); the card above the prompt renders nothing.
 		const snapshot = current;
 		current.ui.setWidget(WIDGET_KEY, (tui, theme) => {

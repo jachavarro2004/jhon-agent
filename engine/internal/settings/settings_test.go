@@ -113,11 +113,10 @@ func TestDefaultsWithNoFile(t *testing.T) {
 		"shell.behaviour.thinking_stall_seconds": 300,
 		"shell.behaviour.double_esc_cancel":      false, // today's shell default (L199)
 		"shell.keys.panel":                       "alt+j",
-		"shell.keys.tasks":                       "alt+s",
+		"shell.keys.agents":                      "alt+s",
 		"shell.keys.todos":                       "alt+t",
 		"shell.keys.changes":                     "alt+g",
-		"shell.keys.rail":                        "alt+r",
-		"shell.keys.commands":                    "alt+k",
+		"shell.keys.usage":                       "alt+u",
 	}
 	for key, w := range want {
 		v := valueOf(t, vals, key)
@@ -148,8 +147,9 @@ icons = "emoji"
 	}
 	env := envOf(map[string]string{
 		"JHON_SHELL_COMPACT_AT":             "55",
-		"JHON_SHELL_COMMANDS_KEY":           "ctrl+p",
 		"JHON_SHELL_JHON_KEY":               "off",
+		"JHON_SHELL_TASKS_KEY":              "ctrl+b",
+		"JHON_SHELL_USAGE_KEY":              "ctrl+u",
 		"JHON_SHELL_ASCII":                  "1",
 		"JHON_SHELL_STALL_SECONDS":          "0",
 		"JHON_SHELL_THINKING_STALL_SECONDS": "0",
@@ -162,8 +162,9 @@ icons = "emoji"
 	}
 	for key, w := range map[string]any{
 		"shell.behaviour.compact_at":             55,
-		"shell.keys.commands":                    "ctrl+p",
 		"shell.keys.panel":                       "off",
+		"shell.keys.agents":                      "ctrl+b",
+		"shell.keys.usage":                       "ctrl+u",
 		"shell.appearance.ascii":                 true,
 		"shell.behaviour.stall_seconds":          0,
 		"shell.behaviour.thinking_stall_seconds": 0,

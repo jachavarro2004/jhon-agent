@@ -487,44 +487,33 @@ func TestAnExplicitNewKeySurvivesTheMigration(t *testing.T) {
 	}
 }
 
-// T15.11 (L121): shell.keys.usage went with /jhon:usage (L117). A file that
-// still holds it, with its own comment, between keys that stay: list reads
-// it without touching the file, get refuses the key, migrate backs the file
-// up byte for byte and drops exactly that line, and a second migrate is a no-op.
-func TestTheRetiredUsageKeyEndToEnd(t *testing.T) {
+// T15.11 (L121) retired shell.keys.usage with the old /jhon:usage (L117);
+// T167 (L1437, L1438) made it the setting of alt+u again. A file that holds
+// it, with its own comment: list reads it without a warning or a rewrite,
+// get gives its value, and migrate has nothing to do and makes no backup.
+func TestTheUsageKeyIsKeptEndToEnd(t *testing.T) {
 	h := newHome(t)
-	old := "schema = 1\n\n[shell.keys]\npanel = \"alt+j\"\nusage = \"alt+u\" # x\nrail = \"alt+r\"\n"
+	old := "schema = 1\n\n[shell.keys]\npanel = \"alt+j\"\nusage = \"alt+y\" # x\n"
 	support.Write(t, filepath.Join(h.config, "jhon"), map[string]string{"settings.toml": old})
-	if r := h.jhon(t, "list"); r.Code != 0 || !strings.Contains(r.Stderr, "shell.keys.usage") {
+	if r := h.jhon(t, "list"); r.Code != 0 || strings.Contains(r.Stderr, "shell.keys.usage") {
 		t.Fatalf("list: %d\n%s", r.Code, r.Out())
 	}
 	if support.Read(t, h.file()) != old {
 		t.Fatal("list rewrote the owner's file")
 	}
-	if r := h.jhon(t, "get", "shell.keys.usage"); r.Code != 2 {
-		t.Errorf("get shell.keys.usage: %d %q, want 2", r.Code, r.Out())
+	if r := h.jhon(t, "get", "shell.keys.usage"); r.Code != 0 || strings.TrimSpace(r.Stdout) != "alt+y" {
+		t.Errorf("get shell.keys.usage: %d %q, want alt+y", r.Code, r.Out())
 	}
-	if r := h.jhon(t, "migrate"); r.Code != 0 || !strings.Contains(r.Stdout, "backup:") {
-		t.Fatalf("migrate: %d\n%s", r.Code, r.Out())
+	if r := h.jhon(t, "migrate"); r.Code != 0 || !strings.Contains(r.Stdout, "nothing to migrate") || support.Read(t, h.file()) != old {
+		t.Errorf("migrate: %d %q", r.Code, r.Out())
 	}
-	backups, _ := filepath.Glob(filepath.Join(h.config, "jhon", "settings-backup-*", "settings.toml"))
-	if len(backups) != 1 || support.Read(t, backups[0]) != old {
-		t.Fatalf("backups = %v, want one copy of the file as it was", backups)
-	}
-	want := "schema = 1\n\n[shell.keys]\npanel = \"alt+j\"\nrail = \"alt+r\"\n"
-	if now := support.Read(t, h.file()); now != want {
-		t.Errorf("after migrate:\n%s\nwant:\n%s", now, want)
-	}
-	if r := h.jhon(t, "migrate"); r.Code != 0 || !strings.Contains(r.Stdout, "nothing to migrate") || support.Read(t, h.file()) != want {
-		t.Errorf("second migrate: %d %q", r.Code, r.Out())
-	}
-	if again, _ := filepath.Glob(filepath.Join(h.config, "jhon", "settings-backup-*")); len(again) != 1 {
-		t.Errorf("backups after a second run = %v", again)
+	if backups, _ := filepath.Glob(filepath.Join(h.config, "jhon", "settings-backup-*")); len(backups) != 0 {
+		t.Errorf("backups = %v, want none", backups)
 	}
 }
 
 // T17b (L138, answer 5): integrations.dashboard is retired as
-// shell.keys.usage was: `list` warns and leaves the file, get and set exit 2
+// shell.keys.usage was until T167: `list` warns and leaves the file, get and set exit 2
 // saying it was removed, migrate drops it once with a backup.
 func TestTheRetiredDashboardKeyEndToEnd(t *testing.T) {
 	h := newHome(t)

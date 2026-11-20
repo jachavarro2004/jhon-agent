@@ -173,7 +173,7 @@ const ENV_OVERRIDES: [string, string, (v: string) => SettingValue | undefined][]
 	["JHON_SHELL_STALL_SECONDS", "shell.behaviour.stall_seconds", (v) => /^\d+$/.test(v.trim()) ? Number(v.trim()) : undefined],
 	["JHON_SHELL_THINKING_STALL_SECONDS", "shell.behaviour.thinking_stall_seconds", (v) => /^\d+$/.test(v.trim()) ? Number(v.trim()) : undefined],
 	["JHON_SHELL_DOUBLE_ESC_CANCEL", "shell.behaviour.double_esc_cancel", (v) => v === "on" ? true : v === "off" ? false : undefined],
-	...([["JHON_SHELL_JHON_KEY", "panel"], ["JHON_SHELL_TASKS_KEY", "tasks"], ["JHON_SHELL_TODO_KEY", "todos"], ["JHON_SHELL_CHANGES_KEY", "changes"], ["JHON_SHELL_RAIL_KEY", "rail"], ["JHON_SHELL_COMMANDS_KEY", "commands"]] as const)
+	...([["JHON_SHELL_JHON_KEY", "panel"], ["JHON_SHELL_TASKS_KEY", "agents"], ["JHON_SHELL_TODO_KEY", "todos"], ["JHON_SHELL_CHANGES_KEY", "changes"], ["JHON_SHELL_USAGE_KEY", "usage"]] as const)
 		.map(([name, key]): [string, string, (v: string) => SettingValue | undefined] => [name, `shell.keys.${key}`, (v) => {
 			const t = v.trim();
 			if (t === "" || t.toLowerCase() === "off") return "off";

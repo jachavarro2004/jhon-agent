@@ -9,9 +9,8 @@ import { initTheme, type ExtensionAPI, type ExtensionContext, type SlashCommandI
 import { CURSOR_MARKER, matchesKey, visibleWidth, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { registerSubagentWorktree, resolveSessionWorktree } from "../lib/ui/session-worktree-registry.ts";
 import { SESSION_PROFILE_CHANGED, SESSION_PROFILE_ENTRY } from "../lib/session-profile.ts";
-import installShellUi, { backgroundChangeRefreshesSettled, buildShellBarModel, changesShortcut, createActiveProfileReader, extractQueuedText, fetchNanUsage, loadFileDiff, shellGitRunner, openInExternalEditor, paletteShortcuts, JhonPromptEditor } from "../extensions/ui.ts";
+import installShellUi, { backgroundChangeRefreshesSettled, buildShellBarModel, changesShortcut, createActiveProfileReader, extractQueuedText, fetchNanUsage, loadFileDiff, shellGitRunner, openInExternalEditor, JhonPromptEditor } from "../extensions/ui.ts";
 import { NAN_QUOTA_URL, USAGE_SOURCE_EVENT, USAGE_SOURCE_SCHEMA } from "../lib/ui/shell-usage.ts";
-import { buildCommandPaletteGroups, COMMAND_PALETTE_CATALOG } from "../lib/ui/command-palette-catalog.ts";
 import { CHANGE_STATUS, DIFF_MAX_BYTES, DIFF_MAX_LINES, DIFF_TOO_LARGE } from "../lib/ui/shell-changes.ts";
 import { setSidebarHover, sidebarPart, sidebarState, type SidebarRail } from "../lib/ui/shell-sidebar.ts";
 import type { ShellBarTheme } from "../lib/ui/shell-bar.ts";
@@ -126,7 +125,6 @@ const DEFAULT_COMMANDS: SlashCommandInfo[] = [
 	{ name: "jhon:profile", description: "Configure models", source: "extension", sourceInfo: FAKE_SOURCE_INFO },
 	{ name: "jhon:changes", description: "View changes", source: "extension", sourceInfo: FAKE_SOURCE_INFO },
 	{ name: "jhon:status", description: "The LDD detail", source: "extension", sourceInfo: FAKE_SOURCE_INFO },
-	{ name: "jhon:commands", description: "Open the command palette", source: "extension", sourceInfo: FAKE_SOURCE_INFO },
 	{ name: "jhon:not-in-catalog", description: "Not a curated command", source: "extension", sourceInfo: FAKE_SOURCE_INFO },
 	{ name: "skill:foo", description: "A skill", source: "skill", sourceInfo: FAKE_SOURCE_INFO },
 ];
@@ -422,7 +420,7 @@ test("shellUi stays out of the way without a UI or when disabled", () => {
 });
 
 const fakeTui = { terminal: { rows: 40, columns: 120 }, requestRender() {} };
-// The shell runs fullscreen: the installed prompt is G's panel editor, and with no rail shown its rule carries [ Panel ].
+// The shell runs fullscreen: the installed prompt is G's panel editor (T169: its rule carries no [ Panel ]).
 const promptTui = Object.create(fakeTui, { mode: { value: "fullscreen" } }) as typeof fakeTui & { mode: string };
 const editorTheme = { borderColor: (text: string) => text, selectList: {} };
 const fakeKeybindings = { matches: () => false };
@@ -452,12 +450,12 @@ test("the installed prompt says the Esc hints at its rule's right end and queued
 		assert.doesNotMatch(editor.render(80).join("\n"), /\x1b\[4\dm/, "the prompt paints no background");
 		editor.setText("draft");
 		editor.handleInput("\x1b");
-		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 waiting for input─+ \[ Panel \] esc again to clear ─$/);
+		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 waiting for input ─+ esc again to clear ─$/);
 		assert.equal(editor.render(80).at(-1), " ".repeat(80), "no hint row: G's blank last row");
 		for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 queued─+ \[ Panel \] ─$/);
+		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 queued ─+$/);
 		editor.handleInput("\x1b");
-		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 queued─+ \[ Panel \] esc again to cancel ─$/);
+		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 queued ─+ esc again to cancel ─$/);
 	} finally { editor.dispose(); }
 });
 
@@ -489,7 +487,7 @@ test("shellUi takes over the prompt: pi's Working row hidden, the petal in its r
 	assert.equal(ui.workingVisible, false, "pi's own Working row must be hidden");
 	editor.focused = true;
 	const lines = editor.render(60).map(stripAnsi);
-	assert.match(lines[0], /^─ 力 waiting for input─+ \[ Panel \] ─$/);
+	assert.match(lines[0], /^─ 力 waiting for input ─+$/);
 	assert.doesNotMatch(editor.render(60).join("\n"), /\x1b\[44m/, "prompt must not paint passive backgrounds");
 	assert.match(lines[1], /^› .*type, or \/ for commands/);
 	editor.setText("hola");
@@ -508,7 +506,7 @@ test("sections, the default: the prompt under a rule line, one status line at th
 	try {
 		editor.focused = true;
 		const lines = editor.render(60).map(stripAnsi);
-		assert.match(lines[0], /^─ 力 waiting for input─+ \[ Panel \] ─$/);
+		assert.match(lines[0], /^─ 力 waiting for input ─+$/);
 		assert.match(lines[1], /^› .*type, or \/ for commands/);
 		assert.ok(lines.every((line) => visibleWidth(line) === 60), lines.join("\n"));
 		editor.setText("hola");
@@ -517,7 +515,7 @@ test("sections, the default: the prompt under a rule line, one status line at th
 		assert.match(footer, /^力 jhon ⟡ \/repo main ⟡ claude-opus-5-5 · medium ⟡ ctx ▰▰▰▰▱▱▱▱ 45% ⟡ \$0\.000 sub +Release notes$/, "no usage yet: the cost alone");
 		for (const handler of handlers.get("after_provider_response") ?? []) handler({ status: 200, headers: { "anthropic-ratelimit-unified-7d-utilization": "0.62" } }, ctx);
 		assert.match(renderFooter(ui), /⟡ \$0\.000 sub ⟡ week ▰▰▰▰▰▱▱▱ 62%/, "the week rides G's usage slot after the cost");
-		// The rail's key line and the palette teach the keys; the prompt keeps none (L105).
+		// The README teaches the keys; the prompt keeps none (L105).
 		assert.equal(ui.widgets.has("jhon-shell-key-hints"), false);
 	} finally { editor.dispose(); }
 });
@@ -613,9 +611,10 @@ test("the split chrome: wide, the title rows and the chrome bar with their margi
 });
 
 // T15.12c slice 4: a fullscreen terminal without the rail (under 140
-// columns, or Status hidden) draws the Gentle Shell's narrow editor: the
-// [ Panel ] button on its rule, and the work row above it (` ▸ <lead> … <count>`)
-// in place of the TODOS and AGENTS cards; a tap on either opens the sheet.
+// columns, or Status hidden) draws the Gentle Shell's narrow editor, with the
+// work row above its rule (` ▸ <lead> … <count>`) in place of the TODOS and
+// AGENTS cards. T169 (L1438): the panel sheet is gone, and the rule's
+// [ Panel ] button with it.
 function narrowShell(columns = 100) {
 	const { pi, handlers, shortcuts } = fakePi();
 	shellUi(pi, {});
@@ -627,25 +626,17 @@ function narrowShell(columns = 100) {
 	return { pi, handlers, shortcuts, ctx, ui, tui, footer, editor, state: sidebarState(tui as unknown as TUI) };
 }
 
-test("without the rail the editor rule carries [ Panel ]; a click on it opens the panel sheet; beside a visible rail it is gone (T15.12c)", async () => {
-	const { ctx, ui, footer, editor, state, handlers } = narrowShell();
+test("without the rail the editor rule carries no [ Panel ], and a click at its right end opens nothing (T169)", async () => {
+	const { ctx, ui, footer, editor, handlers } = narrowShell();
 	try {
 		const lines = editor.render(100).map(stripAnsi);
-		assert.match(lines[0]!, /^─ 力 waiting for input─+ \[ Panel \] ─$/);
-		const x = lines[0]!.indexOf("[ Panel ]");
-		assert.deepEqual(editor.handleMouse({ type: "move", button: "none", x: x + 2, y: 0, width: 100, height: lines.length } as never), { handled: true, render: true }, "the button paints its hover");
-		const result = editor.handleMouse({ type: "click", button: "left", x: x + 2, y: 0, width: 100, height: lines.length } as never);
-		assert.deepEqual(result, { handled: true, render: true });
-		assert.ok(ui.overlayView, "the click opened the sheet");
-		assert.match(stripAnsi(ui.overlayView!.render(100)[0]!), /^ 力 Panel +esc back $/);
-		ui.overlayView!.handleInput("\x1b");
-		state.active = true;
-		state.ownsHost = () => true;
-		assert.doesNotMatch(editor.render(100).map(stripAnsi)[0]!, /Panel/, "the rail is visible: no button");
+		assert.match(lines[0]!, /^─ 力 waiting for input ─+$/);
+		editor.handleMouse({ type: "click", button: "left", x: 93, y: 0, width: 100, height: lines.length } as never);
+		assert.equal(ui.overlayView, undefined, "no sheet");
 	} finally { editor.dispose(); footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
-test("without the rail running sub-agents and the todo list fold into the work row above the editor rule; a tap opens the lead's own view: agents /jhon:agents, the todo list the sheet (T15.12c, T15.12d)", async () => {
+test("without the rail running sub-agents and the todo list fold into the work row above the editor rule; a tap opens the lead's own view: agents /jhon:agents, the todo list nothing (T15.12c, T15.12d, T169)", async () => {
 	const { pi, ctx, ui, footer, editor, state, handlers } = narrowShell();
 	const opened: unknown[] = [];
 	pi.events.on("jhon-shell:open-tasks", (payload: unknown) => opened.push(payload));
@@ -655,7 +646,7 @@ test("without the rail running sub-agents and the todo list fold into the work r
 		state.parts.set("todo", { render: () => [], invalidate() {}, summary: () => ({ left: "◐ write the sheet", right: "1/3", rightLabel: "todos" }) } as never);
 		const lines = editor.render(100).map(stripAnsi);
 		assert.match(lines[0]!, /^ ▸ ◐ 1 agent +1\/3 todos $/, "agents lead, the todo count at the right");
-		assert.match(lines[1]!, /^─ 力 waiting for input─+ \[ Panel \] ─$/, "the rule under it");
+		assert.match(lines[1]!, /^─ 力 waiting for input ─+$/, "the rule under it, no [ Panel ] (T169)");
 		assert.equal(visibleWidth(lines[0]!), 100);
 		assert.equal(state.compactWork?.(), true, "the TODOS and AGENTS cards step aside");
 		assert.deepEqual(editor.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 100, height: lines.length } as never), { handled: true, render: true });
@@ -664,9 +655,8 @@ test("without the rail running sub-agents and the todo list fold into the work r
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [] });
 		assert.match(editor.render(100).map(stripAnsi)[0]!, /^ ▸ ◐ write the sheet +1\/3 $/, "the todo list leads now");
 		editor.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 100, height: lines.length } as never);
-		assert.ok(ui.overlayView, "the todo list has no view of its own: the tap opens the sheet");
+		assert.equal(ui.overlayView, undefined, "the todo list has no view of its own: the tap opens nothing (T169: the sheet is gone)");
 		assert.equal(opened.length, 1);
-		ui.overlayView!.handleInput("\x1b");
 		state.active = true;
 		state.ownsHost = () => true;
 		assert.doesNotMatch(editor.render(100).map(stripAnsi).join("\n"), /▸ ◐/, "beside the rail the work is the rail's");
@@ -697,7 +687,7 @@ test("an unknown or unreported phase falls back to the generic working label", (
 	const editor = installedPrompt(ctx, ui, handlers);
 	try {
 		for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-		assert.match(editor.render(60).map(stripAnsi)[0], /^─ .+ working…─+ \[ Panel \] ─$/);
+		assert.match(editor.render(60).map(stripAnsi)[0], /^─ .+ working… ─+$/);
 	} finally {
 		editor.dispose();
 	}
@@ -819,14 +809,14 @@ test("shellUi shows working while the agent runs and queued when messages wait",
 	const editor = installedPrompt(ctx, ui, handlers);
 
 	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 working…─+ \[ Panel \] ─$/);
+	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 working… ─+$/);
 	pending.value = true;
-	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 queued─+ \[ Panel \] ─$/);
+	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 queued ─+$/);
 	for (const handler of handlers.get("agent_end") ?? []) handler({}, ctx);
 	assert.match(stripAnsi(editor.render(60)[0]), /queued/, "low-level run end is not settled");
 	pending.value = false;
 	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 waiting for input─+ \[ Panel \] ─$/);
+	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 waiting for input ─+$/);
 	editor.dispose();
 });
 
@@ -842,22 +832,22 @@ test("after 60 s with no stream event and no tool running, the working line says
 		on("agent_start");
 		on("turn_start");
 		now += 59_999;
-		assert.match(top(), /^─ 力 working…─+ \[ Panel \] ─$/);
+		assert.match(top(), /^─ 力 working… ─+$/);
 		now += 1;
-		assert.match(top(), /^─ 力 waiting for Claude API · 60s─+ \[ Panel \] ─$/);
+		assert.match(top(), /^─ 力 waiting for Claude API · 60s ─+$/);
 		now += 12_400;
-		assert.match(top(), /^─ 力 waiting for Claude API · 72s─+ \[ Panel \] ─$/);
+		assert.match(top(), /^─ 力 waiting for Claude API · 72s ─+$/);
 		// The next stream event clears it, and the wait counts again from there.
 		on("message_start");
-		assert.match(top(), /^─ 力 working…─+ \[ Panel \] ─$/);
+		assert.match(top(), /^─ 力 working… ─+$/);
 		now += 60_000;
 		assert.match(top(), /waiting for Claude API · 60s/);
 		on("message_update");
-		assert.match(top(), /^─ 力 working…─+ \[ Panel \] ─$/);
+		assert.match(top(), /^─ 力 working… ─+$/);
 		// A running tool, however long, is not a wait on the API.
 		on("tool_execution_start");
 		now += 300_000;
-		assert.match(top(), /^─ 力 working…─+ \[ Panel \] ─$/);
+		assert.match(top(), /^─ 力 working… ─+$/);
 		on("tool_execution_end");
 		now += 59_999;
 		assert.match(top(), /working…/);
@@ -868,10 +858,10 @@ test("after 60 s with no stream event and no tool running, the working line says
 		assert.doesNotMatch(top(), /waiting/);
 		on("agent_settled");
 		now += 600_000;
-		assert.match(top(), /^─ 力 waiting for input─+ \[ Panel \] ─$/);
+		assert.match(top(), /^─ 力 waiting for input ─+$/);
 		// The next turn starts its own count.
 		on("agent_start");
-		assert.match(top(), /^─ 力 working…─+ \[ Panel \] ─$/);
+		assert.match(top(), /^─ 力 working… ─+$/);
 	} finally {
 		editor.dispose();
 	}
@@ -1132,9 +1122,6 @@ test("visual customization registers once and remains discoverable", async (t) =
 	for (const merged of ["jhon:vim", "jhon:animations", "jhon:double-esc-cancel"]) assert.equal(commands.has(merged), false, `${merged} merged into /jhon:customize`);
 	// T15.13: Customize is G's Customization view; typing does not filter it. L174: Settings is Customize.
 	assert.equal(commands.get("jhon:customize")!.description, "Customize the shell: appearance, behaviour, keys, permissions");
-	const groups = buildCommandPaletteGroups([...commands].map(([name, value]) => ({ name, description: value.description })), {});
-	const configuration = groups.find((group) => group.title === "Configuration")!;
-	assert.deepEqual(configuration.items.filter((item) => /customize|settings/.test(item.command)).map((item) => [item.command, item.label]), [["jhon:customize", "Customize"]]);
 	const { ctx, ui } = fakeContext();
 	const shown = await setViaSettings(commands, ctx, ui, "Animations", "off");
 	assert.ok(shown.some((row) => /Animations.*off/.test(row)), shown.join("\n"));
@@ -2559,15 +2546,6 @@ test("external editor receives the selected worktree as process cwd", () => {
 	assert.equal(cwd, "/linked");
 });
 
-test("the palette shows the key of every command that has one, as configured", () => {
-	const keys = paletteShortcuts({}, envSettings({}));
-	// The LDD detail's row shows alt+j, as the key opens the same view (L194).
-	assert.deepEqual(keys, { "jhon:status": "alt+j", "jhon:changes": changesShortcut(envSettings({})), "jhon:agents": "alt+s", "jhon:panel": "alt+r", "jhon:usage": "alt+u" });
-	assert.equal(paletteShortcuts({ JHON_SHELL_CHANGES_KEY: "off" }, envSettings({ JHON_SHELL_CHANGES_KEY: "off" }))["jhon:changes"], undefined);
-	const session = buildCommandPaletteGroups([{ name: "jhon:changes" }, { name: "jhon:agents" }], keys).find((g) => g.title === "Session")!;
-	assert.deepEqual(session.items.map((i) => [i.command, i.shortcut]), [["jhon:changes", changesShortcut(envSettings({}))], ["jhon:agents", "alt+s"]]);
-});
-
 test("changesShortcut defaults to alt+g and can be overridden or disabled", () => {
 	assert.equal(changesShortcut(envSettings({})), "alt+g");
 	assert.equal(changesShortcut(envSettings({ JHON_SHELL_CHANGES_KEY: "ctrl+shift+g" })), "ctrl+shift+g");
@@ -3038,119 +3016,6 @@ test("/jhon:stats stays gone; the status line keeps the answering provider's 5h 
 	assert.doesNotMatch(footer, /usage · |alt\+u/);
 });
 
-test("jhon:commands registers alt+k by default", () => {
-	const { pi, shortcuts } = fakePi();
-	shellUi(pi, {});
-	assert.ok(shortcuts.has("alt+k"));
-});
-
-test("jhon:commands honors JHON_SHELL_COMMANDS_KEY", () => {
-	const { pi, shortcuts } = fakePi();
-	shellUi(pi, { JHON_SHELL_COMMANDS_KEY: "ctrl+p" });
-	assert.ok(shortcuts.has("ctrl+p"));
-	assert.equal(shortcuts.has("alt+k"), false);
-});
-
-test("JHON_SHELL_COMMANDS_KEY=off registers no command-palette shortcut", () => {
-	const { pi, shortcuts } = fakePi();
-	shellUi(pi, { JHON_SHELL_COMMANDS_KEY: "off" });
-	assert.equal(shortcuts.has("alt+k"), false);
-	assert.ok(shortcuts.has("alt+g"), "the unrelated changes shortcut still registers");
-});
-
-test("/jhon:commands shows only curated, registered commands, grouped, by their labels", async () => {
-	const { pi, commands } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui, overlayReady } = fakeContext();
-	const opened = commands.get("jhon:commands")!.handler("", ctx);
-	await overlayReady;
-	const lines = ui.overlayView!.render(100);
-	const rendered = lines.join("\n");
-	assert.match(rendered, /│ Configuration +│/);
-	assert.match(rendered, /│ Session +│/);
-	assert.match(rendered, /│ Diagnostics +│/);
-	assert.match(rendered, /Models and profiles/);
-	assert.match(rendered, /Browse changes/);
-	assert.match(rendered, /LDD status +alt\+j/, "the LDD status's row shows its key (L194)");
-	assert.doesNotMatch(rendered, /jhon:profile|jhon:changes/, "raw command names must not leak; only labels are shown");
-	assert.doesNotMatch(rendered, /jhon:not-in-catalog/);
-	assert.doesNotMatch(rendered, /skill:foo/);
-	const changesLine = lines.find((line) => line.includes("Browse changes"));
-	assert.match(changesLine ?? "", /alt\+g/, "expected the configured alt+g shortcut hint next to Browse changes");
-	ui.overlayView!.handleInput("\x1b");
-	await opened;
-});
-
-test("selecting a command from the palette by its label sends the underlying command as a slash message", async () => {
-	const { pi, commands, sentMessages } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui, overlayReady } = fakeContext();
-	const opened = commands.get("jhon:commands")!.handler("", ctx);
-	await overlayReady;
-	// "mod" only matches the "Models and profiles" label; nothing else in the fixture does.
-	for (const ch of "mod") ui.overlayView!.handleInput(ch);
-	assert.match(ui.overlayView!.render(100).join("\n"), /Models and profiles/);
-	ui.overlayView!.handleInput("\r");
-	await opened;
-	assert.deepEqual(sentMessages, [{ content: "/jhon:profile", options: { expandPromptTemplates: true } }]);
-});
-
-test("escaping the palette sends no message", async () => {
-	const { pi, commands, sentMessages } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui, overlayReady } = fakeContext();
-	const opened = commands.get("jhon:commands")!.handler("", ctx);
-	await overlayReady;
-	ui.overlayView!.handleInput("\x1b");
-	await opened;
-	assert.deepEqual(sentMessages, []);
-});
-
-test("/jhon:commands notifies when nothing in the catalog is registered", async () => {
-	const { pi, commands } = fakePi(undefined, [
-		{ name: "skill:foo", description: "A skill", source: "skill", sourceInfo: FAKE_SOURCE_INFO },
-		{ name: "jhon:not-in-catalog", description: "Not curated", source: "extension", sourceInfo: FAKE_SOURCE_INFO },
-	]);
-	shellUi(pi, {});
-	const { ctx, ui } = fakeContext();
-	await commands.get("jhon:commands")!.handler("", ctx);
-	assert.match(ui.notices.join("\n"), /No Jhon commands are registered\./);
-	assert.equal(ui.overlay, undefined);
-});
-
-test("/jhon:commands does nothing in a headless context", async () => {
-	const { pi, commands, sentMessages } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui } = fakeContext({ hasUI: false });
-	await commands.get("jhon:commands")!.handler("", ctx);
-	assert.equal(ui.overlay, undefined);
-	assert.deepEqual(sentMessages, []);
-});
-
-test("the alt+k shortcut opens the same command palette as the command", async () => {
-	const { pi, shortcuts } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui, overlayReady } = fakeContext();
-	const shortcut = shortcuts.get("alt+k");
-	assert.ok(shortcut, "alt+k not registered");
-	const opened = shortcut.handler(ctx);
-	await overlayReady;
-	assert.match(ui.overlayView!.render(100).join("\n"), /Models and profiles/);
-	ui.overlayView!.handleInput("\x1b");
-	await opened;
-});
-
-test("resolving the overlay through closeOverlay sends nothing and does not throw", async () => {
-	const { pi, commands, sentMessages } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui, overlayReady } = fakeContext();
-	const opened = commands.get("jhon:commands")!.handler("", ctx);
-	await overlayReady;
-	ui.closeOverlay?.();
-	await opened;
-	assert.deepEqual(sentMessages, []);
-});
-
 // Targeted usage scope: the session's own provider plus every provider the
 // active profile's subagent routing names, honoring a repository pin over the
 // global active profile.
@@ -3592,146 +3457,6 @@ test("/jhon:customize keys opens Customize on Keys", async (t) => {
 	assert.match(lines.at(-2)!, /Click · ←\/→ or Tab panes · ↑\/↓ move · Enter apply · Esc close/, "G's footer");
 });
 
-// T15.12c slice 5 (L153 answer 5): shell.keys.rail (alt+r) is Jhon's extra
-// key for the Gentle Shell's Panel sheet, under a multiplexer or not.
-test("alt+r opens the Panel sheet; shell.keys.rail sets another or turns it off", () => {
-	const plain = fakePi();
-	shellUi(plain.pi, {});
-	assert.ok(plain.shortcuts.has("alt+r"), "alt+r by default");
-	const custom = fakePi();
-	shellUi(custom.pi, { JHON_SHELL_RAIL_KEY: "ctrl+alt+r" });
-	assert.ok(custom.shortcuts.has("ctrl+alt+r"));
-	assert.equal(custom.shortcuts.has("alt+r"), false);
-	const off = fakePi();
-	shellUi(off.pi, { JHON_SHELL_RAIL_KEY: "off" });
-	assert.equal(off.shortcuts.has("alt+r"), false);
-	assert.ok(off.commands.has("jhon:panel"), "/jhon:panel stays without the key");
-});
-
-// The Gentle Shell's sheet: full width from the top, ` 力 Panel … esc back`,
-// every section in rail order with Status included, `↓ N more · scroll`,
-// leaving six rows for the work row, the editor and the status line.
-test("alt+r does nothing while the rail is visible, and opens the Gentle Shell's full-width sheet from the top when it is not (T15.12c)", async () => {
-	const { pi, handlers, shortcuts } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	renderFooter(ui);
-	const state = sidebarState(fakeTui as unknown as TUI);
-	const restore = { active: state.active, ownsHost: state.ownsHost };
-	try {
-		state.active = true;
-		state.ownsHost = () => true;
-		const over = shortcuts.get("alt+r")!.handler(ctx);
-		await new Promise((resolve) => setImmediate(resolve));
-		const opened = ui.overlayView;
-		if (opened) { opened.handleInput("\x1b"); ui.overlayView = undefined; }
-		await over;
-		assert.equal(opened, undefined, "no sheet over the rail (L143)");
-		state.active = false;
-		const pending = shortcuts.get("alt+r")!.handler(ctx);
-		assert.ok(ui.overlayView, "without a visible rail the sheet opens");
-		assert.deepEqual(ui.overlayOptions, { overlay: true, overlayOptions: { width: "100%", anchor: "top-center" } }, "full width, hanging from the top");
-		const lines = ui.overlayView!.render(60).map(stripAnsi);
-		assert.equal(lines.length, 40 - 6, "six rows stay for the work row, the editor and the status line");
-		assert.match(lines[0]!, /^ 力 Panel +esc back $/);
-		const text = lines.join("\n");
-		assert.match(text, /▾ LDD[\s\S]*▾ AGENTS[\s\S]*▾ CHANGES[\s\S]*▾ INTEGRATIONS/, "LDD first, then G's order, Status included (L174)");
-		assert.doesNotMatch(text, /\/ commands|Rail/, "/ commands only in the prompt (L143); no old Rail sheet");
-		for (const line of lines) assert.equal(visibleWidth(line), 60);
-		ui.overlayView!.handleInput("q");
-		await pending; // q closes it: the key's handler returns once the sheet is gone
-	} finally {
-		state.active = restore.active;
-		state.ownsHost = restore.ownsHost;
-		await fire(handlers, "session_shutdown", ctx);
-	}
-});
-
-// L153 answer 5, the verify's B2: /jhon:panel and the palette's Panel row
-// follow alt+r's rule, never the sheet over a visible rail.
-test("/jhon:panel and the palette's Panel row do nothing while the rail is visible (T15.12g)", async () => {
-	const { pi, handlers, commands, sentMessages } = fakePi(undefined, [...DEFAULT_COMMANDS, { name: "jhon:panel", description: "The panel sheet", source: "extension", sourceInfo: FAKE_SOURCE_INFO }]);
-	shellUi(pi, {});
-	const { ctx, ui, overlayReady } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	renderFooter(ui);
-	const state = sidebarState(fakeTui as unknown as TUI);
-	const restore = { active: state.active, ownsHost: state.ownsHost };
-	try {
-		state.active = true;
-		state.ownsHost = () => true;
-		const panelOver = async () => {
-			const run = commands.get("jhon:panel")!.handler("", ctx);
-			await new Promise((resolve) => setImmediate(resolve));
-			const opened = ui.overlayView;
-			if (opened) { opened.handleInput("\x1b"); ui.overlayView = undefined; }
-			await run;
-			return opened;
-		};
-		assert.equal(await panelOver(), undefined, "/jhon:panel: no sheet over the rail");
-		const palette = commands.get("jhon:commands")!.handler("", ctx);
-		await overlayReady;
-		for (const ch of "panel") ui.overlayView!.handleInput(ch);
-		ui.overlayView!.handleInput("\r");
-		await palette;
-		ui.overlayView = undefined;
-		assert.deepEqual(sentMessages.map((m) => m.content), ["/jhon:panel"], "the palette's Panel row runs /jhon:panel");
-		state.active = true; // the palette's own render may lay the rail out again
-		state.ownsHost = () => true;
-		assert.equal(await panelOver(), undefined, "the palette's Panel row: no sheet over the rail");
-	} finally {
-		state.active = restore.active;
-		state.ownsHost = restore.ownsHost;
-		await fire(handlers, "session_shutdown", ctx);
-	}
-});
-
-test("/jhon:panel opens the sheet; ↓/j scroll it with `↓ N more · scroll`, a click on `esc back` closes it, and the palette lists it with alt+r (T15.12c)", async () => {
-	const { pi, handlers, commands } = fakePi();
-	shellUi(pi, {});
-	assert.match(commands.get("jhon:panel")!.description ?? "", /panel/i);
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	// A short terminal: the sheet keeps 12 - 6 rows, fewer than its sections.
-	const short = { terminal: { rows: 12, columns: 100 }, requestRender() {} };
-	(ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[] })(short, plainTheme, footerData).render(100);
-	const state = sidebarState(short as unknown as TUI);
-	const restore = state.active;
-	state.active = false;
-	try {
-		const pending = commands.get("jhon:panel")!.handler("", ctx);
-		const view = ui.overlayView!;
-		const first = view.render(60).map(stripAnsi);
-		assert.match(first[0]!, /^ 力 Panel +esc back $/);
-		assert.match(first.at(-1)!, /^ ↓ \d+ more · scroll +$/, "rows hidden below say how many");
-		view.handleInput("j");
-		assert.notDeepEqual(view.render(60).map(stripAnsi).slice(1, 3), first.slice(1, 3), "j scrolls");
-		view.handleInput("k");
-		assert.deepEqual(view.render(60).map(stripAnsi), first, "k scrolls back");
-		assert.deepEqual(view.handleMouse!({ type: "move", button: "none", x: 52, y: 0, width: 60, height: first.length }), { handled: true, render: true }, "esc back paints its hover");
-		assert.deepEqual(view.handleMouse!({ type: "click", button: "left", x: 52, y: 0, width: 60, height: first.length }), { handled: true, render: true });
-		await pending; // a click on esc back closes it: the command returns once the sheet is gone
-	} finally {
-		state.active = restore;
-		await fire(handlers, "session_shutdown", ctx);
-	}
-	assert.equal(paletteShortcuts({})["jhon:panel"], "alt+r");
-	assert.ok(COMMAND_PALETTE_CATALOG.some((group) => group.items.some((item) => item.command === "jhon:panel")), "in the palette's catalog");
-});
-
-test("the command palette's key follows shell.keys.commands from the settings file", (t) => {
-	const home = scopedDoubleEscCancelConfigHome(t);
-	homeSettings(home, { "shell.keys.commands": "alt+m" });
-	const { pi, shortcuts } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home });
-	assert.ok(shortcuts.has("alt+m"));
-	assert.equal(shortcuts.has("alt+k"), false);
-	const plain = fakePi();
-	shellUi(plain.pi, {});
-	assert.ok(plain.shortcuts.has("alt+k"), "alt+k by default");
-});
-
 // T15.8 (L98), T15.12d: a click on a rail section's header folds it to that
 // header (the card's top row on a transparent rail), and opens it again; the
 // fold stays for the session.
@@ -3763,7 +3488,7 @@ test("a click on a Status section's header folds that section alone, and a secon
 
 // T15.12c slice 3: the CHANGES row opens /jhon:changes as the Gentle Shell's
 // does; every header paints its hover, and a move anywhere else clears it.
-test("a click on the CHANGES row opens /jhon:changes; a move over a header paints it in the hover role and a move off clears it (T15.12c)", async () => {
+test("a click on the CHANGES row opens /jhon:changes and is counted; a move over a header paints it in the hover role and a move off clears it (T15.12c, T171)", async () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
 	const { ctx, ui } = fakeContext();
@@ -3790,6 +3515,9 @@ test("a click on the CHANGES row opens /jhon:changes; a move over a header paint
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		assert.ok(ui.notices.some((notice) => /No uncommitted changes in \/repo, compared with HEAD/.test(notice)) || ui.overlayView, `the click opened /jhon:changes: ${ui.notices.join(" | ")}`);
 		assert.ok(rail.render(200).some((line) => /▾<\/\w+> <\w+>CHANGES/.test(line)), "the row's click folds nothing");
+		// T171 (L1438): the click is counted, as commands and shortcuts are (lib/ui-use.ts); a move is not.
+		const uses = (ctx.sessionManager.getEntries() as Array<{ customType?: string; data?: unknown }>).filter((e) => e.customType === "jhon-ui-use");
+		assert.deepEqual(uses.map((e) => e.data), [{ feature: "click changes" }]);
 	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
@@ -3927,14 +3655,12 @@ test("/jhon:settings is not registered; /jhon:customize completes its categories
 	assert.deepEqual(await customize.getArgumentCompletions!(""), [
 		{ value: "appearance", label: "appearance", description: "Theme, animations, glyphs, tool icons, cards, surface, density, status line, reset" },
 		{ value: "behaviour", label: "behaviour", description: "Compaction, the fresh-session notice, stall recovery, double Esc" },
-		{ value: "keys", label: "keys", description: "The shell's keys: LDD status, panel sheet, todos, tasks, changes, palette; reload" },
+		{ value: "keys", label: "keys", description: "The shell's keys: LDD status, todos, agents, changes, usage; reload" },
 		{ value: "permissions", label: "permissions", description: "The project's permission mode" },
 	]);
 	assert.deepEqual((await customize.getArgumentCompletions!("pe"))!.map((item) => item.value), ["permissions"]);
 	assert.equal(await customize.getArgumentCompletions!("no"), null, "no notifications group (T169)");
 	assert.equal(await customize.getArgumentCompletions!("zz"), null, "no match: nothing to offer");
-	const palette = buildCommandPaletteGroups([...commands].map(([name, value]) => ({ name, description: value.description })), {});
-	assert.ok(!palette.some((group) => group.items.some((item) => item.command === "jhon:settings")), "no palette row for it");
 });
 
 // T15.9 (L103, B2): /jhon:customize <group> never falls back to Appearance. A
@@ -4001,8 +3727,22 @@ test("a click on the JOBS or the AGENTS header folds that section, and a second 
 	} finally { footer.dispose(); }
 });
 
-// T92 (L658): STATS is its own rail part, fed from the session's entries and its sub-agents' spend.
-test("the rail's STATS part shows the session's spend and the sub-agents' from the running-tasks event", async () => {
+// T169 (L1437, L1438): the command palette and the panel sheet are gone:
+// no /jhon:commands, /jhon:panel, alt+k or alt+r, whatever the variables
+// that used to set those keys say; the other commands and keys stay.
+test("the shell registers no command palette and no panel sheet: no /jhon:commands, /jhon:panel, alt+k or alt+r (T169)", () => {
+	for (const env of [{}, { JHON_SHELL_RAIL_KEY: "ctrl+alt+r", JHON_SHELL_COMMANDS_KEY: "ctrl+p" }]) {
+		const { pi, commands, shortcuts } = fakePi();
+		shellUi(pi, env);
+		for (const name of ["jhon:commands", "jhon:panel"]) assert.equal(commands.has(name), false, `${name} with ${JSON.stringify(env)}`);
+		for (const key of ["alt+k", "alt+r", "ctrl+alt+r", "ctrl+p"]) assert.equal(shortcuts.has(key), false, `${key} with ${JSON.stringify(env)}`);
+		for (const name of ["jhon:usage", "jhon:changes", "jhon:customize"]) assert.ok(commands.has(name), name);
+		for (const key of ["alt+u", "alt+g"]) assert.ok(shortcuts.has(key), key);
+	}
+});
+
+// T169: the rail has no STATS card; the dashboard keeps the session's usage.
+test("the rail has no STATS part, whatever the session and its sub-agents spent (T169)", async () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
 	const entries = [{ type: "message", timestamp: "2026-11-14T10:00:00.000Z", message: { role: "assistant", model: "claude-opus-5-5", usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, cost: { total: 0.5 } } } }];
@@ -4013,46 +3753,12 @@ test("the rail's STATS part shows the session's spend and the sub-agents' from t
 		getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {},
 	});
 	try {
-		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [], spend: { runs: 2, tokens: 3000, cost: 0.1 } });
-		const stats = sidebarState(tui as unknown as TUI).parts.get("stats");
-		assert.ok(stats, "a stats part of its own");
-		const lines = stats.render(48).map(stripAnsi);
-		assert.match(lines[0]!, /^▾ STATS +\$0\.500 sub$/);
-		assert.ok(lines.some((line) => /^ {2}agents 2 runs · 3\.0k · \$0\.100 sub/.test(line)), lines.join("\n"));
-		assert.ok(lines.some((line) => /^ {2}claude-opus-5-5 +1 turn · 150 · \$0\.500 sub/.test(line)), lines.join("\n"));
-	} finally { footer.dispose(); }
-});
-
-test("/jhon:panel and alt+r open G's sheet without a visible rail (inactive, or active but not owning the host), nothing over an owned rail", async () => {
-	const { pi, handlers, commands, shortcuts } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	renderFooter(ui);
-	const state = sidebarState(fakeTui as unknown as TUI);
-	const restore = { active: state.active, ownsHost: state.ownsHost };
-	const run = async (fn: () => Promise<unknown> | unknown) => {
-		const p = fn();
-		await new Promise((resolve) => setImmediate(resolve));
-		const opened = ui.overlayView;
-		if (opened) { assert.match(stripAnsi(opened.render(60)[0]!), /^ 力 Panel +esc back $/); opened.handleInput("q"); ui.overlayView = undefined; }
-		await p;
-		return opened !== undefined;
-	};
-	try {
-		for (const [active, owns, expect] of [[false, true, true], [true, false, true], [false, false, true], [true, true, false]] as const) {
-			state.active = active;
-			state.ownsHost = () => owns;
-			assert.equal(await run(() => commands.get("jhon:panel")!.handler("", ctx)), expect, `/jhon:panel active=${active} owns=${owns}`);
-			state.active = active;
-			state.ownsHost = () => owns;
-			assert.equal(await run(() => shortcuts.get("alt+r")!.handler(ctx)), expect, `alt+r active=${active} owns=${owns}`);
-		}
-	} finally {
-		state.active = restore.active;
-		state.ownsHost = restore.ownsHost;
-		await fire(handlers, "session_shutdown", ctx);
-	}
+		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "agent-1", kind: "agent", label: "explore: callers", startedAt: 1 }], spend: { runs: 2, tokens: 3000, cost: 0.1 } });
+		const parts = sidebarState(tui as unknown as TUI).parts;
+		assert.equal(parts.has("stats"), false, "no STATS part");
+		for (const kept of ["ldd", "jobs", "agents", "footer"]) assert.ok(parts.has(kept), `${kept} stays: ${[...parts.keys()].join(", ")}`);
+		for (const part of parts.values()) assert.doesNotMatch(part.render(48).map(stripAnsi).join("\n"), /STATS/);
+	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
 // The verifier's probes of the Permission mode row (L188): a confirm row runs

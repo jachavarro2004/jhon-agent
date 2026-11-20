@@ -14,7 +14,7 @@
  * over its rows: the shell wires what a change does (extensions/ui.ts).
  */
 import { matchesKey, sliceByColumn, truncateToWidth, visibleWidth, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
-import { CARD_PADDING, renderPaletteCard, renderPaletteSelection } from "./command-palette.ts";
+import { CARD_PADDING, renderPaletteCard, renderPaletteSelection } from "./overlay-card.ts";
 import { asciiText, glyph } from "./primitives/index.ts";
 import { paintHoverable } from "./shell-hover.ts";
 import { stripAnsi } from "./terminal-theme.ts";
