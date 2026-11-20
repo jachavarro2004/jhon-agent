@@ -4,7 +4,7 @@ import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@eare
 import { execFile } from "node:child_process";
 import { existsSync, realpathSync, statSync, watch } from "node:fs";
 import { join } from "node:path";
-import { renderAgentsSection, renderJobsSection, renderLddPanel, renderRunningBlock, shellEnabled, shellJobsCount, type RunningJobDisplay } from "../lib/ui/panel.ts";
+import { JOBS_FINISHED_TTL_MS, renderAgentsSection, renderJobsSection, renderLddPanel, renderRunningBlock, shellEnabled, shellJobsCount, type RunningJobDisplay } from "../lib/ui/panel.ts";
 import { barModel, renderStatusBar, renderTopRow, type BarModel } from "../lib/ui/bars.ts";
 import { SettingsView } from "../lib/ui/settings-view.ts";
 import { ROSE_INK } from "../lib/ui/customize/themes.ts";
@@ -31,9 +31,10 @@ import {
 	resolveDoubleEscCancelPolicy,
 	type DoubleEscCancelPolicy,
 } from "../lib/ui/double-esc-cancel-policy.ts";
-import { installPane, invalidatePane, paneSlot, paneState, renderStrip, setPaneHover, stripModel } from "../lib/ui/pane.ts";
+import { foldablePart, installPane, invalidatePane, paneSlot, paneState, renderStrip, setPaneHover, stripModel } from "../lib/ui/pane.ts";
 import { setChromeSurface } from "../lib/ui/shell-panel.ts";
-import { recentSessionRoots } from "../lib/ui/session-changes.ts";
+import { recentSessionRoots, SessionChanges } from "../lib/ui/session-changes.ts";
+import type { ProfilesJson } from "../lib/session-profile.ts";
 import { installSessionChangeCapture } from "../lib/ui/session-change-capture.ts";
 import { SelectionEngine } from "../lib/ui/selection-engine.ts";
 import { HOST_EVENT, hostShowsPath } from "../lib/host.ts";
@@ -71,6 +72,25 @@ export interface ShellDeps {
 	schedule?: Schedule;
 	/** What a registered usage source fetches with (lib/ui/usage.ts); the global fetch by default. */
 	fetch?: typeof fetch;
+	/** `jhon profile json`, for the usage scope of a session on its own profile; JHON_BIN's by default. */
+	profilesJson?(cwd: string): Promise<ProfilesJson>;
+}
+
+// The `±N` beside the branch: the files the session's own writes changed
+// (lib/ui/session-change-capture.ts records them as session entries), counted
+// again only when the session has new entries: the bar draws every frame.
+const changedCache = new WeakMap<object, { key: string; files: number }>();
+function sessionChangedFiles(ctx: ExtensionContext): number {
+	try {
+		const manager = ctx.sessionManager;
+		const entries = manager.getEntries();
+		const key = `${manager.getSessionId()}\0${entries.length}`;
+		const cached = changedCache.get(manager);
+		if (cached?.key === key) return cached.files;
+		const files = new SessionChanges(manager.getSessionId(), entries as never).model.files.length;
+		changedCache.set(manager, { key, files });
+		return files;
+	} catch { return 0; }
 }
 
 export type ActiveProfileReader = (() => string | undefined) & {
@@ -355,6 +375,8 @@ export class JhonPromptEditor extends CustomEditor {
 					this.deps.requestRender();
 					return { handled: true, render: true };
 				}
+				// pi makes a click only for the component that took its press.
+				if (event.type === "press" && event.button === "left") return { handled: true };
 				if (event.type !== "click" || event.button !== "left") return undefined;
 				this.deps.onTopRowClick?.(event.y);
 				return { handled: true, render: true };
@@ -661,9 +683,15 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	const usage = installUsage(pi, env, {
 		settings, now: () => deps.now(), fetch: deps.fetch, current: () => currentContext,
 		repaint: () => { renderHost?.invalidatePane?.(); renderHost?.requestRender(); },
+		// T149: a session on its own profile runs its sub-agents on that profile's models.
+		sessionProfile: () => sessionProfile,
+		...(deps.profilesJson ? { profilesJson: deps.profilesJson } : {}),
 	});
-	// This session's running background tasks (lib/background-tasks-tools.ts).
+	// This session's background tasks (lib/background-tasks-tools.ts): those
+	// running, and those that ended in the last minute, which the pane keeps.
 	let runningJobs: RunningJobDisplay[] | undefined;
+	/** Something runs, or ended less than a minute ago: the clock keeps the pane's times and lingering rows live. */
+	const jobsLive = () => (runningJobs ?? []).some((job) => job.endedAt === undefined || deps.now() - job.endedAt < JOBS_FINISHED_TTL_MS);
 	let jobClock: ReturnType<typeof setInterval> | undefined;
 	/** Opens the agents view or the jobs view (lib/background-tasks-tools.ts). */
 	const openTasks = (ctx: ExtensionContext, view: "agents" | "jobs") => { pi.events.emit(OPEN_TASKS_EVENT, { ctx, view }); };
@@ -671,18 +699,20 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		? items.filter((item): item is RunningJobDisplay => typeof item?.id === "string" && typeof item.label === "string" && typeof item.startedAt === "number")
 		: [];
 	pi.events.on(TASKS_EVENT, (value) => {
-		const event = value as { sessionId?: unknown; tasks?: unknown } | undefined;
+		const event = value as { sessionId?: unknown; tasks?: unknown; finished?: unknown } | undefined;
 		if (!currentContext || event?.sessionId !== currentContext.sessionManager.getSessionId() || !Array.isArray(event.tasks)) return;
-		runningJobs = displays(event.tasks);
-		// The elapsed times run live: one redraw a second while a task runs, none when idle.
-		if (runningJobs.length && !jobClock) {
+		const finished = displays(event.finished).filter((job) => typeof job.endedAt === "number");
+		runningJobs = [...displays(event.tasks).filter((job) => job.endedAt === undefined), ...finished];
+		// The elapsed times run live: one redraw a second while a task runs or a
+		// finished one still shows, none when idle.
+		if (jobsLive() && !jobClock) {
 			jobClock = setInterval(() => {
-				if (!runningJobs?.length && jobClock) { clearInterval(jobClock); jobClock = undefined; }
+				if (!jobsLive() && jobClock) { clearInterval(jobClock); jobClock = undefined; }
 				renderHost?.invalidatePane?.();
 				renderHost?.requestRender();
 			}, 1000);
 			jobClock.unref?.();
-		} else if (!runningJobs.length && jobClock) {
+		} else if (!jobsLive() && jobClock) {
 			clearInterval(jobClock);
 			jobClock = undefined;
 		}
@@ -877,6 +907,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				...(deps.activeProfile() ? { profile: deps.activeProfile() } : {}),
 				...(sandbox ? { sandbox } : {}),
 				...(sandboxWhy ? { sandboxWhy } : {}),
+				...(sessionChangedFiles(ctx) ? { dirty: sessionChangedFiles(ctx) } : {}),
 				...(mode ? { mode } : {}),
 				...(hostShowsPath() ? { hostShowsPath: true } : {}),
 				...(usage.bar(ctx).length ? { usage: usage.bar(ctx) } : {}),
@@ -889,26 +920,25 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			// footer is the status bar and the chrome widget the top row and strip.
 			// The pane's LDD section (01, 02): the change, its slices, the last run;
 			// its digest moves each minute for the run's age.
-			const disposeLdd = paneSlot(tui, "ldd", {
+			// A click on a section's title folds it; the pointer over its title (and
+			// over Agents' and Jobs' rows) paints it (lib/ui/pane.ts foldablePart).
+			const disposeLdd = paneSlot(tui, "ldd", foldablePart(tui, {
 				digest: () => JSON.stringify([ldd, visualSettings, settings.ascii(), Math.floor(deps.now() / 60_000)]),
-				render: (width) => renderLddPanel(ldd, theme, width, { now: deps.now(), ascii: settings.ascii() }),
+				render: (width, view) => renderLddPanel(ldd, theme, width, { now: deps.now(), ascii: settings.ascii(), ...view }),
+				// Without a change its one dim line is no title: nothing to fold.
+				foldable: () => ldd !== undefined,
 				// The narrow form's strip (04): the change, its slice, the next step, the last run.
 				strip: (width) => ldd ? renderStrip(stripModel(ldd, deps.now(), settings.string("shell.keys.panel")), theme, width, { ascii: settings.ascii() }) : undefined,
-				invalidate() {},
-			});
-			// Agents and Jobs, each its own section while something runs (01); a
-			// click on one of its rows opens its view (/jhon:agents, /jhon:jobs).
-			const workPart = (key: "agents" | "jobs", render: typeof renderJobsSection) => paneSlot(tui, key, {
-				digest: () => JSON.stringify([runningJobs, settings.ascii(), runningJobs?.length ? Math.floor(deps.now() / 1000) : 0]),
-				render: (width) => render(runningJobs, theme, width, { now: deps.now(), ascii: settings.ascii() }),
-				invalidate() {},
-				handleMouse(event) {
-					if (event.type === "move" && event.button === "none") { setPaneHover(tui); return undefined; }
-					if (event.type !== "click" || event.button !== "left") return undefined;
-					openTasks(ctx, key);
-					return { handled: true };
-				},
-			});
+			}));
+			// Agents and Jobs, each its own section while something runs or ended in
+			// the last minute (01); a click on one of its rows opens its view
+			// (/jhon:agents, /jhon:jobs).
+			const workPart = (key: "agents" | "jobs", render: typeof renderJobsSection) => paneSlot(tui, key, foldablePart(tui, {
+				digest: () => JSON.stringify([runningJobs, settings.ascii(), jobsLive() ? Math.floor(deps.now() / 1000) : 0]),
+				render: (width, view) => render(runningJobs, theme, width, { now: deps.now(), ascii: settings.ascii(), ...view }),
+				rows: true,
+				open: () => { openTasks(ctx, key); return true; },
+			}));
 			const disposeAgents = workPart("agents", renderAgentsSection);
 			const disposeJobs = workPart("jobs", renderJobsSection);
 			// The status bar spans the width under the rail (L97); the rail has no
@@ -927,14 +957,16 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			const uninstall = installPane(tui, theme, {
 				placement: () => visualSettings.statusPlacement,
 				density: () => visualSettings.density,
+				ascii: () => settings.ascii(),
 				note: (text) => ctx.ui.notify(text, "warning"),
 			});
 			return {
 				render(width: number) {
 					if (paneState(tui).hosted?.()) return [];
 					if (visualSettings.statusPlacement !== "hidden") return [renderStatusBar(bars(), theme, width)];
-					if ((tui as TUI & { mode?: string }).mode !== "fullscreen" && runningJobs?.length) {
-						return [truncateToWidth(theme.fg("muted", shellJobsCount(runningJobs.length)), width, "…")];
+					const running = (runningJobs ?? []).filter((job) => job.endedAt === undefined).length;
+					if ((tui as TUI & { mode?: string }).mode !== "fullscreen" && running) {
+						return [truncateToWidth(theme.fg("muted", shellJobsCount(running)), width, "…")];
 					}
 					return [];
 				},
@@ -967,7 +999,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				// The editor joins the fullscreen chrome, rail or not; a regular terminal keeps the float or neon card, as G's.
 				panelChrome: (tui) => (tui as TUI & { mode?: string }).mode === "fullscreen" && Boolean(tui.terminal),
 				// The narrow form's Running block (04): the agents and jobs while they run.
-				topRows: (tui, width) => narrowChrome(tui) ? renderRunningBlock(runningJobs, ctx.ui.theme, width, { now: deps.now(), ascii: shellSettings().ascii() }).rows : [],
+				topRows: (tui, width, hovered) => narrowChrome(tui) ? renderRunningBlock(runningJobs, ctx.ui.theme, width, { now: deps.now(), ascii: shellSettings().ascii(), ...(hovered !== undefined ? { hover: hovered } : {}) }).rows : [],
 				// A click on one of its rows opens the agents view or the jobs view.
 				onTopRowClick: (tui, index) => {
 					if (!narrowChrome(tui)) return;

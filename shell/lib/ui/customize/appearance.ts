@@ -94,13 +94,15 @@ export const APPEARANCE: CustomizeCategory = {
 		},
 		{
 			key: "shell.appearance.density", label: "Density", kind: "choice", values: ["comfortable", "compact", "minimal"],
-			note: "Spacing: comfortable spaces the rail's sections with a blank row; compact and minimal draw none. The top row and the status bar are one row each at every density. Minimal also keeps tool cards quiet: bash collapses to ↳ ✓ N lines instead of its output tail and duration.",
-			// The rail's section gaps (L195); the bars have no margin rows (T174-S3, design/shell-tui 01).
+			note: "The pane's two forms: comfortable draws each of its sections in its own box; compact draws them flat, a blank row apart; minimal draws none between them. The top row and the status bar are one row each at every density. Minimal also keeps tool cards quiet: bash collapses to ↳ ✓ N lines instead of its output tail and duration.",
+			// The right pane's two forms (L1495, T174-S5b); the bars have no margin rows (T174-S3, design/shell-tui 01).
 			preview: (v, ascii) => ({
-				caption: "the rail",
+				caption: "the right pane",
 				lines: v === "comfortable"
-					? [`${ascii ? "v" : "▾"} LDD`, "a blank row", `${ascii ? "v" : "▾"} AGENTS`]
-					: [`${ascii ? "v" : "▾"} LDD`, `${ascii ? "v" : "▾"} AGENTS`, "the sections one under another"],
+					? (ascii ? ["+--------+", "| Agents |", "+--------+"] : ["╭────────╮", "│ Agents │", "╰────────╯"])
+					: v === "compact"
+						? ["Last run", "a blank row", "Agents"]
+						: ["Last run", "Agents", "the sections one under another"],
 			}),
 			read: (h) => h.settings.density(),
 			live: appearance,

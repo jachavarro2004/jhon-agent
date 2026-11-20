@@ -113,7 +113,7 @@ in `~/.pi/jhon/settings.json`, so pi loads it from that path.
 | `/jhon:dashboard` | | This session's audit in the browser at `http://127.0.0.1:7480/#/s/<session id>`, starting `jhon dashboard` detached when it does not answer, or replacing one that runs an older build than this shell's `jhon` (no `/api/version`, or another binary; stopped only when it is proven Jhon's). One that is not replaced is opened all the same, and the notice says to run `jhon dashboard --port <p>` to see why. With no display it says the address instead. |
 | `/jhon:agents` | `alt+s` | The sub-agents, full screen (T92, L657): this session's, or every session's this pi ran after `a`, running first, beside the selected one's live thread (its model, tokens, cost and time, its task, its thinking, text and tool events, then its answer). `j/k` select, `ctrl+j/k` scroll, `f` follows, `s` stops the selected agent, `o` opens its saved session in `$VISUAL`/`$EDITOR`, `F` (or `tab` when narrow) shows the thread alone, `esc` goes back, `q` closes; a click selects a row or presses a button. The work row opens it. |
 | `/jhon:jobs` | `alt+o` | The background commands and monitors (T92): the list beside the selected job's command line, output file and tail, with the agents view's keys but `a` and `o`. |
-| `/jhon:usage` | `alt+u` | Each provider's subscription usage (T174-S5b, `lib/ui/usage.ts`): the session's provider first, marked `力`, then each one the sub-agents' models name, each with its plan, its windows (name, meter, used share, reset) and a warning from 80%; a provider without data says why. Claude (anthropic, claude-bridge) and ChatGPT (openai-codex) send theirs with each reply; a provider another extension registers (`jhon-shell:usage-source/v1` on pi.events) is fetched at a session's start, at most every 5 minutes after each turn, and on `r`, each fetch bounded by 10 s (`JHON_SHELL_USAGE_TIMEOUT_MS`). `r` refreshes, `esc` or `q` closes. |
+| `/jhon:usage` | `alt+u` | Each provider's subscription usage (T174-S5b, `lib/ui/usage.ts`): the session's provider first, marked `力`, then each one the sub-agents' models name, each with its plan, its windows (name, meter, used share, reset) and a warning from 80%; a provider without data says why. Claude (anthropic, claude-bridge) and ChatGPT (openai-codex) send theirs with each reply; NaN Cloud (`nan`) is fetched from its quota endpoint with the key pi holds for it (redirects refused, no stored copy), one allowance per model: the bar follows the session's model's own, else its family's total, else the account's (`glm total`, `nan total`: shares of the summed allowances), and the overlay lists a family together, the most used first; a provider another extension registers (`jhon-shell:usage-source/v1` on pi.events) is fetched the same way: at a session's start, at most every 5 minutes after each turn, and on `r`, each fetch bounded by 10 s (`JHON_SHELL_USAGE_TIMEOUT_MS`). A session on a profile of its own (T149) lists the providers of that profile's sub-agent models. `r` refreshes, `esc` or `q` closes; the pointer paints a key hint and a click on it does what its key does. |
 | | `alt+t` | Folds or unfolds the agent's todo list; `alt+PgUp/PgDn` scroll it three rows. |
 
 `/jhon:stats` and the rail's STATS went (L117, T169), and T174 removed
@@ -133,12 +133,15 @@ The chrome wears Jhon's brand (`力`, rose ink) and has only Jhon's options
 (L146). In a fullscreen terminal the top row holds the project and its path
 and nothing else (` 力 <project>  <~path>`; the project alone when a
 multiplexer host that shows the path is announced, `jhon:host`), and the
-status bar sits at the bottom: on the left `⎇ <branch>`, the sandbox's real
+status bar sits at the bottom: on the left `⎇ <branch>` with `±N`, the files
+the session's own writes changed (`lib/ui/session-changes.ts`), the sandbox's real
 state (`sandbox on`, `sandbox off`, or `sandbox not running · <why>` when
 the mode is on but the sandbox cannot run, no project can be pinned or the
 status gave no answer: what `lib/sandbox.ts` read at the session's start)
 and the permission mode when it is not normal
-(`YOLO` in amber, `SUPER YOLO` in red and bold); on the right
+(`YOLO` in amber, `SUPER YOLO` in red and bold), then what other extensions
+report on pi's status line (an MCP adapter's servers), in their own words and
+the bar's palette; on the right
 `model · effort · profile`, `ctx` with its 70/90 meter, the percent and
 `· compacts at N%` near it, the subscription's windows (T174-S5b): the week
 with its meter, its percent and `· resets Thu 14:00`, and `5h N%` once the
@@ -146,10 +149,12 @@ with its meter, its percent and `· resets Thu 14:00`, and `5h N%` once the
 and the cost, thin `│` dividers between. Running agents and jobs are not on
 the bar. Under 140 columns the status bar takes its narrow form: no meter,
 the branch cut to 18 cells. Narrowing further, the branch shortens first (to
-8 cells); then why the sandbox is not running, the meter, the profile, the
-reset, the week's meter, the compaction note, the window without the reset,
-the windows, model · effort, sandbox, the branch, ctx and the mode badge go
-in that order; the cost goes last. `shell.appearance.status = "hidden"` hides it, with the right pane and
+8 cells); then why the sandbox is not running, the other extensions'
+statuses, the profile, the reset, the week's meter (the profile before the
+windows' meters and resets, as before T174), the context meter, the
+compaction note, the window without the reset, the windows, model · effort,
+sandbox, the branch with its `±N`, ctx and the mode badge go in that order;
+the cost goes last. `shell.appearance.status = "hidden"` hides it, with the right pane and
 the strip.
 
 Cards come in two styles, `shell.appearance.cards`: `float` (the default: a
@@ -163,9 +168,11 @@ The surface, `shell.appearance.surface`: `transparent` (the default) leaves
 the right pane's sections on the terminal's background; `tinted` paints them
 on one panel, and paints the top row, the strip and the status bar on it too.
 
-The density, `shell.appearance.density`: `comfortable` (the default) draws a
-blank row between the pane's sections; `compact` draws none; `minimal` spaces
-like `compact` and keeps bash tool cards quiet (`↳ ✓ N lines` and a short
+The density, `shell.appearance.density`, picks one of the pane's two forms
+(L1495): `comfortable` (the default) draws each of the pane's sections (LDD,
+TODOS, Agents, Jobs) in its own rounded box, in rose ink's border role, in
+the same pane; `compact` draws them flat with one blank row between them
+(design 01); `minimal` stacks them with none and keeps bash tool cards quiet (`↳ ✓ N lines` and a short
 preview, no output tail or duration); tool calls are otherwise full cards (a
 bash card shows its whole command, the last five output lines with the
 ctrl+o hint, and "Took Ns") (T91, L656).
@@ -188,19 +195,31 @@ then TODOS, Agents and Jobs. LDD says the change, its route, strict TDD and
 risk, the next step; `Slices n/m · tasks a/b`, a row per slice with the open
 one's tasks under it; the last run (verdict, scope, age, then the commit);
 the other worktrees' changes. With no change it is one dim line. Agents and
-Jobs show only while something runs, a row each: its state glyph, its name
-(the column fits the longest agent name), what it does, its elapsed time at
-the right; a click on a row opens `/jhon:agents` or `/jhon:jobs`.
+Jobs show only while something runs or ended in the last minute. Agents: a
+row per sub-agent running or failed in that minute, its state glyph, its name
+(the column fits the longest agent name), what it does, its tokens and
+elapsed time at the right (`48k · 4m12s`, `failed 1m03s`); those done and
+cancelled fold into `✓ N done · /jhon:agents` and `– N cancelled`; past eight
+rows `… N more · /jhon:agents` stands for the rest. Jobs: a row per command or
+monitor, `⧗ <id> <command>` and its time, then the newest three that ended in
+the last minute (`✓` a clean exit, `✗` a failure, `–` stopped). A click on a
+row opens `/jhon:agents` or `/jhon:jobs`; a click on a section's title (the
+change's row for LDD) folds it to its title and first row (`▸` at its right);
+the pointer over a title, or over an Agents or Jobs row, paints it in the
+hover role. The wheel over the pane scrolls the part under it first (the
+todo list), then the pane, and never the conversation.
 
-TODOS is the agent's own list (the todo tool), one row per task with its
-state glyph and, in progress or blocked, its note (`lib/ui/todo-section.ts`).
+TODOS is the agent's own list (the todo tool) (`lib/ui/todo-section.ts`):
+the done and dropped tasks folded into one `✓ N done · M dropped` row, then
+one row per open task with its state glyph and, in progress or blocked, its
+note; the task at hand wraps instead of being cut.
 It shows only while it has tasks and the LDD section has no change (L1469):
 with one, the change's tasks are the LDD section's alone (L154). Its title
 names its fold key and `done/planned` (`▾ TODOS … alt+t  0/2`), and
 `stale · N turns` once the agent let open work sit two turns. `alt+t`
 (`shell.keys.todos`), or a click on the title, folds it to the task at hand;
 it keeps to a third of the terminal (16 rows at most), past which `alt+PgUp`
-and `alt+PgDn` scroll it three rows and a row says where it is
+and `alt+PgDn` (or the wheel over it) scroll it three rows and a row says where it is
 (`↑↓ 4–11/12 · alt+PgUp/PgDn`). In a regular terminal and the narrow form it
 sits above the prompt as the Running block does: `── ▾ Todos  alt+t · 0/2 ──`,
 its rows two columns in, then a blank row.
@@ -212,7 +231,8 @@ In a fullscreen terminal the prompt is a ruled editor:
 `shell.appearance.cards`' style. In a fullscreen terminal without the pane
 (under 140 columns, Status hidden, or no layout hook) the Running block sits
 above the rule while agents or jobs run (design 04): `── Running  2 agents ·
-1 job ──`, then their rows; a click on a row opens its view. With
+1 job ──`, then their rows (the finished ones of the last minute too); the
+pointer paints the row under it and a click opens its view. With
 no pane, `alt+j` (the LDD status), `alt+s` (the agents), `alt+o` (the jobs),
 `alt+u` (the usage) and `alt+t` (the todo list, above the rule) remain. `ask_user` asks in the dock between two accent
 rules, never an overlay.

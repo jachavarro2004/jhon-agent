@@ -283,7 +283,7 @@ test("barModel reads the session, the model and the footer data (T174-S3)", () =
 	assert.equal(built.contextPercent, 45);
 	assert.equal(built.costTotal, 0.75);
 	assert.equal(built.subscription, true);
-	assert.equal("statuses" in built, false, "T174: the extension statuses (the integrations) are gone");
+	assert.deepEqual(built.statuses, ["MCP: 3 servers enabled"], "T174-S5b: other extensions' statuses are back on the bar");
 });
 
 test("barModel keeps the folder whole for the top row, which shows the home as ~; no effort for a non-reasoning model", () => {
@@ -375,7 +375,7 @@ test("the fullscreen status line carries a live digest so model, context, and co
 		const live = () => header.digest?.();
 		const text = () => header.render(160).join("\n");
 		assert.match(text(), /claude-opus-5-5/);
-		assert.doesNotMatch(text(), /MCP: 3 servers/, "extension statuses never reach the status line");
+		assert.match(text(), /MCP: 3 servers/, "other extensions' statuses reach the status line (T174-S5b)");
 		assert.doesNotMatch(text(), /working/i, "the working state never reaches the status line");
 
 		const beforeModel = live();
@@ -532,7 +532,7 @@ test("the status line wears the owner's mode from STATUS's own status read, with
 	} finally { editor.dispose(); }
 });
 
-test("without the rail the status bar is exactly one row: no extension status, no jobs, never a second line (T15.12d, T174)", async (t) => {
+test("without the rail the status bar is exactly one row: other extensions' statuses on it, no jobs, never a second line (T15.12d, T174, T174-S5b)", async (t) => {
 	const home = mkdtempSync(join(tmpdir(), "jhon-sections-statuses-"));
 	t.after(() => rmSync(home, { recursive: true, force: true }));
 	const { pi, handlers } = fakePi();
@@ -548,15 +548,15 @@ test("without the rail the status bar is exactly one row: no extension status, n
 	assert.deepEqual(footer.render(120), [], "the footer steps aside for the statusbar row");
 	const rows = statusRow();
 	assert.equal(rows.length, 1, rows.join("\n"));
-	assert.doesNotMatch(rows.join("\n"), /MCP/, "the integrations are gone (T174)");
+	assert.match(rows.join("\n"), /│ MCP: 2 servers/, "another extension's status, on the bar (T174-S5b)");
 	pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }] });
 	const busy = statusRow();
 	assert.equal(busy.length, 1);
 	assert.equal(busy[0], rows[0], "a running job is the right pane's, not the bar's (T174-S3)");
-	assert.match(rows[0]!, /^ ⎇ main +claude-opus-5-5 · medium │ ctx 45% │ \$0\.000 sub $/, "120 columns: the narrow form");
+	assert.match(rows[0]!, /^ ⎇ main │ MCP: 2 servers +claude-opus-5-5 · medium │ ctx 45% │ \$0\.000 sub $/, "120 columns: the narrow form");
 });
 
-test("a regular (not fullscreen) terminal's footer is the status bar alone: branch and sandbox, model, ctx and cost; no session name, jobs or integrations (T174-S3)", async (t) => {
+test("a regular (not fullscreen) terminal's footer is the status bar alone: branch and sandbox, other extensions' statuses, model, ctx and cost; no session name or jobs (T174-S3, S5b)", async (t) => {
 	const home = mkdtempSync(join(tmpdir(), "jhon-regular-bar-"));
 	t.after(() => rmSync(home, { recursive: true, force: true }));
 	const { pi, handlers } = fakePi();
@@ -565,7 +565,7 @@ test("a regular (not fullscreen) terminal's footer is the status bar alone: bran
 	await fire(handlers, "session_start", ctx);
 	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, data: unknown) => { render(width: number): string[] };
 	const rows = factory(fakeTui, plainTheme, { ...footerData, getExtensionStatuses: () => new Map([["mcp", "MCP: 2 servers"]]) }).render(160);
-	assert.deepEqual(rows, [" ⎇ main" + " ".repeat(96) + "claude-opus-5-5 · medium │ ctx ▰▰▰▰▱▱▱▱ 45% │ $0.000 sub "]);
+	assert.deepEqual(rows, [" ⎇ main │ MCP: 2 servers" + " ".repeat(79) + "claude-opus-5-5 · medium │ ctx ▰▰▰▰▱▱▱▱ 45% │ $0.000 sub "]);
 	pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }] });
 	assert.doesNotMatch(factory(fakeTui, plainTheme, footerData).render(160)[0]!, /⧗|job|Release notes/);
 	pi.events.emit(SANDBOX_EVENT, { mode: "on" });
@@ -679,7 +679,7 @@ test("without the pane the Running block sits above the editor rule while agents
 		const lines = editor.render(100).map(stripAnsi);
 		assert.match(lines[0]!, /^── Running {2}1 agent · 1 job ─+$/);
 		assert.match(lines[1]!, /^ {2}◐ jhon-builder {2}slice 3 +\d+s +$/);
-		assert.match(lines[2]!, /^ {2}⧗ npm test +\d+s +$/);
+		assert.match(lines[2]!, /^ {2}⧗ job-1 npm test +\d+s +$/);
 		assert.equal(lines[3]!.trim(), "", "a blank row before the prompt");
 		assert.match(lines[4]!, /^─ 力 ready for you ─+$/, "the rule under it, no [ Panel ] (T169)");
 		for (const line of lines.slice(0, 4)) assert.equal(visibleWidth(line), 100);
@@ -2516,15 +2516,19 @@ test("Agents and Jobs: each its own part, drawn while something runs; a click on
 		const now = Date.now();
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: now - 1_000 }, { id: "agent-1", kind: "agent", label: "jhon-checker: callers", startedAt: now - 2_000 }] });
 		assert.match(draw(jobs)[0]!, /^Jobs {2}1 running$/);
-		assert.match(draw(jobs)[1]!, /^⧗ build +\ds$/);
+		assert.match(draw(jobs)[1]!, /^⧗ job-1 build +\ds$/);
 		assert.match(draw(agents)[0]!, /^Agents {2}1 running$/);
 		assert.match(draw(agents)[1]!, /^◐ jhon-checker {2}callers +\ds$/, "the whole name, never jhon-chec… (L1475)");
 		assert.ok(!draw(jobs).some((line) => /callers/.test(line)) && !draw(agents).some((line) => /build/.test(line)), "each holds its own");
 		assert.doesNotMatch([...draw(jobs), ...draw(agents)].join("\n"), /alt\+|\/jhon/, "no key on a header (C6)");
 		assert.deepEqual(agents.handleMouse({ type: "click", button: "left", x: 3, y: 1, width: 42, height: 2 }), { handled: true });
-		assert.deepEqual(jobs.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 42, height: 2 }), { handled: true });
-		assert.equal(jobs.handleMouse({ type: "move", button: "none", x: 3, y: 1, width: 42, height: 2 }), undefined, "a move is no click");
+		assert.deepEqual(jobs.handleMouse({ type: "click", button: "left", x: 3, y: 1, width: 42, height: 2 }), { handled: true });
+		assert.deepEqual(jobs.handleMouse({ type: "move", button: "none", x: 3, y: 1, width: 42, height: 2 }), { handled: true, render: true }, "a move paints the row, and opens nothing");
 		assert.deepEqual(opened.map((payload) => payload.view), ["agents", "jobs"]);
+		// T174-S5b: a click on the title folds the section to its title and first row.
+		assert.deepEqual(jobs.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 42, height: 2 }), { handled: true, render: true });
+		assert.match(draw(jobs)[0]!, /^Jobs {2}1 running +▸$/);
+		assert.deepEqual(opened.map((payload) => payload.view), ["agents", "jobs"], "the title opens nothing");
 	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 

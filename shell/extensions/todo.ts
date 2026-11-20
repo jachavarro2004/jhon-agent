@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Text, type TUI } from "@earendil-works/pi-tui";
-import { invalidatePane, paneSlot, paneState } from "../lib/ui/pane.ts";
+import { Text, type Component, type TUI } from "@earendil-works/pi-tui";
+import { invalidatePane, paneSlot, paneState, setPaneHover } from "../lib/ui/pane.ts";
 import type { PanelTheme } from "../lib/ui/shell-panel.ts";
 import { asciiText } from "../lib/ui/primitives/glyphs.ts";
 import { plainTodoRows, renderTodoBlock, renderTodoPane, todoHeight, TODO_SCROLL_KEYS, TODO_SCROLL_ROWS, type TodoView } from "../lib/ui/todo-section.ts";
@@ -204,26 +204,51 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		current.ui.setWidget(WIDGET_KEY, (tui, theme) => {
 			snapshot.tui = tui;
 			const hidden = () => snapshot.state.tasks.length === 0 || selectedChange(snapshot.id) !== undefined;
+			// The pane's title row under the pointer, and how far the list scrolls as last drawn.
+			let hover = false;
+			let maxTop = 0;
 			const view = (): TodoView => ({
 				collapsed: snapshot.collapsed, top: snapshot.top, staleTurns: staleTurns(snapshot.state, snapshot.turn),
 				...(collapseKey ? { key: collapseKey } : {}), height: todoHeight(tui.terminal?.rows ?? 48), ascii: shellSettings().ascii(),
 			});
-			const dispose = paneSlot(tui, "todo", {
-				digest: () => JSON.stringify([snapshot.state.tasks, hidden(), view()]),
-				render: (width) => {
+			const part = {
+				digest: () => JSON.stringify([snapshot.state.tasks, hidden(), view(), hover]),
+				render: (width: number) => {
 					if (hidden()) return [];
-					const drawn = renderTodoPane(snapshot.state, theme, width, view());
+					const drawn = renderTodoPane(snapshot.state, theme, width, { ...view(), hover });
 					snapshot.top = drawn.top;
+					maxTop = drawn.maxTop ?? 0;
 					return drawn.rows;
 				},
-				// A click on the title row folds or unfolds it.
-				handleMouse(event) {
+				// A click on the title row folds or unfolds it; the pointer over it
+				// paints it; the wheel scrolls the list, and past its ends leaves the
+				// wheel to the pane.
+				handleMouse(event: Parameters<NonNullable<Component["handleMouse"]>>[0]) {
+					if (event.type === "wheel") {
+						if (snapshot.collapsed) return undefined;
+						const next = Math.max(0, Math.min(maxTop, snapshot.top + Math.trunc(event.wheelDelta ?? 0)));
+						if (next === snapshot.top) return undefined;
+						snapshot.top = next;
+						redraw(snapshot);
+						return { handled: true, render: true };
+					}
+					if (event.type === "move" && event.button === "none") {
+						if (event.y !== 0) { setPaneHover(tui); return undefined; }
+						if (hover) return undefined;
+						hover = true;
+						setPaneHover(tui, part, () => { hover = false; redraw(snapshot); });
+						redraw(snapshot);
+						return { handled: true, render: true };
+					}
+					// pi makes a click only for the component that took its press.
+					if (event.type === "press" && event.button === "left") return event.y === 0 ? { handled: true } : undefined;
 					if (event.type !== "click" || event.button !== "left" || event.y !== 0) return undefined;
 					toggle(snapshot);
 					return { handled: true, render: true };
 				},
 				invalidate() {},
-			});
+			};
+			const dispose = paneSlot(tui, "todo", part);
 			return {
 				render: (width: number) => {
 					if (hidden() || paneState(tui).wide?.()) return [];

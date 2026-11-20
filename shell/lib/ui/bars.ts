@@ -3,16 +3,20 @@
  * T174-S3).
  *
  * The top row says where the session is: `力 repo  ~/path`, nothing more.
- * The status bar at the bottom says how it runs: the branch, the sandbox and
- * the owner's mode on the left; model · effort, the context, the
- * subscription's windows (the week, the 5h one from 70%; T174-S5b) and the
- * cost on the right, the most volatile last, thin dividers between.
+ * The status bar at the bottom says how it runs: the branch with `±N` (the
+ * files the session changed), the sandbox, the owner's mode and what other
+ * extensions report (an MCP adapter's servers) on the left; model · effort,
+ * the context, the subscription's windows (the week, the 5h one from 70%;
+ * T174-S5b) and the cost on the right, the most volatile last, thin dividers
+ * between.
  *
  * Under NARROW_BELOW columns the status bar takes the narrow form (04): no
  * meter, the branch capped at NARROW_BRANCH_CELLS. When a row still does not
  * fit, the branch shortens first (to BRANCH_MIN_CELLS), then the pieces in
- * DROP_ORDER give way one at a time, why the sandbox is not running first;
- * the windows go before model · effort, the cost is the last thing left.
+ * DROP_ORDER give way one at a time, why the sandbox is not running and the
+ * other extensions' statuses first; the profile before the windows' meters
+ * and resets (as before T174), the windows before model · effort, the cost
+ * is the last thing left.
  *
  * Both renders are pure: data, a theme and a width in, one row of exactly
  * that width out.
@@ -34,6 +38,10 @@ export interface BarModel {
 	/** A multiplexer host shows the path itself (lib/host.ts): the top row names the project alone (L112). */
 	hostShowsPath?: boolean;
 	branch: string | null;
+	/** The `±N` beside the branch: the files the session's own writes changed (session-changes.ts). */
+	dirty?: number;
+	/** What other extensions report on pi's status line (ctx.ui.setStatus), in their keys' order. */
+	statuses?: string[];
 	/** What the session's pin means for the commands (lib/sandbox.ts sandboxShown); unknown until the pin is read. */
 	sandbox?: "on" | "off" | "not running";
 	/** Why the sandbox is not running, in a few words. */
@@ -191,7 +199,7 @@ export function renderTopRow(model: Pick<BarModel, "cwd" | "hostShowsPath">, the
  * in it. Of the subscription's windows the reset goes first, then the week's
  * meter, then the window without the reset, then the windows.
  */
-export const DROP_ORDER = ["why", "meter", "profile", "resets", "usageMeter", "note", "window", "usage", "exec", "sandbox", "branch", "ctx", "mode"] as const;
+export const DROP_ORDER = ["why", "statuses", "profile", "resets", "usageMeter", "meter", "note", "window", "usage", "exec", "sandbox", "branch", "ctx", "mode"] as const;
 type Droppable = (typeof DROP_ORDER)[number];
 
 const METER_ROLE: Record<MeterTone, Role> = { success: "ok", warning: "warn", error: "bad", dim: "dim" };
@@ -214,18 +222,23 @@ export function renderStatusBar(model: BarModel, theme: ThemeLike, cells: number
 	const compacts = compactionPercent(model.contextWindow, options.compactAt === undefined ? compactAt() ?? null : options.compactAt);
 	const note = compacts !== undefined && percent !== null && percent >= compacts - NOTE_FROM;
 	const effort = model.effort ? EFFORT_WORDS[model.effort] ?? clean(model.effort) : "";
+	// The `±N` stays with the branch: it is cut from the name, never dropped alone.
+	const dirty = model.dirty ? `±${model.dirty}` : "";
+	// Another extension may paint its status itself: the bar owns the palette, its escapes go.
+	const statuses = (model.statuses ?? []).map(clean).filter(Boolean);
 
 	// One layout with some pieces dropped and the branch at most `branchCells` wide.
 	const layout = (dropped: ReadonlySet<Droppable>, branchCells: number): { left: Run[][]; right: Run[][] } => {
 		const shown = (piece: Droppable) => !dropped.has(piece);
 		const left: Run[][] = [];
-		if (branch && shown("branch")) left.push([{ role: "accent", text: glyph("branch", ascii) }, { role: "ink", text: " " }, { role: "ink", text: clip(branch, branchCells, { ascii }) }]);
+		if (branch && shown("branch")) left.push([{ role: "accent", text: glyph("branch", ascii) }, { role: "ink", text: " " }, { role: "ink", text: clip(branch, branchCells, { ascii }) }, ...(dirty ? [{ role: "warn" as const, text: ` ${dirty}` }] : [])]);
 		if (model.sandbox && shown("sandbox")) {
 			const state: Run = model.sandbox === "on" ? { role: "ok", text: "on" } : model.sandbox === "off" ? { role: "warn", text: "off" } : { role: "bad", text: "not running" };
 			const why = model.sandbox === "not running" && model.sandboxWhy && shown("why") ? [{ role: "dim" as const, text: `${dot().text}${clean(model.sandboxWhy)}` }] : [];
 			left.push([{ role: "dim", text: "sandbox" }, { role: "ink", text: " " }, state, ...why]);
 		}
 		if (badge && shown("mode")) left.push([{ role: badge.role, text: badge.text, bold: true }]);
+		if (statuses.length && shown("statuses")) left.push(statuses.flatMap((status, i) => [...(i ? [dot()] : []), { role: "soft" as const, text: status }]));
 		const right: Run[][] = [];
 		if (shown("exec")) {
 			const exec: Run[] = [{ role: "ink", text: clean(model.modelId) }];
@@ -287,7 +300,11 @@ export function renderStatusBar(model: BarModel, theme: ThemeLike, cells: number
 // ---------------------------------------------------------------- the model
 
 /** What the footer data gives the bars: pi's branch read. */
-export interface BranchSource { getGitBranch(): string | null }
+export interface BranchSource {
+	getGitBranch(): string | null;
+	/** What other extensions set on pi's status line, by key. */
+	getExtensionStatuses?(): ReadonlyMap<string, string>;
+}
 
 interface Usage { costTotal: number; percent: number | null; contextWindow: number | undefined }
 interface UsageEntry { type?: string; message?: { role?: string; usage?: { cost?: { total?: number } } } }
@@ -316,13 +333,15 @@ function sessionUsage(ctx: ExtensionContext): Usage {
 	return usage;
 }
 
-/** The bars' data from pi: the session's folder, the branch, the model and its effort, the context and the cost. */
+/** The bars' data from pi: the session's folder, the branch, the model and its effort, the context, the cost and the other extensions' statuses. */
 export function barModel(pi: Pick<ExtensionAPI, "getThinkingLevel">, ctx: ExtensionContext, footer: BranchSource, extra: Partial<BarModel> = {}): BarModel {
 	const usage = sessionUsage(ctx);
 	const model = ctx.model;
+	const statuses = [...(footer.getExtensionStatuses?.() ?? new Map<string, string>()).entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, text]) => text);
 	return {
 		cwd: ctx.sessionManager.getCwd(),
 		branch: footer.getGitBranch(),
+		...(statuses.length ? { statuses } : {}),
 		modelId: model?.id ?? "no-model",
 		...(model?.reasoning ? { effort: pi.getThinkingLevel() } : {}),
 		contextPercent: usage.percent,

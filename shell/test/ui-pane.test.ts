@@ -52,7 +52,11 @@ const LDD: LddStatus = {
 	next: "apply slice 3",
 	tests: { passed: true, failed: 0, at: new Date(NOW - 6 * 60_000).toISOString(), scope: "affected", count: 42, seconds: 11.8, commit: "3f2a9c1" },
 };
-/** design/shell-tui 01's right pane, column 136 on, rows 2 to 25 (.src/parts.py ldd_panel and running_block). */
+/**
+ * design/shell-tui 01's right pane, column 136 on, rows 2 to 25 (.src/parts.py
+ * ldd_panel and running_block): the compact form, one blank row between
+ * sections (T174-S5b); the job row carries its id.
+ */
 const DESIGN_PANE = [
 	"◆ add-invoice-export",
 	"standard · strict TDD · risk medium",
@@ -77,7 +81,7 @@ const DESIGN_PANE = [
 	"◐ jhon-checker  slice 2 tests        1m03s",
 	"",
 	"Jobs  1 running",
-	"⧗ pytest tests/billing -k range        18s",
+	"⧗ j1 pytest tests/billing -k range     18s",
 ];
 const JOBS: RunningJobDisplay[] = [
 	{ id: "a1", kind: "agent", label: "jhon-builder: slice 3", startedAt: NOW - 252_000 },
@@ -99,7 +103,7 @@ function piRoot(footer: Component = new Text("", 0, 0)): Component {
 type FakeTui = { mode?: string; terminal: { columns: number; rows: number }; layoutRoot?: Component; requestRender(): void };
 
 /** A full-screen TUI over pi's root, with the bars and the rail sections registered as ui.ts registers them. */
-function shell(columns: number, rows = 24, tui: FakeTui = { mode: "fullscreen", terminal: { columns, rows }, layoutRoot: piRoot(), requestRender() {} }, placement: () => "auto" | "hidden" = () => "auto") {
+function shell(columns: number, rows = 24, tui: FakeTui = { mode: "fullscreen", terminal: { columns, rows }, layoutRoot: piRoot(), requestRender() {} }, placement: () => "auto" | "hidden" = () => "auto", density: "comfortable" | "compact" | "minimal" = "compact") {
 	const host = tui as unknown as TUI;
 	const disposers = [
 		paneSlot(host, "header", { render: (width) => [renderTopRow(BARS, plainTheme, width, { home: "/home/owner", ascii: false })], invalidate() {} }),
@@ -113,7 +117,7 @@ function shell(columns: number, rows = 24, tui: FakeTui = { mode: "fullscreen", 
 		paneSlot(host, "agents", { render: (width) => renderAgentsSection(JOBS, plainTheme, width, { now: NOW }), invalidate() {} }),
 	];
 	const notes: string[] = [];
-	const uninstall = installPane(host, plainTheme, { placement, density: () => "comfortable", note: (text) => notes.push(text) });
+	const uninstall = installPane(host, plainTheme, { placement, density: () => density, note: (text) => notes.push(text) });
 	const frame = (width = tui.terminal.columns, height = tui.terminal.rows) => {
 		tui.terminal.columns = width;
 		return renderLayoutFrame(tui.layoutRoot!, width, height, () => {}).lines.map(stripAnsi);

@@ -15,7 +15,11 @@ import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { renderStatusBar, type BarModel } from "../lib/ui/bars.ts";
-import { barWindows, resetDay, usageFromCodexEvent, usageFromHeaders, UsageTracker, USAGE_SOURCE_EVENT, USAGE_SOURCE_SCHEMA, usageTimeoutMs, type ProviderUsage } from "../lib/ui/usage.ts";
+import { barWindows, NAN, NAN_QUOTA_URL, parseNanQuota, resetDay, selectLimit, usageFromCodexEvent, usageFromHeaders, usageRows, UsageTracker, USAGE_SOURCE_EVENT, USAGE_SOURCE_SCHEMA, usageTimeoutMs, type ProviderUsage } from "../lib/ui/usage.ts";
+import { installUsage } from "../lib/ui/usage-shell.ts";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { UsageOverlay } from "../lib/ui/usage-view.ts";
 import { stripAnsi } from "../lib/ui/primitives/index.ts";
 import jhonShellUi from "../extensions/ui.ts";
@@ -268,4 +272,118 @@ test("another extension's usage source registers on pi.events and is fetched for
 	emit(USAGE_SOURCE_EVENT, acmeSource.payload);
 	await new Promise((resolve) => setTimeout(resolve, 20));
 	assert.equal(acmeSource.calls.length, 1, "a registration for the session's provider fetches once");
+});
+
+// ---------------------------------------------------------------- T174-S5b part 2: B's parity
+
+const NAN_PAYLOAD = {
+	periodEnd: "2026-12-01T00:00:00Z",
+	models: [
+		{ model: "glm5.2", cap: 500, fullCap: 1_000, tokensUsed: 600, periodEnd: "2026-11-25T00:00:00Z" },
+		{ model: "glm5.3-flash", cap: 3_000, tokensUsed: 300 },
+		{ model: "kimi-k2", cap: 1_000, tokensUsed: 100, windowTokensUsed: 50, windowTokens: 200, windowHours: 4, windowResetsAt: Math.floor((NOW + HOUR) / 1000) },
+		{ model: "no-meter" },
+	],
+};
+
+/** A fetch that answers payload as JSON and keeps every call; no network. */
+function nanFetch(payload: unknown, status = 200) {
+	const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+	const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
+		calls.push({ url: String(input), init });
+		return new Response(JSON.stringify(payload), { status });
+	}) as typeof fetch;
+	return { calls, fetchFn };
+}
+
+test("NaN: the tracker fetches its quota with the key pi holds, at its fixed origin, refusing redirects; a model with no allowance is left out", async () => {
+	const { calls, fetchFn } = nanFetch(NAN_PAYLOAD);
+	let settled = 0;
+	const tracker = new UsageTracker({ now: () => NOW, fetch: fetchFn, timeoutMs: 1_000, apiKey: async (provider) => (provider === NAN ? "nan-key" : undefined), onSettled: () => { settled++; } });
+	assert.equal(tracker.note(NAN), "not fetched yet · r fetches", "nan is the shell's own source");
+	await tracker.refresh([NAN], true);
+	assert.equal(calls.length, 1);
+	assert.equal(calls[0]!.url, NAN_QUOTA_URL);
+	assert.equal(calls[0]!.init?.redirect, "error");
+	assert.equal(calls[0]!.init?.cache, "no-store");
+	assert.equal((calls[0]!.init?.headers as Record<string, string>).Authorization, "Bearer nan-key");
+	assert.equal(settled, 1);
+	const usage = tracker.get(NAN)!;
+	assert.deepEqual(usage.limits.map((limit) => [limit.name, limit.windows.map((w) => [w.label, Math.round(w.usedPercent)])]), [
+		["glm5.2", [["", 60]]], ["glm5.3-flash", [["", 10]]], ["kimi-k2", [["", 10], ["4h", 25]]],
+	], "the full-period cap, not a first period's prorated one");
+	assert.deepEqual(parseNanQuota({ models: [{ model: "glm5.2", cap: 10 }] }, NOW), undefined, "a metered model whose use cannot be read refuses the whole answer");
+	const failing = new UsageTracker({ now: () => NOW, fetch: nanFetch({}, 401).fetchFn, timeoutMs: 1_000, apiKey: async () => "nan-key", onSettled() {} });
+	await failing.refresh([NAN], true);
+	assert.equal(failing.failed(NAN), true, "a refused fetch is a failure to show");
+});
+
+test("NaN on the bar: the session's model's own allowance, else its family's total, else the account's, each a share of the summed allowances", () => {
+	const usage = parseNanQuota(NAN_PAYLOAD, NOW)!;
+	const bar = (model: string) => barWindows(usage, model).map((w) => [w.label, Math.round(w.percent * 10) / 10, w.reset]);
+	assert.deepEqual(bar("glm5.2"), [["glm5.2", 60, true]], "its own, with its reset");
+	assert.deepEqual(bar("glm5.4"), [["glm total", 22.5, false]], "glm: 900 of 4000 tokens, no reset: each model closes its own period");
+	assert.deepEqual(bar("qwen3"), [["nan total", 20, false]], "the account: 1000 of 5000");
+	assert.deepEqual(selectLimit(claude(10, 20), "anything")?.name, "claude", "a provider without allowances keeps its first limit");
+});
+
+test("NaN in the overlay: a family together, the most used family and member first; no total is a row", () => {
+	const tracker = new UsageTracker({ now: () => NOW, fetch: globalThis.fetch, timeoutMs: 100, apiKey: async () => undefined, onSettled() {} });
+	tracker.record(parseNanQuota({ models: [
+		{ model: "kimi-k2", cap: 1_000, tokensUsed: 400 },
+		{ model: "glm5.3-flash", cap: 1_000, tokensUsed: 100 },
+		{ model: "glm5.2", cap: 1_000, tokensUsed: 900 },
+	] }, NOW));
+	const rows = usageRows({ scope: [NAN], active: NAN, tracker, now: NOW }, plainTheme, 90).map(stripAnsi);
+	assert.deepEqual(rows.slice(1, 4).map((row) => row.trim().split(" ")[0]), ["glm5.2", "glm5.3-flash", "kimi-k2"], "glm (1000 of 2000, 50%) before kimi (40%), though kimi came first; glm5.2 (90%) before glm5.3-flash (10%)");
+	assert.ok(!rows.some((row) => /total/.test(row)));
+});
+
+test("the overlay's key hints are controls: the pointer paints one, a click does what its key does", async () => {
+	let closed = 0;
+	let refreshed = 0;
+	const tracker = new UsageTracker({ now: () => NOW, fetch: globalThis.fetch, timeoutMs: 100, apiKey: async () => undefined, onSettled() {} });
+	const tagged = { ...plainTheme, fg: (role: string, text: string) => (role === "warning" ? `«${text}»` : text) };
+	const overlay = new UsageOverlay({ tracker, now: () => NOW, theme: tagged, scope: () => [], active: () => undefined, refresh: async () => { refreshed++; }, close: () => { closed++; }, requestRender() {} });
+	const hints = overlay.render(80).length - 2;
+	assert.equal(stripAnsi(overlay.render(80)[hints]!).trim(), "│ r refresh  esc close                                                         │".trim());
+	assert.deepEqual(overlay.handleMouse({ type: "move", button: "none", x: 13, y: hints } as never), { handled: true, render: true });
+	assert.match(stripAnsi(overlay.render(80)[hints]!), /^│ r refresh {2}«esc» «close» +│$/, "esc close under the pointer");
+	assert.deepEqual(overlay.handleMouse({ type: "press", button: "left", x: 3, y: hints } as never), { handled: true }, "it takes the press, so pi makes the click");
+	overlay.handleMouse({ type: "click", button: "left", x: 3, y: hints } as never);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(refreshed, 1, "r refresh refreshes");
+	overlay.handleMouse({ type: "click", button: "left", x: 14, y: hints } as never);
+	assert.equal(closed, 1, "esc close closes");
+	assert.equal(overlay.handleMouse({ type: "click", button: "left", x: 30, y: hints } as never), undefined, "past the hints, nothing");
+	overlay.handleMouse({ type: "move", button: "none", x: 30, y: 1 } as never);
+	assert.doesNotMatch(stripAnsi(overlay.render(80)[hints]!), /«/, "off the hints, none painted");
+});
+
+test("T149: the overlay's providers follow a session-only profile's sub-agent models, read once the profile is known", async (t) => {
+	const settings = useMemorySettings(t, {});
+	const dir = mkdtempSync(join(tmpdir(), "jhon-usage-scope-"));
+	t.after(() => rmSync(dir, { recursive: true, force: true }));
+	mkdirSync(join(dir, "agents"));
+	writeFileSync(join(dir, "agents", "jhon-builder.md"), "---\nname: jhon-builder\nmodel: anthropic/claude-opus-5-5\n---\nBuild.\n");
+	let profile: string | undefined;
+	let reads = 0;
+	const { pi, commands, fire } = fakePi();
+	const { ctx, ui } = fakeCtx();
+	(ctx as unknown as { model: { provider: string } }).model.provider = "openai-codex";
+	installUsage(pi, { PI_CODING_AGENT_DIR: dir }, {
+		settings, now: () => NOW, fetch: nanFetch(NAN_PAYLOAD).fetchFn, current: () => ctx, repaint() {},
+		sessionProfile: () => profile,
+		profilesJson: async () => { reads++; return { profiles: [{ name: "jhon-nan", agents: [{ agent: "jhon-builder", runtime: "pi", model: "nan/glm5.2@high" }] }] }; },
+	});
+	await fire("session_start", ctx);
+	const providers = async () => {
+		void commands.get("jhon:usage")!.handler("", ctx);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		return ui.overlay!.render(100).map(stripAnsi).filter((row) => /^│ (力 )?[a-z]/.test(row) && !/Subscriptions|refresh/.test(row)).map((row) => row.slice(2).replace(/^力 /, "").split(" ")[0]);
+	};
+	assert.deepEqual(await providers(), ["openai-codex", "anthropic"], "the default: the agent file's model");
+	profile = "jhon-nan";
+	assert.deepEqual(await providers(), ["openai-codex", "nan"], "the session's profile: its row's model");
+	assert.equal(reads, 1, "the profile's rows are read once");
 });
