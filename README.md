@@ -22,6 +22,8 @@ https://github.com/user-attachments/assets/cf117fce-99d9-456c-a42e-f91101aea2b7
 
 Full resolution: [English](docs/assets/video/jhon-explainer.mp4) · [Spanish subtitles](docs/assets/video/jhon-explainer.es.mp4)
 
+The teaser (1:13): [English](docs/assets/video/jhon-teaser.mp4) · [Spanish subtitles](docs/assets/video/jhon-teaser.es.mp4)
+
 ---
 
 ## Why Jhon

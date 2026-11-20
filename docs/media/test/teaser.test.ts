@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { ASSETS, MEDIA } from "../paths.ts";
+import { ASSETS, MEDIA, REPO } from "../paths.ts";
 
 const DIR = join(MEDIA, "hyperframes", "teaser");
 const { SHOTS, lines } = await import(join(DIR, "script.mjs"));
@@ -61,6 +61,12 @@ test("the captions are the script's: every line in English by default, its Spani
     assert.equal(vars.find((v) => v.id === `c_${s.id}`)!.default, s.en, `${s.id}: the English caption is not script.mjs's (run compose.mjs)`);
     assert.equal(es[`c_${s.id}`], s.es, `${s.id}: captions.es.json is not script.mjs's (run compose.mjs)`);
     assert.ok(html.includes(`data-var-text="c_${s.id}"`), `${s.id}: no caption clip shows c_${s.id}`);
+  }
+});
+
+test("README.md and CHANGELOG.md each mention the published teaser (jhon-teaser.mp4)", () => {
+  for (const f of ["README.md", "CHANGELOG.md"]) {
+    assert.ok(readFileSync(join(REPO, f), "utf8").includes("jhon-teaser.mp4"), `${f} does not mention jhon-teaser.mp4`);
   }
 });
 
