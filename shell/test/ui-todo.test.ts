@@ -112,8 +112,10 @@ test("long Todo widgets stay bounded, scroll, resize and keep their collapse con
 			const before = component.render(40).map(stripAnsi);
 			assert.ok(before.length <= 10, "card uses at most one third of terminal height");
 			// G's position row: where the view is, and the key that scrolls the todos (L136).
-			const hint = before.find((row) => row.includes("ctrl+shift+↑/↓"))!;
-			assert.match(hint, /^ *↑↓ 1–\d+\/\d+ · ctrl\+shift\+↑\/↓/, `${style}: the position and the key: ${JSON.stringify(hint)}`);
+			// T165: alt+PgUp/PgDn, as pi 1.5.2 keeps ctrl+shift+↑/↓ for its message jump.
+			const hint = before.find((row) => row.includes("alt+PgUp/PgDn"))!;
+			assert.match(hint, /^ *↑↓ 1–\d+\/\d+ · alt\+PgUp\/PgDn/, `${style}: the position and the key: ${JSON.stringify(hint)}`);
+			assert.ok(!before.some((row) => row.includes("ctrl+shift")), "pi's key is not offered");
 			assert.match(before[header]!, title);
 			assert.equal(component.handleMouse?.({ type: "wheel", button: "none", wheelDelta: 10000, x: 5, y: header + 2, screenX: 5, screenY: 5, width: 40, height: before.length, shift: false, alt: false, ctrl: false })?.handled, true);
 			const after = component.render(40).map(stripAnsi);
@@ -130,7 +132,7 @@ test("long Todo widgets stay bounded, scroll, resize and keep their collapse con
 		assert.equal((result.details.jhonTodo as { tasks: { title: string; note: string }[] }).tasks[0].title, title.trim());
 		assert.equal((result.details.jhonTodo as { tasks: { title: string; note: string }[] }).tasks[0].note, note.trim());
 		await shortcuts.get("alt+t")!.handler(ctx);
-		await shortcuts.get("ctrl+shift+down")!.handler(ctx);
+		await shortcuts.get("alt+pageDown")!.handler(ctx);
 		assert.notDeepEqual(bottom.render(40), collapsed, "keyboard scrolling is available without mouse");
 	}
 });
@@ -183,13 +185,13 @@ test("Todo keyboard scrolling targets the visible card after a cached sidebar br
 			bottom.render(40);
 			tui.terminal.columns = 160;
 			const before = railLines();
-			await shortcuts.get("ctrl+shift+down")!.handler(ctx);
+			await shortcuts.get("alt+pageDown")!.handler(ctx);
 			const after = railLines();
 			assert.notDeepEqual(after, before, "DOWN changes the visible cached rail, not the hidden bottom widget");
 			// DOWN moves the viewport three rows: the first changed row now shows what was three rows lower.
 			const moved = after.findIndex((row, index) => row !== before[index]);
 			assert.ok(moved >= 0 && before[moved + 3] !== undefined && after[moved] === before[moved + 3], `scrolled by three rows: ${JSON.stringify({ before, after })}`);
-			await shortcuts.get("ctrl+shift+up")!.handler(ctx);
+			await shortcuts.get("alt+pageUp")!.handler(ctx);
 			assert.deepEqual(railLines(), before, "UP restores the expanded viewport");
 		} finally {
 			dispose();
@@ -216,16 +218,16 @@ test("sections: TODOS is bounded in the rail as above the prompt, a third of the
 		return { ctx, shortcuts, frame };
 	};
 	const tall = (await start(60)).frame();
-	const card = tall.filter((line) => /Task-\d+\b|TODOS|╰─|ctrl\+shift/.test(line));
+	const card = tall.filter((line) => /Task-\d+\b|TODOS|╰─|alt\+PgUp/.test(line));
 	assert.ok(card.length <= 16, `at most 16 rows even in a tall band: ${card.length}`);
 	assert.ok(!tall.some((line) => /Task-21\b/.test(line)), "the rest waits a scroll away");
-	assert.ok(tall.some((line) => line.includes("ctrl+shift+↑/↓")), "an overflowing list shows the hint");
+	assert.ok(tall.some((line) => line.includes("alt+PgUp/PgDn")), "an overflowing list shows the hint");
 	const short = await start(12);
 	const before = short.frame();
-	assert.ok(before.some((line) => line.includes("ctrl+shift+↑/↓")), "a short band overflows: the hint shows");
+	assert.ok(before.some((line) => line.includes("alt+PgUp/PgDn")), "a short band overflows: the hint shows");
 	assert.ok(!before.some((line) => /Task-21\b/.test(line)));
-	await short.shortcuts.get("ctrl+shift+down")!.handler(short.ctx);
-	assert.notDeepEqual(short.frame(), before, "ctrl+shift+↓ scrolls the list");
+	await short.shortcuts.get("alt+pageDown")!.handler(short.ctx);
+	assert.notDeepEqual(short.frame(), before, "alt+PgDn scrolls the list");
 	// The bottom widget above the prompt keeps its cap: a third of the screen, at most 16 rows.
 	const { pi, tools, fire } = fakePi();
 	jhonTodo(pi, {});
@@ -236,7 +238,7 @@ test("sections: TODOS is bounded in the rail as above the prompt, a third of the
 	const bottom = widgets.get("jhon-todo")!({ requestRender() {}, terminal: { rows: 30, columns: 100 } }, theme);
 	const rows = bottom.render(100).map(stripAnsi);
 	assert.ok(rows.length <= 10, `the bottom widget stays within a third of 30 rows: ${rows.length}`);
-	assert.ok(rows.some((line) => line.includes("ctrl+shift+↑/↓")));
+	assert.ok(rows.some((line) => line.includes("alt+PgUp/PgDn")));
 });
 
 test("todoEnabled and todoCollapseKey read their environment flags", () => {
