@@ -17,11 +17,11 @@ import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { BRANCH_MIN_CELLS, NARROW_BELOW, NARROW_BRANCH_CELLS, renderStatusBar, renderTopRow, tildePath, type BarModel } from "../lib/ui/bars.ts";
+import { BRANCH_MIN_CELLS, NARROW_BELOW, NARROW_BRANCH_CELLS, compactAt, compactionPercent, formatCost, formatTokens, renderStatusBar, renderTopRow, tildePath, type BarModel } from "../lib/ui/bars.ts";
 import { chromeSurface, setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { stripAnsi } from "../lib/ui/primitives/index.ts";
 import { assertRows, plainTheme, spread, padded } from "./rows.ts";
-import { useMemorySettings } from "./fake-jhon-settings.ts";
+import { envOverrides, memorySettings, useMemorySettings } from "./fake-jhon-settings.ts";
 
 // The design's story (design/shell-tui/.src/parts.py): acme_app, mid-slice 3.
 const acme = (overrides: Partial<BarModel> = {}): BarModel => ({
@@ -196,4 +196,13 @@ test("ASCII (shell.appearance.ascii): ⎇ reads @, │ reads |, the meter # and 
 		}
 	}
 	assert.equal(stripAnsi(renderStatusBar(acme(), plainTheme, 100, { ascii: false })).slice(0, 3), " ⎇ ", "the flag can be given");
+});
+
+test("the bar's numbers: tokens and cost kept short, and where the session compacts", () => {
+	assert.deepEqual([999, 4_200, 272_000, 2_600_000, 13_000_000].map(formatTokens), ["999", "4.2k", "272k", "2.6M", "13M"]);
+	assert.deepEqual([formatCost(1.42), formatCost(9.49, true), formatCost(0.004)], ["$1.42", "$9.49 sub", "$0.004"]);
+	// Jhon compacts the main session at 60% (shell.behaviour.compactAt); pi's own point counts when it comes first.
+	assert.deepEqual([compactionPercent(200_000), compactionPercent(200_000, null), compactionPercent(20_000, 60), compactionPercent(undefined)], [60, 92, 18, undefined]);
+	const at = (value?: string) => compactAt(memorySettings({}, undefined, envOverrides(value === undefined ? {} : { JHON_SHELL_COMPACT_AT: value })));
+	assert.deepEqual([at(), at("70"), at("off"), at("x")], [60, 70, undefined, 60]);
 });

@@ -6,7 +6,7 @@
  * (`pi.appendEntry`: kept out of the model's context), which
  * `jhon audit --all` counts. A click the shell handles itself is recorded
  * the same way with recordUse (T171): `click agents` or `click jobs` for
- * each OPEN_TASKS_EVENT request (the narrow work row's tap). Counting never
+ * each OPEN_TASKS_EVENT request (a click on a row of the pane's Agents or Jobs, or of the narrow form's Running block). Counting never
  * breaks the feature. shell/CONTRACT.md,
  * "Session entries".
  */

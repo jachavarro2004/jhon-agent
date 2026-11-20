@@ -1,7 +1,8 @@
 /**
  * shell.appearance.ascii reaches every chrome piece forked from the Gentle
  * Shell (T15.12g, inventory row 79): the prompt rule and the card prompt, the
- * top row and the status bar (T174-S3) with their dividers and meter, the LDD rows, the TODOS, JOBS and AGENTS sections
+ * top row and the status bar (T174-S3) with their dividers and meter, the right pane's LDD, Agents and Jobs sections and
+ * the narrow form's Running block (T174-S5), the TODOS section
  * and a notice's title draw nothing outside 0x20-0x7e, in the
  * forms design/system.md's glyph table gives, at 160 and 100 columns.
  *
@@ -11,7 +12,8 @@ import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusSections, type ShellBarModel } from "../lib/ui/shell-bar.ts";
+import { renderAgentsSection, renderJobsSection, renderLddPanel, renderRunningBlock } from "../lib/ui/panel.ts";
+import type { LddStatus } from "../lib/ui/ldd-status.ts";
 import { renderStatusBar, renderTopRow, type BarModel } from "../lib/ui/bars.ts";
 import { CARD_STYLE, renderCard, setCardStyle, cardStyle, CARD_TONE } from "../lib/ui/primitives/index.ts";
 import { framePromptLines, PROMPT_STATE, resolvePromptLayout } from "../lib/ui/shell-prompt.ts";
@@ -43,16 +45,12 @@ const jobs = [
 	{ id: "ag-3", kind: "agent" as const, label: "explore: docs", startedAt: NOW - 95_000, endedAt: NOW - 3_000, status: "completed" as const },
 	{ id: "ag-4", kind: "agent" as const, label: "explore: stop", startedAt: NOW - 95_000, endedAt: NOW - 4_000, status: "stopped" as const },
 ];
-const model = (overrides: Partial<ShellBarModel> = {}): ShellBarModel => ({
-	cwd: "/home/owner/code/jhon", branch: "feat/shell-gentle", sessionName: "rail work", modelId: "claude-opus-5-5", effort: "high", profile: "jhon",
-	contextPercent: 85, contextWindow: 1_000_000, costTotal: 1.25, subscription: true, mode: "yolo", jobs,
-	ldd: {
-		change: "v0-1-release", slice: "Slice 2: launch", slices: ["done", "current", "pending"], route: "verified", next: "apply",
-		tests: { passed: false, failed: 2, at: new Date(NOW - 60_000).toISOString() },
-		lanes: [{ change: "fix-infra", worktree: "infra", done: 2, slices: 5, next: "verify" }],
-	},
-	...overrides,
-});
+const ldd: LddStatus = {
+	change: "v0-1-release", slice: "Slice 2: launch", slices: ["done", "current", "pending"], route: "verified", risk: "high", strictTdd: true, next: "apply", worktree: "rail",
+	detail: [{ name: "Slice 1: read", total: 1, completed: 1 }, { name: "Slice 2: launch", total: 2, completed: 1, tasks: [{ text: "draw", done: true }, { text: "wire", done: false }] }, { name: "Slice 3: docs", total: 1, completed: 0 }],
+	tests: { passed: false, failed: 2, at: new Date(NOW - 60_000).toISOString(), scope: "affected", commit: "3f2a9c1" },
+	lanes: [{ change: "fix-infra", worktree: "infra", done: 2, slices: 5, next: "verify" }, { change: "split", worktree: "main", done: 0, slices: 0, umbrella: true }],
+};
 const bars: BarModel = {
 	cwd: "/home/owner/code/jhon", branch: "feat/shell-gentle", sandbox: "on", modelId: "claude-opus-5-5", effort: "high", profile: "jhon",
 	contextPercent: 85, contextWindow: 1_000_000, costTotal: 1.25, subscription: true, mode: "yolo",
@@ -108,19 +106,20 @@ test("the status bar draws its dividers, branch mark and meter in ASCII, wide an
 	assert.match(stripAnsi(renderStatusBar(bars, plain, 200)), /ctx #+-* 85%/, "the meter reads # and -");
 });
 
-test("the Status sections and the LDD rows draw in ASCII", (t) => {
-	ascii(t);
-	for (const width of [46, 80, 100, 160]) pureAscii(`status sections ${width}`, renderShellStatusSections(model(), plain, width));
+test("the right pane's LDD section draws in ASCII, with a change and without one", () => {
+	for (const width of [42, 80, 100, 160]) {
+		pureAscii(`LDD ${width}`, renderLddPanel(ldd, plain, width, { now: NOW, ascii: true }));
+		pureAscii(`no change ${width}`, renderLddPanel(undefined, plain, width, { now: NOW, ascii: true }));
+	}
 });
 
-test("TODOS, JOBS and AGENTS draw their glyphs in ASCII, JOBS and AGENTS folded too", (t) => {
+test("TODOS, Agents, Jobs and the narrow form's Running block draw their glyphs in ASCII", (t) => {
 	ascii(t);
-	for (const width of [46, 80, 100, 160]) {
-		for (const folded of [false, true]) {
-			if (!folded) pureAscii(`TODOS ${width}`, renderTodoRail(todos, plain, width, true));
-			pureAscii(`JOBS ${width} ${folded}`, renderShellJobsSection(jobs, plain, width, NOW, folded));
-			pureAscii(`AGENTS ${width} ${folded}`, renderShellAgentsSection(jobs, plain, width, NOW, folded));
-		}
+	for (const width of [42, 80, 100, 160]) {
+		pureAscii(`TODOS ${width}`, renderTodoRail(todos, plain, width, true));
+		pureAscii(`Jobs ${width}`, renderJobsSection(jobs, plain, width, { now: NOW, ascii: true }));
+		pureAscii(`Agents ${width}`, renderAgentsSection(jobs, plain, width, { now: NOW, ascii: true }));
+		pureAscii(`Running ${width}`, renderRunningBlock(jobs, plain, width, { now: NOW, ascii: true }).rows);
 	}
 });
 

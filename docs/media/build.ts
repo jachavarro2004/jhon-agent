@@ -24,8 +24,8 @@ import { BANNER, bannerSvg } from "./banner.ts";
 /** What each feature capture shows, under it. */
 export const FEATURE_CAPTIONS: Record<string, string> = {
   "shell-bar": "The top row and the status bar: the project and its path; branch, sandbox, model and effort, context, cost.",
-  "ldd-status": "The rail's LDD status: the change, its slices done of all, the route, the next step and the last test run.",
-  "agents-jobs": "Sub-agents and background jobs, live in the rail: what each runs, its tokens and how long.",
+  "ldd-status": "The right pane's LDD section: the change and its route, the next step, the slices with the open one's tasks, the last test run.",
+  "agents-jobs": "Sub-agents and background jobs, live in the right pane while they run: what each does and for how long.",
   "ldd-question": "A repo with no LDD yet: at the first code change, the session asks once how to deliver and test.",
   "guard-refusal": "A writer's edit outside its edit surfaces, refused by scope-guard: the shell's tool card, then the engine's whole reason.",
   "route-refusal": "Under delivery: change, route-guard refuses the pull request while a task is unchecked: the card, then the reason.",
@@ -55,7 +55,10 @@ export async function buildFeatures(c: Colors, caps: Capture[], out: string): Pr
 /** The banner GIF from its frames. */
 export async function buildBanner(c: Colors, caps: Capture[], out: string, scratch: string): Promise<string> {
   mkdirSync(join(out, "brand"), { recursive: true });
-  const lines = caps.find((x) => x.name === "ldd-status")!.lines;
+  // The LDD section's head and its slices (up to its second blank row): the banner's frame holds twelve rows.
+  const all = caps.find((x) => x.name === "ldd-status")!.lines;
+  const second = all.indexOf("", all.indexOf("") + 1);
+  const lines = second > 0 ? all.slice(0, second) : all;
   const dir = join(scratch, "frames-banner");
   mkdirSync(dir, { recursive: true });
   const count = BANNER.seconds * BANNER.fps;

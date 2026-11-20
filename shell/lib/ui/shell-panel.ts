@@ -1,11 +1,11 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { asciiText, glyph } from "./primitives/glyphs.ts";
+import { glyph } from "./primitives/glyphs.ts";
 import { BAND_ROLE, HOVER_ROLE, paintHover, paintSurfaceRows, surfaceOpener, type CardTheme } from "./primitives/index.ts";
 import type { ChromeSurface } from "./visual-customization-policy.ts";
 
 // The rail's sections drawn as Gentle Shell's panel (its lib/shell-panel.ts,
-// T15.12b): a one-row header `▾ NAME … count`, dense rows indented under it,
-// and the narrow work row (T169 removed the full-width sheet). A tinted
+// T15.12b): a one-row header `▾ NAME … count` and dense rows indented under
+// it (the todo list's). A tinted
 // surface paints them on rose ink's band, a transparent one leaves the
 // terminal's own background (shell.appearance.surface, as G's Layout →
 // Surface); ascii (shell.appearance.ascii) draws every glyph in its ASCII form.
@@ -93,37 +93,5 @@ export function paintPanelSurface(theme: CardTheme, rows: readonly string[], wid
 	return chromeSurface() === "transparent" ? [...rows] : paintSurfaceRows(rows, theme, PANEL_SURFACE_ROLE, width);
 }
 
-/** A one-row digest of a rail section for the narrow work row. */
-export interface PanelSummary {
-	left: string;
-	/** Right-aligned count, e.g. `2/6`. */
-	right?: string;
-	/** Names the count when another summary leads the row, e.g. `todos`. */
-	rightLabel?: string;
-	/** Higher leads the row: live agents outrank the current todo. */
-	priority?: number;
-}
-
-/** The index of the summary that leads the work row (highest priority, first on ties); -1 when there is none. */
-export function workRowLead(summaries: readonly PanelSummary[]): number {
-	let lead = -1;
-	summaries.forEach((summary, index) => {
-		if (lead === -1 || (summary.priority ?? 0) > (summaries[lead]!.priority ?? 0)) lead = index;
-	});
-	return lead;
-}
-
-/** ` ▸ <lead> … <count>`: the section that matters most, plus the todo count; undefined without live work. */
-export function renderWorkRow(summaries: readonly PanelSummary[], theme: PanelTheme, width: number, hovered = false, ascii = false): string | undefined {
-	if (summaries.length === 0) return undefined;
-	const lead = summaries[workRowLead(summaries)]!;
-	const counted = lead.right ? lead : summaries.find((summary) => summary.right);
-	const right = !counted ? "" : counted === lead ? counted.right! : `${counted.right} ${counted.rightLabel ?? ""}`.trimEnd();
-	const target = Math.max(0, Math.floor(width));
-	// The ▸ is the row's tap affordance; hovering paints it like every other clickable surface.
-	const row = fitPanelLine(`${paintHover(theme, glyph("cursor", ascii), hovered, "muted")} ${lead.left}`, right ? theme.fg("muted", right) : "", Math.max(0, target - 2), ascii);
-	return paintPanelSurface(theme, [` ${ascii ? asciiText(row) : row} `], target)[0];
-}
-
-/** The right pane's parts in order (lib/ui/pane.ts): LDD first (L174), then the agent's todo list (while no change shows), jobs and agents. */
-export const RAIL_ORDER = ["ldd", "todo", "jobs", "agents"] as const;
+/** The right pane's parts in order (lib/ui/pane.ts, design 01): LDD first (L174), then the agent's todo list (while no change shows), Agents and Jobs. */
+export const RAIL_ORDER = ["ldd", "todo", "agents", "jobs"] as const;

@@ -69,8 +69,8 @@ export const SHOTS = [
     body: [["with the session.", "is gone"]],
     en: "And what was decided is gone with the session.",
     es: "Y lo que se decidió se pierde con la sesión." },
-  { id: "status", kind: "proof", src: F("ldd-status"), crop: panel(58, 4),
-    marks: [{ at: "the change", r: cells(2, 1, 21) }, { at: "its slices", r: cells(4, 2, 47) }, { at: "the next step", r: cells(4, 3, 21) }, { at: "the last test run", r: cells(26, 3, 14) }],
+  { id: "status", kind: "proof", src: F("ldd-status"), crop: panel(42, 15),
+    marks: [{ at: "the change", r: cells(0, 0, 20) }, { at: "its slices", r: cells(0, 4, 42, 7) }, { at: "the next step", r: cells(0, 2, 27) }, { at: "the last test run", r: cells(0, 12, 28, 3) }],
     en: "With Jhon, the change stays in view: its slices, the next step, and the last test run.",
     es: "Con Jhon, el cambio queda a la vista: sus slices, el siguiente paso y la última ejecución de tests." },
 
@@ -134,8 +134,8 @@ export const SHOTS = [
     marks: [{ at: 0, r: [294, 118, 416, 352] }, { at: "the decisions", r: [308, 278, 388, 64] }, { at: "a code map", r: [308, 335, 388, 64] }],
     en: "Each launch carries the decisions on record and a code map.",
     es: "Cada lanzamiento lleva las decisiones registradas y un mapa del código." },
-  { id: "jobs", kind: "proof", src: F("agents-jobs"), crop: panel(58, 8),
-    marks: [{ at: 0, r: cells(2, 1, 36, 2) }, { at: "background jobs", r: cells(2, 6, 56, 2) }, { at: "tokens and time", r: cells(49, 1, 9, 2) }],
+  { id: "jobs", kind: "proof", src: F("agents-jobs"), crop: panel(42, 7),
+    marks: [{ at: 0, r: cells(0, 1, 42, 2) }, { at: "background jobs", r: cells(0, 5, 42, 2) }, { at: "tokens and time", r: cells(36, 1, 6, 2) }],
     en: "Sub-agents and background jobs show live, with their tokens and time.",
     es: "Los sub-agentes y los trabajos en segundo plano se ven en vivo, con sus tokens y su tiempo." },
 

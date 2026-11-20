@@ -9,7 +9,7 @@ import jhonTodo, { todoEnabled } from "../extensions/todo.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { paneState } from "../lib/ui/pane.ts";
 import { lddFromStatus, selectChange, shareSelection } from "../lib/ui/ldd-status.ts";
-import { renderShellStatusSections } from "../lib/ui/shell-bar.ts";
+import { renderLddPanel } from "../lib/ui/panel.ts";
 
 
 // The todo extension: the `todo` tool, its list in the right pane (T174),
@@ -590,9 +590,9 @@ test("inside a change TODOS hides and LDD shows only the change's tasks: nothing
 	await tools.get("todo")!.execute("w", { action: "write", tasks: [{ title: "write the test", status: "in_progress" }, { title: "fix tsc" }] }, undefined, undefined, ctx);
 	await fire("tool_execution_end", ctx, { toolName: "todo" });
 	assert.deepEqual(widget(), [], "inside a change the LDD section rules: the list hides");
-	const ldd = renderShellStatusSections({ cwd: "/repo", branch: "main", sessionName: undefined, modelId: "m", effort: undefined, contextPercent: 1, contextWindow: 1000, costTotal: 0, subscription: false, ldd: CHANGE_STATUS }, { ...plainTheme, bold: (text: string) => text }, 60)
+	const ldd = renderLddPanel(CHANGE_STATUS, { ...plainTheme, bold: (text: string) => text }, 42, { now: Date.now() })
 		.map(stripAnsi).join("\n");
-	assert.match(ldd, /▾ LDD[\s\S]*◆ rail-redesign[\s\S]*on 1: rail/);
+	assert.match(ldd, /◆ rail-redesign[\s\S]*◐ 1 rail[\s\S]*✓ Read tasks[\s\S]*◐ Draw rows/, "the change's own tasks, under its open slice");
 	assert.doesNotMatch(ldd, /write the test|fix tsc/, "the agent's tasks are TODOS' alone");
 	selectChange("s1", undefined);
 	const todos = widget()!.join("\n");

@@ -13,7 +13,9 @@ import { pathToFileURL } from "node:url";
 import { SHELL } from "./paths.ts";
 
 import { ShellSettings, installShellSettings } from "../../shell/lib/settings.ts";
-import { renderShellStatusSections, renderShellAgentsSection, renderShellJobsSection, type RunningJobDisplay, type ShellBarTheme } from "../../shell/lib/ui/shell-bar.ts";
+import { renderAgentsSection, renderJobsSection, renderLddPanel, type RunningJobDisplay } from "../../shell/lib/ui/panel.ts";
+import { PANE_TEXT } from "../../shell/lib/ui/pane.ts";
+import type { ThemeLike } from "../../shell/lib/ui/primitives/index.ts";
 import { renderStatusBar, renderTopRow, type BarModel } from "../../shell/lib/ui/bars.ts";
 import { lddFromStatus } from "../../shell/lib/ui/ldd-status.ts";
 import { AskView } from "../../shell/lib/ui/ask-view.ts";
@@ -23,7 +25,7 @@ export const NOW = Date.parse("2026-11-16T10:00:00Z");
 const HOME = "/home/dev";
 
 /** A theme the shell's renderers accept: pi's Theme over rose ink, in truecolor. */
-export interface MediaTheme extends ShellBarTheme {
+export interface MediaTheme extends ThemeLike {
   bg(color: string, text: string): string;
   underline(text: string): string;
 }
@@ -56,7 +58,7 @@ const BARS: BarModel = {
 
 /** A change in the shape `jhon status --json` reports (as ui-ldd-status.test.ts builds it). */
 const LDD = lddFromStatus("invoice-csv-export", {
-  route: { level: "verified" }, next: "apply", strict_tdd: { value: true },
+  route: { level: "verified", tier: "medium" }, next: "apply", strict_tdd: { value: true },
   tasks: {
     total: 9, completed: 5, slice: "Slice 2: stream large exports",
     slices: [
@@ -65,7 +67,7 @@ const LDD = lddFromStatus("invoice-csv-export", {
       { name: "Slice 3: export button", total: 2, completed: 0 },
     ],
   },
-  tests: { timestamp: "2026-11-16T09:52:00Z", passed: true, failed: [], scope: "affected" },
+  tests: { timestamp: "2026-11-16T09:52:00Z", passed: true, failed: [], scope: "affected", commit: "50e3ff2daea42318fbca2eec33f512f9220c946e" },
 })!;
 
 const JOBS: RunningJobDisplay[] = [
@@ -178,15 +180,17 @@ export async function captures(theme: MediaTheme): Promise<Capture[]> {
     lines: [renderTopRow(BARS, theme, wide, { home: HOME }), "", renderStatusBar(BARS, theme, wide)],
   });
 
-  const rail = 58;
+  // The right pane's sections at its width (shell/lib/ui/panel.ts): the LDD
+  // section, then Agents and Jobs a blank row apart, as the pane stacks them.
+  const pane = PANE_TEXT;
   out.push({
-    name: "ldd-status", title: "LDD status", cols: rail,
-    lines: renderShellStatusSections({ ldd: LDD }, theme, rail),
+    name: "ldd-status", title: "LDD status", cols: pane,
+    lines: renderLddPanel(LDD, theme, pane, { now: NOW }),
   });
 
   out.push({
-    name: "agents-jobs", title: "agents and jobs", cols: rail,
-    lines: [...renderShellAgentsSection(JOBS, theme, rail, NOW), "", ...renderShellJobsSection(JOBS, theme, rail, NOW)],
+    name: "agents-jobs", title: "agents and jobs", cols: pane,
+    lines: [...renderAgentsSection(JOBS, theme, pane, { now: NOW }), "", ...renderJobsSection(JOBS, theme, pane, { now: NOW })],
   });
 
   const pw = 84;

@@ -14,7 +14,7 @@ import { barModel, renderTopRow } from "../lib/ui/bars.ts";
 import { SANDBOX_EVENT } from "../lib/events.ts";
 import { openInExternalEditor } from "../lib/ui/jhon-panel-editor.ts";
 import { paneState, type PanePart } from "../lib/ui/pane.ts";
-import type { ShellBarTheme } from "../lib/ui/shell-bar.ts";
+import type { ThemeLike as ShellBarTheme } from "../lib/ui/primitives/index.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { CARD_STYLE, cardStyle, setCardStyle } from "../lib/ui/primitives/index.ts";
 import { chromeSurface, setChromeSurface } from "../lib/ui/shell-panel.ts";
@@ -642,11 +642,11 @@ test("the chrome: the top row and the status bar one row each; under 140 columns
 	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
-// T15.12c slice 4: a fullscreen terminal without the rail (under 140
-// columns, or Status hidden) draws the Gentle Shell's narrow editor, with the
-// work row above its rule (` ▸ <lead> … <count>`) in place of the AGENTS
-// card (T174: the todo list is the right pane's alone). T169 (L1438): the panel sheet is gone, and the rule's
-// [ Panel ] button with it.
+// T15.12c slice 4, T174-S5: a fullscreen terminal without the right pane
+// (under 140 columns, or Status hidden) draws the narrow editor with the
+// Running block above its rule while agents or jobs run (design 04; the todo
+// list is the right pane's alone). T169 (L1438): the panel sheet is gone, and
+// the rule's [ Panel ] button with it.
 function narrowShell(columns = 100) {
 	const { pi, handlers, shortcuts } = fakePi();
 	shellUi(pi, {});
@@ -668,27 +668,33 @@ test("without the rail the editor rule carries no [ Panel ], and a click at its 
 	} finally { editor.dispose(); footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
-test("without the rail running sub-agents fold into the work row above the editor rule, the todo list never (it is the right pane's); a tap opens /jhon:agents (T15.12c, T15.12d, T169, T174)", async () => {
+test("without the pane the Running block sits above the editor rule while agents or jobs run; a click on a row opens its view (design 04, T174-S5)", async () => {
 	const { pi, ctx, ui, footer, editor, state, handlers } = narrowShell();
-	const opened: unknown[] = [];
-	pi.events.on("jhon-shell:open-tasks", (payload: unknown) => opened.push(payload));
+	const opened: Array<{ view?: string }> = [];
+	pi.events.on("jhon-shell:open-tasks", (payload: unknown) => opened.push(payload as { view?: string }));
 	try {
-		assert.equal(editor.render(100).map(stripAnsi).filter((line) => /▸/.test(line)).length, 0, "no live work, no work row");
-		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "agent-1", kind: "agent", label: "explore: callers", startedAt: 1 }] });
-		state.parts.set("todo", { render: () => [], invalidate() {}, summary: () => ({ left: "◐ write the sheet", right: "1/3", rightLabel: "todos" }) } as never);
+		assert.match(stripAnsi(editor.render(100)[0]!), /^─ 力 ready for you ─+$/, "nothing runs: no block, the rule first");
+		const now = Date.now();
+		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "agent-1", kind: "agent", label: "jhon-builder: slice 3", startedAt: now - 5_000 }, { id: "job-1", kind: "command", label: "npm test", startedAt: now - 3_000 }] });
 		const lines = editor.render(100).map(stripAnsi);
-		assert.match(lines[0]!, /^ ▸ ◐ 1 agent +$/, "agents alone: no todo count");
-		assert.match(lines[1]!, /^─ 力 ready for you ─+$/, "the rule under it, no [ Panel ] (T169)");
-		assert.equal(visibleWidth(lines[0]!), 100);
-		assert.equal(state.wide?.() ?? false, false, "no pane: the work row carries the agents");
-		assert.deepEqual(editor.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 100, height: lines.length } as never), { handled: true, render: true });
-		assert.equal(opened.length, 1, "agents lead: the tap opens /jhon:agents, as G's opens its agents view");
+		assert.match(lines[0]!, /^── Running {2}1 agent · 1 job ─+$/);
+		assert.match(lines[1]!, /^ {2}◐ jhon-builder {2}slice 3 +\d+s +$/);
+		assert.match(lines[2]!, /^ {2}⧗ npm test +\d+s +$/);
+		assert.equal(lines[3]!.trim(), "", "a blank row before the prompt");
+		assert.match(lines[4]!, /^─ 力 ready for you ─+$/, "the rule under it, no [ Panel ] (T169)");
+		for (const line of lines.slice(0, 4)) assert.equal(visibleWidth(line), 100);
+		assert.equal(state.wide?.() ?? false, false, "no pane: the block carries the work");
+		const click = (y: number) => editor.handleMouse({ type: "click", button: "left", x: 3, y, width: 100, height: lines.length } as never);
+		click(1);
+		click(2);
+		click(3);
+		assert.deepEqual(opened.map((payload) => payload.view), ["agents", "jobs"], "an agent's row opens the agents view, a job's the jobs view, the blank row nothing");
 		assert.equal(ui.overlayView, undefined, "not the sheet");
-		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [] });
-		assert.equal(editor.render(100).map(stripAnsi).filter((line) => /▸/.test(line)).length, 0, "no agents: no work row, the todo list never leads it");
-		assert.equal(opened.length, 1);
 		state.wide = () => true;
-		assert.doesNotMatch(editor.render(100).map(stripAnsi).join("\n"), /▸ ◐/, "beside the rail the work is the rail's");
+		assert.doesNotMatch(editor.render(100).map(stripAnsi).join("\n"), /Running/, "beside the pane the work is the pane's");
+		state.wide = undefined;
+		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [] });
+		assert.match(stripAnsi(editor.render(100)[0]!), /^─ 力 ready for you ─+$/, "the work ended: no block");
 	} finally { editor.dispose(); footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
@@ -2472,50 +2478,53 @@ test("/jhon:customize keys opens Customize on Keys", async (t) => {
 	assert.match(lines.at(-2)!, /Click · ←\/→ or Tab panes · ↑\/↓ moves · Enter applies · Esc closes/, "the footer");
 });
 
-// T15.8 (L98), T15.12d: a click on a rail section's header folds it to that
-// header (the card's top row on a transparent rail), and opens it again; the
-// fold stays for the session.
-test("a click on a Status section's header folds that section alone, and a second opens it", async () => {
+// T174-S5: the pane's LDD section is its first part; with no change it says
+// so in one dim line, and it folds no more (design 01 draws no fold glyph).
+test("the LDD section leads the pane: one line without a change, and a click on it folds nothing", async () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
 	const { ctx, ui } = fakeContext();
 	await fire(handlers, "session_start", ctx);
 	renderFooter(ui);
-	type Part = PanePart & { handleMouse(e: unknown): unknown };
-	// L174: LDD is its own part, first in the rail; T174: the footer draws nothing in the rail.
+	type Part = PanePart & { handleMouse?(e: unknown): unknown };
 	const ldd = paneState(fakeTui as unknown as TUI).parts.get("ldd")! as Part;
-	const open = ldd.render(46).map(stripAnsi);
-	assert.match(open[0]!, /^▾ LDD/);
-	assert.ok(open.length >= 2);
-	assert.equal(ldd.handleMouse({ type: "click", button: "left", x: 3, y: 1, width: 46, height: open.length }), undefined, "only the header folds");
-	assert.deepEqual(ldd.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 46, height: open.length }), { handled: true, render: true });
-	assert.deepEqual(ldd.render(46).map(stripAnsi).filter((line) => line.trim() !== "").map((line) => line.trim()).length, 1, "LDD is its header alone");
-	assert.match(stripAnsi(ldd.render(46)[0]!), /^▸ LDD/);
+	assert.deepEqual(ldd.render(42).map(stripAnsi), ["No active LDD change"]);
+	assert.equal(ldd.handleMouse?.({ type: "click", button: "left", x: 3, y: 0, width: 42, height: 1 }), undefined);
+	assert.deepEqual(ldd.render(42).map(stripAnsi), ["No active LDD change"]);
 	assert.equal(paneState(fakeTui as unknown as TUI).parts.has("footer"), false, "no CHANGES, no INTEGRATIONS: the footer has no part in the pane (T174-S4)");
-	ldd.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 46, height: 1 });
-	assert.match(stripAnsi(ldd.render(46)[0]!), /^▾ LDD/);
 	await fire(handlers, "session_shutdown", ctx);
 });
 
-test("a move over the JOBS or AGENTS header paints it in the hover role; the keys stay off the headers (T15.12c, C6)", async () => {
+// T174-S5: Agents and Jobs are sections of their own, each only while
+// something runs; a click on one of their rows opens its view.
+test("Agents and Jobs: each its own part, drawn while something runs; a click on a row opens the agents or the jobs view, and no key is on a header", async () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
 	const { ctx, ui } = fakeContext();
 	await fire(handlers, "session_start", ctx);
 	const tui = { terminal: { rows: 40, columns: 180 }, requestRender() {} };
-	const tagged = { ...plainTheme, fg: (color: string, value: string) => `<${color}>${value}</${color}>` };
-	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, tagged, footerData);
+	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, plainTheme, footerData);
+	const opened: Array<{ view?: string }> = [];
+	pi.events.on("jhon-shell:open-tasks", (payload: unknown) => opened.push(payload as { view?: string }));
 	try {
-		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }, { id: "agent-1", kind: "agent", label: "explore: callers", startedAt: 2 }] });
+		const parts = paneState(tui as unknown as TUI).parts;
 		type Part = PanePart & { handleMouse(e: unknown): unknown };
-		for (const [key, title] of [["jobs", "JOBS"], ["agents", "AGENTS"]] as const) {
-			const part = paneState(tui as unknown as TUI).parts.get(key) as Part;
-			assert.doesNotMatch(stripAnsi(part.render(200)[0]!), /alt\+s/, `${title}: no key on the header`);
-			part.handleMouse({ type: "move", button: "none", x: 3, y: 0, width: 200, height: 3 });
-			assert.match(part.render(200)[0]!, new RegExp(`<warning>${title}</warning>`), title);
-			part.handleMouse({ type: "move", button: "none", x: 3, y: 1, width: 200, height: 3 });
-			assert.doesNotMatch(part.render(200)[0]!, /<warning>/, `${title}: a body row is no control`);
-		}
+		const jobs = parts.get("jobs") as Part;
+		const agents = parts.get("agents") as Part;
+		const draw = (part: Part) => part.render(42).map(stripAnsi);
+		assert.deepEqual([draw(jobs), draw(agents)], [[], []], "nothing runs: neither shows");
+		const now = Date.now();
+		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: now - 1_000 }, { id: "agent-1", kind: "agent", label: "jhon-checker: callers", startedAt: now - 2_000 }] });
+		assert.match(draw(jobs)[0]!, /^Jobs {2}1 running$/);
+		assert.match(draw(jobs)[1]!, /^⧗ build +\ds$/);
+		assert.match(draw(agents)[0]!, /^Agents {2}1 running$/);
+		assert.match(draw(agents)[1]!, /^◐ jhon-checker {2}callers +\ds$/, "the whole name, never jhon-chec… (L1475)");
+		assert.ok(!draw(jobs).some((line) => /callers/.test(line)) && !draw(agents).some((line) => /build/.test(line)), "each holds its own");
+		assert.doesNotMatch([...draw(jobs), ...draw(agents)].join("\n"), /alt\+|\/jhon/, "no key on a header (C6)");
+		assert.deepEqual(agents.handleMouse({ type: "click", button: "left", x: 3, y: 1, width: 42, height: 2 }), { handled: true });
+		assert.deepEqual(jobs.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 42, height: 2 }), { handled: true });
+		assert.equal(jobs.handleMouse({ type: "move", button: "none", x: 3, y: 1, width: 42, height: 2 }), undefined, "a move is no click");
+		assert.deepEqual(opened.map((payload) => payload.view), ["agents", "jobs"]);
 	} finally { footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
@@ -2660,47 +2669,6 @@ test("/jhon:customize with a group that moved points where it lives, and an unkn
 	assert.ok(ui.overlayView, "a valid group, any case, opens Settings");
 	ui.overlayView!.handleInput("\x1b");
 	await pending;
-});
-
-// T15.9 (L103): JOBS and AGENTS fold by a click on their header too, each
-// on its own, and open again.
-test("a click on the JOBS or the AGENTS header folds that section, and a second opens it", async () => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-	const tui = { terminal: { rows: 40, columns: 180 }, requestRender() {} };
-	const footer = (ui.footerFactory as (tui: unknown, theme: ShellBarTheme, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, plainTheme, {
-		getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {},
-	});
-	try {
-		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "job-1", label: "build", startedAt: 1 }, { id: "agent-1", kind: "agent", label: "explore: callers", startedAt: 2 }] });
-		const parts = paneState(tui as unknown as TUI).parts;
-		type Part = PanePart & { handleMouse(e: unknown): unknown };
-		// JOBS is its own part, as Gentle Shell's: the rail orders todo, jobs, agents, Status.
-		const jobs = parts.get("jobs") as Part;
-		const agents = parts.get("agents") as Part;
-		assert.ok(jobs, "a jobs part of its own");
-		const draw = (rail: Part) => rail.render(48).map(stripAnsi);
-		const click = (rail: Part, y: number) => rail.handleMouse({ type: "click", button: "left", x: 3, y, width: 48, height: draw(rail).length });
-		assert.match(draw(jobs)[0]!, /^▾ JOBS /);
-		assert.ok(!draw(jobs).some((line) => /AGENTS|callers/.test(line)), "JOBS holds no agent");
-		assert.match(draw(agents)[0]!, /^▾ AGENTS /);
-		assert.ok(!draw(agents).some((line) => /JOBS|build/.test(line)), "AGENTS holds no job");
-		assert.equal(click(jobs, 1), undefined, "a body row folds nothing");
-		assert.deepEqual(click(jobs, 0), { handled: true, render: true });
-		assert.match(draw(jobs)[0]!, /▸ JOBS/);
-		assert.deepEqual(draw(jobs).slice(1).map((line) => line.trim().split(/ +/).slice(0, 3).join(" ")), ["⧗ job-1 build"], "folded JOBS keeps its first job, as G's");
-		assert.match(draw(agents)[0]!, /▾ AGENTS/, "AGENTS stays open");
-		click(agents, 0);
-		assert.match(draw(agents)[0]!, /▸ AGENTS/);
-		assert.equal(draw(agents).filter((line) => /callers/.test(line)).length, 1, "folded AGENTS keeps its first row, as G's");
-		click(jobs, 0);
-		click(agents, 0);
-		assert.match(draw(jobs)[0]!, /▾ JOBS/);
-		assert.match(draw(agents)[0]!, /▾ AGENTS/);
-		assert.ok(draw(agents).some((line) => /callers/.test(line)));
-	} finally { footer.dispose(); }
 });
 
 // T169 (L1437, L1438): the command palette and the panel sheet are gone:

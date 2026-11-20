@@ -17,7 +17,7 @@ import {
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { shellEnabled } from "../lib/ui/shell-bar.ts";
+import { shellEnabled } from "../lib/ui/panel.ts";
 
 type PiPrettyExtension = (pi: unknown, deps?: unknown) => unknown;
 

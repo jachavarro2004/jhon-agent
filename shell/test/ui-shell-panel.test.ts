@@ -10,16 +10,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import {
-	PANEL_ROW_INDENT, RAIL_ORDER, clipPanelText, fitPanelLine, renderPanelHeader, renderPanelRow, renderWorkRow, workRowLead,
-	type PanelSummary,
-	setChromeSurface,
+	PANEL_ROW_INDENT, RAIL_ORDER, clipPanelText, fitPanelLine, renderPanelHeader, renderPanelRow,
 } from "../lib/ui/shell-panel.ts";
-import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 
 const WIDTHS = [120, 80, 60];
 const plain = { fg: (_role: string, text: string) => text, bold: (text: string) => text };
 const tagged = { fg: (role: string, text: string) => `<${role}>${text}</${role}>`, bold: (text: string) => `<b>${text}</b>` };
-const banded = { ...plain, bg: (role: string, text: string) => `\x1b[48;5;1m${text}\x1b[49m` };
 const ASCII_ONLY = /^[\x20-\x7e]*$/;
 
 test("fitPanelLine: left and right on one row exactly the width; left gives way with an ellipsis, right drops when it cannot fit", () => {
@@ -57,33 +53,9 @@ test("renderPanelRow: a row indented under its header with an optional right col
 	}
 });
 
-test("workRowLead and renderWorkRow: ` ▸ <lead> … <count>`, the highest priority leads, the todo count named when it is not the lead's", () => {
-	const todo: PanelSummary = { left: "◐ Write the tests", right: "2/6", rightLabel: "todos" };
-	const agents: PanelSummary = { left: "◐ 1 agent running", priority: 1 };
-	assert.equal(workRowLead([]), -1);
-	assert.equal(workRowLead([todo, agents]), 1);
-	assert.equal(workRowLead([todo, { ...agents, priority: 0 }]), 0, "first on ties");
-	assert.equal(renderWorkRow([], plain, 60), undefined, "no live work, no row");
-	for (const width of WIDTHS) {
-		const row = renderWorkRow([todo, agents], plain, width)!;
-		assert.equal(visibleWidth(row), width);
-		assert.match(row, /^ ▸ ◐ 1 agent running +2\/6 todos $/);
-		assert.match(renderWorkRow([todo], plain, width)!, /^ ▸ ◐ Write the tests +2\/6 $/);
-	}
-	assert.match(renderWorkRow([todo], tagged, 200, true)!, /^ <warning>▸<\/warning>/, "hover paints the ▸");
-	assert.match(stripAnsi(renderWorkRow([todo], plain, 40, false, true)!), /^ > /);
-	assert.ok(!renderWorkRow([todo], banded, 40)!.includes("\x1b[48;5;1m"), "a transparent surface leaves it unpainted (shell.appearance.surface)");
-	setChromeSurface("tinted");
-	try {
-		const painted = renderWorkRow([todo], banded, 40)!;
-		assert.ok(painted.startsWith("\x1b[48;5;1m"), "tinted: on the panel surface");
-		assert.equal(visibleWidth(painted), 40);
-	} finally { setChromeSurface("transparent"); }
-});
-
 // T169 (L1437, L1438): the panel sheet is gone, and with it the rail's STATS
-// card; the rail's parts, in order, are LDD first (L174), then G's todo, jobs,
-// agents and the rest of Status.
-test("the pane's order is ldd → todo → jobs → agents, with no stats (T169) and no footer slot (T174-S4)", () => {
-	assert.deepEqual([...RAIL_ORDER], ["ldd", "todo", "jobs", "agents"]);
+// card; the pane's parts, in order, are LDD first (L174), then the todo list
+// (while no change shows), Agents and Jobs (design 01, T174-S5).
+test("the pane's order is ldd → todo → agents → jobs, with no stats (T169) and no footer slot (T174-S4)", () => {
+	assert.deepEqual([...RAIL_ORDER], ["ldd", "todo", "agents", "jobs"]);
 });

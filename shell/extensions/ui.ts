@@ -4,7 +4,7 @@ import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@eare
 import { execFile } from "node:child_process";
 import { existsSync, realpathSync, statSync, watch } from "node:fs";
 import { join } from "node:path";
-import { renderShellStatusLayout, type StatusHover, type StatusTarget, agentsWorkSummary, renderShellAgentsSection, renderShellJobsSection, JOBS_FINISHED_TTL_MS, shellEnabled, shellJobsCount, type RunningJobDisplay } from "../lib/ui/shell-bar.ts";
+import { renderAgentsSection, renderJobsSection, renderLddPanel, renderRunningBlock, shellEnabled, shellJobsCount, type RunningJobDisplay } from "../lib/ui/panel.ts";
 import { barModel, renderStatusBar, renderTopRow, type BarModel } from "../lib/ui/bars.ts";
 import { SettingsView } from "../lib/ui/settings-view.ts";
 import { ROSE_INK } from "../lib/ui/customize/themes.ts";
@@ -31,9 +31,8 @@ import {
 	resolveDoubleEscCancelPolicy,
 	type DoubleEscCancelPolicy,
 } from "../lib/ui/double-esc-cancel-policy.ts";
-import { installPane, invalidatePane, paneSlot, paneState, renderStrip, setPaneHover, stripModel, type PanePart } from "../lib/ui/pane.ts";
-import type { PanelSummary } from "../lib/ui/shell-panel.ts";
-import { renderWorkRow, setChromeSurface, workRowLead } from "../lib/ui/shell-panel.ts";
+import { installPane, invalidatePane, paneSlot, paneState, renderStrip, setPaneHover, stripModel } from "../lib/ui/pane.ts";
+import { setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { recentSessionRoots } from "../lib/ui/session-changes.ts";
 import { installSessionChangeCapture } from "../lib/ui/session-change-capture.ts";
 import { SelectionEngine } from "../lib/ui/selection-engine.ts";
@@ -115,7 +114,7 @@ interface PromptEditorDeps {
 	workingLabel?: () => string | undefined;
 	/** The fullscreen chrome: the editor is G's panel editor (a titled rule over `›` rows); elsewhere the float or neon card. */
 	panelChrome?: () => boolean;
-	/** Rows the shell draws above the rule (the work row), with the hovered one's index. */
+	/** Rows the shell draws above the rule (the narrow form's Running block), with the hovered one's index. */
 	topRows?: (width: number, hovered?: number) => string[];
 	/** A left click on one of the top rows (index into topRows). */
 	onTopRowClick?: (index: number) => void;
@@ -420,7 +419,7 @@ export class JhonPromptEditor extends CustomEditor {
 			framed.push(this.deps.fg(PROMPT_FRAME_ROLE, border) + clipped +
 				" ".repeat(Math.max(0, inner - visibleWidth(clipped))) + this.deps.fg(PROMPT_FRAME_ROLE, border));
 		}
-		// What the shell draws above the rule (the work row).
+		// What the shell draws above the rule (the narrow form's Running block).
 		const topRows = this.deps.topRows?.(width, this.hoveredTopRow) ?? [];
 		if (this.hoveredTopRow !== undefined && this.hoveredTopRow >= topRows.length) this.hoveredTopRow = undefined;
 		this.topRowCount = topRows.length;
@@ -470,22 +469,12 @@ type PromptFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorCom
 
 /**
  * The narrow form of a full-screen terminal (04): no right pane (under 140
- * columns, Status hidden, or a pi-tui without the layout hook): live work
- * folds into the work row above the editor rule.
+ * columns, Status hidden, or a pi-tui without the layout hook): the Running
+ * block sits above the editor rule.
  */
 function narrowChrome(tui: TUI): boolean {
 	if ((tui as TUI & { mode?: string }).mode !== "fullscreen" || !tui.terminal) return false;
 	return !paneState(tui).wide?.();
-}
-
-/** The live-work digests the work row folds: the sub-agents (the todo list shows in the right pane only, T174). */
-function workParts(tui: TUI): Array<{ part: PanePart; summary: NonNullable<ReturnType<NonNullable<PanePart["summary"]>>> }> {
-	if (!tui.terminal) return [];
-	return ["agents"].flatMap((key) => {
-		const part = paneState(tui).parts.get(key);
-		const summary = part?.summary?.();
-		return part && summary ? [{ part, summary }] : [];
-	});
 }
 
 function installPrompt(
@@ -625,8 +614,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	// The Card content preference rides the same kind of slot: the quiet tool
 	// renderers read it live, so the saved level applies from the first render.
 	let visualSettings = resolveVisualSettings(animationOptions).settings;
-	/** The rail cards folded by a click this session (LDD, JOBS, AGENTS). */
-	const railFolded = new Set<string>();
 	// The Gentle Shell's card style and chrome surface (L153 answers 1-2) live in
 	// process-wide slots every extension's cards and the rail read.
 	const applyAppearance = () => {
@@ -669,28 +656,25 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	let currentContext: ExtensionContext | undefined;
 	// This session's running background tasks (lib/background-tasks-tools.ts).
 	let runningJobs: RunningJobDisplay[] | undefined;
-	// The jobs that finished lately, which JOBS shows for a minute (L168).
-	let finishedJobs: RunningJobDisplay[] = [];
 	let jobClock: ReturnType<typeof setInterval> | undefined;
-	const lingering = () => finishedJobs.some((job) => deps.now() - (job.endedAt ?? 0) < JOBS_FINISHED_TTL_MS);
+	/** Opens the agents view or the jobs view (lib/background-tasks-tools.ts). */
+	const openTasks = (ctx: ExtensionContext, view: "agents" | "jobs") => { pi.events.emit(OPEN_TASKS_EVENT, { ctx, view }); };
 	const displays = (items: unknown): RunningJobDisplay[] => Array.isArray(items)
 		? items.filter((item): item is RunningJobDisplay => typeof item?.id === "string" && typeof item.label === "string" && typeof item.startedAt === "number")
 		: [];
 	pi.events.on(TASKS_EVENT, (value) => {
-		const event = value as { sessionId?: unknown; tasks?: unknown; finished?: unknown } | undefined;
+		const event = value as { sessionId?: unknown; tasks?: unknown } | undefined;
 		if (!currentContext || event?.sessionId !== currentContext.sessionManager.getSessionId() || !Array.isArray(event.tasks)) return;
 		runningJobs = displays(event.tasks);
-		finishedJobs = displays(event.finished).filter((job) => typeof job.endedAt === "number");
-		// The cards' times run live: one redraw a second while a task runs or a
-		// finished job still shows, none when idle.
-		if ((runningJobs.length || lingering()) && !jobClock) {
+		// The elapsed times run live: one redraw a second while a task runs, none when idle.
+		if (runningJobs.length && !jobClock) {
 			jobClock = setInterval(() => {
-				if (!runningJobs?.length && !lingering() && jobClock) { clearInterval(jobClock); jobClock = undefined; }
+				if (!runningJobs?.length && jobClock) { clearInterval(jobClock); jobClock = undefined; }
 				renderHost?.invalidatePane?.();
 				renderHost?.requestRender();
 			}, 1000);
 			jobClock.unref?.();
-		} else if (!runningJobs.length && !lingering() && jobClock) {
+		} else if (!runningJobs.length && jobClock) {
 			clearInterval(jobClock);
 			jobClock = undefined;
 		}
@@ -837,7 +821,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	pi.on("session_start", async (_event, ctx) => {
 		closeSettings?.();
 		runningJobs = undefined;
-		finishedJobs = [];
 		stopProfilePoll();
 		registry?.close();
 		currentContext = ctx;
@@ -895,69 +878,30 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			// out (lib/ui/pane.ts), both are its rows and the footer steps aside;
 			// elsewhere (a regular terminal, a pi-tui without the layout hook) the
 			// footer is the status bar and the chrome widget the top row and strip.
-			// A click on a card's header folds or opens it. Kept for the session (T15.8).
-			const fold = (title: string) => {
-				if (railFolded.has(title)) railFolded.delete(title); else railFolded.add(title);
-				invalidatePane(tui);
-				return { handled: true, render: true };
-			};
-			// Every header is a control, as the Gentle Shell's: a move over one paints
-			// it in the hover role, a move anywhere else clears it (setPaneHover).
-			const hoverTo = <T>(owner: object, current: T | undefined, next: T | undefined, set: (value: T | undefined) => void) => {
-				if (next !== undefined) setPaneHover(tui, owner, () => { set(undefined); invalidatePane(tui); tui.requestRender(); });
-				else setPaneHover(tui);
-				if (next === current) return { handled: true };
-				set(next);
-				invalidatePane(tui);
-				return { handled: true, render: true };
-			};
-			// The rail's LDD section, which leads it (L174) and folds on a click on its header.
-			const lddRail = (): PanePart => {
-				let statusAt: StatusTarget[] = [];
-				let statusHover: StatusHover | undefined;
-				const statusOwner = {};
-				return {
-					digest: () => JSON.stringify([ldd, visualSettings, [...railFolded], statusHover ?? ""]),
-					render: (width) => {
-						const layout = renderShellStatusLayout({ ...(ldd ? { ldd } : {}) }, theme, width, railFolded, statusHover, visualSettings.density);
-						statusAt = layout.targets;
-						return layout.lines;
-					},
-					// The narrow form's strip (04): the change, its slice, the next step, the last run.
-					strip: (width) => ldd ? renderStrip(stripModel(ldd, deps.now(), settings.string("shell.keys.panel")), theme, width, { ascii: settings.ascii() }) : undefined,
-					invalidate() {},
-					handleMouse(event) {
-						const target = statusAt.find((candidate) => candidate.row === event.y);
-						if (event.type === "move" && event.button === "none") {
-							return hoverTo<StatusHover>(statusOwner, statusHover, target?.section, (value) => { statusHover = value; });
-						}
-						if (event.type !== "click" || event.button !== "left" || !target) return undefined;
-						return fold(target.section);
-					},
-				};
-			};
-			const disposeLdd = paneSlot(tui, "ldd", lddRail());
-			// Background work gets its own rail sections, out of Status, each its own
-			// part as in Gentle Shell: JOBS (commands and monitors) and AGENTS (sub-agents) (L168).
-			const workPart = (key: string, title: string, render: typeof renderShellJobsSection, summary?: () => PanelSummary | undefined, open?: () => void) => {
-				let hovered = false;
-				const owner = {};
-				return paneSlot(tui, key, {
-					digest: () => JSON.stringify([runningJobs, finishedJobs, runningJobs?.length || lingering() ? Math.floor(deps.now() / 1000) : 0, railFolded.has(title), hovered]),
-					render: (width) => render([...(runningJobs ?? []), ...finishedJobs], theme, width, deps.now(), railFolded.has(title), hovered),
-					...(summary ? { summary } : {}),
-					...(open ? { open } : {}),
-					invalidate() {},
-					handleMouse(event) {
-						if (event.type === "move" && event.button === "none") return hoverTo<true>(owner, hovered || undefined, event.y === 0 ? true : undefined, (value) => { hovered = value ?? false; });
-						if (event.type !== "click" || event.button !== "left" || event.y !== 0) return undefined;
-						return fold(title);
-					},
-				});
-			};
-			const disposeJobs = workPart("jobs", "JOBS", renderShellJobsSection, undefined, () => { pi.events.emit(OPEN_TASKS_EVENT, { ctx, view: "jobs" }); });
-			// The work row's lead while sub-agents run, as the Gentle Shell's: `◐ N agents`.
-			const disposeAgents = workPart("agents", "AGENTS", renderShellAgentsSection, () => agentsWorkSummary([...(runningJobs ?? []), ...finishedJobs], theme, deps.now()), () => { pi.events.emit(OPEN_TASKS_EVENT, { ctx }); });
+			// The pane's LDD section (01, 02): the change, its slices, the last run;
+			// its digest moves each minute for the run's age.
+			const disposeLdd = paneSlot(tui, "ldd", {
+				digest: () => JSON.stringify([ldd, visualSettings, settings.ascii(), Math.floor(deps.now() / 60_000)]),
+				render: (width) => renderLddPanel(ldd, theme, width, { now: deps.now(), ascii: settings.ascii() }),
+				// The narrow form's strip (04): the change, its slice, the next step, the last run.
+				strip: (width) => ldd ? renderStrip(stripModel(ldd, deps.now(), settings.string("shell.keys.panel")), theme, width, { ascii: settings.ascii() }) : undefined,
+				invalidate() {},
+			});
+			// Agents and Jobs, each its own section while something runs (01); a
+			// click on one of its rows opens its view (/jhon:agents, /jhon:jobs).
+			const workPart = (key: "agents" | "jobs", render: typeof renderJobsSection) => paneSlot(tui, key, {
+				digest: () => JSON.stringify([runningJobs, settings.ascii(), runningJobs?.length ? Math.floor(deps.now() / 1000) : 0]),
+				render: (width) => render(runningJobs, theme, width, { now: deps.now(), ascii: settings.ascii() }),
+				invalidate() {},
+				handleMouse(event) {
+					if (event.type === "move" && event.button === "none") { setPaneHover(tui); return undefined; }
+					if (event.type !== "click" || event.button !== "left") return undefined;
+					openTasks(ctx, key);
+					return { handled: true };
+				},
+			});
+			const disposeAgents = workPart("agents", renderAgentsSection);
+			const disposeJobs = workPart("jobs", renderJobsSection);
 			// The status bar spans the width under the rail (L97); the rail has no
 			// key line, "/ commands" is the prompt's alone (L143).
 			const disposeStatusbar = paneSlot(tui, "statusbar", {
@@ -1011,21 +955,15 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				prompt.setAnimationPolicy(animationPolicy);
 			},
 			{ now: () => deps.now(), doubleEscCancelEnabled: () => doubleEscCancelPolicy === "on", dispatchQueuedText: queueAfterSettle, workingLabel: () => apiWait.label(),
-				// Without the rail the work row above the rule folds AGENTS.
 				// The editor joins the fullscreen chrome, rail or not; a regular terminal keeps the float or neon card, as G's.
 				panelChrome: (tui) => (tui as TUI & { mode?: string }).mode === "fullscreen" && Boolean(tui.terminal),
-				topRows: (tui, width, hovered) => {
-					if (!narrowChrome(tui)) return [];
-					const row = renderWorkRow(workParts(tui).map((work) => work.summary), ctx.ui.theme, width, hovered === 0, shellSettings().ascii());
-					return row ? [row] : [];
-				},
-				// A tap on the work row opens the leading section's own view (sub-agents
-				// open /jhon:agents); a section without one opens nothing (T169: the
-				// panel sheet is gone).
+				// The narrow form's Running block (04): the agents and jobs while they run.
+				topRows: (tui, width) => narrowChrome(tui) ? renderRunningBlock(runningJobs, ctx.ui.theme, width, { now: deps.now(), ascii: shellSettings().ascii() }).rows : [],
+				// A click on one of its rows opens the agents view or the jobs view.
 				onTopRowClick: (tui, index) => {
-					if (!narrowChrome(tui) || index !== 0) return;
-					const parts = workParts(tui);
-					parts[workRowLead(parts.map((work) => work.summary))]?.part.open?.();
+					if (!narrowChrome(tui)) return;
+					const view = renderRunningBlock(runningJobs, ctx.ui.theme, tui.terminal?.columns ?? 0, { now: deps.now() }).opens[index];
+					if (view) openTasks(ctx, view);
 				} },
 		);
 		// Hide native feedback only when our petal replaces it. Native transcript
@@ -1035,7 +973,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	pi.on("session_shutdown", (_event, ctx) => {
 		closeSettings?.();
 		runningJobs = undefined;
-		finishedJobs = [];
 		if (jobClock) { clearInterval(jobClock); jobClock = undefined; }
 		stopLddSources();
 		releaseSelection?.();
