@@ -174,7 +174,7 @@ func TestRefusalBypass(t *testing.T) {
 	eq(t, "a write of another path", len(bypass(t, "general", write, bash("printf 'x' > "+testRoot+"/notes.md"))), 0)
 
 	// A write refused for its content, written again and passed by the same
-	// guard, is the correction the refusal asked for (2026-10-30, a client project: a
+	// guard, is the correction the refusal asked for (2026-10-30, a recorded session: a
 	// tasks.md refused for a slice without its Delivers: line).
 	content := tcall{name: "Write", input: obj("file_path", testRoot+"/openspec/changes/c/tasks.md", "content", "## Slice 1: a\n- [ ] 1.1 a\n"), isError: true, denial: "permission-rule",
 		result: str("PreToolUse:Write hook error: ['jhon' 'hook' 'pre-tool']: vcs-guard: Write of " + testRoot + "/openspec/changes/c/tasks.md leaves Slice 1: a without the value it delivers.\n")}
@@ -207,7 +207,7 @@ func TestRefusalBypassDelegation(t *testing.T) {
 		}
 	}
 	// A loop refused for its unbounded wait leaves no `for` or `done` a
-	// delegation could ask for (2026-10-30, a client project: "a delegation asks for done").
+	// delegation could ask for (2026-10-30, a recorded session: "a delegation asks for done").
 	loop := refusedCall("for s in a b; do until test -f $s; do sleep 5; done; done", hookText("safety-guard", "general", "refused: an `until` or `while` loop that sleeps with nothing bounding it. A sub-agent that ends or is stopped leaves it running, and only the owner can stop it. Bound the wait: `timeout 600 sh -c '<loop>'`, or `for i in $(seq 1 60); do <check> && break; sleep 10; done`; or run the command in the foreground with a timeout."))
 	loopSteps := []step{user("go"), delegate("r01", "general", chg, loop), {kind: "delegate", id: "r02", typ: "general", change: chg, prompt: "Report what is done for slice 2, for s and the rest."}}
 	eq(t, "keywords are no effect", len(slices.DeleteFunc(findingsOf(t, "refusal-bypass", loopSteps...), func(x Finding) bool { return x.Agent != main })), 0)
@@ -1146,7 +1146,7 @@ func TestRefusalBypassRealCleanFixtures(t *testing.T) {
 	// A write refused as outside the project, retried after the session
 	// moved into the project that now holds it (session 21668be5), is
 	// another effect.
-	// A refused `git worktree remove --force`, then plain removes (a client project, pi
+	// A refused `git worktree remove --force`, then plain removes (pi
 	// session 01a18b2e), which git itself refuses where work would be lost.
 	for _, name := range []string{"refusal-granted-write", "refusal-sibling-invocation", "refusal-interpreter-code", "refusal-moved-into-project", "refusal-unforced-retry"} {
 		r := Audit(fixture(t, name))

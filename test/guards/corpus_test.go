@@ -138,7 +138,7 @@ func corpusTree(t *testing.T, fixture string) sgEnv {
 	if err := os.Chmod(filepath.Join(s.p, "locked.sh"), 0); err != nil {
 		t.Fatal(err)
 	}
-	// The client session's deploy helpers, written under /tmp there and named <TMP> here.
+	// The audited session's deploy helpers, written under /tmp there and named <TMP> here.
 	support.Write(t, s.tmp, map[string]string{"acme-deploy/run-task.sh": "#!/usr/bin/env bash\naws ecs run-task --cluster c --task-definition \"$1\"\n",
 		"acme-deploy/scale.sh":         "#!/usr/bin/env bash\nfor s in \"$@\"; do aws ecs update-service --cluster c --service \"$s\" --desired-count 1; done\n",
 		"acme-deploy/retag-taskdef.sh": "#!/usr/bin/env bash\naws ecs register-task-definition --cli-input-json \"$1\"\n"})

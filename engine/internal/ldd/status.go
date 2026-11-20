@@ -929,8 +929,8 @@ func selectStatus(root string, name *string) (Status, error) {
 		// planned or checked off there, before any commit says so.
 		name = new(EditedChange(root, candidates))
 	case g.laneChange(root, candidates) != "":
-		// A lane worktree (chore/tsr-common working on
-		// test-suite-review-common): the branch names none, its own commits do.
+		// A lane worktree (chore/tst-common working on
+		// test-suite-tidyup-common): the branch names none, its own commits do.
 		name = new(g.laneChange(root, candidates))
 	case len(candidates) > 1:
 		set.ranked = RankChanges(root, candidates)

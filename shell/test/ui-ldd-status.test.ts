@@ -125,16 +125,16 @@ test("lddLanes reads the other worktrees' changes in progress, one row each, aft
   execFileSync("git", ["init", "-q", repo]);
   execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"]);
   const wt = (name: string) => { const p = join(base, "wts", name); execFileSync("git", ["-C", repo, "worktree", "add", "-q", "-b", name, p]); return p; };
-  const [own, common, iam, idle] = [wt("own"), wt("tsr-common"), wt("tsr-iam"), wt("idle")];
+  const [own, common, iam, idle] = [wt("own"), wt("tst-common"), wt("tst-iam"), wt("idle")];
   const lane = (change: string, slices: Array<"done" | "current" | "pending">, next?: string) => ({ change, slices, ...(next ? { next } : {}) });
   const statuses: Record<string, any> = { [own]: lane("test-suite-review", ["done", "done", "done"], "verify"),
-    [common]: lane("test-suite-review-common", ["done", "current", "pending"], "apply"), [iam]: lane("test-suite-review-iam", ["current", "pending"], "apply") };
+    [common]: lane("test-suite-tidyup-common", ["done", "current", "pending"], "apply"), [iam]: lane("test-suite-tidyup-iam", ["current", "pending"], "apply") };
   const read = async (cwd: string) => statuses[cwd];
   const shown = { ...statuses[own], worktree: "own", root: own };
   const lanes = await lddLanes(repo, shown, read);
-  assert.deepEqual(lanes.map((l) => [l.change, l.worktree]).sort(), [["test-suite-review-common", "tsr-common"], ["test-suite-review-iam", "tsr-iam"]], "the shown change and a worktree with none are left out");
+  assert.deepEqual(lanes.map((l) => [l.change, l.worktree]).sort(), [["test-suite-tidyup-common", "tst-common"], ["test-suite-tidyup-iam", "tst-iam"]], "the shown change and a worktree with none are left out");
   const lines = estadoLines({ ...shown, lanes }, plain, 46);
-  const blocks: Array<[string, string]> = [["◆ test-suite-review-common        ⎇ tsr-common", "  1/3 slices · next apply"], ["◆ test-suite-review-iam           ⎇ tsr-iam", "  0/2 slices · next apply"]];
+  const blocks: Array<[string, string]> = [["◆ test-suite-tidyup-common        ⎇ tst-common", "  1/3 slices · next apply"], ["◆ test-suite-tidyup-iam           ⎇ tst-iam", "  0/2 slices · next apply"]];
   assert.deepEqual(lines.slice(-4).filter((l) => l.startsWith("◆")).sort(), blocks.map(([name]) => name), `the lanes after the session's own:\n${lines.join("\n")}`);
   for (const [name, detail] of blocks) assert.equal(lines[lines.indexOf(name) + 1], detail, `each lane one block, its slices under its name:\n${lines.join("\n")}`);
   void idle;
