@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cmp"
 	"encoding/json"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"math"
 	"os"
 	"path/filepath"
@@ -131,7 +132,7 @@ func Summarize(events []Event, days, skipped int) Summary {
 			case "deny":
 				h.Deny++
 				perDay[day].Denies++
-				s.Denials = append(s.Denials, Denial{e.Time, name, str(a, "gen_ai.agent.name"), str(a, "gen_ai.tool.name"), str(a, "jhon.reason")})
+				s.Denials = append(s.Denials, Denial{e.Time, name, rename.AgentNow(str(a, "gen_ai.agent.name")), str(a, "gen_ai.tool.name"), str(a, "jhon.reason")})
 			case "ask":
 				h.Ask++
 			case "context":
@@ -169,7 +170,7 @@ func Summarize(events []Event, days, skipped int) Summary {
 				}
 			}
 		case "jhon.subagent":
-			name := str(a, "gen_ai.agent.name")
+			name := rename.AgentNow(str(a, "gen_ai.agent.name"))
 			x := agents[name]
 			if x == nil {
 				x = &SubagentStat{Agent: name}

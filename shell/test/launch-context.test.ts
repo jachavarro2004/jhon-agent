@@ -75,7 +75,7 @@ async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => Pr
 }
 
 /**
- * Launch a worker on brief in cwd from a child session (its sub-agents run
+ * Launch a jhon-builder on brief in cwd from a child session (its sub-agents run
  * in the call), with the fakes and env; what pi received, how long the call took.
  */
 async function launch(cwd: string, brief: string, env: Record<string, string | undefined> = {}, f = fakes()) {
@@ -247,7 +247,7 @@ test("a linked worktree of a checkout with no index gets no code map and never r
   assert.deepEqual(log(f.dir, "codegraph"), []);
 });
 
-// T137 (L1064 KB2, KB3): verify and each 4R lens get, after the other
+// T137 (L1064 KB2, KB3): verify and each Prism facet get, after the other
 // blocks, the tests the change's record marks as turned green by editing
 // only their test (`jhon context --judge`); any other agent, and a change
 // with nothing to judge, get no such block.
@@ -256,36 +256,36 @@ const TESTS_TO_JUDGE = `${TESTS_TO_JUDGE_HEADING}
 Added at launch from the change's execution record: each test below failed in one recorded run and passed in a later one while only its own test file changed in its project. Judge whether it was weakened to pass (an assertion dropped or loosened, a case removed, an expectation rewritten to what the code does); if it was, report it as a finding.
 - \`tests/test_ids.py::test_ids\` (b, b/tests/test_ids.py): failed in run 2026-01-01T00:01:00.000Z, passed in run 2026-01-01T00:02:00.000Z`;
 
-test("verify and the 4R lenses are launched with the tests to judge; other agents, and nothing to judge, are not", async () => {
+test("jhon-checker and the Prism facets are launched with the tests to judge; other agents, and nothing to judge, are not", async () => {
   const cwd = repo(false);
   const f = fakes();
   const noDecisions = { ...JUDGED, decisions: [] };
   await withEnv({ FAKE_PACKET: JSON.stringify(noDecisions), PATH: `${f.dir}${delimiter}${process.env.PATH}` }, async () => {
-    for (const agent of ["verify", "review-risk", "review-resilience", "review-readability", "review-reliability"]) {
+    for (const agent of ["jhon-checker", "prism-safety", "prism-failure", "prism-clarity", "prism-behavior"]) {
       assert.equal(await launchContext(BRIEF, cwd, { bin: f.jhonBin, change: "c1", agent }), `\n\n${TESTS_TO_JUDGE}`, agent);
     }
     assert.ok(log(f.dir, "jhon").some((a) => a.join(" ") === "context c1 --phase none --judge --json"), JSON.stringify(log(f.dir, "jhon")));
     const judged = () => log(f.dir, "jhon").filter((a) => a.includes("--judge")).length;
     assert.equal(judged(), 5);
-    for (const agent of ["worker", "explore", undefined]) assert.equal(await launchContext(BRIEF, cwd, { bin: f.jhonBin, change: "c1", agent }), "", String(agent));
+    for (const agent of ["jhon-builder", "jhon-scout", undefined]) assert.equal(await launchContext(BRIEF, cwd, { bin: f.jhonBin, change: "c1", agent }), "", String(agent));
     assert.equal(judged(), 5, "only a judge's launch asks for the tests to judge");
   });
   await withEnv({ FAKE_PACKET: JSON.stringify({ ...PACKET, decisions: [] }) }, async () => {
-    assert.equal(await launchContext(BRIEF, cwd, { bin: f.jhonBin, agent: "verify" }), "", "nothing to judge: no block");
+    assert.equal(await launchContext(BRIEF, cwd, { bin: f.jhonBin, agent: "jhon-checker" }), "", "nothing to judge: no block");
   });
   assert.equal(withoutLaunchContext(`${BRIEF}\n\n${TESTS_TO_JUDGE}`), BRIEF, "a continue cuts the block too");
 });
 
-test("a verify launched through the subagent tool ends its first message with the tests to judge", async () => {
+test("a jhon-checker launched through the subagent tool ends its first message with the tests to judge", async () => {
   const cwd = repo(false);
   const f = fakes();
   const agentDir = tempDir("jhon-launch-agent-");
   mkdirSync(join(agentDir, "agents"));
-  writeFileSync(join(agentDir, "agents", "verify.md"), WORKER.replace("name: worker", "name: verify").replace("bounded: true\n", ""));
+  writeFileSync(join(agentDir, "agents", "jhon-checker.md"), WORKER.replace("name: worker", "name: jhon-checker").replace("bounded: true\n", ""));
   await withEnv({ PI_CODING_AGENT_DIR: agentDir, JHON_PI_CHILD: "1", JHON_BIN: f.jhonBin, JHON_PI_BIN: f.piBin, PATH: `${f.dir}${delimiter}${process.env.PATH}`, FAKE_PACKET: JSON.stringify({ ...JUDGED, decisions: [] }) }, async () => {
     const tools = new Map<string, any>();
     jhon({ on: () => {}, registerTool: (t: any) => tools.set(t.name, t), registerCommand: () => {} });
-    await tools.get("subagent").execute("call-1", { agent: "verify", task: "Verify c1.\n" }, undefined, undefined, { cwd, hasUI: false, sessionManager: { getSessionId: () => "parent", getSessionFile: () => undefined } });
+    await tools.get("subagent").execute("call-1", { agent: "jhon-checker", task: "Verify c1.\n" }, undefined, undefined, { cwd, hasUI: false, sessionManager: { getSessionId: () => "parent", getSessionFile: () => undefined } });
     const seen = JSON.parse(readFileSync(f.piLog, "utf8")) as { argv: string[] };
     assert.equal(seen.argv.at(-1), `Verify c1.\n\n\n${TESTS_TO_JUDGE}`);
   });

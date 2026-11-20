@@ -45,7 +45,7 @@ The model is recorded per run: `metrics.json`'s `model` is the effective one, `P
 
 ### A whole Jhon profile (T77b)
 
-A Jhon profile picks every agent's model per runtime, the orchestrator's and each sub-agent's (explore, workers, verify). To measure a whole profile (only GLM, GLM with DeepSeek, mixed with Claude, only OpenAI), install it in the bench HOME:
+A Jhon profile picks every agent's model per runtime, the orchestrator's and each sub-agent's (jhon-scout, jhon-builder, jhon-checker). To measure a whole profile (only GLM, GLM with DeepSeek, mixed with Claude, only OpenAI), install it in the bench HOME:
 
 ```sh
 go run ./tools/bench prepare --pi-profile ~/.config/jhon/profiles.json --profile glm
@@ -507,9 +507,9 @@ The Claude Code conditions follow `SPIKE.md`. Two things there were not tried ye
 
 The multi-message drivers (T46) are covered by the fake runtimes only. Not observed yet: pi's RPC records through `jhon start pi --mode rpc` on the bridge (the `prompt` response and `agent_settled` as `docs/rpc.md` shows them), whether a background notice after `agent_settled` starts a turn the bench does not wait for, `--resume <id>` with `jhon start -p` keeping the transcript's id, whether `-p` keeps a background job alive past its exit, and whether `TaskOutput` (which the binary also lists among older names) is still a tool.
 
-## The 4R gate: `bench review-compare` (T118e, L727)
+## The Prism gate: `bench review-compare` (T118e, L727)
 
-The native 4R (`jhon_review`: one tool call whose lens, refuter and validator prompts run as tool-less completions through pi's model registry) is installed only if it costs less than today's lens agents and finds no fewer known defects. `bench review-compare` measures both on the same frozen changes, in the `pi-jhon` condition, on the bench HOME's profile:
+The native Prism review (`jhon_review`: one tool call whose facet, challenger and arbiter prompts run as tool-less completions through pi's model registry) is installed only if it costs less than today's facet agents and finds no fewer known defects. `bench review-compare` measures both on the same frozen changes, in the `pi-jhon` condition, on the bench HOME's profile:
 
     go run ./tools/bench review-compare --dry-run                 # the plan: 5 fixtures × 2 arms
     go run ./tools/bench review-compare [--repeats N] [--pi-model P/M[@T]] [--pi-env NAMES]
@@ -518,18 +518,18 @@ The native 4R (`jhon_review`: one tool call whose lens, refuter and validator pr
 | Arm | The run |
 |---|---|
 | `native` | `jhon start pi --mode json … -- <prompt>` with `JHON_REVIEW_NATIVE=on` |
-| `agents` | the same with `JHON_REVIEW_NATIVE=off`: the shell's `jhon_review` runs `jhon review start` and answers with its fallback (launch `review-<lens>`, then `review-refuter` and `review-validator`) without a completion |
+| `agents` | the same with `JHON_REVIEW_NATIVE=off`: the shell's `jhon_review` runs `jhon review start` and answers with its fallback (launch `prism-<facet>`, then `prism-challenger` and `prism-arbiter`) without a completion |
 
-Both arms get the same owner message: run the 4R of the branch's change against `main` until review-4r.md is recorded, then stop (no edits, no fixes, no verify, no delivery). The main session runs `--pi-model`, else the profile's orchestrator model, else claude-bridge on `--model` (default `opus`); every reviewer runs the profile's model for its routing key.
+Both arms get the same owner message: run the Prism review of the branch's change against `main` until review-prism.md is recorded, then stop (no edits, no fixes, no verify, no delivery). The main session runs `--pi-model`, else the profile's orchestrator model, else claude-bridge on `--model` (default `opus`); every reviewer runs the profile's model for its routing key.
 
-Fixtures live in `review/<id>/`: `base/` is committed on `main` with the native `ldd/config.yaml` (plus a `review_required` entry naming the fixture's change with `review: 4r`, so the 4R is owed and the route guard lets the agents arm launch its pertinent `review-<lens>`, `review-refuter` and `review-validator` headless, as the native arm runs — without it the guard asks and headless pi cannot answer, L739) and a `pyproject.toml`, `candidate/` is committed on `change/<change>` (with its record `ldd/changes/<change>/`), and `manifest.json` lists the seeded defects (`file`, `lines` [from, to], `lens`, `severity`, `what`); `"clean": true` marks the fixture with none.
+Fixtures live in `review/<id>/`: `base/` is committed on `main` with the native `ldd/config.yaml` (plus a `review_required` entry naming the fixture's change with `review: prism`, so the Prism review is owed and the route guard lets the agents arm launch its pertinent `prism-<facet>`, `prism-challenger` and `prism-arbiter` headless, as the native arm runs — without it the guard asks and headless pi cannot answer, L739) and a `pyproject.toml`, `candidate/` is committed on `change/<change>` (with its record `ldd/changes/<change>/`), and `manifest.json` lists the seeded defects (`file`, `lines` [from, to], `facet`, `severity`, `what`); `"clean": true` marks the fixture with none.
 
-| Fixture | Lenses the engine picks | Known defects |
+| Fixture | Facets the engine picks | Known defects |
 |---|---|---|
-| `webhook-notify` | risk, resilience | D1 the API token logged (risk); D2 an unbounded retry with no backoff (resilience) |
-| `ledger-cache` | resilience, reliability | D1 a race on the shared cache and counter (resilience); D2 `subprocess.run`'s exit code ignored (reliability) |
-| `orders-summary` | risk, reliability, readability | D1 a 65-line, 14-level function (readability); D2 returns `total` (float) where the contract requires integer `total_cents` (risk); D3 float math on cents (reliability) |
-| `late-fees` | reliability | D1 `except Exception: pass` drops fees (reliability); D2 division by zero on an empty batch (reliability) |
-| `slug-clean` | reliability | none: every standing finding is a false positive |
+| `webhook-notify` | safety, failure | D1 the API token logged (safety); D2 an unbounded retry with no backoff (failure) |
+| `ledger-cache` | failure, behavior | D1 a race on the shared cache and counter (failure); D2 `subprocess.run`'s exit code ignored (behavior) |
+| `orders-summary` | safety, behavior, clarity | D1 a 65-line, 14-level function (clarity); D2 returns `total` (float) where the contract requires integer `total_cents` (safety); D3 float math on cents (behavior) |
+| `late-fees` | behavior | D1 `except Exception: pass` drops fees (behavior); D2 division by zero on an empty batch (behavior) |
+| `slug-clean` | behavior | none: every standing finding is a false positive |
 
-Per run, from the pi session: the parent's tokens and cost (its own assistant messages), the reviewers' (the native completions, which only `jhon_review`'s result `details.reviewers` holds, or the `review-*` child sessions under `subagents/`), every other child session's, wall time, and the change's review-4r.md (verdict, lenses, correction set, for verify). A finding hits a known defect when its location names the defect's file and its lines overlap the defect's; refuted findings count neither way; any other standing finding is a false positive. Each run writes `runs/<fixture>-<arm>-pi-jhon-<n>/review-metrics.json`; the batch writes `report.md` and `report.json`: a table per fixture, pooled totals per arm, and the gate — **PASS** when the native total cost < the agents' AND native hits ≥ agents' hits, else **FAIL**, with the numbers. Cost is the providers' reported dollars when both arms report some, else the quota-weighted tokens (input + 1.25 cache write + 0.1 cache read + 5 output).
+Per run, from the pi session: the parent's tokens and cost (its own assistant messages), the reviewers' (the native completions, which only `jhon_review`'s result `details.reviewers` holds, or the `prism-*` (before T177, `review-*`) child sessions under `subagents/`), every other child session's, wall time, and the change's review-prism.md (verdict, facets, correction set, for verify). A finding hits a known defect when its location names the defect's file and its lines overlap the defect's; refuted findings count neither way; any other standing finding is a false positive. Each run writes `runs/<fixture>-<arm>-pi-jhon-<n>/review-metrics.json`; the batch writes `report.md` and `report.json`: a table per fixture, pooled totals per arm, and the gate — **PASS** when the native total cost < the agents' AND native hits ≥ agents' hits, else **FAIL**, with the numbers. Cost is the providers' reported dollars when both arms report some, else the quota-weighted tokens (input + 1.25 cache write + 0.1 cache read + 5 output).

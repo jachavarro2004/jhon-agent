@@ -8,17 +8,17 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 )
 
-// ExploreAgent is the agent whose writes ExploreMayWrite bounds
-// (prose/agents.yaml: "Writes only the change's exploration.md or
+// ExploreAgent is the agent whose writes ExploreMayWrite bounds,
+// jhon-scout (prose/agents.yaml: "Writes only the change's exploration.md or
 // research.md, never code"; T123).
-const ExploreAgent = "explore"
+const ExploreAgent = "jhon-scout"
 
-// ExploreRecords are the only files the explore agent writes, in its change's folder.
+// ExploreRecords are the only files the jhon-scout agent writes, in its change's folder.
 var ExploreRecords = []string{"exploration.md", "research.md"}
 
 // ExploreScope is the rule as vcs-guard's note on another write of
 // explore's states it (a refusal until T153: the write is not destructive).
-const ExploreScope = "explore writes only its change's exploration.md or research.md (<layout>/changes/<change>/exploration.md or research.md, openspec/ or ldd/)"
+const ExploreScope = "jhon-scout writes only its change's exploration.md or research.md (<layout>/changes/<change>/exploration.md or research.md, openspec/ or ldd/)"
 
 // ExploreMayWrite is whether p, an absolute path, is a change's
 // exploration.md or research.md directly under root, in either layout:

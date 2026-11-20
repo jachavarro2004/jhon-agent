@@ -14,6 +14,7 @@ internal/audit -> internal/js
 internal/audit -> internal/lazyre
 internal/audit -> internal/ldd
 internal/audit -> internal/ldd/layout
+internal/audit -> internal/rename
 internal/audit -> internal/sh
 internal/cli -> internal/audit
 internal/cli -> internal/compose
@@ -38,6 +39,7 @@ internal/cli -> internal/palette
 internal/cli -> internal/profiles
 internal/cli -> internal/project
 internal/cli -> internal/release
+internal/cli -> internal/rename
 internal/cli -> internal/render
 internal/cli -> internal/sandbox
 internal/cli -> internal/session
@@ -97,6 +99,7 @@ internal/hook -> internal/lazyre
 internal/hook -> internal/ldd
 internal/hook -> internal/ldd/layout
 internal/hook -> internal/project
+internal/hook -> internal/rename
 internal/hook -> internal/sandbox
 internal/hook -> internal/session
 internal/hook -> internal/settings
@@ -110,6 +113,7 @@ internal/ldd -> internal/js
 internal/ldd -> internal/lazyre
 internal/ldd -> internal/ldd/layout
 internal/ldd -> internal/project
+internal/ldd -> internal/rename
 internal/ldd -> internal/requirements
 internal/ldd -> internal/vcs
 internal/ldd -> internal/workspace
@@ -125,6 +129,7 @@ internal/palette -> internal/project
 internal/palette -> internal/settings
 internal/profiles -> internal/js
 internal/profiles -> internal/lazyre
+internal/profiles -> internal/rename
 internal/project -> internal/lazyre
 internal/project -> internal/ldd/layout
 internal/project -> internal/lddswitch
@@ -161,6 +166,7 @@ internal/setupui -> internal/settings
 internal/setupui -> internal/version
 internal/sh -> internal/lazyre
 internal/telemetry -> internal/project
+internal/telemetry -> internal/rename
 internal/toml -> internal/js
 internal/update -> internal/release
 internal/update -> internal/version

@@ -15,7 +15,7 @@ var testTiers = map[string]map[string]string{
 	"pi":          {"mid": "claude-bridge/claude-sonnet-5-5@medium", "strong": "claude-bridge/claude-opus-5-5@medium"},
 }
 
-var testCtx = Context{Runtimes: []string{"claude-code", "other", "pi"}, Tiers: []string{"cheap", "mid", "strong", "frontier"}, Agents: []string{"worker", "review-risk"}}
+var testCtx = Context{Runtimes: []string{"claude-code", "other", "pi"}, Tiers: []string{"cheap", "mid", "strong", "frontier"}, Agents: []string{"worker", "prism-safety"}}
 
 func parse(t *testing.T, s string) any {
 	t.Helper()
@@ -42,8 +42,8 @@ func TestTierValue(t *testing.T) {
 
 // An agent override beats a tier override, which beats agents.yaml.
 func TestModelFor(t *testing.T) {
-	profile := parse(t, `{"tiers": {"pi": {"mid": "claude-bridge/claude-sonnet-5-5@high"}}, "agents": {"review-risk": {"pi": "claude-bridge/claude-fable-5-1@high"}}}`)
-	worker, risk := Agent{"worker", "mid"}, Agent{"review-risk", "strong"}
+	profile := parse(t, `{"tiers": {"pi": {"mid": "claude-bridge/claude-sonnet-5-5@high"}}, "agents": {"prism-safety": {"pi": "claude-bridge/claude-fable-5-1@high"}}}`)
+	worker, risk := Agent{"worker", "mid"}, Agent{"prism-safety", "strong"}
 	for _, c := range []struct {
 		profile       any
 		runtime       string
@@ -51,7 +51,7 @@ func TestModelFor(t *testing.T) {
 		value, source string
 	}{
 		{profile, "pi", worker, "claude-bridge/claude-sonnet-5-5@high", "profile tier pi.mid"},
-		{profile, "pi", risk, "claude-bridge/claude-fable-5-1@high", "profile agent review-risk.pi"},
+		{profile, "pi", risk, "claude-bridge/claude-fable-5-1@high", "profile agent prism-safety.pi"},
 		{profile, "claude-code", worker, "claude-sonnet-5-5@medium", "agents.yaml tiers.claude-code.mid"},
 		{js.NewObject(), "pi", risk, "claude-bridge/claude-opus-5-5@medium", "agents.yaml tiers.pi.strong"},
 	} {

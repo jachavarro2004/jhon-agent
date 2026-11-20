@@ -950,9 +950,9 @@ func runExecutions(argv []string) (int, error) {
 	record.Complete = true
 	record.Timestamp = now()
 	// A test turned green by editing only its test is marked, never refused
-	// (T137): verify and the 4R lenses are launched with it to judge.
+	// (T137): verify and the Prism facets are launched with it to judge.
 	for _, m := range execution.MarkTurnedGreen(root, record, all, inert) {
-		notes = append(notes, fmt.Sprintf("%s: %s turned green by editing only its test (%s): failed in run %s, passed in run %s; verify and the 4R lenses judge whether it was weakened", m.Project, m.Test, m.File, m.RedRun, m.GreenRun))
+		notes = append(notes, fmt.Sprintf("%s: %s turned green by editing only its test (%s): failed in run %s, passed in run %s; verify and the Prism facets judge whether it was weakened", m.Project, m.Test, m.File, m.RedRun, m.GreenRun))
 	}
 	record.Repos = execution.ReposOf(root, change)
 	if !keep {

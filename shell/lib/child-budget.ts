@@ -6,12 +6,12 @@
  * - a context budget: once per crossing of min(shell.behaviour.child_backstop_tokens
  *   (0 off), CHILD_BACKSTOP_SHARE of the window), the notice to wrap up and
  *   return path:line evidence, not raw output;
- * - for an explore or worker-type child that may call CodeGraph, one
+ * - for a jhon-scout or builder-type child that may call CodeGraph, one
  *   read-budget reminder past CHILD_READ_LOOKUPS lookups or CHILD_READ_BYTES
  *   bytes since its last CodeGraph call (lookups as isLookup counts them:
  *   read, grep, find, ls, inspect, codegraph, and a bash command that only
  *   reads, e.g. cat, sed -n, grep through bash). T125 (L783 F5): four
- *   workers read 362 KB through bash and never called CodeGraph; a worker's reminder
+ *   builders read 362 KB through bash and never called CodeGraph; a jhon-builder's reminder
  *   (workerReadBudgetNotice) is about editing, not exploring.
  *
  * T155 (L1377, L1394): no cap. A child's tool calls are never refused for its
@@ -31,7 +31,7 @@ import { shellSettings } from "./settings.ts";
 
 /** The share of the window, in percent, past which the child budget comes if it is smaller. */
 export const CHILD_BACKSTOP_SHARE = 40;
-/** Lookups an explore child may make since its last CodeGraph call before the reminder. */
+/** Lookups a jhon-scout child may make since its last CodeGraph call before the reminder. */
 export const CHILD_READ_LOOKUPS = 12;
 /** UTF-8 bytes those lookups may return before the reminder. */
 export const CHILD_READ_BYTES = 100_000;
@@ -77,7 +77,7 @@ export function readBudgetNotice(lookups: number, bytes: number): string {
   return `Read budget: ${lookups} lookups, ${bytes} bytes without a CodeGraph call. codegraph_explore returns the source of the symbols it finds, already read: prefer it to more grep and read, and return path:line evidence, not raw output.`;
 }
 
-/** T125: a worker-type child's reminder: CodeGraph instead of reading whole files, the read tool's ranges instead of cat/sed. */
+/** T125: a builder-type child's reminder: CodeGraph instead of reading whole files, the read tool's ranges instead of cat/sed. */
 export function workerReadBudgetNotice(lookups: number, bytes: number): string {
   return `Read budget: ${lookups} lookups, ${bytes} bytes without CodeGraph. codegraph_explore returns the source of a symbol already read; read only the lines you change; prefer the read tool with offset/limit over cat/sed through bash.`;
 }
@@ -96,15 +96,15 @@ export class ChildContextBudget {
   }
 }
 
-/** An explore or worker child's lookups since its last CodeGraph call; one reminder per child. */
+/** A jhon-scout or builder child's lookups since its last CodeGraph call; one reminder per child. */
 export class ChildReadBudget {
   private lookups = 0;
   private bytes = 0;
   private notified = false;
 
-  private readonly kind: "explore" | "worker";
+  private readonly kind: "scout" | "builder";
 
-  constructor(kind: "explore" | "worker" = "explore") { this.kind = kind; }
+  constructor(kind: "scout" | "builder" = "scout") { this.kind = kind; }
 
   result(event: { toolName?: unknown; input?: unknown; content?: unknown; isError?: unknown }): string | undefined {
     if (this.notified || event.isError || typeof event.toolName !== "string") return undefined;
@@ -116,18 +116,18 @@ export class ChildReadBudget {
     }
     if (this.lookups <= CHILD_READ_LOOKUPS && this.bytes <= CHILD_READ_BYTES) return undefined;
     this.notified = true;
-    return (this.kind === "worker" ? workerReadBudgetNotice : readBudgetNotice)(this.lookups, this.bytes);
+    return (this.kind === "builder" ? workerReadBudgetNotice : readBudgetNotice)(this.lookups, this.bytes);
   }
 }
 
-/** The read budget's kind for a child agent: explore, a worker-type writer (worker, *-worker), or none. */
-export function readBudgetKind(agent: string | undefined): "explore" | "worker" | undefined {
-  if (agent === "explore") return "explore";
-  if (agent === "worker" || /-worker$/.test(agent ?? "")) return "worker";
+/** The read budget's kind for a child agent: jhon-scout, a builder-type writer (jhon-builder, *-builder, *-worker), or none. */
+export function readBudgetKind(agent: string | undefined): "scout" | "builder" | undefined {
+  if (agent === "jhon-scout") return "scout";
+  if (/-(builder|worker)$/.test(agent ?? "")) return "builder";
   return undefined;
 }
 
-/** Whether a child running `agent` with `tools` gets the read budget: an explore or worker-type child that may call CodeGraph. */
+/** Whether a child running `agent` with `tools` gets the read budget: a jhon-scout or builder-type child that may call CodeGraph. */
 export function readBudgetApplies(agent: string | undefined, tools: string[] | undefined): boolean {
   return readBudgetKind(agent) !== undefined && (tools ?? []).some((t) => t.includes("codegraph"));
 }

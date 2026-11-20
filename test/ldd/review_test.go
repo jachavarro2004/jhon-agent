@@ -35,22 +35,22 @@ func reviews(t *testing.T, root string) map[string]map[string]any {
 	return out
 }
 
-// On a risk-high route `jhon status` reports 4R due, by risk, until a 4R
+// On a risk-high route `jhon status` reports Prism review due, by risk, until a Prism review
 // record exists (S17, L9); size alone puts no change on the verified route
 // (S25), so a large change owes no review.
-func TestStatusFourRDueOnRiskHigh(t *testing.T) {
+func TestStatusPrismDueOnRiskHigh(t *testing.T) {
 	t.Parallel()
 	root := reviewRepo(t, "schema: spec-driven\n", map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [ ] 1.1 a\n",
 		"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	r := reviews(t, root)
-	equal(t, r["4r"], map[string]any{"review": "4r", "by": []any{"risk high"}, "done": false}, "4R due")
-	equal(t, r["verify"]["done"], false, "verify due")
+	equal(t, r["prism"], map[string]any{"review": "prism", "by": []any{"risk high"}, "done": false}, "Prism review due")
+	equal(t, r["checker"]["done"], false, "verify due")
 	h := jhonGit(t, root, "status")
 	equal(t, h.Code, 0, h.Stderr)
-	match(t, h.Stdout, `(?m)^review      4R due \(risk high\): pick the pertinent lenses`)
-	support.Write(t, root, map[string]string{"openspec/changes/c1/review-4r.md": "lenses: risk, reliability\nverdict: pass\n"})
-	equal(t, reviews(t, root)["4r"], map[string]any{"review": "4r", "by": []any{"risk high"}, "done": true, "record": "review-4r.md (lenses: risk, reliability; verdict: pass)"}, "4R on record")
-	match(t, jhonGit(t, root, "status").Stdout, `(?m)^review      4R done \(risk high\): review-4r\.md`)
+	match(t, h.Stdout, `(?m)^review      Prism review due \(risk high\): pick the pertinent facets`)
+	support.Write(t, root, map[string]string{"openspec/changes/c1/review-prism.md": "facets: safety, behavior\nverdict: pass\n"})
+	equal(t, reviews(t, root)["prism"], map[string]any{"review": "prism", "by": []any{"risk high"}, "done": true, "record": "review-prism.md (facets: safety, behavior; verdict: pass)"}, "Prism review on record")
+	match(t, jhonGit(t, root, "status").Stdout, `(?m)^review      Prism review done \(risk high\): review-prism\.md`)
 
 	size := reviewRepo(t, "schema: spec-driven\n", map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [ ] 1.1 a\n",
 		"src/big.py": strings.Repeat("x = 1\n", 450), "tests/test_big.py": "def test_a(): pass\n"})
@@ -65,17 +65,17 @@ func TestStatusFourRDueOnRiskHigh(t *testing.T) {
 // its diff's paths, and which are missing (S11).
 func TestStatusReviewRequired(t *testing.T) {
 	t.Parallel()
-	config := "schema: spec-driven\nreview_required:\n  - change: c1\n    review: verify\n  - area: \"src/billing/**\"\n    review: 4r\n  - area: \"src/pay/**\"\n    review: verify\n"
+	config := "schema: spec-driven\nreview_required:\n  - change: c1\n    review: checker\n  - area: \"src/billing/**\"\n    review: prism\n  - area: \"src/pay/**\"\n    review: checker\n"
 	root := reviewRepo(t, config, map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [ ] 1.1 a\n",
 		"src/billing/charge.py": "X = 2\n", "tests/test_login.py": "def test_a(): pass\n"})
 	r := reviews(t, root)
-	equal(t, r["verify"], map[string]any{"review": "verify", "by": []any{"review_required: change c1"}, "done": false}, "verify by name; the src/pay/** area the diff does not touch applies nothing")
-	equal(t, r["4r"], map[string]any{"review": "4r", "by": []any{"review_required: area src/billing/**"}, "done": false}, "4R by area")
+	equal(t, r["checker"], map[string]any{"review": "checker", "by": []any{"review_required: change c1"}, "done": false}, "verify by name; the src/pay/** area the diff does not touch applies nothing")
+	equal(t, r["prism"], map[string]any{"review": "prism", "by": []any{"review_required: area src/billing/**"}, "done": false}, "Prism review by area")
 	h := jhonGit(t, root, "status").Stdout
-	match(t, h, "(?m)^review      verify due \\(review_required: change c1\\): launch the verify agent and record verify-report.md with `verdict: pass`$")
-	match(t, h, `(?m)^review      4R due \(review_required: area src/billing/\*\*\)`)
+	match(t, h, "(?m)^review      checker due \\(review_required: change c1\\): launch the jhon-checker agent and record verify-report.md with `verdict: pass`$")
+	match(t, h, `(?m)^review      Prism review due \(review_required: area src/billing/\*\*\)`)
 	support.Write(t, root, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
-	equal(t, reviews(t, root)["verify"]["done"], true, "a passing verify report")
+	equal(t, reviews(t, root)["checker"]["done"], true, "a passing verify report")
 
 	other := reviewRepo(t, config, map[string]string{"openspec/changes/c2/tasks.md": "## Slice 1: a\n- [ ] 1.1 a\n",
 		"src/other.py": "X = 2\n", "tests/test_other.py": "def test_a(): pass\n"})
@@ -94,6 +94,6 @@ func TestStatusReviewRequiredUnreadable(t *testing.T) {
 	root := reviewRepo(t, "schema: spec-driven\nreview_required:\n  - change: c1\n    review: 5r\n", map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [ ] 1.1 a\n",
 		"src/other.py": "X = 2\n", "tests/test_other.py": "def test_a(): pass\n"})
 	equal(t, reviews(t, root)["review_required"], map[string]any{"review": "review_required", "by": []any{"line 4: review: 5r"}, "done": false,
-		"why": "`5r` is not a review: verify or 4r"}, "the unreadable entry")
-	match(t, jhonGit(t, root, "status").Stdout, "(?m)^review      review_required in openspec/config.yaml has an entry jhon cannot read \\(line 4: review: 5r\\): `5r` is not a review: verify or 4r; fix it before the PR$")
+		"why": "`5r` is not a review: checker or prism"}, "the unreadable entry")
+	match(t, jhonGit(t, root, "status").Stdout, "(?m)^review      review_required in openspec/config.yaml has an entry jhon cannot read \\(line 4: review: 5r\\): `5r` is not a review: checker or prism; fix it before the PR$")
 }

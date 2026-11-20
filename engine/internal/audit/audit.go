@@ -18,9 +18,9 @@
 //	test-weakened       after a failing test run and before the next pass,
 //	                    an edit of a test file that adds a skip marker or
 //	                    removes a test block;
-//	verify-wrote        a verify agent's write of anything but its
+//	checker-wrote       a jhon-checker agent's write of anything but its
 //	                    verify-report.md;
-//	explore-wrote       an explore agent's write of anything but its
+//	scout-wrote         a jhon-scout agent's write of anything but its
 //	                    change's exploration.md or research.md;
 //	archive-without-red `jhon archive <change>` with no RED then GREEN of
 //	                    the change in the session.

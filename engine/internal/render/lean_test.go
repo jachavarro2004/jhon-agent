@@ -156,7 +156,7 @@ func TestRuntimesRenderLeanBesideFull(t *testing.T) {
 		t.Errorf("pi's full file is %s, want %s", e.fullFile("pi"), want)
 	}
 	// Sub-agents keep the full always-on layer.
-	worker := promptOf(t, claude{e}, filepath.Join(e.claudeAgents(), "worker.md"))
+	worker := promptOf(t, claude{e}, filepath.Join(e.claudeAgents(), "jhon-builder.md"))
 	if !strings.Contains(worker, "## Runtime boundaries") {
 		t.Error("Claude Code's worker lost the always-on layer")
 	}

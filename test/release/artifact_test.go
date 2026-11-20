@@ -476,7 +476,7 @@ func TestUserReleaseWithoutCheckout(t *testing.T) {
 		g := exec.Command("grep", "-rlF", src, share(env.home))
 		b, _ := g.Output()
 		equal(t, strings.TrimSpace(string(b)), "")
-		match(t, support.Read(t, filepath.Join(env.home, ".claude", "agents", "worker.md")), `'framework-guard' '`+regexp.QuoteMeta(share(env.home))+`/releases/`)
+		match(t, support.Read(t, filepath.Join(env.home, ".claude", "agents", "jhon-builder.md")), `'framework-guard' '`+regexp.QuoteMeta(share(env.home))+`/releases/`)
 	})
 
 	t.Run("doctor in a home with neither runtime says Claude Code was not found, not that a setting turned it off", func(t *testing.T) {
@@ -507,7 +507,7 @@ func TestUserReleaseWithoutCheckout(t *testing.T) {
 	})
 
 	t.Run("the rendered framework guard of a user install refuses an Edit under current/ (exit 2) and allows the project", func(t *testing.T) {
-		agent := support.Read(t, filepath.Join(env.home, ".claude", "agents", "worker.md"))
+		agent := support.Read(t, filepath.Join(env.home, ".claude", "agents", "jhon-builder.md"))
 		m := regexp.MustCompile(`(?m)^ +command: "('[^"]*'pre-tool'[^"]*)"$`).FindStringSubmatch(agent)
 		if m == nil {
 			t.Fatalf("no pre-tool hook in worker.md:\n%s", agent)

@@ -25,9 +25,9 @@ code lives here: the engine (`engine/`) reads these files, validates them
 | `orchestrator.md` | the `jhon-orchestrator` main agent | Its contract, delivered as its body. |
 | `orchestrator-writer.md` | pi's shell, in writer mode | The writer-mode delegation rules, rendered to `~/.pi/jhon/jhon-orchestrator-writer.md`; the shell puts them in place of the orchestrator's region between `<!-- delegation:begin -->` and `<!-- delegation:end -->`, and keeps that region when the file or a marker is missing. |
 | `agents/<name>.md` | that sub-agent | Its body. |
-| `agents/templates/` | the engine | Bodies shared by several agents (the review lenses), expanded per agent. |
+| `agents/templates/` | the engine | Bodies shared by several agents (the review facets), expanded per agent. |
 | `persona/jhon.md` | every main agent | How Jhon speaks to the owner. Sub-agents get a short identity line instead. |
-| `contracts/` | agents, and the engine for `vocabulary.yaml` | The rules. Always on, inlined in every agent: `language`, `shell-tools`, `remote-auth`, `runtime-boundaries`, `codegraph`, `engram`, `tdd`, `archify-activation`, `routing`. Read on demand: `ldd`, `delivery`, `delegation`, `asked-operations`, `witness`, `spec-delta`, `efficiency`, `review-4r`, `archify`. |
+| `contracts/` | agents, and the engine for `vocabulary.yaml` | The rules. Always on, inlined in every agent: `language`, `shell-tools`, `remote-auth`, `runtime-boundaries`, `codegraph`, `engram`, `tdd`, `archify-activation`, `routing`. Read on demand: `ldd`, `delivery`, `delegation`, `asked-operations`, `witness`, `spec-delta`, `efficiency`, `review-prism`, `archify`. |
 | `contracts/vocabulary.yaml` | the engine | The values the code reads (states, phases, record fields, audit rules), so prose and code cannot drift apart. |
 | `templates/claude-md-block.md` | the engine | The fixed text around the always-on layer; each `{{group}}` is replaced by that group's files. |
 | `skills/<name>/` | agents, through the runtime's skill loader | Skills Jhon owns: `ldd` (Leapfrog-Driven Development, with one reference per step). |

@@ -1,9 +1,9 @@
 /**
  * shell/lib/writer-guard.ts — T117c (L720): in writer mode the main session
- * edits inline only a change cheaper than starting a worker, at most
+ * edits inline only a change cheaper than starting a builder, at most
  * WRITER_INLINE_LINES changed lines per owner request (T117e: summed over
  * its calls since the owner's last message); a larger edit or write is
- * refused toward a worker with a self-contained brief. The plan doc, the
+ * refused toward a jhon-builder with a self-contained brief. The plan doc, the
  * Log and every file under odd/ always pass. Inline mode and children never
  * reach this check.
  */
@@ -59,7 +59,7 @@ export function writerCallLines(toolName: string, input: Record<string, unknown>
 
 function refusal(toolName: string, path: string, changed: number, prior: number): string {
 	const total = prior ? `, ${prior + changed} with the ${prior} already written inline since the owner's last message,` : ",";
-	return `jhon: writer mode: this ${toolName} changes ${changed} lines of ${path}${total} more than the ${WRITER_INLINE_LINES} the orchestrator writes inline per request. Hand the rest to a worker (subagent) with a self-contained brief: the spec lines, the exact files and line ranges, the decisions taken, and how to verify. The plan doc and the Log (odd/**) stay yours.`;
+	return `jhon: writer mode: this ${toolName} changes ${changed} lines of ${path}${total} more than the ${WRITER_INLINE_LINES} the orchestrator writes inline per request. Hand the rest to a jhon-builder (subagent) with a self-contained brief: the spec lines, the exact files and line ranges, the decisions taken, and how to verify. The plan doc and the Log (odd/**) stay yours.`;
 }
 
 /** Why writer mode refuses this call in the main session on its own; undefined when it passes. */

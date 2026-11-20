@@ -112,16 +112,16 @@ func onBothRuntimes(t *testing.T, x integrationScript, check func(t *testing.T, 
 
 // theIntegrations: the orchestrator reads and writes memory, asks CodeGraph
 // once, reads three times (one a `cd x && cat f`; `cd x && go test` is no
-// read) and writes its todo list twice; two workers, one explore that reads
+// read) and writes its todo list twice; two workers, one jhon-scout that reads
 // memory twice in one launch, and a verify that uses nothing.
 var theIntegrations = integrationScript{
 	main: []used{memSearch(), memSave(), codegraphCall(), readFile(), shell("cd /work/p && cat SECRETFILE.go"),
 		shell("cd /work/p && go test ./..."), shell("sed -n '1,5p' SECRETFILE.go"), todoCall(), todoCall()},
 	subs: []launched{
-		{"worker", []used{memContext(), codegraphCall(), codegraphCall(), grepFiles(), shell("cd /work/p && rg SECRETPATTERN"), todoCall()}},
-		{"worker", []used{memUpdate(), globFiles(), listDir(), shell("head -5 SECRETFILE.go"), shell("cd /work/p && go test ./...")}},
-		{"explore", []used{memGet(), memProject(), readFile(), shell("tail -n 3 SECRETFILE.go")}},
-		{"verify", []used{shell("go test ./...")}},
+		{"jhon-builder", []used{memContext(), codegraphCall(), codegraphCall(), grepFiles(), shell("cd /work/p && rg SECRETPATTERN"), todoCall()}},
+		{"jhon-builder", []used{memUpdate(), globFiles(), listDir(), shell("head -5 SECRETFILE.go"), shell("cd /work/p && go test ./...")}},
+		{"jhon-scout", []used{memGet(), memProject(), readFile(), shell("tail -n 3 SECRETFILE.go")}},
+		{"jhon-checker", []used{shell("go test ./...")}},
 	},
 }
 
@@ -146,31 +146,31 @@ func TestIntegrationsCountEachRolesLaunches(t *testing.T) {
 		for _, u := range r.Integrations.Roles {
 			roles = append(roles, u.Role)
 		}
-		eq(t, "roles: the orchestrator first, then by name", roles, []string{"orchestrator", "explore", "verify", "worker"})
-		eq(t, "launches", [4]int{role(t, r, "orchestrator").Launches, role(t, r, "explore").Launches, role(t, r, "verify").Launches, role(t, r, "worker").Launches}, [4]int{1, 1, 1, 2})
+		eq(t, "roles: the orchestrator first, then by name", roles, []string{"orchestrator", "jhon-builder", "jhon-checker", "jhon-scout"})
+		eq(t, "launches", [4]int{role(t, r, "orchestrator").Launches, role(t, r, "jhon-scout").Launches, role(t, r, "jhon-checker").Launches, role(t, r, "jhon-builder").Launches}, [4]int{1, 1, 1, 2})
 	})
 }
 
 func TestIntegrationsCountTheLaunchesThatReadMemory(t *testing.T) {
 	onBothRuntimes(t, theIntegrations, func(t *testing.T, r *Result) {
-		eq(t, "launches with a memory read: orchestrator, explore, verify, worker",
-			[4]int{role(t, r, "orchestrator").MemoryReadLaunches, role(t, r, "explore").MemoryReadLaunches, role(t, r, "verify").MemoryReadLaunches, role(t, r, "worker").MemoryReadLaunches},
+		eq(t, "launches with a memory read: orchestrator, jhon-scout, verify, jhon-builder",
+			[4]int{role(t, r, "orchestrator").MemoryReadLaunches, role(t, r, "jhon-scout").MemoryReadLaunches, role(t, r, "jhon-checker").MemoryReadLaunches, role(t, r, "jhon-builder").MemoryReadLaunches},
 			[4]int{1, 1, 0, 1})
 	})
 }
 
 func TestIntegrationsCountTheLaunchesThatWriteMemory(t *testing.T) {
 	onBothRuntimes(t, theIntegrations, func(t *testing.T, r *Result) {
-		eq(t, "launches with a memory write: orchestrator, explore, verify, worker",
-			[4]int{role(t, r, "orchestrator").MemoryWriteLaunches, role(t, r, "explore").MemoryWriteLaunches, role(t, r, "verify").MemoryWriteLaunches, role(t, r, "worker").MemoryWriteLaunches},
+		eq(t, "launches with a memory write: orchestrator, jhon-scout, verify, jhon-builder",
+			[4]int{role(t, r, "orchestrator").MemoryWriteLaunches, role(t, r, "jhon-scout").MemoryWriteLaunches, role(t, r, "jhon-checker").MemoryWriteLaunches, role(t, r, "jhon-builder").MemoryWriteLaunches},
 			[4]int{1, 0, 0, 1})
 	})
 }
 
 func TestIntegrationsCountCodeGraphCalls(t *testing.T) {
 	onBothRuntimes(t, theIntegrations, func(t *testing.T, r *Result) {
-		eq(t, "CodeGraph calls: orchestrator, explore, verify, worker",
-			[4]int{role(t, r, "orchestrator").CodegraphCalls, role(t, r, "explore").CodegraphCalls, role(t, r, "verify").CodegraphCalls, role(t, r, "worker").CodegraphCalls},
+		eq(t, "CodeGraph calls: orchestrator, jhon-scout, verify, jhon-builder",
+			[4]int{role(t, r, "orchestrator").CodegraphCalls, role(t, r, "jhon-scout").CodegraphCalls, role(t, r, "jhon-checker").CodegraphCalls, role(t, r, "jhon-builder").CodegraphCalls},
 			[4]int{1, 0, 0, 2})
 	})
 }
@@ -180,8 +180,8 @@ func TestIntegrationsCountCodeGraphCalls(t *testing.T) {
 // is one, `cd x && go test` is not.
 func TestIntegrationsCountPlainReads(t *testing.T) {
 	onBothRuntimes(t, theIntegrations, func(t *testing.T, r *Result) {
-		eq(t, "plain reads: orchestrator, explore, verify, worker",
-			[4]int{role(t, r, "orchestrator").PlainReads, role(t, r, "explore").PlainReads, role(t, r, "verify").PlainReads, role(t, r, "worker").PlainReads},
+		eq(t, "plain reads: orchestrator, jhon-scout, verify, jhon-builder",
+			[4]int{role(t, r, "orchestrator").PlainReads, role(t, r, "jhon-scout").PlainReads, role(t, r, "jhon-checker").PlainReads, role(t, r, "jhon-builder").PlainReads},
 			[4]int{3, 2, 0, 5})
 	})
 	for _, c := range []struct {
@@ -201,9 +201,9 @@ func TestIntegrationsCountPlainReads(t *testing.T) {
 func TestIntegrationsShareCodeGraphAgainstPlainReads(t *testing.T) {
 	onBothRuntimes(t, theIntegrations, func(t *testing.T, r *Result) {
 		eq(t, "orchestrator share", role(t, r, "orchestrator").CodegraphShare(), 0.25)
-		eq(t, "worker share", role(t, r, "worker").CodegraphShare(), 2.0/7)
-		eq(t, "explore share", role(t, r, "explore").CodegraphShare(), 0.0)
-		if s := role(t, r, "verify").CodegraphShare(); !math.IsNaN(s) {
+		eq(t, "jhon-builder share", role(t, r, "jhon-builder").CodegraphShare(), 2.0/7)
+		eq(t, "jhon-scout share", role(t, r, "jhon-scout").CodegraphShare(), 0.0)
+		if s := role(t, r, "jhon-checker").CodegraphShare(); !math.IsNaN(s) {
 			t.Errorf("verify share: %v, want none", s)
 		}
 	})
@@ -211,8 +211,8 @@ func TestIntegrationsShareCodeGraphAgainstPlainReads(t *testing.T) {
 
 func TestIntegrationsCountTodoCalls(t *testing.T) {
 	onBothRuntimes(t, theIntegrations, func(t *testing.T, r *Result) {
-		eq(t, "todo calls: orchestrator, explore, verify, worker",
-			[4]int{role(t, r, "orchestrator").TodoCalls, role(t, r, "explore").TodoCalls, role(t, r, "verify").TodoCalls, role(t, r, "worker").TodoCalls},
+		eq(t, "todo calls: orchestrator, jhon-scout, verify, jhon-builder",
+			[4]int{role(t, r, "orchestrator").TodoCalls, role(t, r, "jhon-scout").TodoCalls, role(t, r, "jhon-checker").TodoCalls, role(t, r, "jhon-builder").TodoCalls},
 			[4]int{2, 0, 0, 1})
 	})
 }
@@ -228,14 +228,14 @@ func TestIntegrationsAreReportedAsStatisticsNeverAFinding(t *testing.T) {
 			return strings.NewReplacer("L", itoa(launches), "R", itoa(read), "W", itoa(write), "C", itoa(cg), "P", itoa(plain), "S", share, "T", itoa(todo)).
 				Replace(`{"launches":L,"launches_with_memory_read":R,"launches_with_memory_write":W,"codegraph_calls":C,"plain_reads":P,"codegraph_share":S,"todo_calls":T}`)
 		}
-		want := `{"orchestrator":` + entry(1, 1, 1, 1, 3, "0.25", 2) + `,"explore":` + entry(1, 1, 0, 0, 2, "0", 0) +
-			`,"verify":` + entry(1, 0, 0, 0, 0, "null", 0) + `,"worker":` + entry(2, 1, 1, 2, 5, js.NumberString(2.0/7), 1) + `}`
+		want := `{"orchestrator":` + entry(1, 1, 1, 1, 3, "0.25", 2) + `,"jhon-builder":` + entry(2, 1, 1, 2, 5, js.NumberString(2.0/7), 1) +
+			`,"jhon-checker":` + entry(1, 0, 0, 0, 0, "null", 0) + `,"jhon-scout":` + entry(1, 1, 0, 0, 2, "0", 0) + `}`
 		eq(t, "integrations", got, want)
 		out := Human(r, "s.jsonl", false)
 		lines := "\n  integrations  orchestrator  launches 1  memory read 1  memory write 1  codegraph 1  plain reads 3  codegraph share 25.0%  todo 2\n" +
-			"  integrations  explore  launches 1  memory read 1  memory write 0  codegraph 0  plain reads 2  codegraph share 0.0%  todo 0\n" +
-			"  integrations  verify  launches 1  memory read 0  memory write 0  codegraph 0  plain reads 0  codegraph share -  todo 0\n" +
-			"  integrations  worker  launches 2  memory read 1  memory write 1  codegraph 2  plain reads 5  codegraph share 28.6%  todo 1\n"
+			"  integrations  jhon-builder  launches 2  memory read 1  memory write 1  codegraph 2  plain reads 5  codegraph share 28.6%  todo 1\n" +
+			"  integrations  jhon-checker  launches 1  memory read 0  memory write 0  codegraph 0  plain reads 0  codegraph share -  todo 0\n" +
+			"  integrations  jhon-scout  launches 1  memory read 1  memory write 0  codegraph 0  plain reads 2  codegraph share 0.0%  todo 0\n"
 		if !strings.Contains(out, lines) {
 			t.Errorf("missing %q in\n%s", lines, out)
 		}
@@ -275,12 +275,12 @@ func TestIntegrationsAreNullOnAnAuditError(t *testing.T) {
 // jhon audit --all sums each role's counts over the sessions, Jhon's apart.
 func TestAggregateSumsTheIntegrations(t *testing.T) {
 	first := theIntegrations.claude(t)
-	second := integrationScript{main: []used{memSearch(), readFile()}, subs: []launched{{"worker", []used{memSave(), codegraphCall()}}}}.pi(t)
+	second := integrationScript{main: []used{memSearch(), readFile()}, subs: []launched{{"jhon-builder", []used{memSave(), codegraphCall()}}}}.pi(t)
 	f := Aggregate([]Audited{{Path: "a.jsonl", Result: first}, {Path: "b.jsonl", Jhon: true, Result: second},
 		{Path: "c.jsonl", Jhon: true, Result: &Result{Status: "audit-error", Errors: []AuditError{{Message: "unreadable"}}}}}, nil, time.Time{})
 	eq(t, "sessions summed: all, Jhon's", [2]int{f.Integrations.Sessions, f.JhonIntegrations.Sessions}, [2]int{2, 1})
-	eq(t, "all", js.StringifyValueCompact(js.Prop(js.Prop(f.Integrations.Value(), "roles"), "worker")),
+	eq(t, "all", js.StringifyValueCompact(js.Prop(js.Prop(f.Integrations.Value(), "roles"), "jhon-builder")),
 		`{"launches":3,"launches_with_memory_read":1,"launches_with_memory_write":2,"codegraph_calls":3,"plain_reads":5,"codegraph_share":0.375,"todo_calls":1}`)
 	eq(t, "all: orchestrator launches", f.Integrations.Roles[0], RoleUse{Role: "orchestrator", Launches: 2, MemoryReadLaunches: 2, MemoryWriteLaunches: 1, CodegraphCalls: 1, PlainReads: 4, TodoCalls: 2})
-	eq(t, "Jhon's", f.JhonIntegrations.Roles, []RoleUse{{Role: "orchestrator", Launches: 1, MemoryReadLaunches: 1, PlainReads: 1}, {Role: "worker", Launches: 1, MemoryWriteLaunches: 1, CodegraphCalls: 1}})
+	eq(t, "Jhon's", f.JhonIntegrations.Roles, []RoleUse{{Role: "orchestrator", Launches: 1, MemoryReadLaunches: 1, PlainReads: 1}, {Role: "jhon-builder", Launches: 1, MemoryWriteLaunches: 1, CodegraphCalls: 1}})
 }

@@ -206,14 +206,14 @@ func changeOf(prompt string) string {
 }
 
 // phaseOf is the phase a delegation is to: its block's `phase`; else the
-// phase the agent type always runs (`verify`); else "". `explore` and
-// `worker` also run work outside a change's phases, so only their block
+// phase the agent type always runs (jhon-checker: `verify`); else "".
+// jhon-scout and jhon-builder also run work outside a change's phases, so only their block
 // names a phase.
 func phaseOf(prompt, agentType string) string {
 	if p, _ := strProp(launchBlock(prompt), "phase"); p != "" {
 		return p
 	}
-	if agentType == "verify" {
+	if agentType == "jhon-checker" {
 		return "verify"
 	}
 	return ""

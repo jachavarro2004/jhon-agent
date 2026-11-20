@@ -21,25 +21,25 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 )
 
-// The native 4R (contracts/review-4r.md): one freeze, then tool-less
+// The native Prism review (contracts/review-prism.md): one freeze, then tool-less
 // prompts a runtime completes without tools or a checkout, and a record
 // bound to the subject.
 //
-//   - `start` freezes once and prints, per pertinent lens (the route's
-//     lenses), its prompt (prose/review/lens.md with the lens's scope from
-//     agents.yaml's review-<lens>, the risk reasons, the diff and every
+//   - `start` freezes once and prints, per pertinent facet (the route's
+//     facets), its prompt (prose/review/facet.md with the facet's scope from
+//     agents.yaml's review-<facet>, the risk reasons, the diff and every
 //     changed file inline), its routing key, the active profile's pi model
 //     and thinking for that agent, and its size; a prompt past
 //     ldd.PromptTokenCap is refused: split the slice.
-//   - `refute` reads the lens results and prints the refuter's prompt;
-//     `validate` reads them with the refuter's answer and prints the
-//     validator's prompt for the findings that stand.
+//   - `refute` reads the facet results and prints the challenger's prompt;
+//     `validate` reads them with the challenger's answer and prints the
+//     arbiter's prompt for the findings that stand.
 //   - `record` reads all three, reduces them and writes the change's
-//     review-4r.md with its `subject:` and `base:`.
+//     review-prism.md with its `subject:` and `base:`.
 //
 // Each freezes again and refuses (exit 1) a --subject that is not the
 // fresh one: the bytes changed since `start`. The subject leaves out the
-// change's own records (ldd.ReviewExempt), so writing review-4r.md does
+// change's own records (ldd.ReviewExempt), so writing review-prism.md does
 // not change it. Usage errors and a state that cannot freeze (an empty
 // diff among them) exit 2; a result it cannot read exits 1 and writes
 // nothing.
@@ -53,7 +53,7 @@ func runReviewNative(sub string, argv []string) (int, error) {
 	return reviewNative(sub, argv, os.Stdin, os.Stdout, os.Stderr), nil
 }
 
-// reviewNative is one native 4R step over stdin, stdout and stderr, its
+// reviewNative is one native Prism review step over stdin, stdout and stderr, its
 // exit code; `jhon review run` calls it in process.
 func reviewNative(sub string, argv []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var a reviewArgs
@@ -125,29 +125,29 @@ func reviewNative(sub string, argv []string, stdin io.Reader, stdout, stderr io.
 		raw, _ := io.ReadAll(stdin)
 		var findings []ldd.Finding
 		if sub == "refute" {
-			lenses, err := ldd.ParseLensResults(raw)
+			facets, err := ldd.ParseFacetResults(raw)
 			if err == nil {
-				lenses, err = ldd.CheckLenses(lenses, f.Subject)
+				facets, err = ldd.CheckFacets(facets, f.Subject)
 			}
 			if err != nil {
 				return fail(1, "%v", err)
 			}
-			findings = ldd.AllFindings(lenses)
+			findings = ldd.AllFindings(facets)
 		} else {
 			rr, err := ldd.ParseReviewResults(raw)
 			if err == nil {
-				rr.Lenses, err = ldd.CheckLenses(rr.Lenses, f.Subject)
+				rr.Facets, err = ldd.CheckFacets(rr.Facets, f.Subject)
 			}
-			all := ldd.AllFindings(rr.Lenses)
+			all := ldd.AllFindings(rr.Facets)
 			if err == nil {
-				err = ldd.CheckRole(rr.Refuter, "refuter", f.Subject, ldd.IDs(all))
+				err = ldd.CheckRole(rr.Challenger, "challenger", f.Subject, ldd.IDs(all))
 			}
 			if err != nil {
 				return fail(1, "%v", err)
 			}
-			findings = ldd.Standing(all, rr.Refuter)
+			findings = ldd.Standing(all, rr.Challenger)
 		}
-		t, err := template(map[string]string{"refute": "refuter", "validate": "validator"}[sub])
+		t, err := template(map[string]string{"refute": "challenger", "validate": "arbiter"}[sub])
 		if err != nil {
 			return fail(2, "its prompt template cannot be read: %v", err)
 		}
@@ -160,7 +160,7 @@ func reviewNative(sub string, argv []string, stdin io.Reader, stdout, stderr io.
 		if err != nil {
 			return fail(2, "agents.yaml: %v", err)
 		}
-		agent := map[string]string{"refute": "review-refuter", "validate": "review-validator"}[sub]
+		agent := map[string]string{"refute": "prism-challenger", "validate": "prism-arbiter"}[sub]
 		model, effort, source := reviewModel(m, activeProfile(), agent)
 		reviewJSON(stdout, map[string]any{"routing_key": agent, "model": model, "effort": effort, "model_source": source,
 			"prompt": prompt, "bytes": len(prompt), "est_tokens": ldd.EstTokens(len(prompt))})
@@ -169,19 +169,19 @@ func reviewNative(sub string, argv []string, stdin io.Reader, stdout, stderr io.
 	raw, _ := io.ReadAll(stdin)
 	rr, err := ldd.ParseReviewResults(raw)
 	if err == nil {
-		rr.Lenses, err = ldd.CheckLenses(rr.Lenses, f.Subject)
+		rr.Facets, err = ldd.CheckFacets(rr.Facets, f.Subject)
 	}
-	all := ldd.AllFindings(rr.Lenses)
+	all := ldd.AllFindings(rr.Facets)
 	if err == nil {
-		err = ldd.CheckRole(rr.Refuter, "refuter", f.Subject, ldd.IDs(all))
-	}
-	if err == nil {
-		err = ldd.CheckRole(rr.Validator, "validator", f.Subject, ldd.IDs(ldd.Standing(all, rr.Refuter)))
+		err = ldd.CheckRole(rr.Challenger, "challenger", f.Subject, ldd.IDs(all))
 	}
 	if err == nil {
-		for _, l := range risk.Lenses {
-			if !slices.ContainsFunc(rr.Lenses, func(r ldd.LensResult) bool { return r.Lens == l }) {
-				err = fmt.Errorf("no result for the %s lens, which this diff calls for (%s)", l, strings.Join(risk.Lenses, ", "))
+		err = ldd.CheckRole(rr.Arbiter, "arbiter", f.Subject, ldd.IDs(ldd.Standing(all, rr.Challenger)))
+	}
+	if err == nil {
+		for _, l := range risk.Facets {
+			if !slices.ContainsFunc(rr.Facets, func(r ldd.FacetResult) bool { return r.Facet == l }) {
+				err = fmt.Errorf("no result for the %s facet, which this diff calls for (%s)", l, strings.Join(risk.Facets, ", "))
 				break
 			}
 		}
@@ -194,16 +194,16 @@ func reviewNative(sub string, argv []string, stdin io.Reader, stdout, stderr io.
 	if err := writeAtomic(layout.At(top, rel), ldd.RecordText(a.change, f.Subject, f.Base, red)); err != nil {
 		return fail(2, "%v", err)
 	}
-	reviewJSON(stdout, map[string]any{"record": filepath.ToSlash(rel), "subject": f.Subject, "base": f.Base, "lenses": red.Lenses, "verdict": red.Verdict,
+	reviewJSON(stdout, map[string]any{"record": filepath.ToSlash(rel), "subject": f.Subject, "base": f.Base, "facets": red.Facets, "verdict": red.Verdict,
 		"correction_set": ldd.IDs(red.CorrectionSet), "for_verify": ldd.IDs(red.ForVerify), "follow_ups": ldd.IDs(red.FollowUps),
 		"information": ldd.IDs(red.Information), "refuted": ldd.IDs(red.Refuted), "unavailable": red.Unavailable})
 	return 0
 }
 
 // reviewStart prints `jhon review start`'s object. judge is the change's
-// tests to judge (T137), which each lens prompt ends with; "" for none.
+// tests to judge (T137), which each facet prompt ends with; "" for none.
 func reviewStart(stdout io.Writer, fail func(int, string, ...any) int, root string, template func(string) (string, error), risk ldd.Risk, f vcs.Frozen, files, judge string) int {
-	t, err := template("lens")
+	t, err := template("facet")
 	if err != nil {
 		return fail(2, "its prompt template cannot be read: %v", err)
 	}
@@ -213,26 +213,26 @@ func reviewStart(stdout io.Writer, fail func(int, string, ...any) int, root stri
 	}
 	profile := activeProfile()
 	reasons := ldd.ReasonsBlock(risk.Reasons)
-	lenses := []any{}
-	for _, lens := range risk.Lenses {
-		agent := "review-" + lens
+	facets := []any{}
+	for _, facet := range risk.Facets {
+		agent := "prism-" + facet
 		scope := ""
 		if i := slices.IndexFunc(m.Agents, func(a manifest.Agent) bool { return a.Name == agent }); i >= 0 && m.Agents[i].Vars != nil {
 			scope, _ = m.Agents[i].Vars.Get("scope")
 		}
 		model, effort, source := reviewModel(m, profile, agent)
-		prompt := ldd.Fill(t, map[string]string{"lens": lens, "scope": scope, "reasons": reasons, "subject": f.Subject, "diff": f.Diff, "files": files})
+		prompt := ldd.Fill(t, map[string]string{"facet": facet, "scope": scope, "reasons": reasons, "subject": f.Subject, "diff": f.Diff, "files": files})
 		if judge != "" {
 			prompt += "\n\n" + judge
 		}
 		n := ldd.EstTokens(len(prompt))
 		if n > ldd.PromptTokenCap {
-			return fail(1, "the %s lens prompt is ~%d tokens, over the %d-token cap: split the slice and review each part", lens, n, ldd.PromptTokenCap)
+			return fail(1, "the %s facet prompt is ~%d tokens, over the %d-token cap: split the slice and review each part", facet, n, ldd.PromptTokenCap)
 		}
-		lenses = append(lenses, map[string]any{"lens": lens, "routing_key": agent, "model": model, "effort": effort, "model_source": source,
+		facets = append(facets, map[string]any{"facet": facet, "routing_key": agent, "model": model, "effort": effort, "model_source": source,
 			"prompt": prompt, "bytes": len(prompt), "est_tokens": n})
 	}
-	reviewJSON(stdout, map[string]any{"subject": f.Subject, "base": f.Base, "candidate": f.Candidate, "lenses": lenses})
+	reviewJSON(stdout, map[string]any{"subject": f.Subject, "base": f.Base, "candidate": f.Candidate, "facets": facets})
 	return 0
 }
 
@@ -299,7 +299,7 @@ func writeAtomic(file, text string) error {
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 		return errors.New("the change's directory " + dir + " does not exist")
 	}
-	tmp, err := os.CreateTemp(dir, ".review-4r-*")
+	tmp, err := os.CreateTemp(dir, ".review-prism-*")
 	if err != nil {
 		return err
 	}

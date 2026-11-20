@@ -27,13 +27,13 @@ func eq(t *testing.T, what string, got, want any) {
 }
 
 func TestSessionBuilderYieldsAReadableSession(t *testing.T) {
-	r := auditOf(t, user("go"), phased("apply", delegate("s01", "worker", chg)))
+	r := auditOf(t, user("go"), phased("apply", delegate("s01", "jhon-builder", chg)))
 	eq(t, "version", *r.Version, "2.1.280")
 }
 
 func TestOnlyVerifiedVersionsAreSupported(t *testing.T) {
 	eq(t, "SupportedVersions", SupportedVersions, []string{"2.1.278", "2.1.280", "2.1.289", "2.1.292", "2.1.293", "2.1.296", "2.1.299", "2.1.304"})
-	eq(t, "Checks", Checks, []string{"refusal-bypass", "isolation-bypass", "delivered-untested", "edit-before-red", "test-weakened", "verify-wrote", "explore-wrote", "archive-without-red"})
+	eq(t, "Checks", Checks, []string{"refusal-bypass", "isolation-bypass", "delivered-untested", "edit-before-red", "test-weakened", "checker-wrote", "scout-wrote", "archive-without-red"})
 }
 
 func TestFixtures(t *testing.T) {
@@ -107,8 +107,8 @@ func TestSessionHeader(t *testing.T) {
 }
 
 func TestReaderQueuedResultReachesTheMainThread(t *testing.T) {
-	pass := step{kind: "delegate", id: "v01", typ: "verify", phase: "verify", change: chg, result: "**Status**: success\nverdict: pass", queuedResult: true}
-	fail := step{kind: "delegate", id: "v02", typ: "verify", phase: "verify", change: chg, result: "**Status**: success\nverdict: fail"}
+	pass := step{kind: "delegate", id: "v01", typ: "jhon-checker", phase: "verify", change: chg, result: "**Status**: success\nverdict: pass", queuedResult: true}
+	fail := step{kind: "delegate", id: "v02", typ: "jhon-checker", phase: "verify", change: chg, result: "**Status**: success\nverdict: fail"}
 	c := outcomeOf(auditOf(t, user("go"), pass, fail), chg)
 	if c.VerifyRuns != 2 || c.Verdicts != [3]int{1, 1, 0} || c.Unfinished != 0 {
 		t.Errorf("outcome = %+v", c)
@@ -149,8 +149,8 @@ func TestRefusalBypass(t *testing.T) {
 	eq(t, "another path", len(bypass(t, "general", refusedCall("rm -rf /etc/app", rm), bash("env rm -rf ./build"))), 0)
 	eq(t, "sh -c", len(bypass(t, "general", refusedCall("rm -rf /etc/app", rm), bash("sh -c 'rm -r -f /etc/app'"))), 1)
 
-	refusedMerge := refusedCall("git merge feat", hookText("inspect-guard", "review-risk", "command is outside this agent's Bash allowlist (git diff, git show)"))
-	eq(t, "merge-base", len(bypass(t, "review-risk", refusedMerge, bash("env git merge-base HEAD origin/main"))), 0)
+	refusedMerge := refusedCall("git merge feat", hookText("inspect-guard", "prism-safety", "command is outside this agent's Bash allowlist (git diff, git show)"))
+	eq(t, "merge-base", len(bypass(t, "prism-safety", refusedMerge, bash("env git merge-base HEAD origin/main"))), 0)
 	eq(t, "refused again", len(bypass(t, "general", refusedCall("git push --force origin feat", force), refusedCall("/usr/bin/git push --force origin feat", force))), 0)
 
 	asked := bypass(t, "general", refusedCall("git push origin feat", safetyAsk("git push", "push")), bash("git push origin feat"))
@@ -164,9 +164,9 @@ func TestRefusalBypass(t *testing.T) {
 	eq(t, "a project hook", len(bypass(t, "general", refusedCall("psql -c 'DROP DATABASE x'", project), bash("env psql -c 'DROP DATABASE x'"))), 0)
 	eq(t, "a permission rule", len(bypass(t, "general", refusedCall("git push origin feat", "Permission to use Bash with command git push origin feat has been denied."), bash("env git push origin feat"))), 0)
 
-	declared := refusedCall("git rev-parse HEAD && git diff --name-status a b", hookText("inspect-guard", "review-risk",
+	declared := refusedCall("git rev-parse HEAD && git diff --name-status a b", hookText("inspect-guard", "prism-safety",
 		"shell syntax is not allowed here: \"git rev-parse HEAD && git diff --name-status a b\"\nallowed forms: git diff, git show"))
-	eq(t, "a declared form", len(bypass(t, "review-risk", declared, bash("git -C /work/p diff --name-status a b"))), 0)
+	eq(t, "a declared form", len(bypass(t, "prism-safety", declared, bash("git -C /work/p diff --name-status a b"))), 0)
 
 	write := tcall{name: "Write", input: obj("file_path", testRoot+"/.git/hooks/pre-push", "content", "exit 0"), isError: true, denial: "permission-rule",
 		result: str("PreToolUse:Write hook error: ['node' '/h/hooks/vcs-guard.mjs' '--agent' 'general' '.git']: vcs-guard: " + testRoot + "/.git/hooks/pre-push is inside a VCS directory (.git); no one writes there through Write\n")}
@@ -217,14 +217,14 @@ func TestRefusalBypassDelegation(t *testing.T) {
 
 func TestIsolationBypassRealFixtures(t *testing.T) {
 	f := of(Audit(fixture(t, "apply-worktree-bypass")).Findings, "isolation-bypass")
-	if len(f) != 1 || f[0].Severity != "violation" || f[0].Agent != "a88fe31dbb7fed352" || f[0].AgentType != "worker" ||
+	if len(f) != 1 || f[0].Severity != "violation" || f[0].Agent != "a88fe31dbb7fed352" || f[0].AgentType != "jhon-builder" ||
 		!strings.Contains(f[0].Message, "/work/acme-worktrees/widget-check") || !strings.Contains(f[0].Message, "git worktree add") {
 		t.Errorf("findings = %+v", f)
 	}
 	eq(t, "the write's line", f[0].Line, lineOf(t, subOf(fixture(t, "apply-worktree-bypass"), bypassAgent), `"file_path":"`+worktreeWrite+`"`))
 	stop, err := os.ReadFile(subOf(fixture(t, "general-isolation-stop"), "acddeec440dac0386"))
 	must(t, err)
-	eq(t, "the worker was refused", strings.Contains(string(stop), "hasn't isolated yet"), true)
+	eq(t, "the jhon-builder was refused", strings.Contains(string(stop), "hasn't isolated yet"), true)
 	eq(t, "general-isolation-stop", len(of(Audit(fixture(t, "general-isolation-stop")).Findings, "isolation-bypass")), 0)
 	wouldBe(t, of(Audit(fixture(t, "refusal-allowed-form")).Findings, "refusal-bypass"))
 }
@@ -372,7 +372,7 @@ func TestDeliveredUntestedRisk(t *testing.T) {
 	eq(t, "no risk read", len(deliver(t, runPass(), push())), 0)
 	eq(t, "a ready check that read the tier", len(deliver(t, riskHigh, runPass(), risked, push())), 0)
 	eq(t, "a ready check that did not read it", len(deliver(t, riskHigh, runPass(), checkReady("merge", ""), push())), 1)
-	verify := step{kind: "delegate", id: "v01", typ: "verify", change: chg, at: intp(10), span: intp(30), result: "**Status**: success\nverdict: pass"}
+	verify := step{kind: "delegate", id: "v01", typ: "jhon-checker", change: chg, at: intp(10), span: intp(30), result: "**Status**: success\nverdict: pass"}
 	d := delegate("d01", "general", chg, riskHigh, runPass(), push())
 	d.at = intp(100)
 	eq(t, "a verify agent before it", len(findingsOf(t, "delivered-untested", user("go"), verify, d)), 0)
@@ -429,17 +429,17 @@ func outcomeOf(r *Result, change string) *ChangeOutcome {
 
 func TestOutcomes(t *testing.T) {
 	at := func(s step, from, span int) step { s.at, s.span = intp(from), intp(span); return s }
-	verify := phased("verify", delegate("o03", "verify", chg))
+	verify := phased("verify", delegate("o03", "jhon-checker", chg))
 	verify.result = "**Status**: success\nverdict: fail"
 	general := delegate("o05", "general", "")
 	general.noBlock = true
-	r := auditOf(t, user("go"), at(phased("design", delegate("o01", "explore", chg)), 0, 600), at(phased("tasks", delegate("o02", "worker", chg)), 300, 600),
-		at(verify, 1200, 300), at(phased("design", delegate("o04", "explore", chg)), 1600, 200), at(general, 2000, 100))
+	r := auditOf(t, user("go"), at(phased("design", delegate("o01", "jhon-scout", chg)), 0, 600), at(phased("tasks", delegate("o02", "jhon-builder", chg)), 300, 600),
+		at(verify, 1200, 300), at(phased("design", delegate("o04", "jhon-scout", chg)), 1600, 200), at(general, 2000, 100))
 	x := outcomeOf(r, chg)
 	eq(t, "elapsed", x.ElapsedMs, 1800_000.0)
 	eq(t, "active", x.ActiveMs, float64((900+300+200)*1000))
 	eq(t, "agent", x.AgentMs, float64((600+600+300+200)*1000))
-	eq(t, "launches", js.StringifyValueCompact(x.Launches), `{"explore":2,"worker":1,"verify":1}`)
+	eq(t, "launches", js.StringifyValueCompact(x.Launches), `{"jhon-scout":2,"jhon-builder":1,"jhon-checker":1}`)
 	eq(t, "verify runs", x.VerifyRuns, 1)
 	eq(t, "verdicts", x.Verdicts, [3]int{0, 1, 0})
 	eq(t, "replans", x.Replans, 1)
@@ -453,15 +453,15 @@ func TestOutcomes(t *testing.T) {
 
 	run := tcall{name: "Bash", input: obj("command", "jhon executions run "+chg), result: str(executionsOut(c1, t1, []string{"pass", "timeout"})), isError: true, wait: 1200}
 	affected := tcall{name: "Bash", input: obj("command", "jhon executions run "+chg+" --affected main"), result: str(executionsOut(c1, t1, []string{"pass"})), wait: 60}
-	x = outcomeOf(auditOf(t, user("go"), phased("apply", delegate("o01", "worker", chg, run, affected))), chg)
+	x = outcomeOf(auditOf(t, user("go"), phased("apply", delegate("o01", "jhon-builder", chg, run, affected))), chg)
 	eq(t, "test runs", x.TestRuns, TestRuns{Count: 2, TotalMs: 1201_000 + 61_000, MaxMs: 1201_000, Timeouts: 1, Failed: 1})
 	redirected := tcall{name: "Bash", input: obj("command", "cd "+testRoot+" && jhon executions run "+chg+" > /tmp/run.log 2>&1"), result: str(""), wait: 300}
-	x = outcomeOf(auditOf(t, user("go"), phased("apply", delegate("o01", "worker", chg, redirected))), chg)
+	x = outcomeOf(auditOf(t, user("go"), phased("apply", delegate("o01", "jhon-builder", chg, redirected))), chg)
 	eq(t, "redirected", x.TestRuns, TestRuns{Count: 1, TotalMs: 301_000, MaxMs: 301_000, Unknown: 1})
 	background := tcall{name: "Bash", input: obj("command", "jhon executions run "+chg+" > /tmp/run.log 2>&1", "run_in_background", true), result: str("Command running in background with ID: b1"), wait: 1}
-	x = outcomeOf(auditOf(t, user("go"), phased("apply", delegate("o01", "worker", chg, background))), chg)
+	x = outcomeOf(auditOf(t, user("go"), phased("apply", delegate("o01", "jhon-builder", chg, background))), chg)
 	eq(t, "background", x.TestRuns, TestRuns{Count: 1, Unknown: 1})
-	x = outcomeOf(auditOf(t, user("go"), phased("apply", delegate("o01", "worker", chg, bash("jhon executions run "+chg+" --dry-run", "would run: svc0")))), chg)
+	x = outcomeOf(auditOf(t, user("go"), phased("apply", delegate("o01", "jhon-builder", chg, bash("jhon executions run "+chg+" --dry-run", "would run: svc0")))), chg)
 	eq(t, "dry run", x.TestRuns.Count, 0)
 }
 
@@ -476,7 +476,7 @@ func TestOutcomesMainThread(t *testing.T) {
 		t.Errorf("outcome = %+v session %+v", x, r.Outcomes)
 	}
 	eq(t, "nothing named", len(auditOf(t, user("go"), waited(mainBash("ls"), 100)).Outcomes.Changes), 0)
-	named := phased("apply", delegate("o01", "worker", ""))
+	named := phased("apply", delegate("o01", "jhon-builder", ""))
 	named.noBlock, named.prompt = true, "Apply openspec/changes/"+chg+"/tasks.md."
 	changes := auditOf(t, user("go"), named).Outcomes.Changes
 	eq(t, "named by its path", [2]any{len(changes), changes[0].Change}, [2]any{1, chg})
@@ -490,7 +490,7 @@ func writeCall(path string) tcall {
 
 func writer(t *testing.T, prompt, result string, calls ...tcall) *WriterEfficiency {
 	t.Helper()
-	s := delegate("e01", "worker", chg, calls...)
+	s := delegate("e01", "jhon-builder", chg, calls...)
 	s.prompt, s.result = prompt, result
 	return auditOf(t, user("go"), s).Efficiency[0]
 }
@@ -498,7 +498,7 @@ func writer(t *testing.T, prompt, result string, calls ...tcall) *WriterEfficien
 func TestEfficiency(t *testing.T) {
 	w := writer(t, "Add the timeout in `src/a.ts`.", shaped, writeCall(testRoot+"/src/a.ts"), bash("npm test", "3 passed"))
 	w.ActiveMs = 0 // the fixture's timing; measured in TestHumanOutput
-	eq(t, "clean", *w, WriterEfficiency{Agent: "e01", AgentType: "worker", Change: chg, Phase: "none", ReturnShape: "ok", FilesWritten: 1,
+	eq(t, "clean", *w, WriterEfficiency{Agent: "e01", AgentType: "jhon-builder", Change: chg, Phase: "none", ReturnShape: "ok", FilesWritten: 1,
 		OutOfScope: []string{}, DependencyEdits: []string{}, Bounded: true})
 	w = writer(t, "Add the timeout in `src/a.ts`.", "Done: added the timeout.", writeCall(testRoot+"/src/a.ts"), writeCall(testRoot+"/src/util/helpers.ts"), writeCall(testRoot+"/package.json"))
 	eq(t, "missing shape", w.ReturnShape, "missing")
@@ -524,7 +524,7 @@ func TestEfficiency(t *testing.T) {
 	w = writer(t, "Fix `src/a.ts`.", shaped, fail, writeCall(testRoot+"/src/a.ts"), fail, writeCall(testRoot+"/src/a.ts"), fail, bash("npm run lint", "bad", true))
 	eq(t, "failures", [2]any{w.MaxSameFailure, w.Bounded}, [2]any{3, false})
 	eq(t, "a failed bash write", writer(t, "Fix `src/a.ts`.", shaped, bash("echo x > "+testRoot+"/src/z.ts", "denied", true)).FilesWritten, 0)
-	vague := delegate("e01", "worker", "", writeCall(testRoot+"/src/a.ts"))
+	vague := delegate("e01", "jhon-builder", "", writeCall(testRoot+"/src/a.ts"))
 	vague.noBlock, vague.prompt = true, "Make it faster."
 	if w := auditOf(t, user("go"), vague).Efficiency[0]; w.OutOfScope != nil {
 		t.Errorf("a prompt naming no file leaves the scope unknown: %+v", w.OutOfScope)
@@ -535,7 +535,7 @@ func TestEfficiencyApplyScope(t *testing.T) {
 	root := t.TempDir()
 	must(t, os.MkdirAll(filepath.Join(root, "openspec", "changes", chg), 0o755))
 	must(t, os.WriteFile(filepath.Join(root, "openspec", "changes", chg, "tasks.md"), []byte("- [ ] 1.1 GREEN `src/b.ts`: retry\n"), 0o644))
-	s := delegate("e01", "worker", chg, writeCall(root+"/src/b.ts"), writeCall(root+"/openspec/changes/"+chg+"/tasks.md"), writeCall(root+"/src/c.ts"))
+	s := delegate("e01", "jhon-builder", chg, writeCall(root+"/src/b.ts"), writeCall(root+"/openspec/changes/"+chg+"/tasks.md"), writeCall(root+"/src/c.ts"))
 	s.phase, s.root, s.prompt, s.result = "apply", root, "Apply openspec/changes/"+chg+"/tasks.md 1.1.", shaped
 	eq(t, "out of scope", auditOf(t, user("go"), s).Efficiency[0].OutOfScope, []string{"src/c.ts"})
 }
@@ -553,14 +553,14 @@ func TestContextUse(t *testing.T) {
 	u := func(c tcall, usage []float64, msg string) tcall { c.usage, c.msgID = usage, msg; return c }
 	split := u(bash("ls"), []float64{2, 100, 1000}, "msg_a")
 	split.split = true
-	a := agentOf(auditOf(t, user("go"), phased("apply", delegate("cu01", "worker", chg, split, u(bash("ls"), []float64{3, 50, 1100}, "msg_b")))), "cu01")
+	a := agentOf(auditOf(t, user("go"), phased("apply", delegate("cu01", "jhon-builder", chg, split, u(bash("ls"), []float64{3, 50, 1100}, "msg_b")))), "cu01")
 	eq(t, "turns", [2]int{a.Turns, a.TurnsWithoutUsage}, [2]int{3, 1})
 	eq(t, "context", [5]float64{a.Peak, a.Total, a.Input, a.CacheCreation, a.CacheRead}, [5]float64{1153, 1102 + 1153, 5, 150, 2100})
 	eq(t, "each turn's context, in order", a.TurnContext, []float64{1102, 1153, 0})
 
 	x := func(n int) string { return strings.Repeat("x", n) }
 	res := func(c tcall, s string) tcall { c.result = str(s); return c }
-	a = agentOf(auditOf(t, user("go"), phased("apply", delegate("cu01", "worker", chg,
+	a = agentOf(auditOf(t, user("go"), phased("apply", delegate("cu01", "jhon-builder", chg,
 		res(tcall{name: "Read", input: obj("file_path", testRoot+"/a.ts")}, x(100)),
 		res(tcall{name: "Read", input: obj("file_path", testRoot+"/b.ts", "offset", 10.0, "limit", 5.0)}, x(20)),
 		bash("sed -n '1,20p' src/c.ts", x(30)), bash("cat src/d.ts", x(40)), bash("rg -n foo src | head -20", x(50)),
@@ -584,11 +584,11 @@ func TestContextUse(t *testing.T) {
 	editA := tcall{name: "Edit", input: obj("file_path", testRoot+"/a.ts", "old_string", "x", "new_string", "y")}
 	failedEdit := editA
 	failedEdit.isError = true
-	r := auditOf(t, user("go"), phased("apply", delegate("cu01", "worker", chg,
+	r := auditOf(t, user("go"), phased("apply", delegate("cu01", "jhon-builder", chg,
 		read("a.ts", false), read("a.ts", false, "offset", 5.0, "limit", 10.0), bash("cat "+testRoot+"/a.ts"), failedEdit, read("a.ts", false),
 		editA, read("a.ts", false), read("a.ts", false), read("b.ts", false, "offset", 1.0, "limit", 5.0), read("b.ts", false),
 		bash("head -n 20 "+testRoot+"/b.ts"), read("c.ts", true), read("c.ts", false), bash("sed -n '1,5p' "+testRoot+"/d.ts"), bash("cat "+testRoot+"/d.ts"),
-		writeCall(testRoot+"/e.ts"), read("e.ts", false))), phased("verify", delegate("cu02", "verify", chg, read("a.ts", false))))
+		writeCall(testRoot+"/e.ts"), read("e.ts", false))), phased("verify", delegate("cu02", "jhon-checker", chg, read("a.ts", false))))
 	eq(t, "rereads", [2]int{agentOf(r, "cu01").Rereads, agentOf(r, "cu02").Rereads}, [2]int{5, 0})
 	files := agentOf(r, "cu01").RereadFiles
 	eq(t, "the reread paths, most often first", len(files), 2)
@@ -605,7 +605,7 @@ func TestContextUse(t *testing.T) {
 		return tcall{name: "Read", input: obj("file_path", testRoot+"/"+file), result: str(result), isError: isError}
 	}
 	skill := tcall{name: "Read", input: obj("file_path", "/home/u/.claude/skills/ldd/SKILL.md"), result: str("1\t# skill")}
-	r = auditOf(t, user("go"), phased("apply", delegate("cu01", "worker", chg, skill, skill, whole("b.ts", "1\tv1", false), whole("b.ts", "1\tv2", false),
+	r = auditOf(t, user("go"), phased("apply", delegate("cu01", "jhon-builder", chg, skill, skill, whole("b.ts", "1\tv1", false), whole("b.ts", "1\tv2", false),
 		whole("c.ts", strings.Join(long, "\n"), false), whole("c.ts", strings.Join(long, "\n"), false), whole("d.ts", "", true), whole("d.ts", "1\td", false),
 		bash("cat "+testRoot+"/e.md", "same"), bash("cat "+testRoot+"/e.md", "same"), bash("cat "+testRoot+"/f.md | head -5", "part"), bash("cat "+testRoot+"/f.md | head -5", "part"))))
 	eq(t, "reloads", agentOf(r, "cu01").Reloads, 2)
@@ -617,8 +617,8 @@ func TestContextUseGroupsAndOverLimit(t *testing.T) {
 	call := func(context float64, bytes int, id string) tcall {
 		return tcall{name: "Read", input: obj("file_path", testRoot+"/"+id+".ts"), result: str(strings.Repeat("x", bytes)), usage: []float64{0, 0, context}, msgID: "msg_" + id}
 	}
-	r := auditOf(t, user("go"), phased("apply", delegate("cu01", "worker", chg, call(100, 10, "a"), call(300, 1, "b"))), phased("apply", delegate("cu02", "worker", "other-change", call(500, 20, "c"))),
-		phased("verify", delegate("cu03", "verify", chg, call(50, 5, "d"))))
+	r := auditOf(t, user("go"), phased("apply", delegate("cu01", "jhon-builder", chg, call(100, 10, "a"), call(300, 1, "b"))), phased("apply", delegate("cu02", "jhon-builder", "other-change", call(500, 20, "c"))),
+		phased("verify", delegate("cu03", "jhon-checker", chg, call(50, 5, "d"))))
 	row := func(rows []*ContextUseGroup, key groupKey) *ContextUseGroup {
 		for _, g := range rows {
 			if g.Key == key {
@@ -633,7 +633,7 @@ func TestContextUseGroupsAndOverLimit(t *testing.T) {
 	x := row(r.ContextUse.ByChange, chg)
 	eq(t, "change", []any{x.Agents, x.Total, x.PeakMax, x.Bytes.Total}, []any{2, 450.0, 300.0, 16})
 	eq(t, "main has no phase and no change", [2]int{row(r.ContextUse.ByChange, nil).Agents, row(r.ContextUse.ByPhase, nil).Agents}, [2]int{1, 1})
-	eq(t, "by agent type", row(r.ContextUse.ByAgentType, "verify").Total, 50.0)
+	eq(t, "by agent type", row(r.ContextUse.ByAgentType, "jhon-checker").Total, 50.0)
 	eq(t, "main by agent type", row(r.ContextUse.ByAgentType, "main").Agents, 1)
 	rv := row(r.ContextUse.ByRuntime, runtimeVersion{"claude-code", "2.1.280"})
 	eq(t, "runtime", []any{rv.Agents, rv.Total, rv.PeakMax}, []any{4, 950.0, 500.0})
@@ -655,7 +655,7 @@ func TestContextUseGroupsAndOverLimit(t *testing.T) {
 	readOf := func(path, result string, isError bool, kv ...any) tcall {
 		return tcall{name: "Read", input: obj(append([]any{"file_path", testRoot + "/" + path}, kv...)...), result: str(result), isError: isError}
 	}
-	r = auditOf(t, user("go"), phased("apply", delegate("cu01", "worker", chg, readOf("src/big.ts", numbered(1, 300), false), readOf("src/small.ts", numbered(1, 299), false),
+	r = auditOf(t, user("go"), phased("apply", delegate("cu01", "jhon-builder", chg, readOf("src/big.ts", numbered(1, 300), false), readOf("src/small.ts", numbered(1, 299), false),
 		readOf("src/big.ts", numbered(1, 400), false, "offset", 1.0, "limit", 400.0), bash("cat "+testRoot+"/src/other.ts", lines(320)),
 		bash("cat "+testRoot+"/src/tiny.ts", "a\nb"), bash("cat "+testRoot+"/src/piped.ts | head -400", lines(400)), readOf("src/big.ts", numbered(1, 350), true))))
 	eq(t, "over limit", agentOf(r, "cu01").OverLimit, 2)
@@ -663,7 +663,7 @@ func TestContextUseGroupsAndOverLimit(t *testing.T) {
 }
 
 func TestHumanOutput(t *testing.T) {
-	s := phased("apply", delegate("o01", "worker", chg))
+	s := phased("apply", delegate("o01", "jhon-builder", chg))
 	s.at, s.span = intp(0), intp(5400)
 	m := sessionWith(t, user("go"), s)
 	out := Human(Audit(m), m, false)
@@ -782,7 +782,7 @@ func TestRefusalBypassAtTheCall(t *testing.T) {
 	eq(t, "line", f[0].Line, lineOf(t, subOf(m, "r01"), `"id":"toolu_r01_1"`))
 	eq(t, "names the guard", strings.Contains(f[0].Message, "safety-guard"), true)
 
-	// A reviewer's declared form is compliance, an absolute path is not; the main thread and the general worker are no reviewers.
+	// A reviewer's declared form is compliance, an absolute path is not; the main thread and the general jhon-builder are no reviewers.
 	const reviewer = "a0000000000000a51"
 	m = fixture(t, "refusal-allowed-form")
 	all := of(Audit(m).Findings, "refusal-bypass")
@@ -965,23 +965,23 @@ func TestIsolationBypassVariants(t *testing.T) {
 func TestOutcomesInlineReplan(t *testing.T) {
 	dir := testRoot + "/openspec/changes/" + chg
 	tool := func(name string, input *js.Object) step { return step{kind: "tool", tool: name, input: input} }
-	verify := step{kind: "delegate", id: "o02", typ: "verify", change: chg, noBlock: true, prompt: "Verify openspec/changes/" + chg + "/ against its specs", result: "**Status**: success\nverdict: fail"}
+	verify := step{kind: "delegate", id: "o02", typ: "jhon-checker", change: chg, noBlock: true, prompt: "Verify openspec/changes/" + chg + "/ against its specs", result: "**Status**: success\nverdict: fail"}
 	refused := tool("Write", obj("file_path", dir+"/specs/auth/spec.md", "content", "x"))
 	refused.isError, refused.result = true, "refused"
 	x := outcomeOf(auditOf(t, user("go"), tool("Write", obj("file_path", dir+"/design.md", "content", "# Design")),
-		step{kind: "delegate", id: "o01", typ: "worker", phase: "apply", change: chg}, verify,
+		step{kind: "delegate", id: "o01", typ: "jhon-builder", phase: "apply", change: chg}, verify,
 		tool("Edit", obj("file_path", dir+"/tasks.md", "old_string", "- [ ] 1.1 a", "new_string", "- [x] 1.1 a")),
 		tool("Edit", obj("file_path", dir+"/design.md", "old_string", "cache", "new_string", "no cache")),
 		refused, tool("Write", obj("file_path", dir+"/verify-report.md", "content", "verdict: pass"))), chg)
 	eq(t, "verify runs", x.VerifyRuns, 1)
 	eq(t, "verdicts", x.Verdicts, [3]int{0, 1, 0})
 	eq(t, "replans", x.Replans, 1)
-	eq(t, "launches", js.StringifyValueCompact(x.Launches), `{"worker":1,"verify":1}`)
+	eq(t, "launches", js.StringifyValueCompact(x.Launches), `{"jhon-builder":1,"jhon-checker":1}`)
 }
 
 func TestOutcomesRelaunchesAndResumes(t *testing.T) {
 	launch := func(id, result string) step {
-		return step{kind: "delegate", id: id, typ: "worker", phase: "apply", change: "c1", result: result}
+		return step{kind: "delegate", id: id, typ: "jhon-builder", phase: "apply", change: "c1", result: result}
 	}
 	r := auditOf(t, user("go"), launch("s01", "Stopped: reached maxTurns (80) before finishing tasks 4-6"), launch("s02", "done"), launch("s03", "done"))
 	eq(t, "relaunches", outcomeOf(r, "c1").Relaunches, 1)
@@ -1074,9 +1074,9 @@ func TestAuditRules(t *testing.T) {
 }
 
 func TestEfficiencyMeasuresWritersOnly(t *testing.T) {
-	reader := delegate("e00", "explore", chg)
+	reader := delegate("e00", "jhon-scout", chg)
 	reader.result = "found it"
-	w := delegate("e01", "worker", chg, writeCall(testRoot+"/src/a.ts"))
+	w := delegate("e01", "jhon-builder", chg, writeCall(testRoot+"/src/a.ts"))
 	w.prompt, w.result = "Fix `src/a.ts`.", shaped
 	var agents []string
 	for _, x := range auditOf(t, user("go"), reader, w).Efficiency {
@@ -1088,13 +1088,13 @@ func TestEfficiencyMeasuresWritersOnly(t *testing.T) {
 func TestContextUseAgentFacts(t *testing.T) {
 	m := mainBash("jhon status")
 	m.usage = []float64{1, 10, 100}
-	r := auditOf(t, user("go"), m, phased("apply", delegate("cu01", "worker", chg)), delegate("cu02", "general", ""))
+	r := auditOf(t, user("go"), m, phased("apply", delegate("cu01", "jhon-builder", chg)), delegate("cu02", "general", ""))
 	pick := func(id string) [5]string {
 		a := agentOf(r, id)
 		return [5]string{a.AgentType, a.Phase, a.Change, a.Runtime, a.Version}
 	}
 	eq(t, "main", pick("main"), [5]string{"main", "", "", "claude-code", "2.1.280"})
-	eq(t, "cu01", pick("cu01"), [5]string{"worker", "apply", chg, "claude-code", "2.1.280"})
+	eq(t, "cu01", pick("cu01"), [5]string{"jhon-builder", "apply", chg, "claude-code", "2.1.280"})
 	eq(t, "cu02", pick("cu02"), [5]string{"general", "none", "", "claude-code", "2.1.280"})
 	eq(t, "the main thread is measured separately", agentOf(r, "main").Total, 111.0)
 	eq(t, "main first", r.ContextUse.Agents[0].Agent, "main")
@@ -1102,7 +1102,7 @@ func TestContextUseAgentFacts(t *testing.T) {
 
 func TestContextUseShellReads(t *testing.T) {
 	x := func(n int) string { return strings.Repeat("x", n) }
-	a := agentOf(auditOf(t, user("go"), phased("apply", delegate("cu01", "worker", chg,
+	a := agentOf(auditOf(t, user("go"), phased("apply", delegate("cu01", "jhon-builder", chg,
 		bash("sed -n -i 's/a/b/p' "+testRoot+"/a.ts", x(1)),
 		bash("cat > "+testRoot+"/notes.md <<'EOF'\nsee "+testRoot+"/a.ts\nEOF", x(2)),
 		bash("git log -5 | head -3", x(4)),
@@ -1119,12 +1119,12 @@ func TestContextUseLongAgents(t *testing.T) {
 		c.msgID = fmt.Sprintf("msg_long_%d", i)
 		calls = append(calls, c)
 	}
-	long := phased("apply", delegate("s01", "worker", "c1", calls...))
+	long := phased("apply", delegate("s01", "jhon-builder", "c1", calls...))
 	long.result = "done"
-	short := delegate("s02", "explore", "c1")
+	short := delegate("s02", "jhon-scout", "c1")
 	short.result = "done"
 	agents := auditOf(t, user("go"), long, short).ContextUse.LongAgents
-	if len(agents) != 1 || agents[0].AgentType != "worker" || !regexp.MustCompile(`^15\d turns$`).MatchString(agents[0].Why) {
+	if len(agents) != 1 || agents[0].AgentType != "jhon-builder" || !regexp.MustCompile(`^15\d turns$`).MatchString(agents[0].Why) {
 		t.Errorf("long agents = %+v", agents)
 	}
 }
@@ -1265,9 +1265,9 @@ func TestDeliveredUntestedCountsAGrepOfTheCIGateRow(t *testing.T) {
 	verifiedViolation(t, deliver(mainBash("gh pr checks 13 2>&1 | grep -i success", gate)))
 }
 
-// A worker started in a service below the repository's top lists its
+// A jhon-builder started in a service below the repository's top lists its
 // surfaces from the top, as the scope guard reads them: the measurement
-// resolves them from the repository, not from the worker's directory.
+// resolves them from the repository, not from the jhon-builder's directory.
 func TestSurfaceRootIsTheRepository(t *testing.T) {
 	repo := t.TempDir()
 	svc := filepath.Join(repo, "backend", "svc")
@@ -1284,7 +1284,7 @@ func TestSurfaceRootIsTheRepository(t *testing.T) {
 // launch; read so, and noted, never an audit-error.
 func TestANestedSubagentIsReadWithItsParentsLaunch(t *testing.T) {
 	path := sessionWith(t, user("go"),
-		delegate("p1", "worker", "c1", tcall{name: "Agent", input: obj("subagent_type", "fork", "prompt", "fix the tests")}),
+		delegate("p1", "jhon-builder", "c1", tcall{name: "Agent", input: obj("subagent_type", "fork", "prompt", "fix the tests")}),
 		delegate("n1", "fork", "c1"))
 	subdir := filepath.Join(filepath.Dir(path), sessionID, "subagents")
 	meta := func(parent, use string) {

@@ -1,5 +1,5 @@
 /**
- * T134 H7a (L1019, L1021): worker, explore and verify keep their own todo
+ * T134 H7a (L1019, L1021): jhon-builder, jhon-scout and jhon-checker keep their own todo
  * list. A child pi process (JHON_PI_CHILD=1) whose tools (JHON_PI_TOOLS, its
  * rendered `tools:`) name `todo` registers the tool; the list is the child's
  * alone (no card, no rail, nothing in the parent's list) and a child's
@@ -48,7 +48,7 @@ function fakeContext(id: string, branch: unknown[] = []) {
 
 const turn = (name: string) => ({ message: { role: "assistant", content: [{ type: "toolCall", id: "t", name, arguments: { path: "a.ts" } }] } });
 
-test("a worker, explore or verify child whose tools name todo registers it and can call it", async () => {
+test("a jhon-builder, jhon-scout or jhon-checker child whose tools name todo registers it and can call it", async () => {
 	for (const agent of ["worker", "explore", "verify"]) {
 		const env = child(agent);
 		assert.equal(todoEnabled(env), true, agent);
@@ -67,7 +67,7 @@ test("a worker, explore or verify child whose tools name todo registers it and c
 });
 
 test("a child whose tools do not name todo registers nothing, as before", () => {
-	for (const env of [child("review-risk", "inspect,mcp__codegraph__codegraph_explore"), { JHON_PI_CHILD: "1", JHON_PI_AGENT: "worker" }]) {
+	for (const env of [child("prism-safety", "inspect,mcp__codegraph__codegraph_explore"), { JHON_PI_CHILD: "1", JHON_PI_AGENT: "worker" }]) {
 		assert.equal(todoEnabled(env), false, JSON.stringify(env));
 		const kid = fakePi();
 		jhonTodo(kid.pi, env);

@@ -55,7 +55,7 @@ func TestASliceCommitNamesTheProposalAndDesignTheRouteNowAsks(t *testing.T) {
 	}
 	// The verified route says verify is due on every slice commit; the
 	// design note follows it.
-	const verify = "route verified (risk high reaches the verified tier (passive)): verify is due before delivery; launch the verify agent and record verify-report.md before the PR"
+	const verify = "route verified (risk high reaches the verified tier (passive)): verify is due before delivery; launch the jhon-checker agent and record verify-report.md before the PR"
 	const want = verify + "; the route asks for a proposal and a design now (a, b): write openspec/changes/c1/proposal.md (missing) and openspec/changes/c1/design.md (missing) before the next slice; `jhon status c1` lists what each needs"
 
 	t.Run("over the threshold", func(t *testing.T) {

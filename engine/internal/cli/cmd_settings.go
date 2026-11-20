@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/profiles"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/release"
@@ -30,7 +31,9 @@ import (
 // list and get first migrate the active profile from profiles.json when
 // there is no settings.toml yet. A key T15.3 removed is no error: list says on stderr
 // what goes and why (--json lists it under "retired"), and migrate drops it
-// from the file, backed up. Exit 1 when the file cannot be used.
+// from the file, backed up. migrate also rewrites the agent names T177
+// retired in profiles.json, and the review_required values (4r, verify) in
+// the LDD config of the project it runs in. Exit 1 when the file cannot be used.
 func init() { register("settings", runSettings) }
 
 var settingsUsage = `usage: jhon settings [list] [--json]
@@ -123,14 +126,36 @@ func runSettings(argv []string) (int, error) {
 		if err != nil {
 			return settingsFileError(err)
 		}
+		// T177: the retired agent names in the profiles, and the retired
+		// review_required values of the project here, rewritten.
+		renamed := struct {
+			Profiles []string `json:"profiles"`
+			Project  []string `json:"project"`
+		}{[]string{}, []string{}}
+		if done, err := profiles.Migrate(profiles.Path()); err != nil {
+			return settingsFileError(err)
+		} else if done != nil {
+			renamed.Profiles = done
+		}
+		if done, err := ldd.MigrateReviews(project.Root(cwd())); err != nil {
+			return settingsFileError(err)
+		} else if done != nil {
+			renamed.Project = done
+		}
 		if asJSON {
 			return 0, encodeJSON(struct {
 				settings.Report
 				Retired settings.CleanReport `json:"retired"`
-			}{rep, clean})
+				Renamed any                  `json:"renamed"`
+			}{rep, clean, renamed})
+		}
+		for _, w := range append(renamed.Profiles, renamed.Project...) {
+			fmt.Printf("rewritten: %s\n", w)
 		}
 		if !rep.Done && !clean.Done {
-			fmt.Printf("nothing to migrate (%s)\n", rep.Reason)
+			if len(renamed.Profiles)+len(renamed.Project) == 0 {
+				fmt.Printf("nothing to migrate (%s)\n", rep.Reason)
+			}
 			return 0, nil
 		}
 		if rep.Done {

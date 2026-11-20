@@ -1,6 +1,7 @@
 package ldd
 
 import (
+	"errors"
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"os"
@@ -12,35 +13,40 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/contract"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 )
 
 // This file is the reviews a change owes before delivery (contracts/ldd.md,
 // "Delivery"), each with whether it is on record:
 //
-//   - verify, on the verified route: verify-report.md (`verdict: pass`)
-//     (IndependentVerification);
-//   - 4R, when the change's risk reaches the verified tier (not by size
-//     alone), with only the lenses the change touches: review-4r.md naming
-//     them on a `lenses:` line and stating `verdict: pass`
-//     (contracts/review-4r.md);
+//   - checker, on the verified route: the jhon-checker agent's
+//     verify-report.md (`verdict: pass`) (IndependentVerification);
+//   - prism, the Prism review, when the change's risk reaches the verified
+//     tier (not by size alone), with only the facets the change touches:
+//     review-prism.md naming them on a `facets:` line and stating
+//     `verdict: pass` (contracts/review-prism.md);
 //   - what `review_required` in openspec/config.yaml names for the change,
-//     by its name or by an area (a path glob) its diff touches: verify or
-//     4r. It always wins over the route.
+//     by its name or by an area (a path glob) its diff touches: checker or
+//     prism. It always wins over the route.
 
 // The reviews, in the order a change owes them.
 const (
-	ReviewVerify = "verify"
-	ReviewFourR  = "4r"
+	ReviewChecker = "checker"
+	ReviewPrism   = "prism"
 	// ReviewUnreadable is a review_required entry jhon cannot read: never
 	// done, it holds the PR until it is fixed.
 	ReviewUnreadable = "review_required"
 )
 
-var reviewKinds = []string{ReviewVerify, ReviewFourR}
+var reviewKinds = []string{ReviewChecker, ReviewPrism}
 
-// Lenses are the 4R lenses a review-4r.md may name.
-var Lenses = []string{"risk", "resilience", "reliability", "readability"}
+// Facets are the Prism facets a review-prism.md may name.
+var Facets = []string{"safety", "failure", "behavior", "clarity"}
+
+// legacyReviewFile is the Prism review's record before T177: read when
+// review-prism.md is absent, its facets under their new names.
+const legacyReviewFile = "review-4r.md"
 
 // Review is one review a change owes: why (By), and whether it is on record.
 type Review struct {
@@ -59,47 +65,59 @@ func (v Review) Line() string {
 	if v.Review == ReviewUnreadable {
 		return "review_required in openspec/config.yaml has an entry jhon cannot read (" + strings.Join(v.By, "; ") + "): " + v.Why + "; fix it before the PR"
 	}
-	name := map[string]string{ReviewVerify: "verify", ReviewFourR: "4R"}[v.Review]
+	name := map[string]string{ReviewChecker: "checker", ReviewPrism: "Prism review"}[v.Review]
 	why := strings.Join(v.By, "; ")
 	if v.Done {
 		return name + " done (" + why + "): " + v.Record
 	}
 	return name + " due (" + why + "): " + map[string]string{
-		ReviewVerify: "launch the verify agent and record verify-report.md with `verdict: pass`",
-		ReviewFourR:  "pick the pertinent lenses (" + strings.Join(Lenses, ", ") + ") by what the change touches and record them in review-4r.md with `lenses:` and `verdict: pass`",
+		ReviewChecker: "launch the jhon-checker agent and record verify-report.md with `verdict: pass`",
+		ReviewPrism:   "pick the pertinent facets (" + strings.Join(Facets, ", ") + ") by what the change touches and record them in review-prism.md with `facets:` and `verdict: pass`",
 	}[v.Review]
 }
 
-var lensesLine = lazyre.New(`(?m)^\s*(?:[-*]\s+)?(?:\*\*|__)?lenses(?:\*\*|__)?\s*:[ \t]*(.*)$`)
+// facetsLine is a record's facets; `lenses:` is its name before T177.
+var facetsLine = lazyre.New(`(?m)^\s*(?:[-*]\s+)?(?:\*\*|__)?(?:facets|lenses)(?:\*\*|__)?\s*:[ \t]*(.*)$`)
 
 var (
 	subjectLine = lazyre.New(`(?m)^subject:[ \t]*(\S*)[ \t]*\r?$`)
 	baseLine    = lazyre.New(`(?m)^base:[ \t]*(\S*)[ \t]*\r?$`)
 )
 
-// FourRDone is what holds the change's 4R, "" when nothing does: its
-// review-4r.md naming at least one lens, only the four, and stating
+// PrismDone is what holds the change's Prism review, "" when nothing does: its
+// review-prism.md naming at least one facet, only the four, and stating
 // `verdict: pass` (ReportVerdict). A
 // record with a `subject:` line (`jhon review record`) holds only while a
 // fresh freeze against its `base:` gives that subject: a candidate changed
 // since the review is a stale record. One without it is read as before.
-func FourRDone(root, change string) string {
+// A review-4r.md written before T177 holds when review-prism.md is absent,
+// its lens names read as their facets.
+func PrismDone(root, change string) string {
 	dir := layout.At(root, layout.For(root).ChangeDir(change))
-	if src, err := os.ReadFile(filepath.Join(dir, ReviewFile)); err == nil && ReportVerdict(string(src)) == "pass" && subjectHolds(root, change, string(src)) {
-		if m := lensesLine.FindStringSubmatch(string(src)); m != nil {
+	file := ReviewFile
+	src, err := os.ReadFile(filepath.Join(dir, file))
+	if errors.Is(err, os.ErrNotExist) {
+		file = legacyReviewFile
+		src, err = os.ReadFile(filepath.Join(dir, file))
+	}
+	if err == nil && ReportVerdict(string(src)) == "pass" && subjectHolds(root, change, string(src)) {
+		if m := facetsLine.FindStringSubmatch(string(src)); m != nil {
 			named := contract.InlineList(m[1])
 			if named == nil {
 				named = strings.FieldsFunc(m[1], func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\r' })
 			}
-			if len(named) > 0 && !slices.ContainsFunc(named, func(l string) bool { return !slices.Contains(Lenses, l) }) {
-				return "review-4r.md (lenses: " + strings.Join(named, ", ") + "; verdict: pass)"
+			for i, l := range named {
+				named[i] = rename.FacetNow(l)
+			}
+			if len(named) > 0 && !slices.ContainsFunc(named, func(l string) bool { return !slices.Contains(Facets, l) }) {
+				return file + " (facets: " + strings.Join(named, ", ") + "; verdict: pass)"
 			}
 		}
 	}
 	return ""
 }
 
-// subjectHolds is whether a 4R record's subject, when it states one, is the
+// subjectHolds is whether a Prism record's subject, when it states one, is the
 // subject of a fresh freeze of the change against the record's base.
 func subjectHolds(root, change, src string) bool {
 	m := subjectLine.FindStringSubmatch(src)
@@ -141,11 +159,18 @@ func RequiredReviews(config string) []Required {
 // ReadRequired reads the `review_required` block of an openspec/config.yaml:
 // a list (at any consistent indentation, column 0 too) of mappings, block
 // or flow (`{change: c1, review: 4r}`), each naming a `change` or an `area`
-// and its `review`: verify or 4r in any case, as a scalar, a flow list
-// (`[verify, 4r]`) or a block list. Values may be quoted and lines carry
+// and its `review`: checker or prism in any case (4r and verify, their
+// names before T177, read as them with a warning until v0.4), as a scalar,
+// a flow list (`[checker, prism]`) or a block list. Values may be quoted and lines carry
 // `# comments`. A line it cannot read, an entry naming neither a change nor
 // an area, or no review or another one, is unreadable: it fails closed.
 func ReadRequired(config string) (out []Required, bad []Unreadable) {
+	return readRequired(config, nil)
+}
+
+// readRequired is ReadRequired, adding to warn (when not nil) a warning
+// for each retired value an entry names (T177).
+func readRequired(config string, warn *[]string) (out []Required, bad []Unreadable) {
 	lines := strings.Split(strings.ReplaceAll(config, "\r\n", "\n"), "\n")
 	key := -1
 	for i, l := range lines {
@@ -153,7 +178,7 @@ func ReadRequired(config string) (out []Required, bad []Unreadable) {
 			key = i
 			if v = strings.TrimSpace(v); v != "" {
 				if strings.HasPrefix(v, "[") {
-					return flowEntries(v, i+1, strings.TrimSpace(l))
+					return flowEntries(v, i+1, strings.TrimSpace(l), warn)
 				}
 				return nil, []Unreadable{{i + 1, strings.TrimSpace(l), "it is not a list of entries"}}
 			}
@@ -260,7 +285,7 @@ func ReadRequired(config string) (out []Required, bad []Unreadable) {
 		if !readable {
 			continue
 		}
-		if r, u := requiredOf(fields, it.line, it.text); u != nil {
+		if r, u := requiredOf(fields, it.line, it.text, warn); u != nil {
 			bad = append(bad, *u)
 		} else {
 			out = append(out, r)
@@ -278,7 +303,7 @@ type value struct {
 
 // requiredOf is the entry fields name, or why it is unreadable; the entry
 // starts at line n (text).
-func requiredOf(fields map[string][]value, n int, text string) (Required, *Unreadable) {
+func requiredOf(fields map[string][]value, n int, text string, warn *[]string) (Required, *Unreadable) {
 	one := func(k string) string {
 		if len(fields[k]) == 1 {
 			return fields[k][0].s
@@ -293,9 +318,12 @@ func requiredOf(fields map[string][]value, n int, text string) (Required, *Unrea
 		return r, &Unreadable{n, text, "the entry names no review"}
 	}
 	for _, v := range fields["review"] {
-		kind := strings.ToLower(v.s)
+		kind, old := rename.Review(strings.ToLower(v.s))
 		if !slices.Contains(reviewKinds, kind) {
-			return r, &Unreadable{v.n, v.text, "`" + v.s + "` is not a review: verify or 4r"}
+			return r, &Unreadable{v.n, v.text, "`" + v.s + "` is not a review: checker or prism"}
+		}
+		if old && warn != nil {
+			*warn = append(*warn, rename.Warning(fmt.Sprintf("review_required line %d", v.n), "review", v.s, kind))
 		}
 		if !slices.Contains(r.Reviews, kind) {
 			r.Reviews = append(r.Reviews, kind)
@@ -305,7 +333,7 @@ func requiredOf(fields map[string][]value, n int, text string) (Required, *Unrea
 }
 
 // flowEntries is `review_required: [{...}, ...]` on line n (text).
-func flowEntries(v string, n int, text string) (out []Required, bad []Unreadable) {
+func flowEntries(v string, n int, text string, warn *[]string) (out []Required, bad []Unreadable) {
 	inner, opens := strings.CutPrefix(v, "[")
 	inner, closes := strings.CutSuffix(inner, "]")
 	if !opens || !closes {
@@ -314,9 +342,9 @@ func flowEntries(v string, n int, text string) (out []Required, bad []Unreadable
 	for _, part := range splitFlow(inner) {
 		m, ok := flowMapping(part, n, text)
 		if !ok {
-			return nil, []Unreadable{{n, text, "an entry is not a flow mapping (`{change: c1, review: 4r}`)"}}
+			return nil, []Unreadable{{n, text, "an entry is not a flow mapping (`{change: c1, review: prism}`)"}}
 		}
-		r, u := requiredOf(m, n, text)
+		r, u := requiredOf(m, n, text, warn)
 		if u != nil {
 			return nil, []Unreadable{*u}
 		}
@@ -325,7 +353,7 @@ func flowEntries(v string, n int, text string) (out []Required, bad []Unreadable
 	return out, nil
 }
 
-// flowMapping reads `{change: c1, review: [verify, 4r]}` on line n (text);
+// flowMapping reads `{change: c1, review: [checker, prism]}` on line n (text);
 // ok is false when it does not open and close, or holds what is not `key: value`.
 func flowMapping(v string, n int, text string) (map[string][]value, bool) {
 	inner, opens := strings.CutPrefix(strings.TrimSpace(v), "{")
@@ -356,7 +384,7 @@ func flowMapping(v string, n int, text string) (map[string][]value, bool) {
 	return m, true
 }
 
-// flowList reads `[verify, "4r"]` on line n (text).
+// flowList reads `[checker, "prism"]` on line n (text).
 func flowList(v string, n int, text string) ([]value, bool) {
 	inner, opens := strings.CutPrefix(strings.TrimSpace(v), "[")
 	inner, closes := strings.CutSuffix(inner, "]")
@@ -465,16 +493,16 @@ func AreaMatches(area, path string) bool {
 // ReviewsOf is the reviews the route r and the project's review_required
 // ask of changes (directories under openspec/changes/ of the repository
 // whose top level is top, an archived one as archive/<name>), in the order
-// verify, 4r; each is done when one of the changes has it on record.
+// checker, prism; each is done when one of the changes has it on record.
 // Each review_required entry jhon cannot read comes first, as a
 // ReviewUnreadable that is never done: it may name any change.
 func ReviewsOf(top string, changes []string, r Route) []Review {
 	by := map[string][]string{}
 	if r.Level == RouteVerified {
-		by[ReviewVerify] = append(by[ReviewVerify], "route verified")
+		by[ReviewChecker] = append(by[ReviewChecker], "route verified")
 	}
 	if rank(r.Tier) >= 0 && rank(r.Tier) >= rank(r.VerifiedTier) {
-		by[ReviewFourR] = append(by[ReviewFourR], "risk "+string(r.Tier))
+		by[ReviewPrism] = append(by[ReviewPrism], "risk "+string(r.Tier))
 	}
 	config := ""
 	if b, err := project.ReadLddConfig(top); err == nil {
@@ -520,12 +548,73 @@ func ReviewsOf(top string, changes []string, r Route) []Review {
 // recordOf is what holds review kind for change, "" when nothing does.
 func recordOf(top, change, kind string) string {
 	switch kind {
-	case ReviewVerify:
+	case ReviewChecker:
 		if v := IndependentVerification(top, change); v != nil {
 			return v.By
 		}
-	case ReviewFourR:
-		return FourRDone(top, change)
+	case ReviewPrism:
+		return PrismDone(top, change)
 	}
 	return ""
 }
+
+// RenamedReviews are the warnings for the retired review_required values
+// (4r, verify) the project's openspec/config.yaml at top names (T177).
+func RenamedReviews(top string) []string {
+	config, err := project.ReadLddConfig(top)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	readRequired(config, &out)
+	return out
+}
+
+// MigrateReviews rewrites the retired review_required values (4r, verify)
+// of the project's LDD config at top to prism and checker (T177), line by
+// line so every other byte stays, and is the warning of each value it
+// rewrote; nothing is written when the config names none.
+func MigrateReviews(top string) ([]string, error) {
+	file := project.LddConfigFile(top)
+	config, err := project.ReadLddConfig(top)
+	if err != nil {
+		return nil, nil
+	}
+	done := RenamedReviews(top)
+	if len(done) == 0 {
+		return nil, nil
+	}
+	lines := strings.SplitAfter(config, "\n")
+	in := false
+	for i, l := range lines {
+		body := yamlComment(l)
+		k, _, isKey := strings.Cut(body, ":")
+		switch {
+		case isKey && strings.TrimRight(k, " \t") == "review_required":
+			in = true
+		case !in || strings.TrimSpace(body) == "":
+			continue
+		case len(body) > 0 && body[0] != ' ' && body[0] != '\t' && body[0] != '-':
+			in = false
+			continue
+		}
+		at := strings.Index(body, "review:")
+		if at < 0 {
+			if t := strings.TrimSpace(body); !strings.HasPrefix(t, "- ") || strings.Contains(t, ":") {
+				continue
+			}
+			at = 0
+		}
+		lines[i] = l[:at] + oldReview.ReplaceAllStringFunc(body[at:], func(v string) string {
+			now, _ := rename.Review(strings.ToLower(v))
+			return now
+		}) + l[len(body):]
+	}
+	if err := os.WriteFile(file, []byte(strings.Join(lines, "")), 0o644); err != nil {
+		return nil, err
+	}
+	return done, nil
+}
+
+// oldReview is a retired review_required value as a YAML word.
+var oldReview = lazyre.New(`(?i)\b(?:4r|verify)\b`)

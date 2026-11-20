@@ -95,7 +95,7 @@ func TestRuntimesAsAdapters(t *testing.T) {
 		write(t, filepath.Join(home, ".pi", "agent", "auth.json"), "{}\n")
 		// What an earlier release left: a block in CLAUDE.md and an agent.
 		write(t, filepath.Join(home, ".claude", "CLAUDE.md"), "@RTK.md\n\n<!-- jhon:start -->\n<!-- jhon:end -->\n")
-		write(t, filepath.Join(home, ".claude", "agents", "worker.md"), "stale\n")
+		write(t, filepath.Join(home, ".claude", "agents", "jhon-builder.md"), "stale\n")
 		before := snapshot(t, filepath.Join(home, ".claude"))
 
 		r := install(t, home, repoRoot)
@@ -138,7 +138,7 @@ func TestRuntimesAsAdapters(t *testing.T) {
 		if exists(filepath.Join(home, ".pi", "jhon")) {
 			t.Fatal("~/.pi/jhon was created")
 		}
-		if !exists(filepath.Join(home, ".claude", "agents", "worker.md")) {
+		if !exists(filepath.Join(home, ".claude", "agents", "jhon-builder.md")) {
 			t.Fatal("Claude Code was not installed\n" + r.Out())
 		}
 
@@ -301,7 +301,7 @@ func TestRuntimesAsAdapters(t *testing.T) {
 				t.Error("a non-bridge profile installed", f)
 			}
 		}
-		match(t, frontmatter(support.Read(t, filepath.Join(pi, "agents", "worker.md"))), `(?m)^model: anthropic/claude-opus-4-5\nthinking: medium$`)
+		match(t, frontmatter(support.Read(t, filepath.Join(pi, "agents", "jhon-builder.md"))), `(?m)^model: anthropic/claude-opus-4-5\nthinking: medium$`)
 		c := render(t, home, "--check", "--only", "pi")
 		wantCode(t, c, 0)
 		noMatch(t, c.Out(), `DRIFT`)

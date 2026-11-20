@@ -35,7 +35,7 @@ func TestReportStatesSlicesAndOwnerMessagesPerSlice(t *testing.T) {
 	must(t, os.MkdirAll(filepath.Dir(tasks), 0o755))
 	must(t, os.WriteFile(tasks, []byte("## Slice 1: a\n\n- [x] 1.1 a\n\n## Slice 2: b\n\n- [ ] 2.1 b\n"), 0o644))
 	at := func(s step) step { s.root = root; return s }
-	r := auditOf(t, user("go"), at(delegate("d01", "worker", chg)), user("and the other one"), at(delegate("d02", "worker", chg)))
+	r := auditOf(t, user("go"), at(delegate("d01", "jhon-builder", chg)), user("and the other one"), at(delegate("d02", "jhon-builder", chg)))
 	c := changeValue(t, r, chg)
 	eq(t, "slices", js.Prop(c, "slices"), any(2.0))
 	eq(t, "owner messages per slice", js.Prop(c, "owner_messages_per_slice"), any(0.5))
@@ -44,7 +44,7 @@ func TestReportStatesSlicesAndOwnerMessagesPerSlice(t *testing.T) {
 		t.Errorf("the human output states no slices:\n%s", out)
 	}
 
-	none := auditOf(t, user("go"), delegate("d01", "worker", chg))
+	none := auditOf(t, user("go"), delegate("d01", "jhon-builder", chg))
 	c = changeValue(t, none, chg)
 	eq(t, "no tasks.md: slices", js.Prop(c, "slices"), any(0.0))
 	eq(t, "no tasks.md: per slice", js.Prop(c, "owner_messages_per_slice"), nil)
@@ -61,8 +61,8 @@ func TestPerSliceIsOwnerMessagesOverSlices(t *testing.T) {
 func TestReportNamesPostVerifyRewrites(t *testing.T) {
 	dir := testRoot + "/openspec/changes/" + chg
 	tool := func(name string, input *js.Object) step { return step{kind: "tool", tool: name, input: input} }
-	verify := step{kind: "delegate", id: "o02", typ: "verify", change: chg, noBlock: true, prompt: "Verify openspec/changes/" + chg + "/ against its specs", result: "**Status**: success\nverdict: fail"}
-	r := auditOf(t, user("go"), step{kind: "delegate", id: "o01", typ: "worker", phase: "apply", change: chg}, verify,
+	verify := step{kind: "delegate", id: "o02", typ: "jhon-checker", change: chg, noBlock: true, prompt: "Verify openspec/changes/" + chg + "/ against its specs", result: "**Status**: success\nverdict: fail"}
+	r := auditOf(t, user("go"), step{kind: "delegate", id: "o01", typ: "jhon-builder", phase: "apply", change: chg}, verify,
 		tool("Edit", obj("file_path", dir+"/design.md", "old_string", "cache", "new_string", "no cache")))
 	c := changeValue(t, r, chg)
 	eq(t, "post_verify_rewrites", js.Prop(c, "post_verify_rewrites"), any(1.0))

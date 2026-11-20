@@ -788,7 +788,7 @@ func TestExecutionsReuseAPassOnTheSameWorkingTree(t *testing.T) {
 }
 
 // jhon review freeze: a review's frozen candidate from the core, the same
-// for every lens that runs it on the same bytes (contracts/review-4r.md).
+// for every facet that runs it on the same bytes (contracts/review-prism.md).
 func TestReviewFreeze(t *testing.T) {
 	t.Parallel()
 	root := tree(t, map[string]string{"a.txt": "a\n"})

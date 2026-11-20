@@ -41,7 +41,7 @@ func TestNoRenderedTextCopiesTheChangeTasksIntoTheTodoList(t *testing.T) {
 	want := map[string]string{
 		filepath.Join(home, ".local", "share", "jhon", "current", "prose", "full-claude-code.md"): "keep in `TaskCreate` tasks your own next steps for this request",
 		filepath.Join(pi, "jhon-orchestrator.md"):                                                 "keep in `todo` your own next steps for this request",
-		filepath.Join(pi, "agents", "worker.md"):                                                  "keep a todo list of your own next steps for this request",
+		filepath.Join(pi, "agents", "jhon-builder.md"):                                            "keep a todo list of your own next steps for this request",
 	}
 	for p, w := range want {
 		if s := flat(string(must(os.ReadFile(p)))); !strings.Contains(s, w) {

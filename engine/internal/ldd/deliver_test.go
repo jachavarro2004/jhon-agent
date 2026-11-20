@@ -197,7 +197,7 @@ func TestCheckDeliveryHighRisk(t *testing.T) {
 	deliverCommit(t, root)
 	deliverTested(t, root, "pass", "")
 	c := deliverRun(t, root)
-	if c.Ready || !deliverReason(c, `^the change is high risk \(a/a\.go: code changed and no test touched\) and has no independent verification: a verify-report\.md stating verdict: pass \(the verify agent\)$`) {
+	if c.Ready || !deliverReason(c, `^the change is high risk \(a/a\.go: code changed and no test touched\) and has no independent verification: a verify-report\.md stating verdict: pass \(the jhon-checker agent\)$`) {
 		t.Errorf("unverified: %+v", c.Reasons)
 	}
 	write(t, filepath.Join(root, deliverDir, "verify-report.md"), "**Verdict**: PASS\n")

@@ -3,7 +3,7 @@
 // refused, and a change that alters behaviour opens its PR only with it; a
 // change whose diff reaches the verified tier (risk high) waits for verify
 // before its PR, and size alone only gets a note (S25). The verify agent may
-// always be launched (S22); 4R reviewers run only with the owner's
+// always be launched (S22); Prism reviewers run only with the owner's
 // permission, and `delivery: change` opens one PR per change and
 // merges with rebase.
 
@@ -112,7 +112,7 @@ func TestRouteGuardRecordBeforeThePR(t *testing.T) {
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/tasks.md": "No spec change: a rename that keeps every behaviour.\n\n## Slice 1: a\n- [x] 1.1 a\n"})
 	// Untested code is risk high, the verified route: its verification is on record.
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
-	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-4r.md": "lenses: risk\nverdict: pass\n"})
+	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-prism.md": "facets: safety\nverdict: pass\n"})
 	code(t, r.call(t, "Bash", pr, true), 0, "tasks stating why no spec changes")
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n"})
 	code(t, r.call(t, "Bash", pr, true), 0, "tasks and a spec delta")
@@ -151,7 +151,7 @@ func TestRouteGuardOneLineRecord(t *testing.T) {
 	code(t, std.call(t, "Bash", pr, true), 2, "delivery: change still waits for every task")
 
 	high := newRG(t, "")
-	support.Write(t, high.p, map[string]string{"src/app.py": "X = 2\n", "openspec/changes/c1/verify-report.md": "verdict: pass\n", "openspec/changes/c1/review-4r.md": "lenses: risk\nverdict: pass\n"})
+	support.Write(t, high.p, map[string]string{"src/app.py": "X = 2\n", "openspec/changes/c1/verify-report.md": "verdict: pass\n", "openspec/changes/c1/review-prism.md": "facets: safety\nverdict: pass\n"})
 	support.Write(t, high.p, oneLine)
 	res = high.call(t, "Bash", pr, true)
 	code(t, res, 2, "a one-line record at risk high")
@@ -208,7 +208,7 @@ func TestRouteGuardVerifiedRoute(t *testing.T) {
 	code(t, res, 2, "every task checked, but no independent verification")
 	matches(t, res.Stderr, `the route is verified \(.*\): verify is due before delivery`, "why")
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
-	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-4r.md": "lenses: risk\nverdict: pass\n"})
+	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-prism.md": "facets: safety\nverdict: pass\n"})
 	code(t, r.call(t, "Bash", pr, true), 0, "every task checked")
 	code(t, r.call(t, "Bash", cmd("gh pr merge 5 --squash"), true), 2, "a merge without rebase")
 	code(t, r.call(t, "Bash", cmd("gh pr merge 5 --rebase --delete-branch"), true), 0, "a merge with rebase")
@@ -323,7 +323,7 @@ func TestRouteGuardWriterSurfacesExist(t *testing.T) {
 	} {
 		res := launch(r.p, c.surfaces...)
 		code(t, res, 2, label)
-		want := "route-guard: a worker is launched with surfaces that exist: its `## Allowed edit surfaces` names " + c.named + ", which matches nothing in " + r.p +
+		want := "route-guard: a jhon-builder is launched with surfaces that exist: its `## Allowed edit surfaces` names " + c.named + ", which matches nothing in " + r.p +
 			". A path matches when a file or folder exists there, a glob when it matches one, and a new path when its top-level folder exists. Fix the path in the brief before the launch: scope-guard holds the writer to the paths listed and refuses the real file a wrong one stands for (contracts/efficiency.md, \"Writer scope\").\n"
 		if res.Stderr != want {
 			t.Errorf("%s: stderr\n%q\nwant\n%q", label, res.Stderr, want)
@@ -346,7 +346,7 @@ func TestRouteGuardWriterSurfacesExist(t *testing.T) {
 func TestRouteGuardReviewers(t *testing.T) {
 	t.Parallel()
 	r := newRG(t, "")
-	for _, kind := range []string{"review-risk", "review-refuter"} {
+	for _, kind := range []string{"prism-safety", "prism-challenger"} {
 		input := map[string]any{"subagent_type": kind, "prompt": "x"}
 		top := r.call(t, "Agent", input, true)
 		code(t, top, 0, kind+": the owner is asked")
@@ -363,7 +363,7 @@ func TestRouteGuardReviewers(t *testing.T) {
 		}
 	}
 	writeGrant(t, r.grants, "review", r.p, 30, nil)
-	code(t, r.call(t, "Agent", map[string]any{"subagent_type": "review-risk", "prompt": "x"}, false), 2, "a review grant is retired: a sub-agent's reviewer is still refused")
+	code(t, r.call(t, "Agent", map[string]any{"subagent_type": "prism-safety", "prompt": "x"}, false), 2, "a review grant is retired: a sub-agent's reviewer is still refused")
 }
 
 // The grant classes review and verified are retired (S19, L19, L22): a
@@ -384,7 +384,7 @@ func TestRouteGuardRetiredGrants(t *testing.T) {
 
 	code(t, r.call(t, "Bash", cmd("gh pr create --title x --body y"), true), 0, "a standard route's PR under a retired verified grant")
 
-	for _, kind := range []string{"review-risk", "review-refuter"} {
+	for _, kind := range []string{"prism-safety", "prism-challenger"} {
 		input := map[string]any{"subagent_type": kind, "prompt": "Fix it.\n\n## Allowed edit surfaces\n\n- src/app.py\n"}
 		if d, why, ok := decision(t, r.call(t, "Agent", input, true).Stdout); !ok || d != "ask" || !strings.HasPrefix(why, "review") {
 			t.Errorf("%s under a retired review grant is still asked for", kind)
@@ -440,11 +440,11 @@ func TestRouteGuardVerifyDueBeforeThePR(t *testing.T) {
 	code(t, res, 2, "a verified route without a verification")
 	matches(t, res.Stderr, `^route-guard: the route is verified \(risk high reaches the verified tier`, "the refusal names the route's reason")
 	matches(t, res.Stderr, `verify is due before delivery`, "the refusal says verify is due")
-	matches(t, res.Stderr, "launch the `verify` agent and record its verify-report.md", "the refusal says how")
+	matches(t, res.Stderr, "launch the `jhon-checker` agent and record its verify-report.md", "the refusal says how")
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: fail\n"})
 	code(t, r.call(t, "Bash", pr, true), 2, "a failing verify-report.md verifies nothing")
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "# Verify\n\n**Verdict**: PASS\n"})
-	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-4r.md": "lenses: risk\nverdict: pass\n"})
+	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-prism.md": "facets: safety\nverdict: pass\n"})
 	code(t, r.call(t, "Bash", pr, true), 0, "a passing verify-report.md")
 
 	jd := newRG(t, "")
@@ -477,7 +477,7 @@ func TestRouteGuardSliceCommitNoticeOnVerifiedRoute(t *testing.T) {
 	res := r.call(t, "Bash", commit, false)
 	code(t, res, 0, "the slice commit is never refused for verify")
 	matches(t, res.Stdout, `"hookEventName":"PreToolUse"`, "a PreToolUse note")
-	matches(t, res.Stdout, `"additionalContext":"route verified \(risk high reaches the verified tier[^"]*\): verify is due before delivery; launch the verify agent and record verify-report.md before the PR"`, "the note")
+	matches(t, res.Stdout, `"additionalContext":"route verified \(risk high reaches the verified tier[^"]*\): verify is due before delivery; launch the jhon-checker agent and record verify-report.md before the PR"`, "the note")
 	code(t, r.call(t, "Bash", cmd("git commit -m 'wip'"), false), 0, "a commit")
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
 	res = r.call(t, "Bash", commit, false)
@@ -645,7 +645,7 @@ func TestRouteGuardSliceCommitOverTheAdvisorySize(t *testing.T) {
 	if n := strings.Count(res.Stdout, "hookSpecificOutput"); n != 1 {
 		t.Errorf("one note, got %d: %s", n, res.Stdout)
 	}
-	matches(t, res.Stdout, `"additionalContext":"route verified \(risk high reaches the verified tier \(high\)\): verify is due before delivery; launch the verify agent and record verify-report.md before the PR; slice 1 adds 451 lines of code, over the advisory 400`, "both sentences in one note")
+	matches(t, res.Stdout, `"additionalContext":"route verified \(risk high reaches the verified tier \(high\)\): verify is due before delivery; launch the jhon-checker agent and record verify-report.md before the PR; slice 1 adds 451 lines of code, over the advisory 400`, "both sentences in one note")
 
 	docs := newRG(t, "")
 	closing(docs, map[string]string{"docs/guide.md": big})
@@ -656,12 +656,12 @@ func TestRouteGuardSliceCommitOverTheAdvisorySize(t *testing.T) {
 	}
 }
 
-// On a risk-high route 4R is due with verify (S17, L9): the PR waits for a
-// passing review-4r.md as well as the verification, and a 4R reviewer runs
+// On a risk-high route Prism review is due with verify (S17, L9): the PR waits for a
+// passing review-prism.md as well as the verification, and a Prism reviewer runs
 // without asking the owner, who approved it in L9. A large change is not
 // verified by its size (S25) and needs neither, and a standard route still
 // asks before a reviewer.
-func TestRouteGuardFourRByRisk(t *testing.T) {
+func TestRouteGuardPrismByRisk(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
 	// Each record carries its RED before GREEN (T31): the PR needs it.
@@ -671,36 +671,36 @@ func TestRouteGuardFourRByRisk(t *testing.T) {
 	support.Write(t, r.p, record)
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
 	res := r.call(t, "Bash", pr, true)
-	code(t, res, 2, "risk high with verify and no 4R")
-	matches(t, res.Stderr, `^route-guard: 4R is due before delivery \(risk high reaches the verified tier \(high\)\): run the pertinent lenses`, "the refusal names 4R and why")
-	matches(t, res.Stderr, "record openspec/changes/c1/review-4r.md with the lenses it ran \\(`lenses: risk`\\) and `verdict: pass`", "the refusal says how")
-	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-4r.md": "lenses: risk\nverdict: fail\n"})
-	code(t, r.call(t, "Bash", pr, true), 2, "a failing 4R")
-	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-4r.md": "verdict: pass\n"})
-	code(t, r.call(t, "Bash", pr, true), 2, "a 4R that names no lens")
-	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-4r.md": "lenses: risk, resilience\nverdict: pass\n"})
-	code(t, r.call(t, "Bash", pr, true), 0, "verify and 4R on record")
+	code(t, res, 2, "risk high with verify and no Prism review")
+	matches(t, res.Stderr, `^route-guard: Prism review is due before delivery \(risk high reaches the verified tier \(high\)\): run the pertinent facets`, "the refusal names Prism review and why")
+	matches(t, res.Stderr, "record openspec/changes/c1/review-prism.md with the facets it ran \\(`facets: safety`\\) and `verdict: pass`", "the refusal says how")
+	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-prism.md": "facets: safety\nverdict: fail\n"})
+	code(t, r.call(t, "Bash", pr, true), 2, "a failing Prism review")
+	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-prism.md": "verdict: pass\n"})
+	code(t, r.call(t, "Bash", pr, true), 2, "a Prism review that names no facet")
+	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-prism.md": "facets: safety, failure\nverdict: pass\n"})
+	code(t, r.call(t, "Bash", pr, true), 0, "verify and Prism review on record")
 
 	for _, top := range []bool{true, false} {
-		res := r.call(t, "Agent", map[string]any{"subagent_type": "review-risk", "prompt": "x"}, top)
-		code(t, res, 0, "a 4R reviewer on a risk-high route")
+		res := r.call(t, "Agent", map[string]any{"subagent_type": "prism-safety", "prompt": "x"}, top)
+		code(t, res, 0, "a Prism reviewer on a risk-high route")
 		if res.Stdout != "" {
-			t.Errorf("no ask for a 4R reviewer on a risk-high route: %q", res.Stdout)
+			t.Errorf("no ask for a Prism reviewer on a risk-high route: %q", res.Stdout)
 		}
 	}
 
 	size := newRG(t, "")
 	support.Write(t, size.p, map[string]string{"src/big.py": strings.Repeat("x = 1\n", 500), "tests/test_app.py": "def test_a(): pass\n"})
 	support.Write(t, size.p, record)
-	code(t, size.call(t, "Bash", pr, true), 0, "a large change: neither verify nor 4R")
-	top := size.call(t, "Agent", map[string]any{"subagent_type": "review-risk", "prompt": "x"}, true)
+	code(t, size.call(t, "Bash", pr, true), 0, "a large change: neither verify nor Prism review")
+	top := size.call(t, "Agent", map[string]any{"subagent_type": "prism-safety", "prompt": "x"}, true)
 	if d, _, ok := decision(t, top.Stdout); !ok || d != "ask" {
 		t.Errorf("a reviewer on a large change is asked for: %q", top.Stdout)
 	}
 
 	std := newRG(t, "")
 	support.Write(t, std.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"})
-	top = std.call(t, "Agent", map[string]any{"subagent_type": "review-risk", "prompt": "x"}, true)
+	top = std.call(t, "Agent", map[string]any{"subagent_type": "prism-safety", "prompt": "x"}, true)
 	if d, _, ok := decision(t, top.Stdout); !ok || d != "ask" {
 		t.Errorf("a reviewer on a standard route is asked for: %q", top.Stdout)
 	}
@@ -722,7 +722,7 @@ func TestRouteGuardReviewRequired(t *testing.T) {
 	support.Write(t, r.p, record)
 	res := r.call(t, "Bash", pr, true)
 	code(t, res, 2, "a standard route whose change requires verify")
-	matches(t, res.Stderr, `^route-guard: verify is due before delivery \(review_required: change c1\): `, "the refusal names the rule")
+	matches(t, res.Stderr, `^route-guard: checker is due before delivery \(review_required: change c1\): `, "the refusal names the rule")
 	matches(t, res.Stderr, "record its verify-report.md \\(`verdict: pass`\\) under openspec/changes/c1/ before the PR \\(contracts/ldd.md", "the refusal says how")
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
 	code(t, r.call(t, "Bash", pr, true), 0, "the required verify on record")
@@ -737,13 +737,13 @@ func TestRouteGuardReviewRequired(t *testing.T) {
 	support.Write(t, area.p, record)
 	res = area.call(t, "Bash", pr, true)
 	code(t, res, 2, "an area the diff touches")
-	matches(t, res.Stderr, `^route-guard: 4R is due before delivery \(review_required: area src/\*\*\)`, "the refusal names the area")
-	res = area.call(t, "Agent", map[string]any{"subagent_type": "review-reliability", "prompt": "x"}, true)
-	if code(t, res, 0, "a required 4R reviewer"); res.Stdout != "" {
-		t.Errorf("a pertinent 4R reviewer review_required asks for runs without asking (L46): %q", res.Stdout)
+	matches(t, res.Stderr, `^route-guard: Prism review is due before delivery \(review_required: area src/\*\*\)`, "the refusal names the area")
+	res = area.call(t, "Agent", map[string]any{"subagent_type": "prism-behavior", "prompt": "x"}, true)
+	if code(t, res, 0, "a required Prism reviewer"); res.Stdout != "" {
+		t.Errorf("a pertinent Prism reviewer review_required asks for runs without asking (L46): %q", res.Stdout)
 	}
-	support.Write(t, area.p, map[string]string{"openspec/changes/c1/review-4r.md": "lenses: reliability\nverdict: pass\n"})
-	code(t, area.call(t, "Bash", pr, true), 0, "the required 4R on record")
+	support.Write(t, area.p, map[string]string{"openspec/changes/c1/review-prism.md": "facets: behavior\nverdict: pass\n"})
+	code(t, area.call(t, "Bash", pr, true), 0, "the required Prism review on record")
 
 	elsewhere := newRG(t, "review_required:\n  - area: \"lib/**\"\n    review: verify\n")
 	support.Write(t, elsewhere.p, small)
@@ -756,7 +756,7 @@ func TestRouteGuardReviewRequired(t *testing.T) {
 	code(t, verify.call(t, "Agent", map[string]any{"subagent_type": "verify", "prompt": "x"}, true), 0, "a required verify on a standard route")
 	res = verify.call(t, "Bash", pr, true)
 	code(t, res, 2, "a required verify")
-	matches(t, res.Stderr, `^route-guard: verify is due before delivery \(review_required: area src/\*\*\)`, "the refusal names the area")
+	matches(t, res.Stderr, `^route-guard: checker is due before delivery \(review_required: area src/\*\*\)`, "the refusal names the area")
 }
 
 // review_required is read in the YAML forms a person writes: a list at
@@ -780,7 +780,7 @@ func TestRouteGuardReviewRequiredYAMLForms(t *testing.T) {
 		support.Write(t, r.p, record)
 		res := r.call(t, "Bash", pr, true)
 		code(t, res, 2, "review_required "+strings.ReplaceAll(config, "\n", `\n`))
-		matches(t, res.Stderr, `^route-guard: verify is due before delivery \(review_required: change c1\): `, "the refusal names the rule")
+		matches(t, res.Stderr, `^route-guard: checker is due before delivery \(review_required: change c1\): `, "the refusal names the rule")
 		support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n"})
 		code(t, r.call(t, "Bash", pr, true), 0, "the verify report passes, "+strings.ReplaceAll(config, "\n", `\n`))
 	}
@@ -820,71 +820,71 @@ func TestRouteGuardReviewRequiredRootedArea(t *testing.T) {
 		"openspec/changes/c1/execution-record.json": redGreenRecord})
 	res := r.call(t, "Bash", cmd("gh pr create --title x --body y"), true)
 	code(t, res, 2, "a rooted area the diff touches")
-	matches(t, res.Stderr, `^route-guard: 4R is due before delivery \(review_required: area /src/\*\*\)`, "the refusal names the area")
+	matches(t, res.Stderr, `^route-guard: Prism review is due before delivery \(review_required: area /src/\*\*\)`, "the refusal names the area")
 }
 
-// verify confirms a 4R (S18, L19): when 4R is due it runs on any route,
-// and with neither 4R nor verify due it runs too (S22).
-func TestRouteGuardVerifyConfirmsFourR(t *testing.T) {
+// verify confirms a Prism review (S18, L19): when Prism review is due it runs on any route,
+// and with neither Prism review nor verify due it runs too (S22).
+func TestRouteGuardVerifyConfirmsPrism(t *testing.T) {
 	t.Parallel()
 	r := newRG(t, "review_required:\n  - area: \"src/**\"\n    review: 4r\n")
 	support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"})
-	code(t, r.call(t, "Agent", map[string]any{"subagent_type": "verify", "prompt": "x"}, false), 0, "verify when 4R is due on a standard route")
+	code(t, r.call(t, "Agent", map[string]any{"subagent_type": "verify", "prompt": "x"}, false), 0, "verify when Prism review is due on a standard route")
 	std := newRG(t, "review_required:\n  - area: \"docs/**\"\n    review: 4r\n")
 	support.Write(t, std.p, map[string]string{"src/app.py": "X = 2\n", "tests/test_app.py": "def test_x(): pass\n"})
 	code(t, std.call(t, "Agent", map[string]any{"subagent_type": "verify", "prompt": "x"}, false), 0, "verify when nothing is due")
 }
 
-// A 4R runs only the lenses the diff calls for (L46): a migration calls for
-// risk alone, so review-risk runs without asking, while review-readability
-// and review-resilience are asked of the owner at the top level and refused
-// from a sub-agent; the 4R refusal names the pertinent lenses.
-func TestRouteGuardFourROnlyPertinentLenses(t *testing.T) {
+// A Prism review runs only the facets the diff calls for (L46): a migration calls for
+// risk alone, so prism-safety runs without asking, while prism-clarity
+// and prism-failure are asked of the owner at the top level and refused
+// from a sub-agent; the Prism refusal names the pertinent facets.
+func TestRouteGuardPrismOnlyPertinentFacets(t *testing.T) {
 	t.Parallel()
 	r := newRG(t, "")
 	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/verify-report.md": "verdict: pass\n",
 		"openspec/changes/c1/execution-record.json": redGreenRecord})
 	res := r.call(t, "Bash", cmd("gh pr create --title x --body y"), true)
-	code(t, res, 2, "4R due")
-	matches(t, res.Stderr, "run the pertinent lenses \\(risk\\)", "the refusal names the lenses the diff calls for")
-	matches(t, res.Stderr, "\\(`lenses: risk`\\)", "the example is the pertinent lenses")
-	ok := r.call(t, "Agent", map[string]any{"subagent_type": "review-risk", "prompt": "x"}, false)
-	code(t, ok, 0, "a pertinent lens")
+	code(t, res, 2, "Prism review due")
+	matches(t, res.Stderr, "run the pertinent facets \\(safety\\)", "the refusal names the facets the diff calls for")
+	matches(t, res.Stderr, "\\(`facets: safety`\\)", "the example is the pertinent facets")
+	ok := r.call(t, "Agent", map[string]any{"subagent_type": "prism-safety", "prompt": "x"}, false)
+	code(t, ok, 0, "a pertinent facet")
 	if ok.Stdout != "" || ok.Stderr != "" {
-		t.Errorf("a pertinent lens runs silently: %q %q", ok.Stdout, ok.Stderr)
+		t.Errorf("a pertinent facet runs silently: %q %q", ok.Stdout, ok.Stderr)
 	}
-	for _, lens := range []string{"review-readability", "review-resilience"} {
-		top := r.call(t, "Agent", map[string]any{"subagent_type": lens, "prompt": "x"}, true)
-		code(t, top, 0, lens+" at the top level")
-		if d, why, ok := decision(t, top.Stdout); !ok || d != "ask" || !strings.Contains(why, "not pertinent to this change") || !strings.Contains(why, "(risk)") {
-			t.Errorf("%s is asked of the owner: %q", lens, top.Stdout)
+	for _, facet := range []string{"prism-clarity", "prism-failure"} {
+		top := r.call(t, "Agent", map[string]any{"subagent_type": facet, "prompt": "x"}, true)
+		code(t, top, 0, facet+" at the top level")
+		if d, why, ok := decision(t, top.Stdout); !ok || d != "ask" || !strings.Contains(why, "not pertinent to this change") || !strings.Contains(why, "(safety)") {
+			t.Errorf("%s is asked of the owner: %q", facet, top.Stdout)
 		}
-		sub := r.call(t, "Agent", map[string]any{"subagent_type": lens, "prompt": "x"}, false)
-		code(t, sub, 2, lens+" from a sub-agent")
+		sub := r.call(t, "Agent", map[string]any{"subagent_type": facet, "prompt": "x"}, false)
+		code(t, sub, 2, facet+" from a sub-agent")
 	}
 }
 
-// Claude Code's native 4R is one Bash call (T118d, L1150 K3): the 4R
+// Claude Code's native Prism review is one Bash call (T118d, L1150 K3): the Prism review
 // refusal names it beside pi's tool, and the guard admits `jhon review run`
-// silently when the 4R is due; the lens agents stay admitted as its fallback.
-func TestRouteGuardFourRNativeInClaudeCode(t *testing.T) {
+// silently when the Prism review is due; the facet agents stay admitted as its fallback.
+func TestRouteGuardPrismNativeInClaudeCode(t *testing.T) {
 	t.Parallel()
 	r := newRG(t, "")
 	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n"})
 	support.Write(t, r.p, map[string]string{"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/verify-report.md": "verdict: pass\n",
 		"openspec/changes/c1/execution-record.json": redGreenRecord})
 	res := r.call(t, "Bash", cmd("gh pr create --title x --body y"), true)
-	code(t, res, 2, "4R due")
-	matches(t, res.Stderr, "run the pertinent lenses \\(risk\\) with the native review \\(`jhon_review` in pi, `jhon review run` in Claude Code; the lens agents when it cannot run\\)", "the refusal names the native review per runtime")
+	code(t, res, 2, "Prism review due")
+	matches(t, res.Stderr, "run the pertinent facets \\(safety\\) with the native review \\(`jhon_review` in pi, `jhon review run` in Claude Code; the facet agents when it cannot run\\)", "the refusal names the native review per runtime")
 	for _, c := range []string{"jhon review run", "jhon review run --base main", "cd " + r.p + " && jhon review run --change c1"} {
 		ok := r.call(t, "Bash", cmd(c), true)
 		code(t, ok, 0, c)
 		if ok.Stdout != "" || ok.Stderr != "" {
-			t.Errorf("%s runs silently when the 4R is due: %q %q", c, ok.Stdout, ok.Stderr)
+			t.Errorf("%s runs silently when the Prism review is due: %q %q", c, ok.Stdout, ok.Stderr)
 		}
 	}
-	code(t, r.call(t, "Agent", map[string]any{"subagent_type": "review-risk", "prompt": "x"}, true), 0, "the fallback lens agent")
+	code(t, r.call(t, "Agent", map[string]any{"subagent_type": "prism-safety", "prompt": "x"}, true), 0, "the fallback facet agent")
 }
 
 // redGreenRecord is an execution record whose last run passed after a
@@ -946,7 +946,7 @@ func TestRouteGuardPRNeedsRedBeforeGreen(t *testing.T) {
 // with no passing light verify of the tree its last run tested (T154).
 func lightVerifyNote(change string) string {
 	return notePrefix + "the PR runs with no passing light verify of the tree its last run tested on record for " + change +
-		" (contracts/ldd.md, \"Light verify\"): an advisory, as no light verify has caught a defect on record; the `verify` agent in light mode records one with `jhon executions verify " + change + " --verdict pass|fail`"
+		" (contracts/ldd.md, \"Light verify\"): an advisory, as no light verify has caught a defect on record; the `jhon-checker` agent in light mode records one with `jhon executions verify " + change + " --verdict pass|fail`"
 }
 
 // A light verify at slice close (T31.5, L311 (1)): on the standard route a
@@ -988,7 +988,7 @@ func TestRouteGuardPRLightVerifyIsAnAdvisory(t *testing.T) {
 	res = high.call(t, "Bash", pr, true)
 	code(t, res, 2, "verified route without its verify-report")
 	matches(t, res.Stderr, `the route is verified \(.*\): verify is due before delivery`, "the verified route's own rule")
-	support.Write(t, high.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n", "openspec/changes/c1/review-4r.md": "lenses: risk\nverdict: pass\n"})
+	support.Write(t, high.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n", "openspec/changes/c1/review-prism.md": "facets: safety\nverdict: pass\n"})
 	res = high.call(t, "Bash", pr, true)
 	code(t, res, 0, "the verified route needs no light verify")
 	if got := adviceOf(t, res.Stdout); got != "" {
@@ -1004,10 +1004,10 @@ func TestRouteGuardPRLightVerifyIsAnAdvisory(t *testing.T) {
 	}
 }
 
-// A 4R recorded by `jhon review record` (T118a) binds to its subject: the
+// A Prism review recorded by `jhon review record` (T118a) binds to its subject: the
 // PR opens while a fresh freeze gives that subject, and waits again once the
 // candidate changes; a record without `subject:` is read as before.
-func TestRouteGuardFourRSubject(t *testing.T) {
+func TestRouteGuardPrismSubject(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
 	r := newRG(t, "")
@@ -1021,35 +1021,35 @@ func TestRouteGuardFourRSubject(t *testing.T) {
 	code(t, start, 0, "start")
 	var s struct {
 		Subject string
-		Lenses  []struct{ Lens string }
+		Facets  []struct{ Facet string }
 	}
 	if err := json.Unmarshal([]byte(start.Stdout), &s); err != nil {
 		t.Fatal(err)
 	}
-	var lenses []any
-	for _, l := range s.Lenses {
-		lenses = append(lenses, map[string]any{"subject_hash": s.Subject, "lens": l.Lens, "inspection": map[string]any{"status": "completed", "paths": []string{}},
+	var facets []any
+	for _, l := range s.Facets {
+		facets = append(facets, map[string]any{"subject_hash": s.Subject, "facet": l.Facet, "inspection": map[string]any{"status": "completed", "paths": []string{}},
 			"findings": []any{}, "evidence": []string{"read"}})
 	}
-	in, _ := json.Marshal(map[string]any{"lenses": lenses, "refuter": map[string]any{"subject_hash": s.Subject, "results": []any{}},
-		"validator": map[string]any{"subject_hash": s.Subject, "results": []any{}}})
+	in, _ := json.Marshal(map[string]any{"facets": facets, "challenger": map[string]any{"subject_hash": s.Subject, "results": []any{}},
+		"arbiter": map[string]any{"subject_hash": s.Subject, "results": []any{}}})
 	code(t, review(string(in), "record", "--subject", s.Subject), 0, "record")
 	code(t, r.call(t, "Bash", pr, true), 0, "a record whose subject is the fresh one")
 	support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column c;\n"})
 	res := r.call(t, "Bash", pr, true)
 	code(t, res, 2, "a stale record")
-	matches(t, res.Stderr, `^route-guard: 4R is due before delivery`, "the stale record is no 4R")
-	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-4r.md": "lenses: risk\nverdict: pass\n"})
+	matches(t, res.Stderr, `^route-guard: Prism review is due before delivery`, "the stale record is no Prism review")
+	support.Write(t, r.p, map[string]string{"openspec/changes/c1/review-prism.md": "facets: safety\nverdict: pass\n"})
 	code(t, r.call(t, "Bash", pr, true), 0, "a record without subject:")
 }
 
 // The subject's edges (T118a verify, L732): after a fresh native record,
 // every change to the candidate — the change's own tasks, an untracked file,
 // a delete, a rename, a binary edit, a mode change, a symlink, a stray
-// review-4r.md outside the change — and every tampering with the record's
+// review-prism.md outside the change — and every tampering with the record's
 // base: or subject: lines refuses the PR; undoing it opens the PR again,
 // and committing everything keeps the subject.
-func TestRouteGuardFourRSubjectEdges(t *testing.T) {
+func TestRouteGuardPrismSubjectEdges(t *testing.T) {
 	t.Parallel()
 	pr := cmd("gh pr create --title x --body y")
 	r := newRG(t, "")
@@ -1065,21 +1065,21 @@ func TestRouteGuardFourRSubjectEdges(t *testing.T) {
 	code(t, start, 0, "start")
 	var s struct {
 		Subject string
-		Lenses  []struct{ Lens string }
+		Facets  []struct{ Facet string }
 	}
 	if err := json.Unmarshal([]byte(start.Stdout), &s); err != nil {
 		t.Fatal(err)
 	}
-	var lenses []any
-	for _, l := range s.Lenses {
-		lenses = append(lenses, map[string]any{"subject_hash": s.Subject, "lens": l.Lens, "inspection": map[string]any{"status": "completed", "paths": []string{}},
+	var facets []any
+	for _, l := range s.Facets {
+		facets = append(facets, map[string]any{"subject_hash": s.Subject, "facet": l.Facet, "inspection": map[string]any{"status": "completed", "paths": []string{}},
 			"findings": []any{}, "evidence": []string{"read"}})
 	}
-	in, _ := json.Marshal(map[string]any{"lenses": lenses, "refuter": map[string]any{"subject_hash": s.Subject, "results": []any{}},
-		"validator": map[string]any{"subject_hash": s.Subject, "results": []any{}}})
+	in, _ := json.Marshal(map[string]any{"facets": facets, "challenger": map[string]any{"subject_hash": s.Subject, "results": []any{}},
+		"arbiter": map[string]any{"subject_hash": s.Subject, "results": []any{}}})
 	code(t, review(string(in), "record", "--subject", s.Subject), 0, "record")
 	code(t, r.call(t, "Bash", pr, true), 0, "a fresh native record")
-	recPath := filepath.Join(r.p, "openspec/changes/c1/review-4r.md")
+	recPath := filepath.Join(r.p, "openspec/changes/c1/review-prism.md")
 	rec := support.Read(t, recPath)
 	abs := func(rel string) string { return filepath.Join(r.p, rel) }
 	must := func(err error) {
@@ -1108,8 +1108,10 @@ func TestRouteGuardFourRSubjectEdges(t *testing.T) {
 			func() { must(os.WriteFile(abs("src/data.bin"), []byte(bin), 0o644)) }},
 		{"chmod +x", func() { must(os.Chmod(abs("src/app.py"), 0o755)) }, func() { must(os.Chmod(abs("src/app.py"), 0o644)) }},
 		{"a symlink", func() { must(os.Symlink("app.py", abs("src/link.py"))) }, func() { must(os.Remove(abs("src/link.py"))) }},
-		{"src/review-4r.md", func() { support.Write(t, r.p, map[string]string{"src/review-4r.md": "lenses: risk\nverdict: pass\n"}) },
-			func() { must(os.Remove(abs("src/review-4r.md"))) }},
+		{"src/review-prism.md", func() {
+			support.Write(t, r.p, map[string]string{"src/review-prism.md": "facets: safety\nverdict: pass\n"})
+		},
+			func() { must(os.Remove(abs("src/review-prism.md"))) }},
 		{"the base: line removed", setRec(func(s string) string { return baseLine.ReplaceAllString(s, "") }), setRec(func(s string) string { return s })},
 		{"base: 0000…01", setRec(func(s string) string { return baseLine.ReplaceAllString(s, "base: "+strings.Repeat("0", 39)+"1\n") }), setRec(func(s string) string { return s })},
 		{"subject: abc", setRec(func(s string) string { return subjectLine.ReplaceAllString(s, "subject: abc") }), setRec(func(s string) string { return s })},
@@ -1118,7 +1120,7 @@ func TestRouteGuardFourRSubjectEdges(t *testing.T) {
 		c.break_()
 		res := r.call(t, "Bash", pr, true)
 		code(t, res, 2, c.name)
-		matches(t, res.Stderr, `^route-guard: 4R is due before delivery`, c.name+": the record is no 4R")
+		matches(t, res.Stderr, `^route-guard: Prism review is due before delivery`, c.name+": the record is no Prism review")
 		c.mend()
 		code(t, r.call(t, "Bash", pr, true), 0, c.name+" undone")
 	}

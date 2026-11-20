@@ -24,7 +24,7 @@ changed verdict is not on the allow list, 2 when the run cannot be made, 0 other
   install (`<HOME>`, `<FW>`), from `test/guards/corpus/trees.txt`. Places: `repo` (a git repository with an
   uncommitted behaviour change), `ldd` (the same with LDD and the change's record), `folder` (no repository),
   `corpus` (corpus_test.go's tree); `ldd` and `repo` take a mode (`ldd:yolo`, `repo:super-yolo`), which each
-  binary sets itself with `jhon mode`. Callers: `top-default`, `top-bypass`, `subagent` (a `worker` launched
+  binary sets itself with `jhon mode`. Callers: `top-default`, `top-bypass`, `subagent` (a `worker`, jhon-builder's old name, which both binaries read, launched
   with the surfaces `src/a.ts`, `src/parse/`, `svc/src/**`, so scope-guard judges it).
 - **The set** (`test/guards/corpus/*.tsv`): the corpus (8 columns, corpus_test.go; a safety-guard line runs at
   the top level, the others in the sub-agent), and 6-column lines `place, fixture, caller, tool, input, source`

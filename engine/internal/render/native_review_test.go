@@ -21,7 +21,7 @@ func TestNativeReviewRunsInTheBackgroundInClaudeCode(t *testing.T) {
 		}
 	}
 	pi := flatText(e.bodyFor("pi", e.mainAgent(piMain)))
-	from := strings.Index(pi, "A 4R is one call to the native review")
+	from := strings.Index(pi, "A Prism review is one call to the native review")
 	to := strings.Index(pi[max(from, 0):], "only when it cannot run")
 	if from < 0 || to < 0 {
 		t.Fatal("pi's orchestrator has no native review sentence")

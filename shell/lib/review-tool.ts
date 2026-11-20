@@ -1,10 +1,10 @@
 /**
- * shell/lib/review-tool.ts — T118c (L726, L727, L730, L731): the native 4R in
+ * shell/lib/review-tool.ts — T118c (L726, L727, L730, L731): the native Prism review in
  * one tool call. `jhon review start` freezes the candidate once and gives one
- * self-contained, tool-less prompt per lens; each runs as one completion
+ * self-contained, tool-less prompt per facet; each runs as one completion
  * through pi's model registry (a single user message, no tools, no system
- * prompt, a fresh session id), all lenses at once; then `refute` → the
- * refuter, `validate` → the validator, and `record` writes review-4r.md bound
+ * prompt, a fresh session id), all facets at once; then `refute` → the
+ * challenger, `validate` → the arbiter, and `record` writes review-prism.md bound
  * to the subject. Every completion uses exactly the model and effort the
  * engine names for its routing key; a role with none, or one the registry
  * cannot resolve, is not run natively: the orchestrator is told to launch its
@@ -39,7 +39,7 @@ export interface ReviewDeps {
 	cwd: string;
 	completer: Completer;
 	signal?: AbortSignal;
-	/** Why the native review must not run (T118e's agents arm); the lens agents are the fallback. */
+	/** Why the native review must not run (T118e's agents arm); the facet agents are the fallback. */
 	disabled?: string;
 }
 
@@ -50,7 +50,7 @@ export interface ReviewOutcome {
 
 /**
  * JHON_REVIEW_NATIVE=off (or 0, false) turns the native review off, so the
- * 4R runs on its lens agents: the switch the bench's agents arm sets (T118e).
+ * Prism review runs on its facet agents: the switch the bench's agents arm sets (T118e).
  */
 export function nativeReviewDisabled(env: Record<string, string | undefined>): string | undefined {
 	return ["off", "0", "false"].includes((env.JHON_REVIEW_NATIVE ?? "").trim().toLowerCase()) ? "the native review is off (JHON_REVIEW_NATIVE=off)" : undefined;
@@ -131,12 +131,12 @@ function jsonLine(text: string): any {
 	return undefined;
 }
 
-type Lens = { lens: string; routing_key: string; model: string; effort: string; prompt: string; bytes: number };
+type Facet = { facet: string; routing_key: string; model: string; effort: string; prompt: string; bytes: number };
 
 const one = (s: string) => s.replace(/\s+/g, " ").trim();
 const clip = (s: string, n: number) => (s.length <= n ? s : s.slice(0, n - 1) + "…");
-const unavailable = (subject: string, lens: string, reason: string) =>
-	({ subject_hash: subject, lens, inspection: { status: "unavailable", paths: [], reason: clip(one(reason), 300) }, findings: [], evidence: [] });
+const unavailable = (subject: string, facet: string, reason: string) =>
+	({ subject_hash: subject, facet, inspection: { status: "unavailable", paths: [], reason: clip(one(reason), 300) }, findings: [], evidence: [] });
 const and = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
 /** The bounded list of findings, by severity. */
@@ -170,21 +170,21 @@ async function review(params: { base?: string; change?: string }, deps: ReviewDe
 	const started = await jhonCall(bin, ["review", "start", "--json", ...opts], cwd);
 	let start: any;
 	try { start = JSON.parse(started.stdout); } catch { /* Below. */ }
-	if (started.code !== 0 || !start || !Array.isArray(start.lenses)) return refused("start", started);
+	if (started.code !== 0 || !start || !Array.isArray(start.facets)) return refused("start", started);
 	const subject: string = start.subject;
-	const lenses: Lens[] = start.lenses;
-	const lensAgents = lenses.map((l) => l.routing_key);
+	const facets: Facet[] = start.facets;
+	const facetAgents = facets.map((l) => l.routing_key);
 	const fallback = (reason: string, agents: string, findings: any[] = []): ReviewOutcome => ({
-		text: bounded([`jhon_review could not run natively: ${clip(one(reason), 400)}.`, `Run the 4R with its agents instead: launch ${agents}, as the 4R contract's fallback says.`,
-			...(findings.length ? ["Findings so far:", ...findingLines(findings, "the lens results")] : [])]),
+		text: bounded([`jhon_review could not run natively: ${clip(one(reason), 400)}.`, `Run the Prism review with its agents instead: launch ${agents}, as the Prism contract's fallback says.`,
+			...(findings.length ? ["Findings so far:", ...findingLines(findings, "the facet results")] : [])]),
 		details: { status: "fallback" },
 	});
-	const allAgents = `the ${and(lensAgents)} agents, then the review-refuter and review-validator agents`;
+	const allAgents = `the ${and(facetAgents)} agents, then the prism-challenger and prism-arbiter agents`;
 	if (deps.disabled) return fallback(deps.disabled, allAgents);
 
 	// Each role runs on exactly its routing key's model, or not natively at all.
 	const why = (key: string, model: string) => (model ? completer.check(model) : `no pi model for ${key} in the active profile`);
-	for (const l of lenses) {
+	for (const l of facets) {
 		const w = why(l.routing_key, l.model);
 		if (w) return fallback(w, allAgents);
 	}
@@ -204,18 +204,18 @@ async function review(params: { base?: string; change?: string }, deps: ReviewDe
 		throw last instanceof Error ? last : new Error(String(last));
 	};
 
-	const results = await Promise.all(lenses.map(async (l) => {
+	const results = await Promise.all(facets.map(async (l) => {
 		let text: string;
-		try { text = await ask(l.routing_key, l.model, l.effort, l.prompt); } catch (e) { return unavailable(subject, l.lens, `the completion failed: ${(e as Error).message}`); }
+		try { text = await ask(l.routing_key, l.model, l.effort, l.prompt); } catch (e) { return unavailable(subject, l.facet, `the completion failed: ${(e as Error).message}`); }
 		const v = jsonLine(text);
-		const shaped = v && v.lens === l.lens && String(v.subject_hash ?? "").replace(/^sha256:/, "") === subject && Array.isArray(v.findings)
+		const shaped = v && v.facet === l.facet && String(v.subject_hash ?? "").replace(/^sha256:/, "") === subject && Array.isArray(v.findings)
 			&& (v.inspection?.status === "completed" || v.inspection?.status === "unavailable");
-		return shaped ? v : unavailable(subject, l.lens, "its answer was not one line of JSON for this lens and subject");
+		return shaped ? v : unavailable(subject, l.facet, "its answer was not one line of JSON for this facet and subject");
 	}));
-	// The engine numbers findings <lens>-<n> in this order.
-	const findings = results.flatMap((r: any) => r.findings.map((f: any, i: number) => ({ ...f, id: `${r.lens}-${i + 1}` })));
+	// The engine numbers findings <facet>-<n> in this order.
+	const findings = results.flatMap((r: any) => r.findings.map((f: any, i: number) => ({ ...f, id: `${r.facet}-${i + 1}` })));
 
-	const role = async (name: "refuter" | "validator", sub: "refute" | "validate", input: unknown): Promise<any | ReviewOutcome> => {
+	const role = async (name: "challenger" | "arbiter", sub: "refute" | "validate", input: unknown): Promise<any | ReviewOutcome> => {
 		const stdin = JSON.stringify(input);
 		const r = sub === "refute"
 			? await jhonCall(bin, ["review", "refute", "--json", "--subject", subject, ...opts], cwd, stdin)
@@ -223,8 +223,8 @@ async function review(params: { base?: string; change?: string }, deps: ReviewDe
 		let out: any;
 		try { out = JSON.parse(r.stdout); } catch { /* Below. */ }
 		if (r.code !== 0 || !out || typeof out.prompt !== "string") return refused(sub, r);
-		const key = `review-${name}`;
-		const agents = name === "refuter" ? "the review-refuter agent, then the review-validator agent, on the findings below" : "the review-validator agent on the findings below";
+		const key = `prism-${name}`;
+		const agents = name === "challenger" ? "the prism-challenger agent, then the prism-arbiter agent, on the findings below" : "the prism-arbiter agent on the findings below";
 		const w = why(key, out.model ?? "");
 		if (w) return fallback(w, agents, findings);
 		let text: string;
@@ -236,26 +236,26 @@ async function review(params: { base?: string; change?: string }, deps: ReviewDe
 	const isOutcome = (x: any): x is ReviewOutcome => x && typeof x.text === "string" && x.details;
 
 	// No finding: nothing to refute or validate.
-	let refuter: any = { subject_hash: subject, role: "refuter", results: [] };
-	let validator: any = { subject_hash: subject, role: "validator", results: [] };
+	let challenger: any = { subject_hash: subject, role: "challenger", results: [] };
+	let arbiter: any = { subject_hash: subject, role: "arbiter", results: [] };
 	if (findings.length) {
-		refuter = await role("refuter", "refute", results);
-		if (isOutcome(refuter)) return refuter;
-		const refutedIds = new Set(refuter.results.filter((v: any) => v?.outcome === "refuted").map((v: any) => v.finding_id));
+		challenger = await role("challenger", "refute", results);
+		if (isOutcome(challenger)) return challenger;
+		const refutedIds = new Set(challenger.results.filter((v: any) => v?.outcome === "refuted").map((v: any) => v.finding_id));
 		if (findings.some((f) => !refutedIds.has(f.id))) {
-			validator = await role("validator", "validate", { lenses: results, refuter });
-			if (isOutcome(validator)) return validator;
+			arbiter = await role("arbiter", "validate", { facets: results, challenger });
+			if (isOutcome(arbiter)) return arbiter;
 		}
 	}
 
-	const rec = await jhonCall(bin, ["review", "record", "--json", "--subject", subject, ...opts], cwd, JSON.stringify({ lenses: results, refuter, validator }));
+	const rec = await jhonCall(bin, ["review", "record", "--json", "--subject", subject, ...opts], cwd, JSON.stringify({ facets: results, challenger, arbiter }));
 	let out: any;
 	try { out = JSON.parse(rec.stdout); } catch { /* Below. */ }
 	if (rec.code !== 0 || !out) return refused("record", rec);
 	const n = (k: string) => (Array.isArray(out[k]) ? out[k].length : 0);
 	const correction = findings.filter((f) => (out.correction_set ?? []).includes(f.id));
 	const lines = [
-		`4R native review: verdict ${out.verdict} · lenses ${(out.lenses ?? []).join(", ")} · record ${out.record}`,
+		`Prism native review: verdict ${out.verdict} · facets ${(out.facets ?? []).join(", ")} · record ${out.record}`,
 		`correction set ${n("correction_set")} · for verify ${n("for_verify")} · follow-ups ${n("follow_ups")} · information ${n("information")} · refuted ${n("refuted")} · unavailable ${n("unavailable")}`,
 		...(correction.length ? ["Correction set:", ...findingLines(correction, out.record)] : []),
 		...(out.for_verify?.length ? [`For verify: ${clip(out.for_verify.join(", "), 200)}`] : []),

@@ -39,7 +39,7 @@ func TestSummarizeSumsEachKindUp(t *testing.T) {
 	if h := s.Hooks[1]; h.Context != 1 || h.P50Ms == h.P50Ms {
 		t.Errorf("route-guard, no duration recorded: %+v", h)
 	}
-	if len(s.Denials) != 1 || s.Denials[0].Agent != "worker" || s.Denials[0].Reason != "refused: git push" {
+	if len(s.Denials) != 1 || s.Denials[0].Agent != "jhon-builder" || s.Denials[0].Reason != "refused: git push" {
 		t.Errorf("denials: %+v", s.Denials)
 	}
 	if s.TestRuns != 2 || s.TestsGreen != 1 || s.Checks != 1 || s.Ready != 1 {
@@ -61,7 +61,7 @@ func TestSummarizeSumsEachKindUp(t *testing.T) {
 	if hooks := j["hooks"].([]any); hooks[1].(map[string]any)["p50_ms"] != nil {
 		t.Errorf("no duration is null: %v", hooks[1])
 	}
-	if h := s.Human(); !strings.Contains(h, "subagent  worker") || !strings.Contains(h, "test runs 2, all green 1") || !strings.Contains(h, "denied") {
+	if h := s.Human(); !strings.Contains(h, "subagent  jhon-builder") || !strings.Contains(h, "test runs 2, all green 1") || !strings.Contains(h, "denied") {
 		t.Errorf("%s", h)
 	}
 }
@@ -74,7 +74,7 @@ func TestAnOldTurnCapEventStillCounts(t *testing.T) {
 		ev("2026-11-14T10:05:00Z", "jhon.subagent", map[string]any{"gen_ai.agent.name": "worker", "jhon.outcome": "turn-cap", "jhon.duration_ms": 90000.0, "jhon.turns": 80.0, "jhon.max_turns": 80.0}),
 		ev("2026-11-15T10:05:00Z", "jhon.subagent", map[string]any{"gen_ai.agent.name": "worker", "jhon.outcome": "completed", "jhon.duration_ms": 60000.0, "jhon.turns": 120.0}),
 	}, 7, 0)
-	if x := s.Subagents[0]; x.Agent != "worker" || x.Count != 2 || x.TurnCap != 1 || x.Completed != 1 || x.Failed != 0 {
+	if x := s.Subagents[0]; x.Agent != "jhon-builder" || x.Count != 2 || x.TurnCap != 1 || x.Completed != 1 || x.Failed != 0 {
 		t.Errorf("subagents: %+v", x)
 	}
 	var j struct {
@@ -86,7 +86,7 @@ func TestAnOldTurnCapEventStillCounts(t *testing.T) {
 	if err := json.Unmarshal([]byte(s.JSON()), &j); err != nil {
 		t.Fatal(err)
 	}
-	if len(j.Subagents) != 1 || j.Subagents[0].Agent != "worker" || j.Subagents[0].TurnCap != 1 {
+	if len(j.Subagents) != 1 || j.Subagents[0].Agent != "jhon-builder" || j.Subagents[0].TurnCap != 1 {
 		t.Errorf("json: %+v", j)
 	}
 	if h := s.Human(); !strings.Contains(h, "completed 1  turn-cap 1  timeout 0") {

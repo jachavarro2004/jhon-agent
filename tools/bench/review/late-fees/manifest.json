@@ -10,7 +10,7 @@
         16,
         18
       ],
-      "lens": "reliability",
+      "facet": "behavior",
       "severity": "CRITICAL",
       "what": "except Exception: pass drops an invoice's fee silently (a missing months entry or amount)"
     },
@@ -21,7 +21,7 @@
         24,
         24
       ],
-      "lens": "reliability",
+      "facet": "behavior",
       "severity": "WARNING",
       "what": "average_fee divides by zero on an empty batch (or one whose every fee failed)"
     }

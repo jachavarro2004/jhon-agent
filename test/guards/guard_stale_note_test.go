@@ -59,9 +59,9 @@ type staleGuard struct {
 // staleGuards is one refusal and one allowed call per guard, as its owner.
 var staleGuards = []staleGuard{
 	{
-		name: "inspect-guard", args: []string{"--agent", "review-risk", "git diff", "git show"}, prefix: "inspect-guard: ",
-		refused: map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": "git fetch origin"}, "agent_type": "review-risk"},
-		allowed: map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": "git diff a b"}, "agent_type": "review-risk"},
+		name: "inspect-guard", args: []string{"--agent", "prism-safety", "git diff", "git show"}, prefix: "inspect-guard: ",
+		refused: map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": "git fetch origin"}, "agent_type": "prism-safety"},
+		allowed: map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": "git diff a b"}, "agent_type": "prism-safety"},
 	},
 	{
 		name: "vcs-guard", args: []string{"--agent", "general", ".git"}, prefix: "vcs-guard: ",

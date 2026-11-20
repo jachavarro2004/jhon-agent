@@ -42,7 +42,7 @@ import (
 // `--affected` reads it (T150). Another change's folder still counts.
 //
 // A high-risk change (risk.go) also carries an independent verification
-// (verification.go): a verify-report.md stating `verdict: pass`. A 4R
+// (verification.go): a verify-report.md stating `verdict: pass`. A Prism review
 // review leaves no record, so it cannot stand in for one.
 
 // actions are the deliver_action values, merge first, on first use.
@@ -308,12 +308,12 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 		folder := filepath.Join(execution.ChangesOf(t.home), change)
 		if st, err := os.Stat(filepath.Join(t.home, folder)); verified == nil && (err != nil || !st.IsDir()) {
 			// A change with no folder: risk high needs tasks.md, and so one.
-			reasons = append(reasons, fmt.Sprintf("the change is high risk (%s) and has no folder: risk high needs its tasks.md, so write it under %s/ and record there a verify-report.md stating verdict: pass (the verify agent)",
+			reasons = append(reasons, fmt.Sprintf("the change is high risk (%s) and has no folder: risk high needs its tasks.md, so write it under %s/ and record there a verify-report.md stating verdict: pass (the jhon-checker agent)",
 				listed(high), folder))
 		} else if verified != nil {
 			notes = append(notes, "high risk, independently verified by "+*verified)
 		} else {
-			reasons = append(reasons, fmt.Sprintf("the change is high risk (%s) and has no independent verification: a verify-report.md stating verdict: pass (the verify agent)",
+			reasons = append(reasons, fmt.Sprintf("the change is high risk (%s) and has no independent verification: a verify-report.md stating verdict: pass (the jhon-checker agent)",
 				listed(high)))
 		}
 	}

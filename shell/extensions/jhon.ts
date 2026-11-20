@@ -269,8 +269,8 @@ const text = (t: string) => ({ content: [{ type: "text", text: t }], details: un
 /**
  * A child's skills (T115f follow-up, L709): children start with --no-skills.
  * Agent definitions declare no skills field, so the rule is: a skill this
- * session resolved whose `skills/<name>/` path the agent's body names (worker,
- * verify and explore name the LDD skill's references), then the exact SKILL.md
+ * session resolved whose `skills/<name>/` path the agent's body names (jhon-builder,
+ * jhon-checker and jhon-scout name the LDD skill's references), then the exact SKILL.md
  * paths the call passes. A passed path that is not a SKILL.md file is refused.
  */
 export function childSkills(body: string, resolved: ReadonlyMap<string, string>, passed?: unknown): string[] {
@@ -835,7 +835,7 @@ export default function jhon(pi: any): void {
   const backstop = child ? undefined : new ContextBackstop();
   // T117e (L746): per owner request, the writer guard's lines.
   const written = child ? undefined : new WriterBudget();
-  // T122 (L762 F2), T125 (L783 F5): a child's own context budget (a wrap-up notice, never a cap: T155), and an explore's or worker's CodeGraph-first read budget (lib/child-budget.ts).
+  // T122 (L762 F2), T125 (L783 F5): a child's own context budget (a wrap-up notice, never a cap: T155), and a scout's or builder's CodeGraph-first read budget (lib/child-budget.ts).
   const childBudget = child ? new ChildContextBudget() : undefined;
   const childReads = child && readBudgetApplies(process.env.JHON_PI_AGENT, limits.tools) ? new ChildReadBudget(readBudgetKind(process.env.JHON_PI_AGENT)) : undefined;
   // T135 (L1055, L1063): a main-session reply that announces an action and stops, or is empty, is sent back once per owner turn (lib/announce-stop.ts).
@@ -1008,11 +1008,11 @@ export default function jhon(pi: any): void {
   // T115c: the deferred tools, reached on request.
   if (!child) pi.registerTool(toolsMoreTool(pi, toolPolicy));
 
-  // T118c: the native 4R, one call; its completions run through pi's model registry.
+  // T118c: the native Prism review, one call; its completions run through pi's model registry.
   if (!child) pi.registerTool({
     name: "jhon_review",
-    label: "4R review",
-    description: "The 4R in one call: lens completions, refuter, validator, record. Takes a few minutes. Returns the verdict, or which review agents to launch.",
+    label: "Prism review",
+    description: "Prism review in one call: facets, challenger, arbiter, record. Takes a few minutes. Returns the verdict, or which review agents to launch.",
     parameters: { type: "object", additionalProperties: false, properties: { base: { type: "string" }, change: { type: "string" } } },
     async execute(_id: string, params: { base?: unknown; change?: unknown }, signal: AbortSignal | undefined, _onUpdate: unknown, ctx: any) {
       if (!config) throw new Error(`jhon: ${join(agentDir, CONFIG_FILE)} is missing or invalid; run \`jhon sync\``);
@@ -1207,7 +1207,7 @@ export default function jhon(pi: any): void {
       // T134 (L1021 H1, H2): the decisions on record and the code map follow the brief, bounded; the scope guard still reads the brief.
       const shown = selectedChange(sm?.getSessionId?.() ?? "");
       const change = shown && (shown.root ?? ctx?.cwd) === cwd ? shown.change : undefined;
-      // T137: verify and the 4R lenses are launched with the tests to judge too.
+      // T137: jhon-checker and the Prism facets are launched with the tests to judge too.
       const task = params.task + await launchContext(params.task, cwd, { bin, change, agent: agent.name }).catch(() => "");
       const scope = params.task;
       if (background) {

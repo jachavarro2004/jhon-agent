@@ -34,7 +34,7 @@ func exploreCall(t *testing.T, runtime, agent, tool, repo, rel string) support.R
 	return hook(t, support.Env("JHON_PI_CHILD=", "JHON_PI_AGENT="), "vcs-guard", append([]string{"--agent", agent}, vcsDirs(t)...), payload)
 }
 
-const exploreNote = `^note \(not a refusal; the call ran\): explore writes only its change's exploration.md or research.md \(<layout>/changes/<change>/exploration.md or research.md, openspec/ or ldd/\); `
+const exploreNote = `^note \(not a refusal; the call ran\): jhon-scout writes only its change's exploration.md or research.md \(<layout>/changes/<change>/exploration.md or research.md, openspec/ or ldd/\); `
 
 // exploreNoteEnd closes the note, after the written file.
 const exploreNoteEnd = ` is outside it: return what you found to the orchestrator instead of writing it\.$`

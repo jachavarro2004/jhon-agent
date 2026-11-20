@@ -9,9 +9,9 @@ import (
 )
 
 // `jhon review freeze [--base <ref>] [--json]`: a review's frozen candidate
-// (contracts/review-4r.md, "Freeze"): the merge base of HEAD and the base
+// (contracts/review-prism.md, "Freeze"): the merge base of HEAD and the base
 // ref (HEAD by default), the working tree as a git tree, and the subject
-// hash of the diff between them. It depends only on the bytes, so every lens
+// hash of the diff between them. It depends only on the bytes, so every facet
 // freezes for itself and the same working state gives the same subject. It
 // writes the working files' blobs to the object store, as `git add` would,
 // and nothing else. Exit 0, or 2 on a usage error or a state it cannot
@@ -19,14 +19,14 @@ import (
 // nothing, so it is refused with the repository's worktrees that hold
 // changes.
 //
-// `start`, `refute`, `validate` and `record` are the native 4R
+// `start`, `refute`, `validate` and `record` are the native Prism review
 // (cmd_review_native.go); `run` is all of it through `claude -p`, Claude
 // Code's variant (cmd_review_claude.go).
 func init() { register("review", runReview) }
 
 const reviewUsage = "usage: jhon review freeze [--base <ref>] [--json]\n" +
 	"       jhon review start [--base <ref>] [--change <name>] [--json]\n" +
-	"       jhon review refute --subject <hash> [--base <ref>] [--change <name>] < lens-results.json\n" +
+	"       jhon review refute --subject <hash> [--base <ref>] [--change <name>] < facet-results.json\n" +
 	"       jhon review validate --subject <hash> [--base <ref>] [--change <name>] < refuted.json\n" +
 	"       jhon review record --subject <hash> [--base <ref>] [--change <name>] < results.json\n" +
 	"       jhon review run [--base <ref>] [--change <name>] [--timeout <seconds>]"

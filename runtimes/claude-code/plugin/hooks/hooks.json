@@ -17,7 +17,7 @@
       {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook announce-stop"}]}
     ],
     "SubagentStop": [
-      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook return-shape worker"}]}
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/../../../build/jhon\" hook return-shape jhon-builder"}]}
     ]
   }
 }

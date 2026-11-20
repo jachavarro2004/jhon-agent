@@ -196,10 +196,10 @@ func TestLaunchLeavesADenyOrAnAskAsItCame(t *testing.T) {
 	if code != 2 || stdout != "" || !strings.Contains(stderr, "launched with its scope") {
 		t.Errorf("a worker with no scope: %d %q %q", code, stdout, stderr)
 	}
-	code, stdout, _ = agentCall(t, cwd, "review-risk", launchBrief, "default", nil)
+	code, stdout, _ = agentCall(t, cwd, "prism-safety", launchBrief, "default", nil)
 	// route-guard's own answer, alone.
 	data, _ := json.Marshal(map[string]any{"session_id": "s1", "hook_event_name": "PreToolUse", "cwd": cwd, "permission_mode": "default", "tool_name": "Agent",
-		"tool_input": map[string]any{"description": "Fix it", "prompt": launchBrief, "subagent_type": "review-risk", "model": "sonnet"}})
+		"tool_input": map[string]any{"description": "Fix it", "prompt": launchBrief, "subagent_type": "prism-safety", "model": "sonnet"}})
 	var want bytes.Buffer
 	RouteGuard([]string{"--agent", "jhon-orchestrator", "worker"}, IO{bytes.NewReader(data), &want, &want})
 	if code != 0 || stdout != want.String() || !strings.Contains(stdout, `"permissionDecision":"ask"`) {
@@ -389,7 +389,7 @@ func TestLaunchBriefNames(t *testing.T) {
 	}
 }
 
-// T137 (L1064 KB2, KB3): verify and each 4R lens, launched for a change
+// T137 (L1064 KB2, KB3): verify and each Prism facet, launched for a change
 // whose record marks a test as turned green by editing only its test, get
 // a `## Tests to judge` block after the other blocks; any other agent, and
 // a change with nothing to judge, get none.
@@ -428,9 +428,9 @@ func TestLaunchOfAJudgeCarriesTheTestsToJudge(t *testing.T) {
 	if got := prompt("explore"); got != brief {
 		t.Errorf("explore judges nothing, yet its brief is %q", got)
 	}
-	for _, lens := range ldd.TestJudges[1:] {
-		if got := launchContext(brief, cwd, lens); got != wantTestsToJudge {
-			t.Errorf("%s's launch adds %q", lens, got)
+	for _, facet := range ldd.TestJudges[1:] {
+		if got := launchContext(brief, cwd, facet); got != wantTestsToJudge {
+			t.Errorf("%s's launch adds %q", facet, got)
 		}
 	}
 }

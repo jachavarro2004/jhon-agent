@@ -43,7 +43,7 @@ type WriterEfficiency struct {
 }
 
 // WriterAgents are the agents contracts/efficiency.md binds, with the retired writers of older sessions.
-var WriterAgents = []string{"worker", "general"}
+var WriterAgents = []string{"jhon-builder", "general"}
 
 // correctionBound is the most failed runs of one command the contract allows: an attempt, and one more after a real fix.
 const correctionBound = 2

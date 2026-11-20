@@ -41,7 +41,7 @@ func (d doctor) remoteProbed(remote bool) {
 // context7's, explore and worker (T133e, L1016), the row's clause before
 // T58b. doctor names them when the judged tree's agents cannot be read
 // (T58c, L1193); a test holds them to the checkout's.
-var shippedHolders = map[string][]string{"context7": {"explore", "worker"}}
+var shippedHolders = map[string][]string{"context7": {"jhon-scout", "jhon-builder"}}
 
 // heldBy is ", for <agents>": the agents of the judged tree's
 // prose/agents.yaml (doctor's src: the checkout, or the installed release,

@@ -42,7 +42,7 @@ func TestRiskDestructiveLookalikeStaysHigh(t *testing.T) {
 	}
 }
 
-// The force case takes the verified route, with the risk lens.
+// The force case takes the verified route, with the risk facet.
 func TestRiskForceMigrationRoute(t *testing.T) {
 	t.Parallel()
 	c := destructiveLookalikes[0]
@@ -63,5 +63,5 @@ func TestRiskForceMigrationRoute(t *testing.T) {
 	route, _ := statusJSON(t, root)["route"].(map[string]any)
 	equal(t, route["level"], "verified", route)
 	equal(t, route["tier"], "high", route)
-	equal(t, route["lenses"], []any{"risk"}, route)
+	equal(t, route["facets"], []any{"safety"}, route)
 }

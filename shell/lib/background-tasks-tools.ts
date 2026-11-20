@@ -116,7 +116,7 @@ const clip = (value: string, max = NOTICE_FIELD_MAX_CHARS) => {
 	return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 };
 
-/** A JSON object result (e.g. a review lens report, possibly fenced), or undefined. */
+/** A JSON object result (e.g. a review facet report, possibly fenced), or undefined. */
 function jsonObject(result: string): Record<string, unknown> | undefined {
 	const body = result.trim().replace(/^```(?:json)?\s*\n([\s\S]*)\n```$/, "$1");
 	if (!body.startsWith("{")) return undefined;

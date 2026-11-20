@@ -10,7 +10,7 @@
         12,
         19
       ],
-      "lens": "resilience",
+      "facet": "failure",
       "severity": "CRITICAL",
       "what": "a race on shared state: the threads check and fill _cache and bump _hits with no lock (_lock is never taken)"
     },
@@ -21,7 +21,7 @@
         35,
         35
       ],
-      "lens": "reliability",
+      "facet": "behavior",
       "severity": "WARNING",
       "what": "a missing error check: subprocess.run's exit code is ignored, so a failed copy still returns the target"
     }

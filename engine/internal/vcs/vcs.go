@@ -216,7 +216,7 @@ func WorkingTree(root string, exempt map[string]bool) string {
 	return tree
 }
 
-// Frozen is a review's candidate (contracts/review-4r.md, "Freeze"): the
+// Frozen is a review's candidate (contracts/review-prism.md, "Freeze"): the
 // base commit it is reviewed against, the working tree's git tree, and the
 // subject, the SHA-256 of the binary diff from one to the other. Diff is
 // that diff and Paths the paths it changes, for a review that carries them
@@ -228,7 +228,7 @@ type Frozen struct {
 }
 
 // Freeze is root's working state frozen for a review against the merge base
-// of HEAD and baseRef. It is a function of the bytes: two lenses freezing
+// of HEAD and baseRef. It is a function of the bytes: two facets freezing
 // the same working state get the same Frozen, so each freezes for itself.
 func Freeze(root, baseRef string) (Frozen, error) { return FreezeExempt(root, baseRef, nil) }
 

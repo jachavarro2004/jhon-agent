@@ -35,8 +35,8 @@ func TestTheSubAgentsHeaderSaysPiStopsNoRunAtItsMark(t *testing.T) {
 // mark is the review mark, as the other executors'.
 func TestTheWorkersAuditMarkIsTheReviewMark(t *testing.T) {
 	marks := turnMarks(manifest.MustLoad(filepath.Join("..", "..", "..")).Agents)
-	if marks["worker"] != reviewTurns || marks["verify"] != reviewTurns || marks["explore"] != reviewTurns {
-		t.Errorf("turnMarks: worker %d, verify %d, explore %d; want %d each", marks["worker"], marks["verify"], marks["explore"], reviewTurns)
+	if marks["jhon-builder"] != reviewTurns || marks["jhon-checker"] != reviewTurns || marks["jhon-scout"] != reviewTurns {
+		t.Errorf("turnMarks: jhon-builder %d, jhon-checker %d, jhon-scout %d; want %d each", marks["jhon-builder"], marks["jhon-checker"], marks["jhon-scout"], reviewTurns)
 	}
 }
 

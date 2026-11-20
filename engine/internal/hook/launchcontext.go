@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,10 +37,10 @@ import (
 //     one, which is then asked (`-p <main checkout>`) and only results whose
 //     files exist at the same path in the worktree are kept.
 //
-//   - `## Tests to judge` (T137, L1064 KB2): for verify and the 4R lenses
+//   - `## Tests to judge` (T137, L1064 KB2): for verify and the Prism facets
 //     only, the tests the selected change's execution record marks as turned
 //     green by editing only their test (ldd.LaunchTestsToJudge), for the
-//     validator to judge whether each was weakened; within 2 s.
+//     arbiter to judge whether each was weakened; within 2 s.
 //
 // All are information, never a gate: a failure, a timeout or an empty
 // result leaves the heading out. The blocks follow the brief, each after a
@@ -554,7 +555,7 @@ func launchInput(agent string, payload []byte) map[string]json.RawMessage {
 	if json.Unmarshal(input["prompt"], &prompt) != nil || strings.TrimSpace(prompt) == "" {
 		return nil
 	}
-	added := launchContext(prompt, p.Cwd(), strings.TrimSpace(p.Obj("tool_input").Str("subagent_type")))
+	added := launchContext(prompt, p.Cwd(), rename.AgentNow(strings.TrimSpace(p.Obj("tool_input").Str("subagent_type"))))
 	if added == "" {
 		return nil
 	}

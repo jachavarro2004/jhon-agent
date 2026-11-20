@@ -10,13 +10,13 @@ import (
 
 // The tests to judge (T137, L1064 KB2, KB3): the tests the change's
 // execution record marks as turned green by editing only their test
-// (execution.MarkTurnedGreen) go with every launch of verify and of the 4R
-// lenses for that change, as a `## Tests to judge` block after the launch's
-// other blocks, so the validator looks at each and reports a weakened test
+// (execution.MarkTurnedGreen) go with every launch of verify and of the Prism review
+// facets for that change, as a `## Tests to judge` block after the launch's
+// other blocks, so the arbiter looks at each and reports a weakened test
 // as a finding. Nothing is refused; with nothing to judge there is no block.
 
-// TestJudges are the agents launched with the tests to judge: verify and the 4R lenses.
-var TestJudges = []string{"verify", "review-risk", "review-resilience", "review-readability", "review-reliability"}
+// TestJudges are the agents launched with the tests to judge: jhon-checker and the Prism facets.
+var TestJudges = []string{"jhon-checker", "prism-safety", "prism-failure", "prism-clarity", "prism-behavior"}
 
 const (
 	// TestsToJudgeHeading opens the block.

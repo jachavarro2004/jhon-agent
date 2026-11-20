@@ -20,13 +20,13 @@ import (
 const shaped = "status: success\nsummary: added the timeout\nfiles_changed:\n  - src/a.ts: timeout\nvalidation:\n  - npm test: 3 passed\nrisks: none"
 
 func returnShapeEvent(kv ...any) map[string]any {
-	return with(map[string]any{"hook_event_name": "SubagentStop", "agent_type": "worker", "stop_hook_active": false,
+	return with(map[string]any{"hook_event_name": "SubagentStop", "agent_type": "jhon-builder", "stop_hook_active": false,
 		"last_assistant_message": "Done: added the timeout."}, kv...)
 }
 
 func returnShape(t *testing.T, payload any) support.Result {
 	t.Helper()
-	return hook(t, nil, "return-shape", []string{"worker"}, payload)
+	return hook(t, nil, "return-shape", []string{"jhon-builder"}, payload)
 }
 
 func TestReturnShapeNotesProseAndLetsItStop(t *testing.T) {
@@ -42,7 +42,7 @@ func TestReturnShapeNotesProseAndLetsItStop(t *testing.T) {
 	if _, ok := j["decision"]; ok {
 		t.Errorf("the stop is decided (%v); want it let through: %q", j["decision"], r.Stdout)
 	}
-	want := "note (not a refusal; the writer stopped): the worker ended without the return shape of contracts/efficiency.md (its `status:` and `validation:` lines): read its result for what changed and what was run"
+	want := "note (not a refusal; the writer stopped): the jhon-builder ended without the return shape of contracts/efficiency.md (its `status:` and `validation:` lines): read its result for what changed and what was run"
 	if got, _ := j["systemMessage"].(string); got != want || len(j) != 1 {
 		t.Errorf("stdout = %v; want only systemMessage %q", j, want)
 	}
@@ -142,7 +142,7 @@ func TestReturnShapePluginDeclaresBoundedWriters(t *testing.T) {
 	if !reflect.DeepEqual(args, bounded) {
 		t.Errorf("hook args %v; bounded agents %v", args, bounded)
 	}
-	if !reflect.DeepEqual(bounded, []string{"worker"}) {
-		t.Errorf("bounded = %v; want [worker]", bounded)
+	if !reflect.DeepEqual(bounded, []string{"jhon-builder"}) {
+		t.Errorf("bounded = %v; want [jhon-builder]", bounded)
 	}
 }

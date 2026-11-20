@@ -30,8 +30,8 @@ func TestRuntimeDoctor(t *testing.T) {
 		for _, rule := range []string{"framework-boundary/no-framework-write", "safety/destructive-deny", "safety/outward-ask", "efficiency/writer-scope"} {
 			match(t, out, `(?m)^  enforced +`+regexp.QuoteMeta(rule)+` +by blocking-hook-agent$`)
 		}
-		// T153 (L957): vcs-guard notes explore's write beyond its record; jhon audit reads it.
-		match(t, out, `(?m)^  behavioural +ldd/explore-scope +jhon audit \(explore-wrote, pending-real-fixture\)$`)
+		// T153 (L957): vcs-guard notes jhon-scout's write beyond its record; jhon audit reads it.
+		match(t, out, `(?m)^  behavioural +ldd/scout-scope +jhon audit \(scout-wrote, pending-real-fixture\)$`)
 		match(t, out, `(?m)^  unsupported +ldd/slices$`)
 		match(t, out, `(?m)^  enforced +top-level-tools/executor-never-calls +by agent-tool-allowlist$`)
 		match(t, out, `(?m)^  verified +blocking-hook-agent +yes +2\.1\.310 +test/testdata/spikes/claude-code-plugin-agent-hooks/record\.json`)

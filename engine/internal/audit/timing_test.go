@@ -12,7 +12,7 @@ func stamp(s string) string { return "2026-10-30T10:" + s + "Z" }
 func TestThreadTimingSplitsModelToolAndWaiting(t *testing.T) {
 	id := func(s string) *string { return &s }
 	u := func(in, created, read float64) *Usage { return &Usage{in, created, read} }
-	tr := &Transcript{Agent: "a1", AgentType: "worker", Entries: []*Entry{
+	tr := &Transcript{Agent: "a1", AgentType: "jhon-builder", Entries: []*Entry{
 		{Role: "user", Timestamp: stamp("00:00.000"), Prompt: id("do it")},
 		// 20s to the first response line, 5s more for its second line: model.
 		{Role: "assistant", Timestamp: stamp("00:20.000"), MessageID: id("m1")},

@@ -1,6 +1,6 @@
 ---
 name: ldd
-description: "Leapfrog-Driven Development: one reference per step of a change's record. Trigger: an LDD step is run, inline or by the explore, worker, or verify agent."
+description: "Leapfrog-Driven Development: one reference per step of a change's record. Trigger: an LDD step is run, inline or by jhon-scout, jhon-builder, or jhon-checker."
 disable-model-invocation: true
 user-invocable: false
 license: MIT

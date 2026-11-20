@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 )
 
 // Default is the profile that is agents.yaml itself.
@@ -132,6 +133,9 @@ type File struct {
 	Active    string
 	HasActive bool
 	Profiles  *js.Object
+	// Renamed are the retired agent names the file still holds (T177), one
+	// warning each; Read has already read each under its new name.
+	Renamed []string
 }
 
 // Names are the profile names a user may choose: default, then the file's.
@@ -173,7 +177,56 @@ func Read(file string) (File, []string) {
 	default:
 		return empty, []string{file + ": active must be a profile name"}
 	}
+	out.Renamed = renameAgents(out.Profiles, file)
 	return out, nil
+}
+
+// renameAgents reads every retired agent name under a profile's `agents`
+// as its new name (T177), in place and in the same position, and is one
+// warning per name it renamed. When the profile also sets the new name,
+// that entry wins and the old one goes.
+func renameAgents(profiles *js.Object, file string) []string {
+	var out []string
+	for _, name := range profiles.Keys() {
+		p, ok := js.Prop(profiles, name).(*js.Object)
+		if !ok {
+			continue
+		}
+		agents, ok := js.Prop(p, "agents").(*js.Object)
+		if !ok {
+			continue
+		}
+		next, changed := js.NewObject(), false
+		for _, a := range agents.Keys() {
+			now, old := rename.Agent(a)
+			if old {
+				changed = true
+				out = append(out, rename.Warning(file+": "+name+".agents", "agent", a, now))
+				if agents.Has(now) {
+					continue
+				}
+			}
+			next.Set(now, js.Prop(agents, a))
+		}
+		if changed {
+			p.Set("agents", next)
+		}
+	}
+	return out
+}
+
+// Migrate rewrites the retired agent names in the profiles file to their
+// new names (T177) and is what it rewrote, one line each; it writes
+// nothing when the file holds none.
+func Migrate(file string) ([]string, error) {
+	f, errs := Read(file)
+	if len(errs) > 0 {
+		return nil, errors.New(strings.Join(errs, "; "))
+	}
+	if len(f.Renamed) == 0 {
+		return nil, nil
+	}
+	return f.Renamed, Edit(file, func(*js.Object) error { return nil })
 }
 
 // Active is the active profile's name and value: the file's `active`, or
@@ -215,7 +268,7 @@ func valueProblem(value any, runtime string) string {
 // Warnings are what a profile names that the manifest no longer has: an
 // agent since retired. Its entry is ignored and nothing stops (L48).
 func Warnings(f File, ctx Context) []string {
-	var out []string
+	out := slices.Clone(f.Renamed)
 	for _, name := range f.Profiles.Keys() {
 		p, ok := js.Prop(f.Profiles, name).(*js.Object)
 		if !ok {
@@ -383,6 +436,10 @@ func Edit(file string, edit func(root *js.Object) error) error {
 			return fmt.Errorf("%s must hold a JSON object", file)
 		}
 		prev = o.Clone()
+		if p, ok := js.Prop(prev, "profiles").(*js.Object); ok {
+			// An edit writes the retired agent names under their new ones.
+			renameAgents(p, file)
+		}
 	}
 	if err := edit(prev); err != nil {
 		return err

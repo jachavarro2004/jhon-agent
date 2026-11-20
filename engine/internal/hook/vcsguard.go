@@ -19,7 +19,7 @@ import (
 // Claude Code settings, and a write outside the project (with a workspace's
 // primary and joined members, workspace.ProjectRoots) is the
 // outside-write ASK class, which the owner's yolo or super-yolo mode passes
-// with a note: the sandbox wraps Bash only (T161, L1420). An explore agent's
+// with a note: the sandbox wraps Bash only (T161, L1420). A jhon-scout agent's
 // write beyond its record runs with a note (a refusal until T153). Fail
 // closed.
 func VCSGuard(args []string, io IO) int {
@@ -56,7 +56,7 @@ func VCSGuard(args []string, io IO) int {
 		return block(fmt.Sprintf("%s call names no file", tool))
 	}
 	var notes []string
-	// The explore agent writes only its change's record (T123); another
+	// The jhon-scout agent writes only its change's record (T123); another
 	// write runs with a note.
 	if caller(name, p) == guard.ExploreAgent {
 		for _, raw := range paths {

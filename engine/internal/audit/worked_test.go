@@ -72,11 +72,11 @@ func claims(r *Result, change, what string) (string, bool) {
 func TestWhatWorkedRecordsLineCountsHandRunsInSubagents(t *testing.T) {
 	const line = "the tests ran only through jhon executions"
 	run := bash("jhon executions run "+chg, executionsOut(c1, t1, []string{"pass"}))
-	handRun := auditOf(t, user("go"), phased("apply", delegate("o01", "worker", chg, run, bash("uv run pytest -q", "3 passed"))))
+	handRun := auditOf(t, user("go"), phased("apply", delegate("o01", "jhon-builder", chg, run, bash("uv run pytest -q", "3 passed"))))
 	if evidence, said := claims(handRun, chg, line); said {
-		t.Errorf("a worker ran the whole suite by hand, yet the audit says %q (%s)", line, evidence)
+		t.Errorf("a jhon-builder ran the whole suite by hand, yet the audit says %q (%s)", line, evidence)
 	}
-	clean := auditOf(t, user("go"), phased("apply", delegate("o01", "worker", chg, run, bash("uv run pytest tests/test_a.py -q", "1 passed"))))
+	clean := auditOf(t, user("go"), phased("apply", delegate("o01", "jhon-builder", chg, run, bash("uv run pytest tests/test_a.py -q", "1 passed"))))
 	evidence, said := claims(clean, chg, line)
 	eq(t, "no hand run in any thread: the line is said", said, true)
 	eq(t, "its evidence, as it was", evidence, "1 run(s), none by hand")

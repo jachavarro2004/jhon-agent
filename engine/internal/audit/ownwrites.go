@@ -20,9 +20,9 @@ import (
 //	    header records and every absolute path its launch prompt names (the
 //	    worktree the orchestrator hands it: pi records the child's cwd as the
 //	    main session's).
-//	verify-wrote (ldd/independent-verify): a verify agent's Edit or Write
+//	checker-wrote (ldd/independent-verify): a jhon-checker agent's Edit or Write
 //	    of anything but its verify-report.md; once per agent.
-//	explore-wrote (ldd/explore-scope, T123): an explore agent's Edit or
+//	scout-wrote (ldd/scout-scope, T123): a jhon-scout agent's Edit or
 //	    Write that ran (its result is no error: a refused write never ran)
 //	    of anything but a change's exploration.md or research.md, in either
 //	    layout (guard.ExploreMayWrite, the rule vcs-guard holds it to);
@@ -78,7 +78,7 @@ func checkPiIsolation(s *Session, emit emitFunc) {
 	}
 	for _, a := range s.Subagents {
 		root := cwdOf(a)
-		if root == "" || (a.AgentType != "worker" && a.AgentType != "verify") {
+		if root == "" || (a.AgentType != "jhon-builder" && a.AgentType != "jhon-checker") {
 			continue
 		}
 		handed := handedTrees(a)
@@ -108,12 +108,12 @@ func checkPiIsolation(s *Session, emit emitFunc) {
 	}
 }
 
-// verifyRecord is the file a verify agent writes.
+// verifyRecord is the file a jhon-checker agent writes.
 const verifyRecord = "verify-report.md"
 
 func checkVerifyWrote(s *Session, emit emitFunc) {
 	for _, a := range s.Subagents {
-		if a.AgentType != "verify" {
+		if a.AgentType != "jhon-checker" {
 			continue
 		}
 	agent:
@@ -123,9 +123,9 @@ func checkVerifyWrote(s *Session, emit emitFunc) {
 				if !ok || path.Base(file) == verifyRecord || scratch(file) {
 					continue
 				}
-				emit(emitted{check: "verify-wrote", severity: "violation", transcript: a.File, line: e.Line,
+				emit(emitted{check: "checker-wrote", severity: "violation", transcript: a.File, line: e.Line,
 					agent: a.Agent, agentType: a.AgentType, evidence: short(tool+" "+file, 120),
-					message: fmt.Sprintf("the verify agent's %s writes %s, not its %s: an independent verifier reports and fixes nothing (contracts/ldd.md)", tool, file, verifyRecord)})
+					message: fmt.Sprintf("the jhon-checker agent's %s writes %s, not its %s: an independent verifier reports and fixes nothing (contracts/ldd.md)", tool, file, verifyRecord)})
 				break agent
 			}
 		}
@@ -157,9 +157,9 @@ func checkExploreWrote(s *Session, emit emitFunc) {
 				if guard.ExploreMayWrite(p, cwdOf(a)) || scratch(p) {
 					continue
 				}
-				emit(emitted{check: "explore-wrote", severity: "violation", transcript: a.File, line: e.Line,
+				emit(emitted{check: "scout-wrote", severity: "violation", transcript: a.File, line: e.Line,
 					agent: a.Agent, agentType: a.AgentType, evidence: short(tool+" "+file, 120),
-					message: fmt.Sprintf("the explore agent's %s writes %s, not its change's exploration.md or research.md: explore investigates and writes only that record, never code or the change's other artifacts (prose/agents.yaml)", tool, file)})
+					message: fmt.Sprintf("the jhon-scout agent's %s writes %s, not its change's exploration.md or research.md: jhon-scout investigates and writes only that record, never code or the change's other artifacts (prose/agents.yaml)", tool, file)})
 				break agent
 			}
 		}

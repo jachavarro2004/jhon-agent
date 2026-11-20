@@ -20,11 +20,11 @@ import (
 )
 
 // `jhon review run [--base <ref>] [--change <name>] [--timeout <seconds>]`:
-// the native 4R in one Bash call, Claude Code's variant of pi's jhon_review
+// the native Prism review in one Bash call, Claude Code's variant of pi's jhon_review
 // tool (T118d, L704, L706; shell/lib/review-tool.ts is the shell's). It runs
-// `start`, then each lens prompt as one tool-less `claude -p` call, all
-// lenses at once (at most reviewClaudeParallel), then the refuter and the
-// validator the same way when there are findings, then `record`: the same
+// `start`, then each facet prompt as one tool-less `claude -p` call, all
+// facets at once (at most reviewClaudeParallel), then the challenger and the
+// arbiter the same way when there are findings, then `record`: the same
 // steps, prompts and record as the shell's, each step in process.
 //
 // Each call is exactly `claude -p --tools "" --disallowedTools "mcp__*"
@@ -36,7 +36,7 @@ import (
 // --timeout) and its output by reviewClaudeOutputMax. Any call that fails
 // (claude not on PATH, a non-zero exit, output that is not claude's JSON
 // result or not the role's answer, a timeout) stops the review: one line on
-// stderr says why and names the lens agents, the contract's fallback, nothing
+// stderr says why and names the facet agents, the contract's fallback, nothing
 // is recorded, exit 1. A step the engine refuses (an oversized prompt, a
 // stale subject) prints its own refusal with its exit code. Exit 0 prints a
 // short result: the verdict, the record and its sets.
@@ -81,8 +81,8 @@ func reviewNativeOff() string {
 	return ""
 }
 
-type reviewLensCall struct {
-	Lens       string `json:"lens"`
+type reviewFacetCall struct {
+	Facet      string `json:"facet"`
 	RoutingKey string `json:"routing_key"`
 	Prompt     string `json:"prompt"`
 }
@@ -123,14 +123,14 @@ func runReviewClaude(argv []string) (int, error) {
 		return code, nil
 	}
 	var start struct {
-		Subject string           `json:"subject"`
-		Lenses  []reviewLensCall `json:"lenses"`
+		Subject string            `json:"subject"`
+		Facets  []reviewFacetCall `json:"facets"`
 	}
 	if err := json.Unmarshal(raw, &start); err != nil {
 		return 2, fmt.Errorf("jhon review start's output: %v", err)
 	}
 	keys := []string{}
-	for _, l := range start.Lenses {
+	for _, l := range start.Facets {
 		keys = append(keys, l.RoutingKey)
 	}
 	// stop cancels every call with why, the first reason only, and prints
@@ -141,7 +141,7 @@ func runReviewClaude(argv []string) (int, error) {
 	stop := func(why error) {
 		cancel(why)
 		printed.Do(func() {
-			fmt.Fprintf(os.Stderr, "jhon review run: %s; nothing recorded. Fallback: launch the %s agents, then the review-refuter and review-validator agents, as the 4R contract's fallback says\n",
+			fmt.Fprintf(os.Stderr, "jhon review run: %s; nothing recorded. Fallback: launch the %s agents, then the prism-challenger and prism-arbiter agents, as the Prism contract's fallback says\n",
 				oneLine(context.Cause(ctx).Error(), 400), andList(keys))
 		})
 	}
@@ -192,11 +192,11 @@ func runReviewClaude(argv []string) (int, error) {
 		return claudeComplete(ctx, bin, model, effort, prompt, limit)
 	}
 
-	// The lenses, at once.
-	lenses := make([]json.RawMessage, len(start.Lenses))
+	// The facets, at once.
+	facets := make([]json.RawMessage, len(start.Facets))
 	sem := make(chan struct{}, reviewClaudeParallel)
 	var wg sync.WaitGroup
-	for i, l := range start.Lenses {
+	for i, l := range start.Facets {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -207,10 +207,10 @@ func runReviewClaude(argv []string) (int, error) {
 			}
 			text, err := ask(l.RoutingKey, l.Prompt)
 			if err == nil {
-				lenses[i], err = lensAnswer(text, l.Lens, start.Subject)
+				facets[i], err = facetAnswer(text, l.Facet, start.Subject)
 			}
 			if err != nil && ctx.Err() == nil {
-				stop(fmt.Errorf("the %s lens call failed: %v", l.Lens, err))
+				stop(fmt.Errorf("the %s facet call failed: %v", l.Facet, err))
 			}
 		}()
 	}
@@ -219,7 +219,7 @@ func runReviewClaude(argv []string) (int, error) {
 		return 1, nil
 	}
 	findings := 0
-	for _, l := range lenses {
+	for _, l := range facets {
 		var v struct {
 			Findings []json.RawMessage `json:"findings"`
 		}
@@ -227,7 +227,7 @@ func runReviewClaude(argv []string) (int, error) {
 		findings += len(v.Findings)
 	}
 
-	// The refuter and the validator, when there is something to judge.
+	// The challenger and the arbiter, when there is something to judge.
 	role := func(name, sub string, input any) (json.RawMessage, int, error) {
 		in, _ := json.Marshal(input)
 		raw, code := step(sub, []string{"--subject", start.Subject}, string(in))
@@ -240,7 +240,7 @@ func runReviewClaude(argv []string) (int, error) {
 		if err := json.Unmarshal(raw, &p); err != nil || p.Prompt == "" {
 			return nil, 2, fmt.Errorf("jhon review %s's output has no prompt", sub)
 		}
-		text, err := ask("review-"+name, p.Prompt)
+		text, err := ask("prism-"+name, p.Prompt)
 		if err == nil {
 			var answer json.RawMessage
 			if answer, err = roleAnswer(text, name); err == nil {
@@ -256,14 +256,14 @@ func runReviewClaude(argv []string) (int, error) {
 		b, _ := json.Marshal(map[string]any{"subject_hash": start.Subject, "role": name, "results": []any{}})
 		return b
 	}
-	refuter, validator := empty("refuter"), empty("validator")
+	challenger, arbiter := empty("challenger"), empty("arbiter")
 	if findings > 0 {
 		var code int
-		if refuter, code, err = role("refuter", "refute", lenses); refuter == nil {
+		if challenger, code, err = role("challenger", "refute", facets); challenger == nil {
 			return code, err
 		}
-		if standing(lenses, refuter, start.Subject) > 0 {
-			if validator, code, err = role("validator", "validate", map[string]any{"lenses": lenses, "refuter": refuter}); validator == nil {
+		if standing(facets, challenger, start.Subject) > 0 {
+			if arbiter, code, err = role("arbiter", "validate", map[string]any{"facets": facets, "challenger": challenger}); arbiter == nil {
 				return code, err
 			}
 		}
@@ -274,7 +274,7 @@ func runReviewClaude(argv []string) (int, error) {
 		recording.Unlock()
 		return 1, nil
 	}
-	in, _ := json.Marshal(map[string]any{"lenses": lenses, "refuter": refuter, "validator": validator})
+	in, _ := json.Marshal(map[string]any{"facets": facets, "challenger": challenger, "arbiter": arbiter})
 	raw, code = step("record", []string{"--subject", start.Subject}, string(in))
 	cancel(errRunDone) // the record is written or refused: a signal no longer stops it
 	recording.Unlock()
@@ -283,7 +283,7 @@ func runReviewClaude(argv []string) (int, error) {
 	}
 	var rec struct {
 		Record, Verdict                                                        string
-		Lenses                                                                 []string
+		Facets                                                                 []string
 		CorrectionSet, ForVerify, FollowUps, Information, Refuted, Unavailable []string
 	}
 	var o map[string]json.RawMessage
@@ -293,14 +293,14 @@ func runReviewClaude(argv []string) (int, error) {
 	get := func(k string, v any) { _ = json.Unmarshal(o[k], v) }
 	get("record", &rec.Record)
 	get("verdict", &rec.Verdict)
-	get("lenses", &rec.Lenses)
+	get("facets", &rec.Facets)
 	get("correction_set", &rec.CorrectionSet)
 	get("for_verify", &rec.ForVerify)
 	get("follow_ups", &rec.FollowUps)
 	get("information", &rec.Information)
 	get("refuted", &rec.Refuted)
 	get("unavailable", &rec.Unavailable)
-	fmt.Printf("4R native review (claude -p): verdict %s · lenses %s · record %s\n", rec.Verdict, strings.Join(rec.Lenses, ", "), rec.Record)
+	fmt.Printf("Prism native review (claude -p): verdict %s · facets %s · record %s\n", rec.Verdict, strings.Join(rec.Facets, ", "), rec.Record)
 	fmt.Printf("correction set %d · for verify %d · follow-ups %d · information %d · refuted %d · unavailable %d\n",
 		len(rec.CorrectionSet), len(rec.ForVerify), len(rec.FollowUps), len(rec.Information), len(rec.Refuted), len(rec.Unavailable))
 	if len(rec.CorrectionSet) > 0 {
@@ -318,20 +318,20 @@ func runReviewClaude(argv []string) (int, error) {
 // errRunDone ends the run's context once the record step has run.
 var errRunDone = errors.New("the run is over")
 
-// standing is how many of the lenses' findings the refuter's answer leaves
+// standing is how many of the facets' findings the challenger's answer leaves
 // standing, by distinct known finding id as record reduces them
 // (ldd.Standing): a refuted id given twice, or one that names no finding,
 // leaves the others standing. Results the engine cannot read count every
 // finding as standing, so the validate step judges them.
-func standing(lenses []json.RawMessage, refuter json.RawMessage, subject string) int {
-	raw, _ := json.Marshal(lenses)
-	results, err := ldd.ParseLensResults(raw)
+func standing(facets []json.RawMessage, challenger json.RawMessage, subject string) int {
+	raw, _ := json.Marshal(facets)
+	results, err := ldd.ParseFacetResults(raw)
 	if err == nil {
-		results, err = ldd.CheckLenses(results, subject)
+		results, err = ldd.CheckFacets(results, subject)
 	}
 	var r ldd.RoleResult
 	if err == nil {
-		err = json.Unmarshal(refuter, &r)
+		err = json.Unmarshal(challenger, &r)
 	}
 	all := ldd.AllFindings(results)
 	if err != nil {
@@ -445,26 +445,26 @@ func jsonLine(text string) json.RawMessage {
 	return nil
 }
 
-// lensAnswer is the lens's answer in text, when it is one line of JSON for
-// lens and subject, as the shell checks it.
-func lensAnswer(text, lens, subject string) (json.RawMessage, error) {
+// facetAnswer is the facet's answer in text, when it is one line of JSON for
+// facet and subject, as the shell checks it.
+func facetAnswer(text, facet, subject string) (json.RawMessage, error) {
 	v := jsonLine(text)
 	var a struct {
 		SubjectHash string `json:"subject_hash"`
-		Lens        string `json:"lens"`
+		Facet       string `json:"facet"`
 		Inspection  struct {
 			Status string `json:"status"`
 		} `json:"inspection"`
 		Findings []json.RawMessage `json:"findings"`
 	}
-	if v == nil || json.Unmarshal(v, &a) != nil || a.Lens != lens || strings.TrimPrefix(a.SubjectHash, "sha256:") != subject || a.Findings == nil ||
+	if v == nil || json.Unmarshal(v, &a) != nil || a.Facet != facet || strings.TrimPrefix(a.SubjectHash, "sha256:") != subject || a.Findings == nil ||
 		(a.Inspection.Status != "completed" && a.Inspection.Status != "unavailable") {
-		return nil, fmt.Errorf("its answer is not one line of JSON for the %s lens and this subject", lens)
+		return nil, fmt.Errorf("its answer is not one line of JSON for the %s facet and this subject", facet)
 	}
 	return v, nil
 }
 
-// roleAnswer is the refuter's or validator's answer in text, with its role
+// roleAnswer is the challenger's or arbiter's answer in text, with its role
 // set as the shell sets it.
 func roleAnswer(text, name string) (json.RawMessage, error) {
 	v := jsonLine(text)

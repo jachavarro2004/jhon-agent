@@ -15,7 +15,7 @@ import (
 )
 
 // A Jhon profile (T77b) picks every agent's model per runtime: the
-// orchestrator's and every sub-agent's (explore, workers, verify). It lives
+// orchestrator's and every sub-agent's (jhon-scout, jhon-builder, jhon-checker). It lives
 // in the owner's ~/.config/jhon/profiles.json (internal/profiles.Path, read
 // under HOME, not XDG_CONFIG_HOME), and `jhon profile use <name>` activates
 // it (settings' pi.profile) and re-renders every runtime. `bench prepare

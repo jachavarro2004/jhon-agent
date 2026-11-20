@@ -103,7 +103,7 @@ func TestExecutionsVerifyRefusesBadInput(t *testing.T) {
 	match(t, r.Stderr, `usage: jhon executions run \[<change>\]`)
 }
 
-const lightVerifyDue = `^light verify due for feat-small-fix: its GREEN run is newer than its last light verify; launch the ` + "`verify`" + ` agent in light mode \(read the diff and the tests, run the focused tests\), which records ` + "`jhon executions verify feat-small-fix --verdict pass\\|fail`$"
+const lightVerifyDue = `^light verify due for feat-small-fix: its GREEN run is newer than its last light verify; launch the ` + "`jhon-checker`" + ` agent in light mode \(read the diff and the tests, run the focused tests\), which records ` + "`jhon executions verify feat-small-fix --verdict pass\\|fail`$"
 
 // Status asks for the light verify when the RED before GREEN run is newer
 // than the last one (or there is none), and only for a change that alters

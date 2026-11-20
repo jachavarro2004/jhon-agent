@@ -1276,7 +1276,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	// The owner's permission mode (S31), from the same reads: the status line's badge.
 	let mode: string | undefined;
 	let releaseSelection: (() => void) | undefined;
-	// Another session can move the change on (a worker, a Claude Code
+	// Another session can move the change on (a jhon-builder, a Claude Code
 	// session): STATUS re-reads it at each turn's end too, at most every 30 s,
 	// since jhon status computes the route from the diff (~2 s in a large repo).
 	let lddReadAt = -Infinity;

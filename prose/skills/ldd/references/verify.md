@@ -43,11 +43,11 @@ verdict: pass | fail
 
 `PASS WITH WARNINGS` states `verdict: pass`.
 
-On a change whose risk reaches the verified tier, 4R is due as well and is
-not verify's: it leaves `openspec/changes/{change-name}/review-4r.md` with a
-`lenses:` line (the lenses it ran: `risk`, `resilience`, `reliability`,
-`readability`) and `verdict: pass` (`contracts/review-4r.md`). When
-review-4r.md lists inferential severe findings, confirm or drop each against
+On a change whose risk reaches the verified tier, Prism review is due as well and is
+not verify's: it leaves `openspec/changes/{change-name}/review-prism.md` with a
+`facets:` line (the facets it ran: `safety`, `failure`, `behavior`,
+`clarity`) and `verdict: pass` (`contracts/review-prism.md`). When
+review-prism.md lists inferential severe findings, confirm or drop each against
 the frozen candidate and its tests, and say which; once a `worker` has
 corrected the confirmed set, confirm the correction holds. Report a
 missing one, or a `review_required` review `jhon status` lists as due, as a

@@ -92,8 +92,8 @@ func TestExpandTemplate(t *testing.T) {
 	var v manifest.Map[string]
 	v.Set("judge", "A")
 	v.Set("spare", "x")
-	text, unknown, unused := expandTemplate("judge {{judge}}, {{lens}} and {{lens}}", &v)
-	if text != "judge A, {{lens}} and {{lens}}" || !reflect.DeepEqual(unknown, []string{"lens"}) || !reflect.DeepEqual(unused, []string{"spare"}) {
+	text, unknown, unused := expandTemplate("judge {{judge}}, {{facet}} and {{facet}}", &v)
+	if text != "judge A, {{facet}} and {{facet}}" || !reflect.DeepEqual(unknown, []string{"facet"}) || !reflect.DeepEqual(unused, []string{"spare"}) {
 		t.Errorf("%q %v %v", text, unknown, unused)
 	}
 }

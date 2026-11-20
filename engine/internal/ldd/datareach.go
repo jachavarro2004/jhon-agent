@@ -27,7 +27,7 @@ import (
 // whose last execution in pytest-testmon's record ran that file (by file, as
 // execution.TestmonReach counts them): a unit test that compiles the query
 // against a fake session never reaches the database. Whether that test had
-// data to read stays the validator's judgment.
+// data to read stays the arbiter's judgment.
 
 // quotedPy is a test module an own run names (execution.OwnTestsCommand).
 var quotedPy = lazyre.New(`'[^']*\.py'`)

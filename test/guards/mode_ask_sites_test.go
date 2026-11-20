@@ -94,9 +94,9 @@ func routeSite(label, kind string, prepare func(t *testing.T, r rgEnv)) askSite 
 // askSites is every ask site in the guards, one call reaching each.
 var askSites = []askSite{
 	// route-guard: a reviewer the owner did not ask for (routeguard.go, ask "review").
-	routeSite("a reviewer nobody asked for", "review-risk", nil),
-	// route-guard: a 4R lens the diff does not call for.
-	routeSite("a 4R lens that is not pertinent", "review-readability", func(t *testing.T, r rgEnv) {
+	routeSite("a reviewer nobody asked for", "prism-safety", nil),
+	// route-guard: a Prism facet the diff does not call for.
+	routeSite("a Prism facet that is not pertinent", "prism-clarity", func(t *testing.T, r rgEnv) {
 		support.Write(t, r.p, map[string]string{"src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n",
 			"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n", "openspec/changes/c1/verify-report.md": "verdict: pass\n"})
 	}),

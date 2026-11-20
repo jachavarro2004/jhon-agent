@@ -201,10 +201,10 @@ func TestHelpNamesHowEachRuntimeRunsAnOwnerCommand(t *testing.T) {
 	}
 }
 
-// `jhon --help` lists `jhon review run`, Claude Code's native 4R (T118d).
+// `jhon --help` lists `jhon review run`, Claude Code's native Prism review (T118d).
 func TestHelpListsReviewRun(t *testing.T) {
 	_, out := capture(t, []string{"--help"})
-	for _, want := range []string{"  jhon review run [--base <ref>] [--change <name>] [--timeout <seconds>]\n", "each lens prompt through claude -p", "names the review-* lens agents as the fallback", "SIGINT or SIGTERM stops"} {
+	for _, want := range []string{"  jhon review run [--base <ref>] [--change <name>] [--timeout <seconds>]\n", "each facet prompt through claude -p", "names the prism-* facet agents as the fallback", "SIGINT or SIGTERM stops"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("jhon --help lacks %q", want)
 		}

@@ -74,7 +74,7 @@ var behaviouralAnchors = []string{
 	"framework-boundary/no-framework-write",
 	"safety/destructive-deny", "safety/outward-ask",
 	"efficiency/writer-scope",
-	"ldd/slices", "ldd/red-first", "ldd/independent-verify", "ldd/explore-scope",
+	"ldd/slices", "ldd/red-first", "ldd/independent-verify", "ldd/scout-scope",
 	"tdd/no-weaken",
 }
 

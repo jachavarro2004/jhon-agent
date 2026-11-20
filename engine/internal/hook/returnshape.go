@@ -3,6 +3,7 @@ package hook
 import (
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"slices"
 	"strings"
 )
@@ -25,14 +26,14 @@ func ReturnShape(args []string, io IO) int {
 	var writers []string
 	for _, a := range args {
 		if a = strings.TrimSpace(a); a != "" {
-			writers = append(writers, a)
+			writers = append(writers, rename.AgentNow(a))
 		}
 	}
 	p, ok := read(io.In)
 	if !ok {
 		return 0
 	}
-	kind := strings.TrimSpace(jsString(p["agent_type"]))
+	kind := rename.AgentNow(strings.TrimSpace(jsString(p["agent_type"])))
 	if p["hook_event_name"] == "SubagentStop" && slices.Contains(writers, kind) &&
 		p["stop_hook_active"] != true && !ReturnShaped(jsString(p["last_assistant_message"])) {
 		fmt.Fprint(io.Out, marshal(map[string]string{"systemMessage": "note (not a refusal; the writer stopped): the " + kind +

@@ -73,8 +73,8 @@ type Risk struct {
 	Tier    Level    `json:"tier"`
 	Base    string   `json:"base"`
 	Reasons []Reason `json:"reasons"`
-	// Lenses are the 4R lenses the diff calls for (lensesOf).
-	Lenses []string `json:"-"`
+	// Facets are the Prism facets the diff calls for (facetsOf).
+	Facets []string `json:"-"`
 }
 
 // A Changed file is its path, relative to the git top level, and the lines
@@ -434,7 +434,7 @@ func (g gitReads) riskOf(dir string, asked *string) (Risk, error) {
 			base = *asked
 		}
 		reasons := []Reason{{High, "", "the diff cannot be read: " + why}}
-		return Risk{Tier: High, Base: base, Reasons: reasons, Lenses: lensesOf(nil, reasons)}
+		return Risk{Tier: High, Base: base, Reasons: reasons, Facets: facetsOf(nil, reasons)}
 	}
 	top, _ := g.git(dir, "rev-parse", "--show-toplevel")
 	if top = js.Trim(top); top == "" {
@@ -459,5 +459,5 @@ func (g gitReads) riskOf(dir string, asked *string) (Risk, error) {
 		}
 		reasons = classify(changed, rules, func(c Changed) ([]byte, bool) { return readWhole(top, c.File) })
 	}
-	return Risk{Tier: tierOf(reasons), Base: label, Reasons: reasons, Lenses: lensesOf(changed, reasons)}, nil
+	return Risk{Tier: tierOf(reasons), Base: label, Reasons: reasons, Facets: facetsOf(changed, reasons)}, nil
 }

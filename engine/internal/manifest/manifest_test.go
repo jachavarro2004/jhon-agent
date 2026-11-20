@@ -28,7 +28,7 @@ agents:
   - name: review-b
     note: x
     tier: strong
-    template: review-lens
+    template: prism-facet
   - name: untiered
 runtimes: [claude-code, other, pi] # three
 `

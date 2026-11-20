@@ -278,7 +278,7 @@ func TestModeRouteGuardFromASessionWorktree(t *testing.T) {
 	support.Git(t, r.p, "worktree", "add", "-q", wt, "-b", "feature")
 	call := func() support.Result {
 		return hook(t, r.env, "route-guard", nil, map[string]any{"tool_name": "Agent", "cwd": wt, "permission_mode": "default",
-			"tool_input": map[string]any{"subagent_type": "review-risk", "prompt": "x"}})
+			"tool_input": map[string]any{"subagent_type": "prism-safety", "prompt": "x"}})
 	}
 	res := call()
 	code(t, res, 0, "normal")

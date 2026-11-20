@@ -1,5 +1,5 @@
 /**
- * pi's guard spawn and the explore write scope (T123, L773): judge() runs
+ * pi's guard spawn and the jhon-scout write scope (T123, L773): judge() runs
  * `jhon hook pre-tool` with the child's environment, so vcs-guard reads the
  * agent from JHON_PI_AGENT (set by childEnv, shell/lib/agents.ts), and pi's
  * payload names no agent_type.
@@ -59,13 +59,13 @@ test("the guard spawn inherits JHON_PI_AGENT and the payload names no agent_type
   assert.equal(payload.agent_id, "pi-child");
 });
 
-// T153 (L957): explore's write beyond its record runs with a note (refused before).
-test("an explore child's write outside its record runs with a note through the real binary", async () => {
+// T153 (L957): jhon-scout's write beyond its record runs with a note (refused before).
+test("a jhon-scout child's write outside its record runs with a note through the real binary", async () => {
   const dir = repo("real");
   const ctx: CallContext = { config: configOf(HOOK_BIN), cwd: dir, child: true, interactive: false };
   const tasks = { path: join(dir, "openspec/changes/c/tasks.md"), content: "x" };
   assert.equal(await asExplore(() => judge("write", tasks, ctx)), null);
-  assert.match(await formatEdited(ctx.config, "write", tasks, dir) ?? "", /^note \(not a refusal; the call ran\): explore writes only its change's exploration\.md or research\.md/);
+  assert.match(await formatEdited(ctx.config, "write", tasks, dir) ?? "", /^note \(not a refusal; the call ran\): jhon-scout writes only its change's exploration\.md or research\.md/);
   const record = { path: join(dir, "openspec/changes/c/exploration.md"), content: "x" };
   assert.equal(await asExplore(() => judge("write", record, ctx)), null);
   assert.equal(await formatEdited(ctx.config, "write", record, dir), undefined);

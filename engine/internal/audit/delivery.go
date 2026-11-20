@@ -978,12 +978,12 @@ func liveGrant(grants []grant, classes []string, at, cwd string) *grant {
 }
 
 // verifiedBefore is whether a change was independently verified by `at`: a
-// verify agent of it had finished, or its passing verify report was
+// jhon-checker agent of it had finished, or its passing verify report was
 // written.
 func verifiedBefore(s *Session, change, at string) bool {
 	t := dateParse(at)
 	for _, a := range s.Subagents {
-		if a.AgentType != "verify" || a.change != change || len(a.Entries) == 0 {
+		if a.AgentType != "jhon-checker" || a.change != change || len(a.Entries) == 0 {
 			continue
 		}
 		if end := a.Entries[len(a.Entries)-1].Timestamp; end != "" && dateParse(end) <= t {
@@ -1274,7 +1274,7 @@ func checkDeliveredUntested(s *Session, seen evidence, emit emitFunc, notes *[]s
 					}
 				}
 				if why == nil && risk != nil && risk.tier == "high" && !slices.ContainsFunc(ready, func(c readyCheck) bool { return c.risked }) && !verifiedBefore(s, change, d.e.Timestamp) {
-					set("delivery/high-risk-verified", "suspect", fmt.Sprintf("%s %s delivers %s (%s) after jhon risk read it as high (%s), with no independent verification before it: no verify agent ran for it, and no verify-report.md stating verdict: pass was written",
+					set("delivery/high-risk-verified", "suspect", fmt.Sprintf("%s %s delivers %s (%s) after jhon risk read it as high (%s), with no independent verification before it: no jhon-checker agent ran for it, and no verify-report.md stating verdict: pass was written",
 						t.AgentType, t.Agent, change, kind, risk.source))
 				}
 				if why == nil {
