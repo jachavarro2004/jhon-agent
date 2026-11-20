@@ -4,7 +4,7 @@
  *
  * - a context budget notice once per crossing at min(shell.behaviour.child_backstop_tokens
  *   (80000; 0 off), 40% of the window): wrap up, return path:line evidence;
- * - for an explore or worker child with CodeGraph, one read-budget reminder
+ * - for a jhon-scout or jhon-builder child with CodeGraph, one read-budget reminder
  *   past 12 lookups or 100,000 bytes without a CodeGraph call.
  *
  * T155 (L1377, L1394): no context cap. A child's tool calls are never refused
@@ -88,8 +88,8 @@ function usage(contextWindow: number) {
 
 const result = (toolName = "read", text = "a\n", input: Record<string, unknown> = { path: "a.txt" }) => ({ toolName, input, content: [{ type: "text", text }], isError: false });
 const appended = (r: any): string[] => (r?.content ?? []).slice(1).map((c: any) => c.text);
-const CHILD = { JHON_PI_CHILD: "1", JHON_PI_AGENT: "worker" };
-const EXPLORE = { JHON_PI_CHILD: "1", JHON_PI_AGENT: "explore", JHON_PI_TOOLS: "read,grep,find,ls,mcp__codegraph__codegraph_explore" };
+const CHILD = { JHON_PI_CHILD: "1", JHON_PI_AGENT: "jhon-builder" };
+const EXPLORE = { JHON_PI_CHILD: "1", JHON_PI_AGENT: "jhon-scout", JHON_PI_TOOLS: "read,grep,find,ls,mcp__codegraph__codegraph_explore" };
 
 function clock(t: TestContext) {
   t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
@@ -171,7 +171,7 @@ test("an old child_cap_tokens in the settings changes nothing", async (t) => {
   assert.equal(await fire("tool_call", { toolName: "read", input: { path: "a.txt" } }, ctx), undefined);
 });
 
-test("an explore child with CodeGraph hears the read budget once past 12 lookups without a CodeGraph call", async (t) => {
+test("a jhon-scout child with CodeGraph hears the read budget once past 12 lookups without a CodeGraph call", async (t) => {
   clock(t);
   const { fire } = load(EXPLORE);
   const { ctx } = usage(1_000_000);
@@ -182,7 +182,7 @@ test("an explore child with CodeGraph hears the read budget once past 12 lookups
   for (let i = 0; i < 20; i++) assert.deepEqual(await read(), [], "once per child");
 });
 
-test("a CodeGraph call restarts the explore read count; bytes count too", async (t) => {
+test("a CodeGraph call restarts the scout read count; bytes count too", async (t) => {
   clock(t);
   const { fire } = load(EXPLORE);
   const { ctx } = usage(1_000_000);
@@ -194,13 +194,13 @@ test("a CodeGraph call restarts the explore read count; bytes count too", async 
   assert.deepEqual(await read("read", big), [readBudgetNotice(11, 100_011)]);
 });
 
-// T125 (L783 F5): worker children read code through bash (cat, sed -n, grep) and never called CodeGraph.
-const WORKER = { JHON_PI_CHILD: "1", JHON_PI_AGENT: "worker", JHON_PI_TOOLS: "read,grep,find,ls,edit,write,bash,mcp__codegraph__codegraph_explore" };
+// T125 (L783 F5): builder children read code through bash (cat, sed -n, grep) and never called CodeGraph.
+const WORKER = { JHON_PI_CHILD: "1", JHON_PI_AGENT: "jhon-builder", JHON_PI_TOOLS: "read,grep,find,ls,edit,write,bash,mcp__codegraph__codegraph_explore" };
 const bash = (command: string, text = "x") => result("bash", text, { command });
 
-test("a worker child with CodeGraph hears the worker read budget once past 12 lookups, read-only bash included", async (t) => {
+test("a jhon-builder child with CodeGraph hears the builder read budget once past 12 lookups, read-only bash included", async (t) => {
   clock(t);
-  for (const agent of ["worker", "gentle-ai-worker"]) {
+  for (const agent of ["jhon-builder", "gentle-ai-worker"]) {
     const { fire } = load({ ...WORKER, JHON_PI_AGENT: agent });
     const { ctx } = usage(1_000_000);
     const heard = async (event: any) => appended(await fire("tool_result", event, ctx)).filter((n) => n.startsWith("Read budget"));
@@ -217,7 +217,7 @@ test("a worker child with CodeGraph hears the worker read budget once past 12 lo
 });
 
 // T134 (L1021 H3): the reads real children make open with `cd <dir> &&`; they count, so the reminder fires.
-test("a worker's reads that open with `cd <dir> &&` count toward the read budget; `cd x && rm f` does not", async (t) => {
+test("a jhon-builder's reads that open with `cd <dir> &&` count toward the read budget; `cd x && rm f` does not", async (t) => {
   clock(t);
   const { fire } = load(WORKER);
   const { ctx } = usage(1_000_000);
@@ -227,7 +227,7 @@ test("a worker's reads that open with `cd <dir> &&` count toward the read budget
   assert.deepEqual(await heard(bash("cd /repo && cat a.ts")), [workerReadBudgetNotice(13, 13)]);
 });
 
-test("a bash call that writes or runs is no worker lookup; bash read bytes count", async (t) => {
+test("a bash call that writes or runs is no builder lookup; bash read bytes count", async (t) => {
   clock(t);
   const { fire } = load(WORKER);
   const { ctx } = usage(1_000_000);
@@ -238,7 +238,7 @@ test("a bash call that writes or runs is no worker lookup; bash read bytes count
   assert.deepEqual(await heard(bash("cat big.ts", "z".repeat(100_001))), [workerReadBudgetNotice(1, 100_001)]);
 });
 
-test("an explore child counts read-only bash too and keeps its own notice", async (t) => {
+test("a jhon-scout child counts read-only bash too and keeps its own notice", async (t) => {
   clock(t);
   const { fire } = load(EXPLORE);
   const { ctx } = usage(1_000_000);
@@ -247,7 +247,7 @@ test("an explore child counts read-only bash too and keeps its own notice", asyn
   assert.deepEqual(await heard(bash("cat a.ts")), [readBudgetNotice(13, 13)]);
 });
 
-test("a CodeGraph call re-arms a worker's count", async (t) => {
+test("a CodeGraph call re-arms a jhon-builder's count", async (t) => {
   clock(t);
   const { fire } = load(WORKER);
   const { ctx } = usage(1_000_000);
@@ -258,9 +258,9 @@ test("a CodeGraph call re-arms a worker's count", async (t) => {
   assert.deepEqual(await heard(bash("cat a.ts")), [workerReadBudgetNotice(13, 13)]);
 });
 
-test("a worker without CodeGraph, other agents, and the main session never hear the read budget from bash reads", async (t) => {
+test("a jhon-builder without CodeGraph, other agents, and the main session never hear the read budget from bash reads", async (t) => {
   clock(t);
-  for (const env of [{ ...WORKER, JHON_PI_TOOLS: "read,bash" }, { ...WORKER, JHON_PI_AGENT: "review-risk" }, {}]) {
+  for (const env of [{ ...WORKER, JHON_PI_TOOLS: "read,bash" }, { ...WORKER, JHON_PI_AGENT: "prism-safety" }, {}]) {
     const { fire } = load(env);
     const { ctx } = usage(1_000_000);
     for (let i = 0; i < 20; i++) {
@@ -270,9 +270,9 @@ test("a worker without CodeGraph, other agents, and the main session never hear 
   }
 });
 
-test("a worker child, an explore without CodeGraph, and the main session never hear the read budget", async (t) => {
+test("a jhon-builder child, a jhon-scout without CodeGraph, and the main session never hear the read budget", async (t) => {
   clock(t);
-  for (const env of [CHILD, { JHON_PI_CHILD: "1", JHON_PI_AGENT: "explore", JHON_PI_TOOLS: "read,grep" }, {}]) {
+  for (const env of [CHILD, { JHON_PI_CHILD: "1", JHON_PI_AGENT: "jhon-scout", JHON_PI_TOOLS: "read,grep" }, {}]) {
     const { fire } = load(env);
     const { ctx } = usage(1_000_000);
     for (let i = 0; i < 20; i++) {
@@ -351,7 +351,7 @@ async function recorded(t: TestContext, bin: string, run: () => Promise<ChildRes
 }
 const event = (outcome: string, severity: string, turns: number) => ({ name: "jhon.subagent", severity, "gen_ai.agent.name": "explore", "jhon.outcome": outcome, "jhon.duration_ms": undefined, "jhon.turns": turns });
 
-test("a worker past 80 turns keeps running and ends as completed, whatever turn cap its agent file still names", async (t) => {
+test("a jhon-builder past 80 turns keeps running and ends as completed, whatever turn cap its agent file still names", async (t) => {
   for (const line of ["", "maxTurns: 80\n", "maxTurns: 2\n"]) {
     const agent = parseAgent(`---\nname: explore\nmodel: m/x\n${line}tools:\n  - read\n---\nbody`, "explore");
     const { result, events } = await recorded(t, fakeTurnsPi(85), () => runAgent(agent, "look", tempDir("jhon-childbudget-run-"), { onEvent: () => {} }));

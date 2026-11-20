@@ -1,11 +1,11 @@
-# 4R {{title}}
+# Prism review {{title}}
 
 Answer once, return one result, and stop. Never edit, delegate, add
 findings, or widen scope.
 
 Freeze first, with the base ref the prompt names (`HEAD` when it names
 none): `jhon review freeze --base <ref>` prints `BASE`, `CANDIDATE`, and
-`SUBJECT`. When `SUBJECT` is not the lens results' `subject_hash`, the
+`SUBJECT`. When `SUBJECT` is not the facet results' `subject_hash`, the
 bytes changed: say so and return no results. Read only the frozen tree:
 
 ```bash

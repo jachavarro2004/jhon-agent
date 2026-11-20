@@ -34,7 +34,7 @@ with: `git switch -c <name>`, then `jhon executions run` (T146g).
 | `notes[]` | string | notes, never refusals |
 | `strict_tdd` | object | `value` (bool), `source`, `evidence`, `reason`, `notes[]` |
 | `tests` | object, null | the last recorded run of the change's tests; `red_before_green` (bool): it passed after an earlier run of the change failed, its RED before its GREEN; `light_verify` (object, null, last): the newest light verify note (see the execution record) |
-| `route` | object, null | `level` (standard or verified), `tier`, `lines`, `reasons[]`, `lenses[]`, `slice`; null when the route cannot be read |
+| `route` | object, null | `level` (standard or verified), `tier`, `lines`, `reasons[]`, `facets[]`, `slice`; null when the route cannot be read |
 | `mode` | string | the owner's permission mode for the project (`jhon mode`): `normal`, `yolo`, or `super-yolo`; always `normal` in a folder that is no git repository, which is no project |
 | `needs` | object, null | only for a selected change, after `mode`: what its record needs, `tasks`, `spec`, `proposal`, `design` (bool), and `why` with each one's reasons (`[]` when not needed); null without a route |
 | `folder` | bool | only for a selected change, the last key but `worktree_per_change`: false for a change with no folder, the one its branch names |

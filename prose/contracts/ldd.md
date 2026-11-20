@@ -71,7 +71,7 @@ openspec/
 ├── specs/<domain>/spec.md             main specs, the source of truth
 └── changes/
     ├── <change>/
-    │   ├── exploration.md             explore
+    │   ├── exploration.md             scout
     │   ├── research.md                research
     │   ├── proposal.md                propose
     │   ├── specs/<domain>/spec.md     spec (delta specs)
@@ -148,10 +148,10 @@ agent may run on any change.
 
 | Step | Runs in |
 |---|---|
-| explore, research | the `explore` agent, or inline |
+| explore, research | the `jhon-scout` agent, or inline |
 | init, propose, spec, design, tasks, archive | the orchestrator, inline, with the step's reference in `skills/ldd/references/` |
-| apply | the `worker` agent, or inline for a small task |
-| verify | the `verify` agent: an independent verifier, never the writer |
+| apply | the `jhon-builder` agent, or inline for a small task |
+| verify | the `jhon-checker` agent: independent, never the writer |
 
 A delegated step carries the output of `jhon context <change> --phase
 <phase>` in its prompt, in a fenced `jhon-context` block, so the audit
@@ -238,7 +238,7 @@ whole change:
    PR without its RED before GREEN. The route (`jhon status`,
    `ldd/route.go`) sets only the rigor, re-read on each slice's diff; it
    only rises: `verified` at the verified tier (`high`,
-   `route_verified_tier`) or when `review_required` names `verify`,
+   `route_verified_tier`) or when `review_required` names `checker`,
    `standard` under it, whatever its size. What each tier verifies, asks and
    reviews is the one table, `contracts/delivery.md`'s; `review_required`
    (see "Delivery") always wins over it.
@@ -294,7 +294,7 @@ counts it (`ByHand`).
 ### Light verify
 
 When a slice of a change that alters behaviour closes on the standard
-route, the `verify` agent verifies it lightly: it reads the slice's diff
+route, the `jhon-checker` agent verifies it lightly: it reads the slice's diff
 and its tests, runs the focused tests, and records its verdict with
 `jhon executions verify <change> --verdict pass|fail [--note <text>]`.
 `jhon status` notes when one is due; a PR with no passing one of the
@@ -330,33 +330,33 @@ reports a high-risk delivery made without one. The tier only rises: a ready
 check records it in `delivery.json`, and a later slice whose own diff reads
 lower is checked at the highest tier the change delivered.
 
-On a change whose risk reaches the verified tier, 4R is due too: the route
-guard opens its PR only once the change carries `review-4r.md` naming the
-lenses it ran (`lenses: risk, reliability`, at least one of `risk`,
-`resilience`, `reliability`, `readability`) and stating `verdict: pass`
-(`contracts/review-4r.md`). `jhon status`
+On a change whose risk reaches the verified tier, Prism review is due too: the route
+guard opens its PR only once the change carries `review-prism.md` naming the
+facets it ran (`facets: safety, behavior`, at least one of `safety`,
+`failure`, `behavior`, `clarity`) and stating `verdict: pass`
+(`contracts/review-prism.md`). `jhon status`
 reports each review the change owes (`route.reviews`), due or done.
 
 `review_required` in `openspec/config.yaml` names the reviews a change or an
 area needs whatever its route: each entry has a `change` (its name) or an
 `area` (a path glob, `**` across directories, matching a path the change's
-diff touches or a directory holding it), and its `review`: `verify`, `4r`,
+diff touches or a directory holding it), and its `review`: `checker`, `prism`,
 or a list of them.
 
 ```yaml
 review_required:
   - change: billing-rewrite
-    review: verify
+    review: checker
   - area: "src/payments/**"
-    review: [verify, 4r]
+    review: [checker, prism]
 ```
 
 It always wins: `jhon status` reports the reviews that apply to the
 selected change and which are missing, the route guard refuses the PR until
 each is on record, and a
-reviewer it names runs without asking the owner, who configured it. The 4R
-correction is a `worker` with its `## Allowed edit surfaces`, and `verify`
-confirms it, so `verify` runs whenever 4R is due (`contracts/review-4r.md`,
+reviewer it names runs without asking the owner, who configured it. The Prism review
+correction is a `jhon-builder` with its `## Allowed edit surfaces`, and `jhon-checker`
+confirms it, so it runs whenever Prism review is due (`contracts/review-prism.md`,
 "Reduction").
 
 An entry jhon cannot read is never ignored: it shows in `jhon status`
@@ -377,8 +377,8 @@ archived afterwards; how its commit is delivered is the owner's call.
 
 ## Every step
 
-What every step shares, run inline or by the `explore`, `worker`, or
-`verify` agent.
+What every step shares, run inline or by the `jhon-scout`, `jhon-builder`, or
+`jhon-checker` agent.
 
 ### Artifacts
 

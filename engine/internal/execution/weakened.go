@@ -17,7 +17,7 @@ import (
 // between the two runs its own test file changed and no other file of its
 // project did, may have been made green by weakening it instead of fixing
 // the code. Nothing refuses it (a test change can be right); the record
-// marks it, and verify and the 4R lenses are launched with it to judge.
+// marks it, and verify and the Prism facets are launched with it to judge.
 //
 //   - The runs: each history entry keeps the tree it tested and, for each
 //     project whose test command it ran (not reused), the tests its output

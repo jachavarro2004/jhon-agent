@@ -67,9 +67,9 @@ func TestLDDProseIsProportionalAndBinding(t *testing.T) {
 			"## Slice 2: {name} Delivers: {CA-03} ```"},
 		"skills/ldd/references/apply.md":   {"`jhon executions run {change-name} --affected <base-ref>` while it fails (RED)"},
 		"skills/ldd/references/archive.md": {"Archive only a change with a folder and its RED before GREEN on record"},
-		"agents/worker.md":                 {"`jhon executions run <change> --affected <base>` while it fails (RED)"},
-		// T76: the explore reports the standing decisions on what it covers.
-		"agents/explore.md": {"for prior decisions on each entity you cover, and report each by id"},
+		"agents/jhon-builder.md":           {"`jhon executions run <change> --affected <base>` while it fails (RED)"},
+		// T76: jhon-scout reports the standing decisions on what it covers.
+		"agents/jhon-scout.md": {"for prior decisions on each entity you cover, and report each by id"},
 	}
 	// Each sentence that made every change carry tasks.md, a spec, a
 	// proposal, or an archive.
@@ -95,7 +95,7 @@ func TestLDDProseIsProportionalAndBinding(t *testing.T) {
 	}
 	for _, file := range []string{"contracts/ldd.md", "contracts/tdd.md", "contracts/routing.md", "orchestrator.md",
 		"skills/ldd/SKILL.md", "skills/ldd/references/tasks.md", "skills/ldd/references/apply.md",
-		"skills/ldd/references/archive.md", "skills/ldd/references/propose.md", "agents/worker.md"} {
+		"skills/ldd/references/archive.md", "skills/ldd/references/propose.md", "agents/jhon-builder.md"} {
 		body := read(file)
 		for _, s := range stale {
 			if strings.Contains(body, s) {

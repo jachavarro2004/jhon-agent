@@ -2,6 +2,7 @@ package hook
 
 import (
 	"bytes"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"io"
 	"strings"
 	"time"
@@ -50,7 +51,7 @@ func Recorded(name string, args []string, h Handler, x IO, rec Recorder) int {
 			attrs[key] = v
 		}
 	}
-	agent := strings.TrimSpace(p.Str("agent_type"))
+	agent := rename.AgentNow(strings.TrimSpace(p.Str("agent_type")))
 	if agent == "" {
 		agent = "main"
 	}

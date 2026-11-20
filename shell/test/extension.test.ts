@@ -589,7 +589,7 @@ test("the orchestrator's tool list is decided once and stays identical across re
   assert.deepEqual(k.set, [ALL.filter((n) => n !== "mcp__codegraph__codegraph_explore")]);
 });
 
-// T118c: the native 4R is the main session's; a child (a lens agent among them) has none.
+// T118c: the native Prism review is the main session's; a child (a facet agent among them) has none.
 test("jhon_review is registered in the main session only, with a small schema", async () => {
   const dir = agentDir();
   const review = loadedTools(dir, toolsApi(ALL).api).tools.get("jhon_review");
@@ -630,9 +630,9 @@ test("tools_more lists the deferred tools and enables a named one for the rest o
 
 // T133e (L1016): mcp.json mounts context7 `direct`, the only exposure a child's
 // --tools can name, and pi declares a direct tool to the main session too. The
-// tools are explore's and worker's: the orchestrator never declares them and
+// tools are jhon-scout's and jhon-builder's: the orchestrator never declares them and
 // tools_more neither lists nor enables them; a child keeps its --tools list.
-test("context7's tools stay out of the main session and of tools_more; an explore or worker child keeps them", async () => {
+test("context7's tools stay out of the main session and of tools_more; a jhon-scout or jhon-builder child keeps them", async () => {
   const dir = agentDir(), cwd = project();
   const C7 = ["mcp__context7__resolve_library_id", "mcp__context7__query_docs"];
   const mounted = [...ALL, ...C7];
@@ -659,7 +659,7 @@ test("context7's tools stay out of the main session and of tools_more; an explor
   await resumed.get("context")!({ messages: [] }, { cwd });
   assert.deepEqual(r.active(), KEPT);
   // A child's --tools list stands: only codegraph without an index leaves it.
-  for (const agent of ["explore", "worker"]) {
+  for (const agent of ["jhon-scout", "jhon-builder"]) {
     const k = toolsApi(mounted);
     await loadedTools(dir, { ...k.api, getAllTools: all }, { JHON_PI_CHILD: "1", JHON_PI_AGENT: agent }).handlers.get("context")!({ messages: [] }, { cwd });
     assert.deepEqual(k.active(), mounted.filter((n) => n !== "mcp__codegraph__codegraph_explore"), agent);
@@ -1991,7 +1991,7 @@ test("changeRoot reads each folder's status once and hands back the one it found
 test("a guard's note on an allowed call reaches the agent with the call's result, and the call is not blocked", async () => {
   const d = project();
   const dir = agentDir();
-  const note = "route verified (risk high reaches the verified tier (high)): verify is due before delivery; launch the verify agent and record verify-report.md before the PR";
+  const note = "route verified (risk high reaches the verified tier (high)): verify is due before delivery; launch the jhon-checker agent and record verify-report.md before the PR";
   const bin = join(dir, "jhon-fake");
   const out = JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: note } });
   writeFileSync(bin, `#!/bin/sh\nif [ "$1" = contract ]; then printf '%s' '{"shell":"${SHELL_CONTRACT}"}'; exit 0; fi\nif [ "$1" = sandbox ]; then printf '%s' '{"mode":"off","can_run":true,"reason":"","fix":"","project":""}'; exit 0; fi\nif [ "$2" = pre-tool ]; then printf '%s' '${out}'; fi\nexit 0\n`);
@@ -2046,7 +2046,7 @@ test("a code edit with no LDD change selected gets one reminder, never a block, 
 // T115f follow-up (L709): a child starts with --no-skills; the subagent tool
 // passes the skills its agent's definition names (a `skills/<name>/` path of a
 // skill this session resolved) and the exact SKILL.md paths the call adds.
-test("a worker child's argv carries --skill for the skills its definition names and the ones the call passes", async () => {
+test("a jhon-builder child's argv carries --skill for the skills its definition names and the ones the call passes", async () => {
   const dir = agentDir(), cwd = project();
   const skillsRoot = tempDir("jhon-pi-skills-");
   const skill = (name: string) => { mkdirSync(join(skillsRoot, name), { recursive: true }); const f = join(skillsRoot, name, "SKILL.md"); writeFileSync(f, `---\nname: ${name}\n---\n`); return f; };

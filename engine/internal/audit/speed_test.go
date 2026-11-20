@@ -60,7 +60,7 @@ func TestCapRefusedIsTheCapRegex(t *testing.T) {
 	results, commands := fixtureTexts(t)
 	cases := append(results,
 		"you have spent your 40 turns", "You have spent your 40 turns", "you have spent your turns",
-		"turn-guard: worker has spent 41 turns, past its cap", "turn-guard: a\nb has spent 41 turns, past its cap",
+		"turn-guard: jhon-builder has spent 41 turns, past its cap", "turn-guard: a\nb has spent 41 turns, past its cap",
 		"x turn-guard: y turn-guard: z has spent 3 turns, past its cap", "turn-guard: has spent 3 turns",
 		"reached maxTurns", "Reached maxTurns", "reached maxturns", "", strings.Repeat("turn-guard: ", 200))
 	for _, c := range commands {

@@ -25,15 +25,15 @@ function fixture(): ProfilesData {
 		profiles: [
 			{ name: "current", provider: "claude-bridge", delegation: "inline", agents: [
 				row("jhon-orchestrator", "claude-bridge/claude-opus-5-5@high"),
-				row("review-refuter", "claude-bridge/claude-opus-5-5@low"),
+				row("prism-challenger", "claude-bridge/claude-opus-5-5@low"),
 				row("gentle-ai-worker", "claude-bridge/claude-opus-5-5@low"),
 				{ agent: "gentle-ai-worker", runtime: "claude-code", model: "claude-opus-5-5@medium", source: "agents.yaml" },
 			] },
 			{ name: "default", provider: "claude-bridge", delegation: "inline", agents: [
-				yaml("jhon-orchestrator", "claude-bridge/claude-opus-5-5@medium"), yaml("review-refuter", "claude-bridge/claude-opus-5-5@medium"),
+				yaml("jhon-orchestrator", "claude-bridge/claude-opus-5-5@medium"), yaml("prism-challenger", "claude-bridge/claude-opus-5-5@medium"),
 			] },
 			{ name: "fast", provider: "deepseek", delegation: "writer", agents: [
-				row("jhon-orchestrator", "deepseek/deepseek-v4@high"), row("review-refuter", "glm/glm-5@low"),
+				row("jhon-orchestrator", "deepseek/deepseek-v4@high"), row("prism-challenger", "glm/glm-5@low"),
 			] },
 		],
 	};
@@ -100,10 +100,10 @@ test("the Orchestrator row first with model, effort and mode word; then Agent/Mo
 	await flush();
 	const t = text();
 	assert.match(t, /\n▸ Orchestrator {2,}claude-bridge\/claude-opus-5-5 {2,}high {2}⊙ inline\n/);
-	assert.match(t, /\n {2}Agent {2,}Model ▾ {2,}Effort ▾\n {2}review-refuter {2,}claude-bridge\/claude-opus-5-5 {2,}low\n {2}gentle-ai-worker {2,}claude-bridge\/claude-opus-5-5 {2,}low\n/);
+	assert.match(t, /\n {2}Agent {2,}Model ▾ {2,}Effort ▾\n {2}prism-challenger {2,}claude-bridge\/claude-opus-5-5 {2,}low\n {2}gentle-ai-worker {2,}claude-bridge\/claude-opus-5-5 {2,}low\n/);
 	assert.doesNotMatch(t, /jhon-orchestrator|claude-opus-5-5 · medium|set every agent|fallbacks|tier/);
 	await keys(c, DOWN);
-	assert.match(text(), /\n {2}Orchestrator .*\n[\s\S]*\n▸ review-refuter /, "↓ moves to the agents");
+	assert.match(text(), /\n {2}Orchestrator .*\n[\s\S]*\n▸ prism-challenger /, "↓ moves to the agents");
 });
 
 async function keys(c: ProfilesCard, ...ks: string[]) { for (const k of ks) { c.handleInput(k); await flush(); } }
@@ -137,9 +137,9 @@ test("w toggles the draft's mode without calling deps; s saves it: deps.mode and
 	assert.match(text().split("\n")[0]!, /current ⇄★/, "the tab shows the draft's mode");
 	await keys(c, DOWN, "e", "\x1b[A", ENTER);
 	assert.deepEqual(calls, [], "an effort edit changes the draft only");
-	assert.match(text(), /▸ review-refuter {2,}claude-bridge\/claude-opus-5-5 {2,}minimal/);
+	assert.match(text(), /▸ prism-challenger {2,}claude-bridge\/claude-opus-5-5 {2,}minimal/);
 	await keys(c, "s");
-	assert.deepEqual(calls, ["mode current writer", "set current review-refuter pi claude-bridge/claude-opus-5-5@minimal"]);
+	assert.deepEqual(calls, ["mode current writer", "set current prism-challenger pi claude-bridge/claude-opus-5-5@minimal"]);
 	assert.match(text(), /Saved$/m);
 	await keys(c, "s");
 	assert.equal(calls.length, 2, "a clean draft saves nothing");

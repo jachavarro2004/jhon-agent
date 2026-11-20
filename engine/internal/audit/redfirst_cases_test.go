@@ -21,7 +21,7 @@ const (
 
 func ccCase(t *testing.T, calls ...tcall) []Finding {
 	t.Helper()
-	return findingsOf(t, "edit-before-red", user("go"), delegate("d01", "worker", acme, calls...))
+	return findingsOf(t, "edit-before-red", user("go"), delegate("d01", "jhon-builder", acme, calls...))
 }
 
 func piCase(t *testing.T, calls ...pcall) []Finding {

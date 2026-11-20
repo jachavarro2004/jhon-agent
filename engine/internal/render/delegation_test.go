@@ -18,7 +18,7 @@ func TestWriterModeRulesReplaceAMarkedRegion(t *testing.T) {
 	}
 	begin, end := strings.Index(prompt, delegationBegin), strings.Index(prompt, delegationEnd)
 	organic := prompt[begin : end+len(delegationEnd)]
-	for _, w := range []string{"Work directly:", "**Parallel work.**", "A fix needed after a worker returns goes to a worker"} {
+	for _, w := range []string{"Work directly:", "**Parallel work.**", "A fix needed after a builder returns goes to a builder"} {
 		if !strings.Contains(organic, w) {
 			t.Errorf("the organic region lacks %q", w)
 		}
@@ -33,9 +33,9 @@ func TestWriterModeRulesReplaceAMarkedRegion(t *testing.T) {
 	}
 	flat := flatText(writer)
 	for _, w := range []string{
-		"Edit inline only a change of at most ~20 lines, cheaper than starting a worker.",
+		"Edit inline only a change of at most ~20 lines, cheaper than starting a builder.",
 		"a self-contained brief: the spec lines, the exact files and line ranges, the decisions already taken, and how to verify, so it finishes in as few turns and attempts as possible.",
-		"A fix after a worker returns: continue it with `subagent_continue`",
+		"A fix after a builder returns: continue it with `subagent_continue`",
 		"Never edit files a running sub-agent is working on.",
 		"Units with disjoint files launch together in one message;",
 		"The plan doc, the Log and `odd/**` stay yours.",

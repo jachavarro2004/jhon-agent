@@ -501,7 +501,7 @@ func TestAudit(t *testing.T) {
 			delegation{id: "e01", typ: "worker", change: x, prompt: "Fix `src/a.ts`.",
 				calls: []call{{name: "Write", input: map[string]any{"file_path": root + "/src/a.ts", "content": "x"}}}, result: shaped})
 		equal(t, get(parse(t, audit(t, []string{main, "--json"}).Stdout), "efficiency", "writers", 0, "agent"), any("e01"))
-		match(t, audit(t, []string{main}).Stdout, `(?m)^  efficiency  e01 \(worker\)  change add-response-timing  return ok  outside scope 0  dependencies 0  same failure max 0  active 3s  files 1$`)
+		match(t, audit(t, []string{main}).Stdout, `(?m)^  efficiency  e01 \(jhon-builder\)  change add-response-timing  return ok  outside scope 0  dependencies 0  same failure max 0  active 3s  files 1$`)
 	})
 
 	// ── context-use ─────────────────────────────────────────────────────────
@@ -541,7 +541,7 @@ func TestAudit(t *testing.T) {
 		equal(t, wide.Code, plain.Code)
 		equal(t, lastLine(wide.Stdout), lastLine(plain.Stdout))
 		match(t, wide.Stdout, `(?m)^ {2}context-use {2}measurement only; never a finding$`)
-		match(t, wide.Stdout, `(?m)^ {4}agent {2}cu01 \(worker\) {2}phase apply {2}change add-response-timing {2}turns 2 {2}peak 6 {2}processed 6 {2}rereads 0 {2}whole reads over limit 0$`)
+		match(t, wide.Stdout, `(?m)^ {4}agent {2}cu01 \(jhon-builder\) {2}phase apply {2}change add-response-timing {2}turns 2 {2}peak 6 {2}processed 6 {2}rereads 0 {2}whole reads over limit 0$`)
 		match(t, wide.Stdout, `(?m)^ {4}by phase {2}apply {2}agents 1 {2}processed 6 \(100\.0%\) {2}peak max 6 {2}read bytes full 3 ranged 0 shell 0 {2}codegraph 0 {2}engram 0 {2}search 0 {2}other 0$`)
 	})
 

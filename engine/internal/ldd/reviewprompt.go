@@ -13,10 +13,10 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 )
 
-// This file is the native 4R (contracts/review-4r.md): the tool-less
+// This file is the native Prism review (contracts/review-prism.md): the tool-less
 // prompts `jhon review start`, `refute` and `validate` build from one
 // frozen candidate, the shapes of the answers they ask for, and the
-// reduction `jhon review record` writes to review-4r.md.
+// reduction `jhon review record` writes to review-prism.md.
 
 // PromptTokenCap is the estimated size past which a review prompt is
 // refused: the slice is too large for one review.
@@ -25,12 +25,12 @@ const PromptTokenCap = 100000
 // EstTokens is a prompt's estimated token count: its bytes over 3.5.
 func EstTokens(bytes int) int { return int(float64(bytes) / 3.5) }
 
-// ReviewFile is the 4R record's name in a change's directory.
-const ReviewFile = "review-4r.md"
+// ReviewFile is the Prism record's name in a change's directory.
+const ReviewFile = "review-prism.md"
 
 // ReviewExempt are the paths a review's subject leaves out: the change's
 // own records (verify-report.md, the execution record, delivery.json) and
-// its review-4r.md, all written after the review, relative to the git top
+// its review-prism.md, all written after the review, relative to the git top
 // level. Nil when change is "".
 func ReviewExempt(top, change string) map[string]bool {
 	if change == "" {
@@ -38,6 +38,7 @@ func ReviewExempt(top, change string) map[string]bool {
 	}
 	out := execution.ChangeRecordPaths(top, change)
 	out[path.Join(execution.ChangeDirInRepo(top, change), ReviewFile)] = true
+	out[path.Join(execution.ChangeDirInRepo(top, change), legacyReviewFile)] = true
 	return out
 }
 
@@ -94,10 +95,10 @@ func ReasonsBlock(reasons []Reason) string {
 	return strings.Join(lines, "\n")
 }
 
-// Finding is one lens finding (contracts/review-4r.md, "Findings").
+// Finding is one facet finding (contracts/review-prism.md, "Findings").
 type Finding struct {
 	ID                string   `json:"id,omitempty"`
-	Lens              string   `json:"lens,omitempty"`
+	Facet             string   `json:"facet,omitempty"`
 	Location          string   `json:"location"`
 	Severity          string   `json:"severity"`
 	Claim             string   `json:"claim"`
@@ -106,10 +107,10 @@ type Finding struct {
 	ProofRefs         []string `json:"proof_refs"`
 }
 
-// LensResult is one lens's answer.
-type LensResult struct {
+// FacetResult is one facet's answer.
+type FacetResult struct {
 	SubjectHash string `json:"subject_hash"`
-	Lens        string `json:"lens"`
+	Facet       string `json:"facet"`
 	Inspection  struct {
 		Status string   `json:"status"`
 		Paths  []string `json:"paths"`
@@ -119,7 +120,7 @@ type LensResult struct {
 	Evidence []string  `json:"evidence"`
 }
 
-// Verdict is the refuter's or the validator's answer on one finding.
+// Verdict is the challenger's or the arbiter's answer on one finding.
 type Verdict struct {
 	FindingID string   `json:"finding_id"`
 	Outcome   string   `json:"outcome"`
@@ -127,19 +128,19 @@ type Verdict struct {
 	ProofRefs []string `json:"proof_refs,omitempty"`
 }
 
-// RoleResult is the refuter's or the validator's answer.
+// RoleResult is the challenger's or the arbiter's answer.
 type RoleResult struct {
 	SubjectHash string    `json:"subject_hash"`
 	Role        string    `json:"role"`
 	Results     []Verdict `json:"results"`
 }
 
-// ReviewResults is what `jhon review validate` and `record` read: the lens
-// results and the refuter's (and, for record, the validator's) answers.
+// ReviewResults is what `jhon review validate` and `record` read: the facet
+// results and the challenger's (and, for record, the arbiter's) answers.
 type ReviewResults struct {
-	Lenses    []LensResult `json:"lenses"`
-	Refuter   *RoleResult  `json:"refuter"`
-	Validator *RoleResult  `json:"validator"`
+	Facets     []FacetResult `json:"facets"`
+	Challenger *RoleResult   `json:"challenger"`
+	Arbiter    *RoleResult   `json:"arbiter"`
 }
 
 var (
@@ -154,54 +155,54 @@ func severeFinding(f Finding) bool { return f.Severity == "BLOCKER" || f.Severit
 // sameSubject is whether hash names subject, bare or as sha256:<hex>.
 func sameSubject(hash, subject string) bool { return strings.TrimPrefix(hash, "sha256:") == subject }
 
-// ParseLensResults reads a JSON array of lens results.
-func ParseLensResults(raw []byte) ([]LensResult, error) {
-	var out []LensResult
+// ParseFacetResults reads a JSON array of facet results.
+func ParseFacetResults(raw []byte) ([]FacetResult, error) {
+	var out []FacetResult
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, fmt.Errorf("the lens results are not a JSON array of lens results: %v", err)
+		return nil, fmt.Errorf("the facet results are not a JSON array of facet results: %v", err)
 	}
 	return out, nil
 }
 
-// ParseReviewResults reads {"lenses": [...], "refuter": {...}, "validator": {...}}.
+// ParseReviewResults reads {"facets": [...], "challenger": {...}, "arbiter": {...}}.
 func ParseReviewResults(raw []byte) (ReviewResults, error) {
 	var out ReviewResults
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return out, fmt.Errorf("the results are not a JSON object {lenses, refuter, validator}: %v", err)
+		return out, fmt.Errorf("the results are not a JSON object {facets, challenger, arbiter}: %v", err)
 	}
 	return out, nil
 }
 
-// CheckLenses validates the lens results against subject and gives each
-// finding its id (<lens>-<n>, from 1) and lens; the error names the first
+// CheckFacets validates the facet results against subject and gives each
+// finding its id (<facet>-<n>, from 1) and facet; the error names the first
 // problem.
-func CheckLenses(results []LensResult, subject string) ([]LensResult, error) {
+func CheckFacets(results []FacetResult, subject string) ([]FacetResult, error) {
 	if len(results) == 0 {
-		return nil, errors.New("no lens result")
+		return nil, errors.New("no facet result")
 	}
 	seen := map[string]bool{}
 	out := slices.Clone(results)
 	for i := range out {
 		r := &out[i]
-		where := fmt.Sprintf("lens result %d", i+1)
+		where := fmt.Sprintf("facet result %d", i+1)
 		switch {
-		case !slices.Contains(Lenses, r.Lens):
-			return nil, fmt.Errorf("%s: lens %q is not one of %s", where, r.Lens, strings.Join(Lenses, ", "))
-		case seen[r.Lens]:
-			return nil, fmt.Errorf("%s: lens %s answers twice", where, r.Lens)
+		case !slices.Contains(Facets, r.Facet):
+			return nil, fmt.Errorf("%s: facet %q is not one of %s", where, r.Facet, strings.Join(Facets, ", "))
+		case seen[r.Facet]:
+			return nil, fmt.Errorf("%s: facet %s answers twice", where, r.Facet)
 		case !sameSubject(r.SubjectHash, subject):
-			return nil, fmt.Errorf("%s (%s): subject_hash %q is not the frozen subject %s", where, r.Lens, r.SubjectHash, subject)
+			return nil, fmt.Errorf("%s (%s): subject_hash %q is not the frozen subject %s", where, r.Facet, r.SubjectHash, subject)
 		case r.Inspection.Status != "completed" && r.Inspection.Status != "unavailable":
-			return nil, fmt.Errorf("%s (%s): inspection.status must be completed or unavailable", where, r.Lens)
+			return nil, fmt.Errorf("%s (%s): inspection.status must be completed or unavailable", where, r.Facet)
 		case r.Inspection.Status == "unavailable" && (strings.TrimSpace(r.Inspection.Reason) == "" || len(r.Findings) > 0):
-			return nil, fmt.Errorf("%s (%s): an unavailable inspection carries a reason and no findings", where, r.Lens)
+			return nil, fmt.Errorf("%s (%s): an unavailable inspection carries a reason and no findings", where, r.Facet)
 		case r.Findings == nil:
-			return nil, fmt.Errorf("%s (%s): findings must be an array", where, r.Lens)
+			return nil, fmt.Errorf("%s (%s): findings must be an array", where, r.Facet)
 		}
-		seen[r.Lens] = true
+		seen[r.Facet] = true
 		for n := range r.Findings {
 			f := &r.Findings[n]
-			f.ID, f.Lens = fmt.Sprintf("%s-%d", r.Lens, n+1), r.Lens
+			f.ID, f.Facet = fmt.Sprintf("%s-%d", r.Facet, n+1), r.Facet
 			f.CausalDisposition = strings.ReplaceAll(f.CausalDisposition, "-", "_")
 			switch {
 			case strings.TrimSpace(f.Location) == "" || strings.TrimSpace(f.Claim) == "":
@@ -220,8 +221,8 @@ func CheckLenses(results []LensResult, subject string) ([]LensResult, error) {
 	return out, nil
 }
 
-// AllFindings are the findings of the lens results, in order.
-func AllFindings(results []LensResult) []Finding {
+// AllFindings are the findings of the facet results, in order.
+func AllFindings(results []FacetResult) []Finding {
 	var out []Finding
 	for _, r := range results {
 		out = append(out, r.Findings...)
@@ -229,14 +230,14 @@ func AllFindings(results []LensResult) []Finding {
 	return out
 }
 
-// CheckRole validates a refuter's (outcomes refuted, stands) or a
-// validator's (confirmed, unconfirmed) answer: one verdict, with a reason,
+// CheckRole validates a challenger's (outcomes refuted, stands) or a
+// arbiter's (confirmed, unconfirmed) answer: one verdict, with a reason,
 // for each of ids and no other; a confirmation carries its proof_refs.
 func CheckRole(r *RoleResult, role string, subject string, ids []string) error {
 	if r == nil {
 		return fmt.Errorf("no %s result", role)
 	}
-	outcomes := map[string][]string{"refuter": {"refuted", "stands"}, "validator": {"confirmed", "unconfirmed"}}[role]
+	outcomes := map[string][]string{"challenger": {"refuted", "stands"}, "arbiter": {"confirmed", "unconfirmed"}}[role]
 	switch {
 	case r.Role != "" && r.Role != role:
 		return fmt.Errorf("the %s result names role %q", role, r.Role)
@@ -255,7 +256,7 @@ func CheckRole(r *RoleResult, role string, subject string, ids []string) error {
 		case strings.TrimSpace(v.Reason) == "":
 			return fmt.Errorf("the %s's verdict on %s gives no reason", role, v.FindingID)
 		case v.Outcome == "confirmed" && len(v.ProofRefs) == 0:
-			return fmt.Errorf("the validator confirms %s without proof_refs", v.FindingID)
+			return fmt.Errorf("the arbiter confirms %s without proof_refs", v.FindingID)
 		}
 		seen[v.FindingID] = true
 	}
@@ -267,10 +268,10 @@ func CheckRole(r *RoleResult, role string, subject string, ids []string) error {
 	return nil
 }
 
-// Standing are the findings the refuter did not refute.
-func Standing(findings []Finding, refuter *RoleResult) []Finding {
+// Standing are the findings the challenger did not refute.
+func Standing(findings []Finding, challenger *RoleResult) []Finding {
 	refuted := map[string]bool{}
-	for _, v := range refuter.Results {
+	for _, v := range challenger.Results {
 		refuted[v.FindingID] = v.Outcome == "refuted"
 	}
 	return slices.DeleteFunc(slices.Clone(findings), func(f Finding) bool { return refuted[f.ID] })
@@ -285,14 +286,14 @@ func IDs(findings []Finding) []string {
 	return out
 }
 
-// Reduction is the 4R's reduction (contracts/review-4r.md, "Reduction"):
+// Reduction is the Prism review's reduction (contracts/review-prism.md, "Reduction"):
 // the refuted findings drop; of those that stand, the pre-existing ones are
-// follow-ups, the severe ones the validator confirms are the correction set
+// follow-ups, the severe ones the arbiter confirms are the correction set
 // and the severe ones it does not are noted for verify; the rest are
-// information. The verdict passes with no correction set and no lens
+// information. The verdict passes with no correction set and no facet
 // unavailable.
 type Reduction struct {
-	Lenses        []string  `json:"lenses"`
+	Facets        []string  `json:"facets"`
 	Verdict       string    `json:"verdict"`
 	CorrectionSet []Finding `json:"correction_set"`
 	ForVerify     []Finding `json:"for_verify"`
@@ -304,12 +305,12 @@ type Reduction struct {
 
 // Reduce is the reduction of checked results.
 func Reduce(rr ReviewResults) Reduction {
-	out := Reduction{Lenses: []string{}, CorrectionSet: []Finding{}, ForVerify: []Finding{}, FollowUps: []Finding{},
+	out := Reduction{Facets: []string{}, CorrectionSet: []Finding{}, ForVerify: []Finding{}, FollowUps: []Finding{},
 		Information: []Finding{}, Refuted: []Finding{}, Unavailable: []string{}}
-	for _, l := range Lenses {
-		for _, r := range rr.Lenses {
-			if r.Lens == l {
-				out.Lenses = append(out.Lenses, l)
+	for _, l := range Facets {
+		for _, r := range rr.Facets {
+			if r.Facet == l {
+				out.Facets = append(out.Facets, l)
 				if r.Inspection.Status == "unavailable" {
 					out.Unavailable = append(out.Unavailable, l+": "+flatLine(r.Inspection.Reason))
 				}
@@ -317,12 +318,12 @@ func Reduce(rr ReviewResults) Reduction {
 		}
 	}
 	outcome := map[string]string{}
-	for _, v := range append(slices.Clone(rr.Refuter.Results), rr.Validator.Results...) {
+	for _, v := range append(slices.Clone(rr.Challenger.Results), rr.Arbiter.Results...) {
 		if outcome[v.FindingID] != "refuted" {
 			outcome[v.FindingID] = v.Outcome
 		}
 	}
-	for _, f := range AllFindings(rr.Lenses) {
+	for _, f := range AllFindings(rr.Facets) {
 		switch {
 		case outcome[f.ID] == "refuted":
 			out.Refuted = append(out.Refuted, f)
@@ -346,12 +347,12 @@ func Reduce(rr ReviewResults) Reduction {
 // flatLine is s on one line: a model's text never starts a record line.
 func flatLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
-// RecordText is review-4r.md for change: the lenses, the verdict, the
+// RecordText is review-prism.md for change: the facets, the verdict, the
 // subject and base it binds to, then the findings by where the reduction
 // put them.
 func RecordText(change, subject, base string, r Reduction) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# 4R: %s\n\nlenses: %s\nverdict: %s\nsubject: %s\nbase: %s\n", change, strings.Join(r.Lenses, ", "), r.Verdict, subject, base)
+	fmt.Fprintf(&b, "# Prism review: %s\n\nfacets: %s\nverdict: %s\nsubject: %s\nbase: %s\n", change, strings.Join(r.Facets, ", "), r.Verdict, subject, base)
 	section := func(title string, fs []Finding) {
 		if len(fs) == 0 {
 			return
@@ -375,7 +376,7 @@ func RecordText(change, subject, base string, r Reduction) string {
 	section("Findings (information)", r.Information)
 	section("Refuted", r.Refuted)
 	if len(r.Unavailable) > 0 {
-		b.WriteString("\n## Unavailable lenses\n\n")
+		b.WriteString("\n## Unavailable facets\n\n")
 		for _, u := range r.Unavailable {
 			fmt.Fprintf(&b, "- %s\n", u)
 		}

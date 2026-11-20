@@ -7,7 +7,7 @@ import (
 )
 
 // A change's light verify (T31.5, L311 (1)): when a slice of a code change
-// closes, the verify agent reads the diff and the tests, runs the focused
+// closes, the jhon-checker agent reads the diff and the tests, runs the focused
 // tests, and records its verdict as a note in the change's execution record,
 // beside its RED and GREEN runs, with or without a folder. A later run keeps
 // the notes, as it keeps the history.

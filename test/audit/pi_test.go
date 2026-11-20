@@ -17,7 +17,7 @@ import (
 func TestAuditPi(t *testing.T) {
 	t.Run("a real pi session audits clean in --json, with its child session read as the sub-agent", func(t *testing.T) {
 		t.Parallel()
-		for _, c := range []struct{ dir, agentType string }{{"pi-main-refusal", "review-risk"}, {"pi-worker-refusal", "worker"}} {
+		for _, c := range []struct{ dir, agentType string }{{"pi-main-refusal", "prism-safety"}, {"pi-worker-refusal", "jhon-builder"}} {
 			r := audit(t, []string{mainOf(t, c.dir), "--json", "--context"})
 			equal(t, r.Code, 0, r.Stderr)
 			j := parse(t, r.Stdout)

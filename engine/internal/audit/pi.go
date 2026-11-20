@@ -3,6 +3,7 @@ package audit
 import (
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"os"
 	"path/filepath"
 	"slices"
@@ -342,7 +343,7 @@ func readPiSession(file, rel string) piRead {
 				addOnce(&r.kinds, kind)
 			}
 			if agent, ok := strProp(data, "agent"); ok && agent != "" {
-				addOnce(&r.agents, agent)
+				addOnce(&r.agents, rename.AgentNow(agent))
 			}
 		}
 		if typ == "compaction" {
@@ -586,7 +587,7 @@ func loadPiSession(mainPath string) (*Session, []AuditError) {
 			launch, line = r.entries[0].note(), r.entries[0].Line
 		}
 		a := &Subagent{
-			Transcript: Transcript{File: rel(c.file), Agent: c.id, AgentType: metaString(meta, "agentType"), Entries: r.entries},
+			Transcript: Transcript{File: rel(c.file), Agent: c.id, AgentType: rename.AgentNow(metaString(meta, "agentType")), Entries: r.entries},
 			ToolUseID:  metaString(meta, "toolUseId"), LaunchPrompt: launch, LaunchLine: line,
 		}
 		a.change, a.phase, a.root = changeOf(a.LaunchPrompt), phaseOf(a.LaunchPrompt, a.AgentType), rootOf(a)

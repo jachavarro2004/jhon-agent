@@ -86,10 +86,10 @@ func TestRunVerdictAndReaders(t *testing.T) {
 }
 
 func TestRefusalReading(t *testing.T) {
-	r := ToolResult{IsError: true, Text: hookText("inspect-guard", "review-risk", "shell syntax is not allowed here\nallowed forms: git diff, git show")}
-	guard, _, ask, ok := SafetyRefusal(r, "review-risk")
+	r := ToolResult{IsError: true, Text: hookText("inspect-guard", "prism-safety", "shell syntax is not allowed here\nallowed forms: git diff, git show")}
+	guard, _, ask, ok := SafetyRefusal(r, "prism-safety")
 	eq(t, "inspect-guard on a reviewer", [3]any{guard, ask, ok}, [3]any{"inspect-guard", false, true})
-	if _, _, _, ok := SafetyRefusal(r, "worker"); ok {
+	if _, _, _, ok := SafetyRefusal(r, "jhon-builder"); ok {
 		t.Error("inspect-guard binds reviewers only")
 	}
 	_, _, ask, _ = SafetyRefusal(ToolResult{IsError: true, Text: safetyAsk("git push", "push")}, "general")
@@ -106,12 +106,12 @@ func TestRefusalReading(t *testing.T) {
 func TestLaunchReading(t *testing.T) {
 	block := "```jhon-context\n{\"change\": \"c1\", \"phase\": \"apply\", \"project_root\": \"/r/x/\"}\n```\nApply it."
 	eq(t, "change", changeOf(block), "c1")
-	eq(t, "phase", phaseOf(block, "worker"), "apply")
+	eq(t, "phase", phaseOf(block, "jhon-builder"), "apply")
 	eq(t, "a null change", changeOf("```jhon-context\n{\"change\": null}\n```\nopenspec/changes/c2/"), "")
 	eq(t, "a named path", changeOf("Apply openspec/changes/c2/tasks.md and openspec/changes/archive/x."), "c2")
 	eq(t, "a change line", changeOf("- change: `c3`\n"), "c3")
-	eq(t, "verify", phaseOf("", "verify"), "verify")
-	eq(t, "no phase", phaseOf("", "worker"), "")
+	eq(t, "verify", phaseOf("", "jhon-checker"), "verify")
+	eq(t, "no phase", phaseOf("", "jhon-builder"), "")
 	a := &Subagent{LaunchPrompt: block}
 	eq(t, "root", rootOf(a), "/r/x")
 	eq(t, "named paths", namedPaths("```jhon-context\n{\"x\": \"a/b.ts\"}\n```\nEdit `/r/src/a.ts` and ./docs/ and src/b.ts.", "/r"), []string{"src/a.ts", "docs/", "src/b.ts"})

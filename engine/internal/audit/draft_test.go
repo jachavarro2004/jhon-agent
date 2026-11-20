@@ -12,7 +12,7 @@ import (
 
 func draftFinding(check, transcript string, line int, at, message string) Finding {
 	return Finding{Check: check, Anchor: "ldd/red-first", ValidationStatus: "pending-real-fixture", Severity: "suspect", Kind: "would-be-violation",
-		Transcript: transcript, Line: line, At: at, Agent: "a1", AgentType: "worker", Evidence: "Edit src/app.go", Message: message}
+		Transcript: transcript, Line: line, At: at, Agent: "a1", AgentType: "jhon-builder", Evidence: "Edit src/app.go", Message: message}
 }
 
 func audited(path, runtime string, fs ...Finding) Audited {
@@ -27,10 +27,10 @@ func TestDraftKeyIsStableAcrossPathsLinesAndDates(t *testing.T) {
 	if a != b {
 		t.Fatalf("causes differ:\n%s\n%s", a, b)
 	}
-	if DraftKey("refusal-bypass", "runtime-boundaries/same-effect", "pi", "worker", a) != DraftKey("refusal-bypass", "runtime-boundaries/same-effect", "pi", "worker", b) {
+	if DraftKey("refusal-bypass", "runtime-boundaries/same-effect", "pi", "jhon-builder", a) != DraftKey("refusal-bypass", "runtime-boundaries/same-effect", "pi", "jhon-builder", b) {
 		t.Fatal("keys differ")
 	}
-	if k := DraftKey("refusal-bypass", "runtime-boundaries/same-effect", "pi", "worker", a); len(k) != 12 || k == DraftKey("refusal-bypass", "runtime-boundaries/same-effect", "claude-code", "worker", a) {
+	if k := DraftKey("refusal-bypass", "runtime-boundaries/same-effect", "pi", "jhon-builder", a); len(k) != 12 || k == DraftKey("refusal-bypass", "runtime-boundaries/same-effect", "claude-code", "jhon-builder", a) {
 		t.Fatalf("key %q: want 12 hex characters that change with the runtime", k)
 	}
 	// edit-before-red's cause is its form, never the change it names.
@@ -95,7 +95,7 @@ check: edit-before-red
 anchor: ldd/red-first
 severity: suspect
 runtime: pi
-agent_type: worker
+agent_type: jhon-builder
 sessions: 2
 occurrences: 2
 first: 2026-09-30T10:00:00.000Z
@@ -103,11 +103,11 @@ last: 2026-10-01T10:00:00.000Z
 owner: shell
 ---
 
-# edit-before-red: pi worker
+# edit-before-red: pi jhon-builder
 
 ## Finding
 
-edit-before-red (ldd/red-first, pending-real-fixture) in pi worker sessions, 2 time(s) in 2 session(s). Cause: before-red
+edit-before-red (ldd/red-first, pending-real-fixture) in pi jhon-builder sessions, 2 time(s) in 2 session(s). Cause: before-red
 
 Example: Edit src/app.go changes code of c1 before its RED, the first failing ` + "`jhon executions run c1`" + ` (line 9): rule
 
@@ -154,7 +154,7 @@ func TestWriteDraftsSkipsAnExistingDraftAndRefreshKeepsTheProposal(t *testing.T)
 	}
 	// The owner writes a proposal; a second run writes nothing.
 	b, _ := os.ReadFile(name)
-	owned := string(b) + "Owner: split the worker's prompt.\n\n  keep   this  spacing\n"
+	owned := string(b) + "Owner: split the jhon-builder's prompt.\n\n  keep   this  spacing\n"
 	must(t, os.WriteFile(name, []byte(owned), 0o644))
 	out, err = WriteDrafts(dir, gs, false)
 	must(t, err)

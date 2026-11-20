@@ -410,15 +410,15 @@ test("a long sub-agent result arrives bounded at a line, with how much was left 
 	assert.equal((await h.run("task_result", { id: agent.id })).content[0].text, `Background sub-agent agent-1 (worker) completed after 0s.\n\n${result}`);
 });
 
-test("a long JSON result (a review lens's report) is summarized by its key fields, never cut mid-JSON", async () => {
+test("a long JSON result (a review facet's report) is summarized by its key fields, never cut mid-JSON", async () => {
 	const findings = Array.from({ length: 40 }, (_, i) => ({ location: `a.ts:${i}`, severity: i % 3 === 0 ? "CRITICAL" : "WARNING", claim: `claim ${i} ${"y".repeat(200)}`, evidence_class: "deterministic", causal_disposition: "introduced", proof_refs: ["p"] }));
-	const report = JSON.stringify({ subject_hash: "abc123", lens: "risk", inspection: { status: "completed", paths: ["a.ts", "b.ts"] }, findings, evidence: ["read a.ts"] });
+	const report = JSON.stringify({ subject_hash: "abc123", facet: "risk", inspection: { status: "completed", paths: ["a.ts", "b.ts"] }, findings, evidence: ["read a.ts"] });
 	const { h, agent, content } = await agentNotice(report);
 	assert.ok(content.length < 2_000, `notice is ${content.length} chars`);
 	assert.doesNotMatch(content, /\{"subject_hash"/, "no raw JSON");
 	assert.match(content, /^JSON result, summarized:$/m);
 	assert.match(content, /^subject_hash: abc123$/m);
-	assert.match(content, /^lens: risk$/m);
+	assert.match(content, /^facet: risk$/m);
 	assert.match(content, /^inspection\.status: completed$/m);
 	assert.match(content, /^findings: 40 \(CRITICAL 14, WARNING 26\)$/m);
 	assert.match(content, /^- CRITICAL a\.ts:0: claim 0 y+…$/m);

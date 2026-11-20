@@ -15,7 +15,7 @@ type Card struct {
 
 // Cards are one card per guard of Matchers, in its order.
 var Cards = []Card{
-	{"inspect-guard", "a reviewer changes what it reviews", "the 4R reviewers must stay read-only for their verdict to mean anything: their Bash is confined to the inspect_allow forms"},
+	{"inspect-guard", "a reviewer changes what it reviews", "the Prism reviewers must stay read-only for their verdict to mean anything: their Bash is confined to the inspect_allow forms"},
 	{"safety-guard", "a destructive or irreversible command (docker rm -f and volume deletions included), an outward-facing one without the owner's consent, or a sub-agent's unbounded wait", "agents ran forced pushes, hard resets, and pushes without asking; on 2026-10-27 two workers in a client project left `until ...; sleep` loops running and the owner had to stop them"},
 	{"vcs-guard", "a write into a VCS directory or the grants, an agent writing Claude Code's settings, or an Edit or Write outside the project (asked)", "a write inside .git/ corrupts the repository; the sandbox wraps Bash, not the file tools (T161, L1420)"},
 	{"framework-guard", "an agent edits the framework or its installed release while it runs on it", "docket AV2: an agent writing the release it is running changes its own rules mid-session"},

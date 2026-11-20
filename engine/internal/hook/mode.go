@@ -2,6 +2,7 @@ package hook
 
 import (
 	"fmt"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -80,7 +81,7 @@ func passByMode(io IO, p Payload, guardName string, passed []modePass) {
 	}
 	var modes []string
 	byMode := map[string][]string{}
-	agent := strings.TrimSpace(p.Str("agent_type"))
+	agent := rename.AgentNow(strings.TrimSpace(p.Str("agent_type")))
 	if agent == "" {
 		agent = "main"
 	}

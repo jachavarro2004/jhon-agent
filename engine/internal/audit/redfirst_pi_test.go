@@ -14,7 +14,7 @@ func TestEditBeforeRedInPi(t *testing.T) {
 	if got := piFindings(t, "edit-before-red", puser("go"), pmain(red), pmain(ed), pmain(green)); len(got) != 0 {
 		t.Errorf("pi main, RED first: want none, got %d %+v", len(got), got)
 	}
-	if got := piFindings(t, "edit-before-red", puser("go"), psub("worker", "do "+acme, "done", ed, red, green)); len(got) != 1 {
+	if got := piFindings(t, "edit-before-red", puser("go"), psub("jhon-builder", "do "+acme, "done", ed, red, green)); len(got) != 1 {
 		t.Errorf("pi sub-agent, edit before RED: want one finding, got %d %+v", len(got), got)
 	}
 }

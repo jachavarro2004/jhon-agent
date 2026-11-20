@@ -3,6 +3,7 @@ package audit
 import (
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"os"
 	"path/filepath"
 	"slices"
@@ -586,7 +587,7 @@ func LoadSession(mainPath string) (*Session, []AuditError) {
 			launch = r.entries[0].note()
 		}
 		a := &Subagent{
-			Transcript: Transcript{File: rel(sf.file), Agent: sf.id, AgentType: metaString(meta, "agentType"), Entries: r.entries},
+			Transcript: Transcript{File: rel(sf.file), Agent: sf.id, AgentType: rename.AgentNow(metaString(meta, "agentType")), Entries: r.entries},
 			ToolUseID:  metaString(meta, "toolUseId"), LaunchPrompt: launch, LaunchLine: 1,
 		}
 		if parent := metaString(meta, "parentAgentId"); launchedBy[parent] != nil {

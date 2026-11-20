@@ -1,6 +1,6 @@
 /**
  * T117c (L720): in writer mode the main session's edit or write changes at
- * most ~20 lines per call; a larger one is refused toward a worker. odd/**
+ * most ~20 lines per call; a larger one is refused toward a jhon-builder. odd/**
  * always passes; inline mode and children are unaffected. The guard reads
  * the session's frozen mode, the one the prompt read.
  */
@@ -66,7 +66,7 @@ async function session(t: TestContext, mode: "inline" | "writer", env: Record<st
 const block = (n: number, tag = "x") => Array.from({ length: n }, (_, i) => `${tag}${i}`).join("\n") + "\n";
 const writerBlock = (r: any) => (r && "block" in r && /writer mode/.test(r.reason) ? r.reason as string : undefined);
 
-test("writer mode: an edit changing 19 lines passes, one changing 21 is refused toward a worker", async (t) => {
+test("writer mode: an edit changing 19 lines passes, one changing 21 is refused toward a jhon-builder", async (t) => {
 	const s = await session(t, "writer");
 	writeFileSync(join(s.repo, "a.ts"), block(30, "old"));
 	assert.equal(writerBlock(await s.call("edit", { path: "a.ts", edits: [{ oldText: block(19, "old"), newText: block(19, "new") }] })), undefined);
@@ -74,7 +74,7 @@ test("writer mode: an edit changing 19 lines passes, one changing 21 is refused 
 	const why = writerBlock(await s.call("edit", { path: "a.ts", edits: [{ oldText: block(21, "old"), newText: block(21, "new") }] }));
 	assert.ok(why, "refused");
 	assert.match(why!, /changes 21 lines of a\.ts, more than the 20/);
-	assert.match(why!, /worker \(subagent\) with a self-contained brief/);
+	assert.match(why!, /jhon-builder \(subagent\) with a self-contained brief/);
 	// The replacements of one call add up: 11 + 11 lines.
 	assert.ok(writerBlock(await s.call("edit", { path: "a.ts", edits: [{ oldText: block(11, "old"), newText: block(11, "p") }, { oldText: block(11, "q"), newText: block(11, "r") }] })));
 });
@@ -112,7 +112,7 @@ test("writer mode: three 8-line edits in one request, the third is refused namin
 	const why = writerBlock(await s.run("edit", { path: "c.ts", edits: [{ oldText: block(8, "b"), newText: block(8, "c") }] }));
 	assert.ok(why, "the third is refused");
 	assert.match(why!, /changes 8 lines of c\.ts, 24 with the 16 already written inline since the owner's last message, more than the 20/);
-	assert.match(why!, /Hand the rest to a worker/);
+	assert.match(why!, /Hand the rest to a jhon-builder/);
 });
 
 test("writer mode: a new owner message resets the count; a notice, a sub-agent completion or a follow-up does not", async (t) => {

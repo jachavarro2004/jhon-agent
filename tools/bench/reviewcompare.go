@@ -1,25 +1,25 @@
 package main
 
-// `bench review-compare` (T118e, L727): the native 4R (`jhon_review`, one
-// tool call whose lens, refuter and validator completions run through pi's
-// model registry) against today's lens agents (review-<lens>, then
-// review-refuter and review-validator) on the same frozen changes, the same
+// `bench review-compare` (T118e, L727): the native Prism review (`jhon_review`, one
+// tool call whose facet, challenger and arbiter completions run through pi's
+// model registry) against today's facet agents (prism-<facet>, then
+// prism-challenger and prism-arbiter) on the same frozen changes, the same
 // pi-jhon condition and the same profile. The agents arm runs with
 // JHON_REVIEW_NATIVE=off, which makes the shell's jhon_review answer with its
-// fallback (launch the lens agents) without running a completion.
+// fallback (launch the facet agents) without running a completion.
 //
 // Each fixture under review/<id>/ is a repository: base/ is the default
 // branch's one commit (with the native LDD layout's ldd/config.yaml and a
 // pyproject.toml added), candidate/ is laid over it and committed on a
 // branch, the frozen change, with its record ldd/changes/<change>/. Its
 // manifest.json lists the defects seeded in the candidate (file, line range,
-// lens, severity); a clean fixture lists none, to count false positives.
+// facet, severity); a clean fixture lists none, to count false positives.
 //
 // A run's measures come from its pi session: the parent's tokens and cost
 // (its own assistant messages), each child session's (subagents/, by
-// agentType: review-* are reviewers), and the native completions' usage,
+// agentType: prism-* are reviewers, review-* before T177), and the native completions' usage,
 // which the session holds only in jhon_review's result details.reviewers.
-// The change's review-4r.md gives the verdict and the findings; a finding
+// The change's review-prism.md gives the verdict and the findings; a finding
 // hits a known defect when its location names the defect's file and its line
 // range overlaps the defect's. Refuted findings count neither way.
 //
@@ -50,9 +50,9 @@ import (
 // ReviewArms are the two arms, in report order.
 var ReviewArms = []string{"native", "agents"}
 
-// reviewLenses and reviewSeverities are the 4R contract's names.
+// reviewFacets and reviewSeverities are the Prism contract's names.
 var (
-	reviewLenses     = []string{"risk", "resilience", "readability", "reliability"}
+	reviewFacets     = []string{"safety", "failure", "clarity", "behavior"}
 	reviewSeverities = []string{"BLOCKER", "CRITICAL", "WARNING", "SUGGESTION"}
 )
 
@@ -61,7 +61,7 @@ type ReviewDefect struct {
 	ID       string `json:"id"`
 	File     string `json:"file"`
 	Lines    [2]int `json:"lines"`
-	Lens     string `json:"lens"`
+	Facet    string `json:"facet"`
 	Severity string `json:"severity"`
 	What     string `json:"what"`
 }
@@ -110,8 +110,8 @@ func parseReviewManifest(b []byte, dir string) (ReviewFixture, error) {
 		switch {
 		case d.ID == "" || seen[d.ID]:
 			return bad("defect id %q is empty or repeated", d.ID)
-		case !slices.Contains(reviewLenses, d.Lens):
-			return bad("defect %s: lens %q is not one of %s", d.ID, d.Lens, strings.Join(reviewLenses, ", "))
+		case !slices.Contains(reviewFacets, d.Facet):
+			return bad("defect %s: facet %q is not one of %s", d.ID, d.Facet, strings.Join(reviewFacets, ", "))
 		case !slices.Contains(reviewSeverities, d.Severity):
 			return bad("defect %s: severity %q is not one of %s", d.ID, d.Severity, strings.Join(reviewSeverities, ", "))
 		case d.Lines[0] < 1 || d.Lines[1] < d.Lines[0]:
@@ -165,11 +165,11 @@ func LoadReviewFixtures(root string, ids []string) ([]ReviewFixture, error) {
 	return out, nil
 }
 
-// reviewPrompt is the owner message of both arms: the 4R of the branch's
+// reviewPrompt is the owner message of both arms: the Prism review of the branch's
 // change, nothing else.
 func reviewPrompt(fx ReviewFixture) string {
-	return fmt.Sprintf("The change `%s` on this branch is complete and committed. Its 4R review is due before delivery. "+
-		"Run the 4R review of this change against base `main` now, as the 4R contract says, until review-4r.md is recorded. "+
+	return fmt.Sprintf("The change `%s` on this branch is complete and committed. Its Prism review is due before delivery. "+
+		"Run the Prism review of this change against base `main` now, as the Prism contract says, until review-prism.md is recorded. "+
 		"Then stop: do not edit any file, do not fix the findings, do not run verify, do not deliver. "+
 		"Reply with the verdict and the findings.", fx.Change)
 }
@@ -177,7 +177,7 @@ func reviewPrompt(fx ReviewFixture) string {
 // buildReviewRepo lays fx out in repo: base/ with the native LDD config and
 // a pyproject.toml committed on main, then candidate/ committed on the
 // branch change/<change>, which stays checked out. The config names the
-// change under review_required with review 4r, so the 4R is owed and the
+// change under review_required with review prism, so the Prism review is owed and the
 // route guard lets both arms run it headless under the same rule (L739).
 func buildReviewRepo(fx ReviewFixture, repo string, env []string) error {
 	if err := copyTree(filepath.Join(fx.Dir, "base"), repo); err != nil {
@@ -192,7 +192,7 @@ func buildReviewRepo(fx ReviewFixture, repo string, env []string) error {
 			return err
 		}
 		if f[0] == "config.yaml" {
-			b = append(b, fmt.Sprintf("\nreview_required:\n  - change: %s\n    review: 4r\n", fx.Change)...)
+			b = append(b, fmt.Sprintf("\nreview_required:\n  - change: %s\n    review: prism\n", fx.Change)...)
 		}
 		if err := os.WriteFile(filepath.Join(repo, f[1]), b, 0o644); err != nil {
 			return err
@@ -224,7 +224,7 @@ func buildReviewRepo(fx ReviewFixture, repo string, env []string) error {
 	return git("commit", "-q", "--no-verify", "-m", fx.Change)
 }
 
-// RecordFinding is one finding line of review-4r.md.
+// RecordFinding is one finding line of review-prism.md.
 type RecordFinding struct {
 	ID       string `json:"id"`
 	Severity string `json:"severity"`
@@ -233,9 +233,9 @@ type RecordFinding struct {
 	Section  string `json:"section"`
 }
 
-// ReviewRecord is what review-4r.md says.
+// ReviewRecord is what review-prism.md says.
 type ReviewRecord struct {
-	Lenses      []string        `json:"lenses"`
+	Facets      []string        `json:"facets"`
 	Verdict     string          `json:"verdict"`
 	Subject     string          `json:"subject,omitempty"`
 	Findings    []RecordFinding `json:"findings"`
@@ -244,7 +244,7 @@ type ReviewRecord struct {
 
 // The record's sections (ldd.RecordText) by their heading.
 var recordSections = map[string]string{"Correction set": "correction_set", "For verify (unconfirmed)": "for_verify",
-	"Follow-ups (pre-existing)": "follow_ups", "Findings (information)": "information", "Refuted": "refuted", "Unavailable lenses": "unavailable"}
+	"Follow-ups (pre-existing)": "follow_ups", "Findings (information)": "information", "Refuted": "refuted", "Unavailable facets": "unavailable"}
 
 var (
 	findingLine  = regexp.MustCompile(`^- \[([^\]]+)\] (BLOCKER|CRITICAL|WARNING|SUGGESTION) (.*)$`)
@@ -252,10 +252,10 @@ var (
 	locationHead = regexp.MustCompile(`^(.*?[^\s:]):(.*)$`)
 )
 
-// parseReviewRecord reads review-4r.md as ldd.RecordText writes it. The
+// parseReviewRecord reads review-prism.md as ldd.RecordText writes it. The
 // location ends at the first ": " that the claim follows.
 func parseReviewRecord(text string) ReviewRecord {
-	rec := ReviewRecord{Lenses: []string{}, Findings: []RecordFinding{}}
+	rec := ReviewRecord{Facets: []string{}, Findings: []RecordFinding{}}
 	section := ""
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimRight(line, "\r")
@@ -266,8 +266,8 @@ func parseReviewRecord(text string) ReviewRecord {
 		if section == "" {
 			k, v, _ := strings.Cut(line, ": ")
 			switch k {
-			case "lenses":
-				rec.Lenses = split(v)
+			case "facets":
+				rec.Facets = split(v)
 			case "verdict":
 				rec.Verdict = strings.TrimSpace(v)
 			case "subject":
@@ -461,12 +461,12 @@ type ReviewRunMetrics struct {
 	TimedOut  bool   `json:"timed_out"`
 	WallMs    int64  `json:"wall_ms"`
 	// Parent is the main session's own messages; Reviewers the review
-	// completions (native) or the review-* child sessions (agents);
-	// Others every other child session (explore, verify, workers).
+	// completions (native) or the prism-* child sessions (agents);
+	// Others every other child session (jhon-scout, jhon-checker, jhon-builder).
 	Parent    TokenUsage `json:"parent"`
 	Reviewers TokenUsage `json:"reviewers"`
 	Others    TokenUsage `json:"others"`
-	// ReviewAgents are the review-* child sessions by agent type.
+	// ReviewAgents are the prism-* child sessions by agent type.
 	ReviewAgents map[string]int `json:"review_agents"`
 	OtherAgents  map[string]int `json:"other_agents,omitempty"`
 	ReviewCalls  int            `json:"jhon_review_calls"`
@@ -511,7 +511,7 @@ func collectReviewRun(m *ReviewRunMetrics, fx ReviewFixture, transcript, repo st
 				m.Problems = append(m.Problems, "child session "+filepath.Base(c)+": "+err.Error())
 				continue
 			}
-			if strings.HasPrefix(agent, "review-") {
+			if strings.HasPrefix(agent, "prism-") || strings.HasPrefix(agent, "review-") { // review-* is a run recorded before T177
 				m.Reviewers.add(cf.Usage)
 				m.ReviewAgents[agent]++
 			} else {
@@ -523,9 +523,9 @@ func collectReviewRun(m *ReviewRunMetrics, fx ReviewFixture, transcript, repo st
 			}
 		}
 	}
-	b, err := os.ReadFile(filepath.Join(repo, "ldd", "changes", fx.Change, "review-4r.md"))
+	b, err := os.ReadFile(filepath.Join(repo, "ldd", "changes", fx.Change, "review-prism.md"))
 	if err != nil {
-		m.Problems = append(m.Problems, "no review-4r.md for "+fx.Change)
+		m.Problems = append(m.Problems, "no review-prism.md for "+fx.Change)
 		return
 	}
 	rec := parseReviewRecord(string(b))
@@ -656,7 +656,7 @@ func fmtTokens(n float64) string {
 // renderReviewCompare writes the report: a table per fixture (a row per
 // run), the pooled totals per arm, and the gate.
 func renderReviewCompare(w io.Writer, rep ReviewCompareReport) {
-	fmt.Fprintln(w, "# bench review-compare (T118e): native 4R vs lens agents")
+	fmt.Fprintln(w, "# bench review-compare (T118e): native Prism review vs facet agents")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Tokens are input / output / cache read / cache write; cost is the providers' reported dollars (0 when none reports); weighted = input + 1.25 cache write + 0.1 cache read + 5 output.")
 	row := func(u TokenUsage) string {
@@ -669,18 +669,18 @@ func renderReviewCompare(w io.Writer, rep ReviewCompareReport) {
 		}
 		fmt.Fprintf(w, "\n## %s — %s (%s)\n\n", fx.ID, fx.Title, kind)
 		for _, d := range fx.Defects {
-			fmt.Fprintf(w, "- %s %s:%d-%d %s %s — %s\n", d.ID, d.File, d.Lines[0], d.Lines[1], d.Lens, d.Severity, d.What)
+			fmt.Fprintf(w, "- %s %s:%d-%d %s %s — %s\n", d.ID, d.File, d.Lines[0], d.Lines[1], d.Facet, d.Severity, d.What)
 		}
 		fmt.Fprintln(w)
-		fmt.Fprintln(w, "| arm | rep | verdict | lenses | parent calls | parent tokens | reviewer runs | reviewer tokens | other agents | cost $ | weighted | wall s | hits | misses | false positives | correction set | for verify | problems |")
+		fmt.Fprintln(w, "| arm | rep | verdict | facets | parent calls | parent tokens | reviewer runs | reviewer tokens | other agents | cost $ | weighted | wall s | hits | misses | false positives | correction set | for verify | problems |")
 		fmt.Fprintln(w, "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
 		for _, r := range rep.Runs {
 			if r.Fixture != fx.ID {
 				continue
 			}
-			verdict, lenses, cs, fv := "none", "", []string{}, []string{}
+			verdict, facets, cs, fv := "none", "", []string{}, []string{}
 			if r.Record != nil {
-				verdict, lenses = r.Record.Verdict, strings.Join(r.Record.Lenses, ", ")
+				verdict, facets = r.Record.Verdict, strings.Join(r.Record.Facets, ", ")
 				for _, f := range r.Record.Findings {
 					switch f.Section {
 					case "correction_set":
@@ -692,7 +692,7 @@ func renderReviewCompare(w io.Writer, rep ReviewCompareReport) {
 			}
 			t := r.Total()
 			fmt.Fprintf(w, "| %s | %d | %s | %s | %d | %s | %d | %s | %s | %.4f | %s | %.0f | %s | %s | %s | %s | %s | %s |\n",
-				r.Arm, r.Repeat, verdict, lenses, r.Parent.Calls, row(r.Parent), r.Reviewers.Calls, row(r.Reviewers), fmtTokens(r.Others.Tokens()),
+				r.Arm, r.Repeat, verdict, facets, r.Parent.Calls, row(r.Parent), r.Reviewers.Calls, row(r.Reviewers), fmtTokens(r.Others.Tokens()),
 				t.Cost, fmtTokens(t.Weighted()), float64(r.WallMs)/1000, orNone(r.Match.Hits), orNone(r.Match.Misses), orNone(r.Match.FalsePositives),
 				orNone(cs), orNone(fv), strings.ReplaceAll(strings.Join(r.Problems, "; "), "|", "/"))
 		}
@@ -937,7 +937,7 @@ func reviewCompareCLI(args []string, out, errOut io.Writer, now time.Time) int {
 	home := fs.String("home", filepath.Join(root(), "home"), "the bench HOME")
 	fixtures := fs.String("fixtures", "", "comma-separated fixture ids under tools/bench/review (default: all)")
 	fixturesRoot := fs.String("fixtures-dir", filepath.Join(source(), "review"), "where the fixtures are")
-	arms := fs.String("arms", strings.Join(ReviewArms, ","), "comma-separated arms: native (jhon_review), agents (JHON_REVIEW_NATIVE=off: the lens agents)")
+	arms := fs.String("arms", strings.Join(ReviewArms, ","), "comma-separated arms: native (jhon_review), agents (JHON_REVIEW_NATIVE=off: the facet agents)")
 	repeats := fs.Int("repeats", 1, "runs per fixture and arm")
 	model := fs.String("model", "opus", "the claude-bridge model of the pi main session when the bench HOME has no profile and no --pi-model")
 	piModel := fs.String("pi-model", "", "the pi main session's provider/model[@thinking] (default: the profile's orchestrator model, else claude-bridge on --model)")

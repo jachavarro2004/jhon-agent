@@ -27,7 +27,7 @@ before merging. Parts sharing files stay with one writer.
 When an executor stops short (a refusal the owner then resolves, a question
 answered), {{runtime:continue-agent}}: it keeps what it
 already read and did. Each slice gets a fresh executor.
-A fix needed after a worker returns goes to a worker (continue it, or
+A fix needed after a builder returns goes to a builder (continue it, or
 launch a fresh one), never inline.
 <!-- delegation:end -->
 Read only what decides the route; a brief gives paths and the spec, never
@@ -95,9 +95,9 @@ missing; never stop with the work undone.
   neither settles.
 - **Delivery.** Before delivering a change (a commit the owner
   will push, a merge, a release), before its delivery test run, and before
-  a 4R, run `jhon risk` in its tree and read
-  `contracts/delivery.md`. A 4R is one call to the native review
-  ({{runtime:native-review}}), the lens agents only when it cannot run.
+  a Prism review, run `jhon risk` in its tree and read
+  `contracts/delivery.md`. A Prism review is one call to the native review
+  ({{runtime:native-review}}), the facet agents only when it cannot run.
 
 The session's last context part states the project's rules from
 `openspec/config.yaml`; they and the contracts outrank every memory, and a

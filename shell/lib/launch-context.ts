@@ -14,9 +14,9 @@
  *   the results whose files exist at the same relative path in the worktree
  *   are kept (codegraphIndexRoot, L1024).
  *
- * - `## Tests to judge` (T137, L1064 KB2): for verify and the 4R lenses
+ * - `## Tests to judge` (T137, L1064 KB2): for jhon-checker and the Prism facets
  *   only, the tests the change's execution record marks as turned green by
- *   editing only their test (`jhon context --judge`), for the validator to
+ *   editing only their test (`jhon context --judge`), for the arbiter to
  *   judge whether each was weakened; a 2 s deadline.
  *
  * All are information, never a gate: a failure, a timeout or an empty
@@ -37,8 +37,8 @@ const DECISIONS_INTRO = "Added at launch from `jhon context --handoff`; search E
 const CODE_MAP_INTRO = "Added at launch from CodeGraph for what the brief names; lines are as of the launch.";
 const TESTS_TO_JUDGE_INTRO = "Added at launch from the change's execution record: each test below failed in one recorded run and passed in a later one while only its own test file changed in its project. Judge whether it was weakened to pass (an assertion dropped or loosened, a case removed, an expectation rewritten to what the code does); if it was, report it as a finding.";
 const MARKS = [`\n\n${DECISIONS_HEADING}\n${DECISIONS_INTRO}\n`, `\n\n${CODE_MAP_HEADING}\n${CODE_MAP_INTRO}\n`, `\n\n${TESTS_TO_JUDGE_HEADING}\n${TESTS_TO_JUDGE_INTRO}\n`];
-/** The agents launched with the tests to judge: verify and the 4R lenses (ldd.TestJudges). */
-export const TEST_JUDGES = ["verify", "review-risk", "review-resilience", "review-readability", "review-reliability"];
+/** The agents launched with the tests to judge: jhon-checker and the Prism facets (ldd.TestJudges). */
+export const TEST_JUDGES = ["jhon-checker", "prism-safety", "prism-failure", "prism-clarity", "prism-behavior"];
 /** The most tests the block lists. */
 const TESTS_TO_JUDGE_LINES = 20;
 

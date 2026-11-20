@@ -241,7 +241,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            integrations.context7 (on by default) mounts
                            context7's hosted documentation server
                            (https://mcp.context7.com/mcp, no key, nothing
-                           installed) for the explore and worker agents:
+                           installed) for the jhon-scout and jhon-builder agents:
                            a call sends the library's name or id and the
                            question asked; false takes the server, its
                            tools and its sentence out of the render (the
@@ -278,7 +278,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            keys.tasks, keys.rail, keys.commands, ...),
                            placing renamed values (keys.tasks as
                            keys.agents), after a
-                           backup to settings-backup-<UTC>/settings.toml
+                           backup to settings-backup-<UTC>/settings.toml; rewrites the old agent names in
+                           profiles.json (explore, worker, verify, review-*)
+                           and the project's review_required values (4r,
+                           verify) to their new names, read until v0.4
   jhon profile [list] | show [<name>] | use <name>
                            the owner's model profiles (~/.config/jhon/profiles.json):
                            list them with the provider pi runs on, show each
@@ -292,7 +295,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
   jhon profile mode <profile> <inline|writer>
                            the profile's delegation mode: inline (the
                            default; the orchestrator may write small work) or
-                           writer (it reads and plans, workers write);
+                           writer (it reads and plans, builders write);
                            default is always inline
   jhon release install <artifact.tar.gz>
                            verify it against the .sha256 beside it, unpack it
@@ -307,7 +310,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            resolves, even below vcs ready, 2 on a usage error;
                            --handoff adds the decisions on record; --judge the
                            tests turned green by editing only their test, which
-                           verify and the 4R lenses judge; --save-state
+                           verify and the Prism facets judge; --save-state
                            --after <commit> (started by route-guard) writes the
                            change's state record to Engram once HEAD moves
   jhon executions run [<change>] [--affected [<base-ref>]] [--timeout <minutes>] [--jobs <n>] [--force] [--dry-run] [--json]
@@ -358,7 +361,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            ran to its end; writes no execution record; exit 0
                            when none is missing any more, 1 otherwise
   jhon executions verify <change> --verdict pass|fail [--note <text>] [--json]
-                           record a light verify (the verify agent's, when a
+                           record a light verify (jhon-checker's, when a
                            slice of a code change closes) in the change's
                            record, beside its runs, with HEAD's tree; on the
                            standard route a PR with none passing on the tree
@@ -605,46 +608,46 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            a review's frozen candidate: the merge base of HEAD
                            and the base, the working tree as a git tree, and
                            the subject hash of their diff; the same bytes give
-                           the same subject, so each lens freezes for itself
+                           the same subject, so each facet freezes for itself
                            An empty diff is refused (exit 2) with the
                            repository's worktrees that hold changes: freeze
                            from the change's worktree
   jhon review start [--base <ref>] [--change <name>] [--json]
-                           the native 4R: one freeze (the change's own records
-                           left out of the subject) and, per lens the diff
-                           calls for, a tool-less prompt with the lens's
+                           the native Prism review: one freeze (the change's own records
+                           left out of the subject) and, per facet the diff
+                           calls for, a tool-less prompt with the facet's
                            instructions, the diff and every changed file
-                           inline, its routing key review-<lens>, the active
+                           inline, its routing key prism-<facet>, the active
                            profile's pi model and thinking (model_source:
                            profile-agent, profile-tier or agents.yaml), its bytes and
                            estimated tokens; a prompt over ~100K tokens is
                            refused (exit 1): split the slice
-  jhon review refute --subject <hash> < lens-results.json
+  jhon review refute --subject <hash> < facet-results.json
   jhon review validate --subject <hash> < refuted.json
-                           the refuter's prompt for the lens findings, and the
-                           validator's for those the refuter did not refute,
-                           with its routing key (review-refuter,
-                           review-validator) and model, effort and
-                           model_source as start gives each lens
+                           the challenger's prompt for the facet findings, and the
+                           arbiter's for those the challenger did not refute,
+                           with its routing key (prism-challenger,
+                           prism-arbiter) and model, effort and
+                           model_source as start gives each facet
   jhon review record --subject <hash> < results.json
-                           checks the lens, refuter and validator answers,
-                           reduces them and writes the change's review-4r.md
-                           with lenses:, verdict:, subject: and base:; it holds
+                           checks the facet, challenger and arbiter answers,
+                           reduces them and writes the change's review-prism.md
+                           with facets:, verdict:, subject: and base:; it holds
                            while a fresh freeze gives that subject
                            Each refuses (exit 1) a subject the candidate no
                            longer freezes to, and an answer it cannot read,
                            writing nothing
   jhon review run [--base <ref>] [--change <name>] [--timeout <seconds>]
-                           the native 4R in one call, for Claude Code: start,
-                           each lens prompt through claude -p (no tools, one
+                           the native Prism review in one call, for Claude Code: start,
+                           each facet prompt through claude -p (no tools, one
                            turn, no session, no settings, the profile's Claude
                            Code model and effort for its routing key) all at
-                           once, then the refuter and validator the same way,
+                           once, then the challenger and arbiter the same way,
                            then record; a failed
                            call (no claude, a non-zero exit, output that is
                            not its JSON, a timeout), SIGINT or SIGTERM stops
                            every call, records nothing, exits 1 and
-                           names the review-* lens agents as the fallback
+                           names the prism-* facet agents as the fallback
   jhon audit --all [--since <n>d | <YYYY-MM-DD>] [--json] [--draft [<dir>] [--min <n>] [--refresh]]
                            every Claude Code session and Jhon pi session changed
                            since then (default 30d), audited in parallel and

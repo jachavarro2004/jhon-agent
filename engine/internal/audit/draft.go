@@ -95,7 +95,7 @@ func Cause(check, message string) string {
 			return "green-unknown"
 		}
 		return "no-red-in-session"
-	case "verify-wrote", "explore-wrote":
+	case "checker-wrote", "scout-wrote":
 		return check
 	}
 	return normalCause(m)

@@ -13,6 +13,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/profiles"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/release"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/render"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/telemetry"
@@ -108,6 +109,10 @@ func profileEdit(argv []string) (int, bool) {
 		if value == "-" {
 			value = ""
 		}
+		if now, old := rename.Agent(agent); old {
+			fmt.Fprintln(os.Stderr, "jhon profile: "+rename.Warning("set", "agent", agent, now))
+			agent = now
+		}
 		apply = func(root *js.Object) error { return profiles.SetAgent(root, name, agent, runtime, value) }
 		done = fmt.Sprintf("profile %s: %s in %s is %s", name, agent, runtime, cmp.Or(value, "agents.yaml's"))
 		touched = name
@@ -162,6 +167,10 @@ func profileEdit(argv []string) (int, bool) {
 		return fail(err.Error())
 	}
 	fmt.Println(done)
+	for _, w := range pf.Renamed {
+		// profiles.Edit wrote each under its new name.
+		fmt.Println("rewritten: " + w)
+	}
 	return 0, touched != "" && touched == active
 }
 
@@ -185,6 +194,11 @@ func profileCommand(argv []string) int {
 	}
 	names := pf.Names()
 	active, _ := profiles.Active(pf)
+	if cmd != "json" {
+		for _, w := range pf.Renamed {
+			fmt.Fprintf(os.Stderr, "jhon profile: %s\n", w)
+		}
+	}
 	switch {
 	case cmd == "json" && len(argv) == 1:
 		var out []map[string]any

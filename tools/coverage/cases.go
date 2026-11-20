@@ -25,12 +25,12 @@ func codeDefect(rule, layer, file, find, replace string) defectCase {
 var cases = []defectCase{
 	// broken-ref — a reference that names no file
 	defect("broken-ref", "contracts", "contracts/ldd.md", "(`contracts/runtime-boundaries.md`)", "(`contracts/ghost.md`)"),
-	defect("broken-ref", "agents", "agents/worker.md", "~/.local/share/jhon/current/prose/contracts/ldd.md", "~/.local/share/jhon/current/prose/contracts/ghost.md"),
+	defect("broken-ref", "agents", "agents/jhon-builder.md", "~/.local/share/jhon/current/prose/contracts/ldd.md", "~/.local/share/jhon/current/prose/contracts/ghost.md"),
 	defect("broken-ref", "plugin", "runtimes/claude-code/plugin/skills/jhon-ldd/SKILL.md", "Read-only.", "Read-only. See `contracts/ghost.md`."),
 	defect("broken-ref", "skills", "skills/ldd/references/spec.md", "~/.local/share/jhon/current/prose/contracts/spec-delta.md", "~/.local/share/jhon/current/prose/contracts/ghost.md"),
 
 	// malformed-tilde — the home-reference typo, not a markdown fence
-	defect("malformed-tilde", "agents", "agents/verify.md", "`~/.local/share/jhon/current/prose/contracts/ldd.md`", "`~~/.local/share/jhon/current/prose/contracts/ldd.md`"),
+	defect("malformed-tilde", "agents", "agents/jhon-checker.md", "`~/.local/share/jhon/current/prose/contracts/ldd.md`", "`~~/.local/share/jhon/current/prose/contracts/ldd.md`"),
 	defect("malformed-tilde", "skills", "skills/ldd/references/spec.md", "~/.local/share/jhon/current/prose/contracts/spec-delta.md", "~~/.local/share/jhon/current/prose/contracts/spec-delta.md"),
 
 	// slash-command — only /jhon-ldd exists, and only as a skill of the release's plugin
@@ -46,13 +46,13 @@ var cases = []defectCase{
 	defect("verdict-vocab", "skills", "skills/ldd/references/verify.md", "verdict: pass | fail", "verdict: pass | fail | warn"),
 
 	// manifest — a declared agent with no body
-	defect("manifest", "manifest", "agents.yaml", "  - name: worker", "  - name: ghost-agent\n    tier: mid\n    caps: [read]\n    description: \"ghost\"\n  - name: worker"),
+	defect("manifest", "manifest", "agents.yaml", "  - name: jhon-builder", "  - name: ghost-agent\n    tier: mid\n    caps: [read]\n    description: \"ghost\"\n  - name: jhon-builder"),
 
 	// manifest — a key or line the minimal reader does not understand fails
 	// instead of being skipped
 	defect("manifest", "manifest", "agents.yaml", "version: 1", "version: 1\nmodels: {}"),
-	defect("manifest", "manifest", "agents.yaml", "  - name: worker\n    tier: strong", "  - name: worker\n    teir: mid\n    tier: mid"),
-	defect("manifest", "manifest", "agents.yaml", "  - name: worker\n", "  - name: worker\n    just some words\n"),
+	defect("manifest", "manifest", "agents.yaml", "  - name: jhon-builder\n    tier: strong", "  - name: jhon-builder\n    teir: mid\n    tier: mid"),
+	defect("manifest", "manifest", "agents.yaml", "  - name: jhon-builder\n", "  - name: jhon-builder\n    just some words\n"),
 
 	// manifest — a tier value is model or model@effort, and a Claude Code effort
 	// is one the runtime documents (docket AX2)
@@ -61,10 +61,10 @@ var cases = []defectCase{
 	defect("manifest", "manifest", "agents.yaml", "cheap: claude-bridge/claude-haiku-5-5@medium", "cheap: @low"),
 	// manifest — an agent's own effort is a documented value, on a tier whose
 	// Claude model takes effort (docket AX)
-	defect("manifest", "manifest", "agents.yaml", "  - name: worker\n    tier: strong\n", "  - name: worker\n    tier: strong\n    effort: turbo\n"),
+	defect("manifest", "manifest", "agents.yaml", "  - name: jhon-builder\n    tier: strong\n", "  - name: jhon-builder\n    tier: strong\n    effort: turbo\n"),
 
 	// agent-template — the manifest's vars and the template's placeholders agree
-	defect("agent-template", "agents.yaml", "agents/templates/review-lens.md", "## Scope", "## Scope for {{audience}}"),
+	defect("agent-template", "agents.yaml", "agents/templates/prism-facet.md", "## Scope", "## Scope for {{audience}}"),
 	defect("agent-template", "agents.yaml", "agents.yaml", "      code: R1\n", "      code: R1\n      colour: red\n"),
 
 	// top-level-tools — session memory is the top-level agent's alone, judged on the
@@ -83,7 +83,7 @@ var cases = []defectCase{
 	// jhon-command — every `jhon <subcommand>` named in prose is one jhon dispatches
 	defect("jhon-command", "skills", "skills/ldd/references/archive.md", "jhon compose \"openspec/specs", "jhon archive-compose \"openspec/specs"),
 	defect("jhon-command", "plugin", "runtimes/claude-code/plugin/skills/jhon-ldd/SKILL.md", "Run `jhon status <change>` from", "Run `jhon state <change>` from"),
-	defect("jhon-command", "agents", "agents/worker.md", "`jhon status <change> --json`", "`jhon derive <change> --json`"),
+	defect("jhon-command", "agents", "agents/jhon-builder.md", "`jhon status <change> --json`", "`jhon derive <change> --json`"),
 	defect("jhon-command", "contracts", "contracts/ldd.md", "`jhon status <change> --json` reads it", "`jhon derive <change>` reads it"),
 	defect("jhon-command", "orchestr", "orchestrator.md", "lets `jhon deliver check` deliver", "lets `jhon ship` deliver"),
 	defect("jhon-command", "README", "README.md", "| `jhon compose` |", "| `jhon merge` |"),

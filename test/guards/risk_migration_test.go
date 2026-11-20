@@ -21,8 +21,8 @@ func TestRouteGuardDataMigrationIsVerified(t *testing.T) {
 	res := r.call(t, "Bash", pr, true)
 	code(t, res, 2, "a data migration without a verification")
 	matches(t, res.Stderr, `^route-guard: the route is verified \(risk high reaches the verified tier`, "the refusal names the route's reason")
-	matches(t, res.Stderr, "launch the `verify` agent and record its verify-report.md", "the refusal says how")
-	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n", "openspec/changes/c1/review-4r.md": "lenses: risk\nverdict: pass\n"})
+	matches(t, res.Stderr, "launch the `jhon-checker` agent and record its verify-report.md", "the refusal says how")
+	support.Write(t, r.p, map[string]string{"openspec/changes/c1/verify-report.md": "verdict: pass\n", "openspec/changes/c1/review-prism.md": "facets: safety\nverdict: pass\n"})
 	code(t, r.call(t, "Bash", pr, true), 0, "a verified data migration")
 
 	std := newRG(t, "")

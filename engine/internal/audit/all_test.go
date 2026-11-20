@@ -21,25 +21,25 @@ func TestAggregateSumsFindingsAndAgentTurns(t *testing.T) {
 		{Path: "b.jsonl", Result: Audit(fixture(t, "background-run-delivered"))},
 		{Path: "c.jsonl", Result: &Result{Status: "audit-error", Errors: []AuditError{{Message: "unreadable"}}}},
 		{Path: "d.jsonl", Jhon: true, Result: &Result{Status: "clean", ContextUse: &ContextUse{Agents: []*AgentContextUse{
-			{AgentType: "worker", Turns: 30, Total: 1000}, {AgentType: "worker", Turns: 50, Total: 3000, TurnContext: slices.Repeat([]float64{60}, 50)}, {AgentType: "verify", Turns: 10, Total: 500},
-			{AgentType: "explore", Turns: 64, Total: 9000},
+			{AgentType: "jhon-builder", Turns: 30, Total: 1000}, {AgentType: "jhon-builder", Turns: 50, Total: 3000, TurnContext: slices.Repeat([]float64{60}, 50)}, {AgentType: "jhon-checker", Turns: 10, Total: 500},
+			{AgentType: "jhon-scout", Turns: 64, Total: 9000},
 		}}}},
 	}
-	f := Aggregate(results, map[string]int{"worker": 40, "verify": 40}, time.Time{})
+	f := Aggregate(results, map[string]int{"jhon-builder": 40, "verify": 40}, time.Time{})
 	eq(t, "sessions", [3]int{f.Sessions, f.JhonSessions, f.Errors}, [3]int{4, 2, 1})
 	eq(t, "delivered-untested violations", f.Findings["delivered-untested"]["violation"], 1)
 	var worker *AgentTypeStats
 	for i := range f.AgentTypes {
-		if f.AgentTypes[i].AgentType == "worker" {
+		if f.AgentTypes[i].AgentType == "jhon-builder" {
 			worker = &f.AgentTypes[i]
 		}
 	}
 	if worker == nil {
-		t.Fatalf("no worker row: %+v", f.AgentTypes)
+		t.Fatalf("no jhon-builder row: %+v", f.AgentTypes)
 	}
-	eq(t, "worker turns", [4]int{worker.Agents, worker.MedianTurns, worker.MaxTurns, worker.OverCap}, [4]int{2, 30, 50, 1})
+	eq(t, "jhon-builder turns", [4]int{worker.Agents, worker.MedianTurns, worker.MaxTurns, worker.OverCap}, [4]int{2, 30, 50, 1})
 	eq(t, "the share of the worker's tokens over the cap", worker.OverCapTokenShare, 600.0/4000)
-	eq(t, "agent types, most tokens first", f.AgentTypes[1].AgentType, "worker")
+	eq(t, "agent types, most tokens first", f.AgentTypes[1].AgentType, "jhon-builder")
 	eq(t, "an agent with no cap is over none", [2]int{f.AgentTypes[0].Cap, f.AgentTypes[0].OverCap}, [2]int{0, 0})
 }
 
@@ -56,14 +56,14 @@ func TestThePastShareCountsOnlyTheTurnsPastTheMark(t *testing.T) {
 		}
 		return a
 	}
-	agents := []*AgentContextUse{run("worker", 82), run("worker", 80), run("worker", 38), run("general", 103)}
+	agents := []*AgentContextUse{run("jhon-builder", 82), run("jhon-builder", 80), run("jhon-builder", 38), run("general", 103)}
 	f := Aggregate([]Audited{{Path: "s.jsonl", Jhon: true, Result: &Result{Status: "clean", ContextUse: &ContextUse{Agents: agents}}}},
-		map[string]int{"worker": 80, "general": 100}, time.Time{})
+		map[string]int{"jhon-builder": 80, "general": 100}, time.Time{})
 	shares := map[string][2]float64{}
 	for _, a := range f.AgentTypes {
 		shares[a.AgentType] = [2]float64{float64(a.OverCap), a.OverCapTokenShare}
 	}
-	eq(t, "worker: one run past, its turns 81-82 only", shares["worker"], [2]float64{1, 20.0 / 2000})
+	eq(t, "jhon-builder: one run past, its turns 81-82 only", shares["jhon-builder"], [2]float64{1, 20.0 / 2000})
 	eq(t, "review mark: turns 101-103 only", shares["general"], [2]float64{1, 30.0 / 1030})
 }
 
@@ -71,11 +71,11 @@ func TestThePastShareCountsOnlyTheTurnsPastTheMark(t *testing.T) {
 // started after it.
 func TestAggregateCountsOnlyTheAgentsStartedSinceTheCutoff(t *testing.T) {
 	agents := []*AgentContextUse{
-		{AgentType: "worker", Turns: 61, Total: 1000, Start: "2026-10-27T02:15:30.000Z"},
-		{AgentType: "worker", Turns: 25, Total: 500, Start: "2026-10-28T06:00:00.000Z"},
+		{AgentType: "jhon-builder", Turns: 61, Total: 1000, Start: "2026-10-27T02:15:30.000Z"},
+		{AgentType: "jhon-builder", Turns: 25, Total: 500, Start: "2026-10-28T06:00:00.000Z"},
 	}
 	since := time.Date(2026, 10, 28, 5, 0, 0, 0, time.UTC)
-	f := Aggregate([]Audited{{Path: "s.jsonl", Jhon: true, Result: &Result{Status: "clean", ContextUse: &ContextUse{Agents: agents}}}}, map[string]int{"worker": 40}, since)
+	f := Aggregate([]Audited{{Path: "s.jsonl", Jhon: true, Result: &Result{Status: "clean", ContextUse: &ContextUse{Agents: agents}}}}, map[string]int{"jhon-builder": 40}, since)
 	eq(t, "workers since the cutoff", [3]int{f.AgentTypes[0].Agents, f.AgentTypes[0].MaxTurns, f.AgentTypes[0].OverCap}, [3]int{1, 25, 0})
 }
 
@@ -188,7 +188,7 @@ func TestGuardNameReadsTheRefusal(t *testing.T) {
 	if m := guardName.FindStringSubmatch(text); m == nil || m[1] != "safety-guard" {
 		t.Errorf("guard of %q: %v", text, m)
 	}
-	if m := guardName.FindStringSubmatch(`'pre-tool' '--agent' 'worker' 'safety-guard' 'vcs-guard'`); m != nil {
+	if m := guardName.FindStringSubmatch(`'pre-tool' '--agent' 'jhon-builder' 'safety-guard' 'vcs-guard'`); m != nil {
 		t.Errorf("a command's guard words are no refusal: %v", m)
 	}
 }
@@ -197,11 +197,11 @@ func TestGuardNameReadsTheRefusal(t *testing.T) {
 // (T133): the count of the audited session reaches the fleet's LDD table.
 func TestAggregateCarriesHandRunsOfSubagents(t *testing.T) {
 	run := bash("jhon executions run "+chg, executionsOut(c1, t1, []string{"pass"}))
-	r := auditOf(t, user("go"), phased("apply", delegate("o01", "worker", chg, run, bash("uv run pytest -q", "3 passed"), bash("uv run pytest -q", "3 passed"))))
+	r := auditOf(t, user("go"), phased("apply", delegate("o01", "jhon-builder", chg, run, bash("uv run pytest -q", "3 passed"), bash("uv run pytest -q", "3 passed"))))
 	f := Aggregate([]Audited{{Path: "s.jsonl", Jhon: true, Result: r}}, nil, time.Time{})
 	if len(f.LDD) != 1 {
 		t.Fatalf("one change: %+v", f.LDD)
 	}
 	eq(t, "the change", f.LDD[0].Change, chg)
-	eq(t, "its test runs by hand, the worker's two", f.LDD[0].ByHand, 2)
+	eq(t, "its test runs by hand, the jhon-builder's two", f.LDD[0].ByHand, 2)
 }

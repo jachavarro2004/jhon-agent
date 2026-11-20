@@ -10,7 +10,7 @@
         17,
         17
       ],
-      "lens": "risk",
+      "facet": "safety",
       "severity": "CRITICAL",
       "what": "the partner's API token is written to the log"
     },
@@ -21,7 +21,7 @@
         24,
         30
       ],
-      "lens": "resilience",
+      "facet": "failure",
       "severity": "CRITICAL",
       "what": "the delivery retries forever, every second, with no attempt cap or backoff (an HTTP 4xx is an OSError too)"
     }

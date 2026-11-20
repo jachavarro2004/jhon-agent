@@ -1171,6 +1171,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 		}
 		route.Reviews = ReviewsOf(root, []string{change}, *route)
 	}
+	notes = append(notes, RenamedReviews(root)...)
 	var needs *Needs
 	if route != nil {
 		n := g.needsOf(root, *route)
@@ -1219,7 +1220,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	// Verify is suggested only when it is due: on the verified route, or
 	// when review_required names it (ReviewsOf). Without a route, status
 	// cannot tell, and suggests it as before.
-	verifyDue := route == nil || slices.ContainsFunc(route.Reviews, func(x Review) bool { return x.Review == ReviewVerify })
+	verifyDue := route == nil || slices.ContainsFunc(route.Reviews, func(x Review) bool { return x.Review == ReviewChecker })
 	if !verifyDue {
 		unrouted = append(unrouted, verify)
 	}
@@ -1279,7 +1280,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	// A small change keeps none (T146g G3).
 	lightRoute := route != nil && route.Behaviour && route.Level != RouteVerified && !small
 	if lightRoute && execution.LightVerifyDue(tests) {
-		notes = append(notes, "light verify due for "+change+": its GREEN run is newer than its last light verify; launch the `verify` agent in light mode (read the diff and the tests, run the focused tests), which records `jhon executions verify "+change+" --verdict pass|fail`")
+		notes = append(notes, "light verify due for "+change+": its GREEN run is newer than its last light verify; launch the `jhon-checker` agent in light mode (read the diff and the tests, run the focused tests), which records `jhon executions verify "+change+" --verdict pass|fail`")
 	}
 	// A folder is archived only once a light verify passed the tested tree.
 	if next == archive && branch == "" && lightRoute && !execution.LightVerified(root, change) {
@@ -1436,7 +1437,7 @@ func StartNote(changes string) string {
 // every artifact.
 func shownArtifacts(s Status) []ArtifactStatus {
 	r := s.Route
-	verifyDue := r == nil || slices.ContainsFunc(r.Reviews, func(x Review) bool { return x.Review == ReviewVerify })
+	verifyDue := r == nil || slices.ContainsFunc(r.Reviews, func(x Review) bool { return x.Review == ReviewChecker })
 	owed := map[string]bool{"tasks.md": true, "verify-report.md": verifyDue, "specs/": r == nil,
 		"proposal.md": r != nil && r.Design, "design.md": r != nil && r.Design}
 	if n := s.Needs; n != nil {

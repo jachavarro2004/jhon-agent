@@ -15,10 +15,10 @@ import (
 	"github.com/jachavarro2004/jhon-agent/test/support"
 )
 
-// The native 4R's Claude Code variant (T118d, L704, L706, L1150): `jhon
-// review run` runs each lens prompt `start` gives through `claude -p`, all
-// lenses at once, then the refuter and the validator the same way, then
-// `record`; any call that fails records nothing and names the lens agents.
+// The native Prism review's Claude Code variant (T118d, L704, L706, L1150): `jhon
+// review run` runs each facet prompt `start` gives through `claude -p`, all
+// facets at once, then the challenger and the arbiter the same way, then
+// `record`; any call that fails records nothing and names the facet agents.
 // A fake `claude` stands in: it records its argv and stdin and answers what
 // the test put in its directory. The real claude never runs.
 
@@ -34,13 +34,13 @@ func claudeArgs(model, effort string) []string {
 
 // The models the fake tells apart, one per routing key.
 const claudeProfile = `{"active":"p","profiles":{"p":{"agents":{` +
-	`"review-risk":{"claude-code":"m-risk","pi":"prov/pi-risk@low"},"review-reliability":{"claude-code":"m-rel@high"},` +
-	`"review-refuter":{"claude-code":"m-ref@low"},"review-validator":{"claude-code":"m-val"}}}}}`
+	`"prism-safety":{"claude-code":"m-risk","pi":"prov/pi-risk@low"},"prism-behavior":{"claude-code":"m-rel@high"},` +
+	`"prism-challenger":{"claude-code":"m-ref@low"},"prism-arbiter":{"claude-code":"m-val"}}}}}`
 
 // fakeClaude writes a `claude` into a fresh directory: each call appends its
 // model to order, writes its argv (one per line) to <model>.args and its
-// stdin to <model>.stdin; a lens call waits until both lenses have arrived
-// (10 s at most, else exit 3), so lenses run one after the other fail, and
+// stdin to <model>.stdin; a facet call waits until both facets have arrived
+// (10 s at most, else exit 3), so facets run one after the other fail, and
 // after.<model> makes it wait (as long) for the file it names. Then
 // exit.<model> makes it exit with that code, sleep.<model> makes it hang
 // (a child `sleep 60` it waits for; <model>.child and then <model>.pid hold
@@ -62,7 +62,7 @@ case "$model" in m-risk|m-rel)
   : > "$log/arrived.$model"
   i=0
   while [ ! -f "$log/arrived.m-risk" ] || [ ! -f "$log/arrived.m-rel" ]; do
-    i=$((i+1)); [ $i -gt 200 ] && { echo "barrier: the other lens never came" >&2; exit 3; }
+    i=$((i+1)); [ $i -gt 200 ] && { echo "barrier: the other facet never came" >&2; exit 3; }
     sleep 0.05
   done ;;
 esac
@@ -98,16 +98,16 @@ func envelope(t *testing.T, text string) string {
 func claudeAnswers(t *testing.T, dir, subject string) string {
 	t.Helper()
 	finding := map[string]any{"location": "src/app.py:2", "severity": "WARNING", "claim": "sum of nothing is 0", "proof_refs": []string{"src/app.py:2"}}
-	risk, rel := lensJSON(subject, "risk"), lensJSON(subject, "reliability", finding)
-	refuter := role(subject, "refuter", map[string]any{"finding_id": "reliability-1", "outcome": "stands", "reason": "src/app.py:2"})
-	validator := role(subject, "validator", map[string]any{"finding_id": "reliability-1", "outcome": "unconfirmed", "reason": "no caller passes nothing"})
+	risk, rel := facetJSON(subject, "safety"), facetJSON(subject, "behavior", finding)
+	challenger := role(subject, "challenger", map[string]any{"finding_id": "behavior-1", "outcome": "stands", "reason": "src/app.py:2"})
+	arbiter := role(subject, "arbiter", map[string]any{"finding_id": "behavior-1", "outcome": "unconfirmed", "reason": "no caller passes nothing"})
 	support.Write(t, dir, map[string]string{
 		"answer.m-risk": envelope(t, "Reviewed.\n"+mustJSON(t, risk)),
 		"answer.m-rel":  envelope(t, "```json\n"+mustJSON(t, rel)+"\n```"),
-		"answer.m-ref":  envelope(t, mustJSON(t, refuter)),
-		"answer.m-val":  envelope(t, mustJSON(t, validator)),
+		"answer.m-ref":  envelope(t, mustJSON(t, challenger)),
+		"answer.m-val":  envelope(t, mustJSON(t, arbiter)),
 	})
-	return mustJSON(t, map[string]any{"lenses": []any{risk, rel}, "refuter": refuter, "validator": validator})
+	return mustJSON(t, map[string]any{"facets": []any{risk, rel}, "challenger": challenger, "arbiter": arbiter})
 }
 
 func withPath(env []string, dir string) []string {
@@ -131,45 +131,45 @@ func TestReviewRunClaude(t *testing.T) {
 	r := reviewRun(t, root, env, "", "run")
 	equal(t, r.Code, 0, r.Stderr)
 	equal(t, r.Stderr, "", "nothing on stderr")
-	match(t, r.Stdout, `^4R native review \(claude -p\): verdict pass · lenses risk, reliability · record openspec/changes/c1/review-4r\.md\n`)
+	match(t, r.Stdout, `^Prism native review \(claude -p\): verdict pass · facets safety, behavior · record openspec/changes/c1/review-prism\.md\n`)
 	match(t, r.Stdout, `(?m)^correction set 0 · for verify 0 · follow-ups 0 · information 1 · refuted 0 · unavailable 0$`)
 
 	// Exact flags, the profile's Claude Code model and effort per routing
 	// key (no --effort when the profile names none), and each prompt on
 	// stdin as start gives it.
 	prompts := map[string]string{}
-	for _, l := range start["lenses"].([]any) {
+	for _, l := range start["facets"].([]any) {
 		m := l.(map[string]any)
 		prompts[m["routing_key"].(string)] = m["prompt"].(string)
 	}
 	effort := map[string]string{"m-risk": "", "m-rel": "high", "m-ref": "low", "m-val": ""}
-	for model, key := range map[string]string{"m-risk": "review-risk", "m-rel": "review-reliability"} {
+	for model, key := range map[string]string{"m-risk": "prism-safety", "m-rel": "prism-behavior"} {
 		equal(t, lines(t, filepath.Join(fake, model+".args")), claudeArgs(model, effort[model]), key+"'s argv")
 		equal(t, support.Read(t, filepath.Join(fake, model+".stdin")), prompts[key], key+"'s prompt on stdin")
 	}
 	for _, model := range []string{"m-ref", "m-val"} {
 		equal(t, lines(t, filepath.Join(fake, model+".args")), claudeArgs(model, effort[model]), model+"'s argv")
 	}
-	match(t, support.Read(t, filepath.Join(fake, "m-ref.stdin")), `"role": "refuter"`, "the refuter's prompt")
-	match(t, support.Read(t, filepath.Join(fake, "m-ref.stdin")), `"id": "reliability-1"`)
-	match(t, support.Read(t, filepath.Join(fake, "m-val.stdin")), `"role": "validator"`, "the validator's prompt")
+	match(t, support.Read(t, filepath.Join(fake, "m-ref.stdin")), `"role": "challenger"`, "the challenger's prompt")
+	match(t, support.Read(t, filepath.Join(fake, "m-ref.stdin")), `"id": "behavior-1"`)
+	match(t, support.Read(t, filepath.Join(fake, "m-val.stdin")), `"role": "arbiter"`, "the arbiter's prompt")
 
-	// The lenses met at the fake's barrier (in parallel), then the refuter,
-	// then the validator.
+	// The facets met at the fake's barrier (in parallel), then the challenger,
+	// then the arbiter.
 	order := lines(t, filepath.Join(fake, "order"))
 	equal(t, len(order), 4, order)
-	equal(t, sortedCopy(order[:2]), []string{"m-rel", "m-risk"}, "the lenses first")
-	equal(t, order[2:], []string{"m-ref", "m-val"}, "then the refuter, then the validator")
+	equal(t, sortedCopy(order[:2]), []string{"m-rel", "m-risk"}, "the facets first")
+	equal(t, order[2:], []string{"m-ref", "m-val"}, "then the challenger, then the arbiter")
 
 	// The record is the one the pi path writes for the same answers.
-	file := filepath.Join(root, "openspec/changes/c1/review-4r.md")
+	file := filepath.Join(root, "openspec/changes/c1/review-prism.md")
 	got := support.Read(t, file)
 	match(t, got, "(?m)^subject: "+subject+"$")
-	match(t, got, "(?m)^lenses: risk, reliability$")
+	match(t, got, "(?m)^facets: safety, behavior$")
 	pi := reviewRun(t, root, env, piInput, "record", "--subject", subject)
 	equal(t, pi.Code, 0, pi.Stderr)
 	equal(t, got, support.Read(t, file), "the same record as the pi path's")
-	equal(t, reviews(t, root)["4r"]["done"], true, "the record holds the 4R")
+	equal(t, reviews(t, root)["prism"]["done"], true, "the record holds the Prism review")
 }
 
 func sortedCopy(xs []string) []string {
@@ -178,7 +178,7 @@ func sortedCopy(xs []string) []string {
 	return out
 }
 
-// Without a finding there is nothing to refute or validate: only the lens
+// Without a finding there is nothing to refute or validate: only the facet
 // calls run.
 func TestReviewRunClaudeNoFindings(t *testing.T) {
 	t.Parallel()
@@ -187,20 +187,20 @@ func TestReviewRunClaudeNoFindings(t *testing.T) {
 	env := withPath(nativeEnv(t, claudeProfile), fake)
 	subject := startReview(t, root, env)["subject"].(string)
 	support.Write(t, fake, map[string]string{
-		"answer.m-risk": envelope(t, mustJSON(t, lensJSON(subject, "risk"))),
-		"answer.m-rel":  envelope(t, mustJSON(t, lensJSON(subject, "reliability"))),
+		"answer.m-risk": envelope(t, mustJSON(t, facetJSON(subject, "safety"))),
+		"answer.m-rel":  envelope(t, mustJSON(t, facetJSON(subject, "behavior"))),
 	})
 	r := reviewRun(t, root, env, "", "run")
 	equal(t, r.Code, 0, r.Stderr)
-	equal(t, sortedCopy(lines(t, filepath.Join(fake, "order"))), []string{"m-rel", "m-risk"}, "no refuter or validator call")
-	match(t, support.Read(t, filepath.Join(root, "openspec/changes/c1/review-4r.md")), "(?m)^verdict: pass$")
+	equal(t, sortedCopy(lines(t, filepath.Join(fake, "order"))), []string{"m-rel", "m-risk"}, "no challenger or arbiter call")
+	match(t, support.Read(t, filepath.Join(root, "openspec/changes/c1/review-prism.md")), "(?m)^verdict: pass$")
 }
 
-// Any failed call gives one line that says why and names the lens agents,
+// Any failed call gives one line that says why and names the facet agents,
 // exits 1 and records nothing (K2).
 func TestReviewRunClaudeFailures(t *testing.T) {
 	t.Parallel()
-	const fallback = `; nothing recorded\. Fallback: launch the review-risk and review-reliability agents, then the review-refuter and review-validator agents, as the 4R contract's fallback says\n$`
+	const fallback = `; nothing recorded\. Fallback: launch the prism-safety and prism-behavior agents, then the prism-challenger and prism-arbiter agents, as the Prism contract's fallback says\n$`
 	type tc struct {
 		name, why string
 		args      []string
@@ -219,29 +219,29 @@ func TestReviewRunClaudeFailures(t *testing.T) {
 			}
 			return "PATH=" + bare
 		}},
-		{name: "a non-zero exit", why: `the reliability lens call failed: claude exited 7: API Error: overloaded`, set: func(t *testing.T, fake, _ string) {
+		{name: "a non-zero exit", why: `the behavior facet call failed: claude exited 7: API Error: overloaded`, set: func(t *testing.T, fake, _ string) {
 			support.Write(t, fake, map[string]string{"exit.m-rel": "7"})
 		}},
-		{name: "unparsable JSON", why: `the risk lens call failed: claude's output is not its JSON result`, set: func(t *testing.T, fake, _ string) {
+		{name: "unparsable JSON", why: `the safety facet call failed: claude's output is not its JSON result`, set: func(t *testing.T, fake, _ string) {
 			support.Write(t, fake, map[string]string{"answer.m-risk": "not json\n"})
 		}},
-		{name: "an error result", why: `the risk lens call failed: claude reported an error \(error_max_turns\)`, set: func(t *testing.T, fake, _ string) {
+		{name: "an error result", why: `the safety facet call failed: claude reported an error \(error_max_turns\)`, set: func(t *testing.T, fake, _ string) {
 			support.Write(t, fake, map[string]string{"answer.m-risk": `{"type":"result","subtype":"error_max_turns","is_error":true,"num_turns":1}`})
 		}},
-		{name: "an answer for another subject", why: `the risk lens call failed: its answer is not one line of JSON for the risk lens and this subject`, set: func(t *testing.T, fake, _ string) {
-			support.Write(t, fake, map[string]string{"answer.m-risk": envelope(t, mustJSON(t, lensJSON(strings.Repeat("1", 64), "risk")))})
+		{name: "an answer for another subject", why: `the safety facet call failed: its answer is not one line of JSON for the safety facet and this subject`, set: func(t *testing.T, fake, _ string) {
+			support.Write(t, fake, map[string]string{"answer.m-risk": envelope(t, mustJSON(t, facetJSON(strings.Repeat("1", 64), "safety")))})
 		}},
-		{name: "a timeout", why: `the risk lens call failed: claude did not answer within 1s`, args: []string{"--timeout", "1"}, set: func(t *testing.T, fake, _ string) {
+		{name: "a timeout", why: `the safety facet call failed: claude did not answer within 1s`, args: []string{"--timeout", "1"}, set: func(t *testing.T, fake, _ string) {
 			support.Write(t, fake, map[string]string{"sleep.m-risk": ""})
 		}},
-		{name: "an answer over 256 KiB", why: `the risk lens call failed: claude's output passed 256 KiB`, set: func(t *testing.T, fake, subject string) {
-			big := envelope(t, strings.Repeat("x", 300<<10)+"\n"+mustJSON(t, lensJSON(subject, "risk")))
+		{name: "an answer over 256 KiB", why: `the safety facet call failed: claude's output passed 256 KiB`, set: func(t *testing.T, fake, subject string) {
+			big := envelope(t, strings.Repeat("x", 300<<10)+"\n"+mustJSON(t, facetJSON(subject, "safety")))
 			support.Write(t, fake, map[string]string{"answer.m-risk": big})
 		}},
-		{name: "the refuter fails", why: `the refuter call failed: claude exited 1: API Error: overloaded`, set: func(t *testing.T, fake, _ string) {
+		{name: "the challenger fails", why: `the challenger call failed: claude exited 1: API Error: overloaded`, set: func(t *testing.T, fake, _ string) {
 			support.Write(t, fake, map[string]string{"exit.m-ref": "1"})
 		}},
-		{name: "the validator's answer is no JSON", why: `the validator call failed: its answer is not one line of JSON with results`, set: func(t *testing.T, fake, _ string) {
+		{name: "the arbiter's answer is no JSON", why: `the arbiter call failed: its answer is not one line of JSON with results`, set: func(t *testing.T, fake, _ string) {
 			support.Write(t, fake, map[string]string{"answer.m-val": envelope(t, "I agree.")})
 		}},
 	}
@@ -264,14 +264,14 @@ func TestReviewRunClaudeFailures(t *testing.T) {
 			equal(t, r.Stdout, "", c.name+": nothing on stdout")
 			match(t, r.Stderr, `^jhon review run: `+c.why+fallback, c.name)
 			equal(t, strings.Count(r.Stderr, "\n"), 1, c.name+": one line")
-			if exists(filepath.Join(root, "openspec/changes/c1/review-4r.md")) {
+			if exists(filepath.Join(root, "openspec/changes/c1/review-prism.md")) {
 				t.Errorf("%s: a failed run records nothing", c.name)
 			}
 		})
 	}
 }
 
-// JHON_REVIEW_NATIVE=off runs no claude and names the lens agents, as the
+// JHON_REVIEW_NATIVE=off runs no claude and names the facet agents, as the
 // shell's switch does.
 func TestReviewRunClaudeOff(t *testing.T) {
 	t.Parallel()
@@ -280,7 +280,7 @@ func TestReviewRunClaudeOff(t *testing.T) {
 	env := append(withPath(nativeEnv(t, claudeProfile), fake), "JHON_REVIEW_NATIVE=off")
 	r := reviewRun(t, root, env, "", "run")
 	equal(t, r.Code, 1)
-	match(t, r.Stderr, `^jhon review run: the native review is off \(JHON_REVIEW_NATIVE=off\); nothing recorded\. Fallback: launch the review-risk and review-reliability agents`)
+	match(t, r.Stderr, `^jhon review run: the native review is off \(JHON_REVIEW_NATIVE=off\); nothing recorded\. Fallback: launch the prism-safety and prism-behavior agents`)
 	if exists(filepath.Join(fake, "order")) {
 		t.Error("no claude call when the native review is off")
 	}
@@ -327,8 +327,8 @@ func noScratch(t *testing.T, tmp string) {
 	}
 }
 
-// F1 (L1159): the first failed lens call cancels its siblings at once: the
-// reliability lens fails while the risk lens hangs (a `sleep 60` under it);
+// F1 (L1159): the first failed facet call cancels its siblings at once: the
+// reliability facet fails while the safety facet hangs (a `sleep 60` under it);
 // the run returns in seconds, the hung call and its child are killed (its
 // process group), its scratch directory is gone, and the one line names the
 // failure.
@@ -347,14 +347,14 @@ func TestReviewRunClaudeSiblingCancel(t *testing.T) {
 	r := reviewRun(t, root, env, "", "run")
 	took := time.Since(began)
 	equal(t, r.Code, 1, r.Stderr)
-	match(t, r.Stderr, `^jhon review run: the reliability lens call failed: claude exited 7: API Error: overloaded; nothing recorded\. Fallback: launch the review-risk and review-reliability agents`)
+	match(t, r.Stderr, `^jhon review run: the behavior facet call failed: claude exited 7: API Error: overloaded; nothing recorded\. Fallback: launch the prism-safety and prism-behavior agents`)
 	equal(t, strings.Count(r.Stderr, "\n"), 1, "one line")
 	if took > 15*time.Second {
 		t.Errorf("the run took %s: the hung sibling was not cancelled", took)
 	}
 	hungGone(t, fake, "m-risk")
 	noScratch(t, tmp)
-	if exists(filepath.Join(root, "openspec/changes/c1/review-4r.md")) {
+	if exists(filepath.Join(root, "openspec/changes/c1/review-prism.md")) {
 		t.Error("a failed run records nothing")
 	}
 }
@@ -384,7 +384,7 @@ func TestReviewRunClaudeSignal(t *testing.T) {
 	for !exists(filepath.Join(fake, "m-risk.pid")) || !exists(filepath.Join(fake, "m-rel.pid")) {
 		if time.Now().After(deadline) {
 			_ = cmd.Process.Kill()
-			t.Fatalf("the lens calls never started:\n%s", stderr.String())
+			t.Fatalf("the facet calls never started:\n%s", stderr.String())
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -402,16 +402,16 @@ func TestReviewRunClaudeSignal(t *testing.T) {
 		t.Errorf("exit %d (%s), want a non-zero exit of its own", code, cmd.ProcessState)
 	}
 	equal(t, stdout.String(), "", "nothing on stdout")
-	match(t, stderr.String(), `^jhon review run: stopped by SIGTERM; nothing recorded\. Fallback: launch the review-risk and review-reliability agents, then the review-refuter and review-validator agents, as the 4R contract's fallback says\n$`)
+	match(t, stderr.String(), `^jhon review run: stopped by SIGTERM; nothing recorded\. Fallback: launch the prism-safety and prism-behavior agents, then the prism-challenger and prism-arbiter agents, as the Prism contract's fallback says\n$`)
 	hungGone(t, fake, "m-risk")
 	hungGone(t, fake, "m-rel")
 	noScratch(t, tmp)
-	if exists(filepath.Join(root, "openspec/changes/c1/review-4r.md")) {
+	if exists(filepath.Join(root, "openspec/changes/c1/review-prism.md")) {
 		t.Error("an interrupted run records nothing")
 	}
 }
 
-// F6 (L1159): the validator is skipped only when every finding is refuted,
+// F6 (L1159): the arbiter is skipped only when every finding is refuted,
 // counted by distinct known finding ids: a refuted id given twice, or one
 // that names no finding, leaves a finding standing, so the validate step
 // runs (and refuses the answer) instead of record.
@@ -426,13 +426,13 @@ func TestReviewRunClaudeRefutedDistinct(t *testing.T) {
 		want    string
 	}{
 		{"a refuted id given twice", []map[string]any{
-			{"finding_id": "reliability-1", "outcome": "refuted", "reason": "src/app.py:2"},
-			{"finding_id": "reliability-1", "outcome": "refuted", "reason": "src/app.py:2"},
-		}, `^jhon review validate: the refuter answers reliability-1 twice\n$`},
+			{"finding_id": "behavior-1", "outcome": "refuted", "reason": "src/app.py:2"},
+			{"finding_id": "behavior-1", "outcome": "refuted", "reason": "src/app.py:2"},
+		}, `^jhon review validate: the challenger answers behavior-1 twice\n$`},
 		{"a refuted id that names no finding", []map[string]any{
-			{"finding_id": "reliability-1", "outcome": "refuted", "reason": "src/app.py:2"},
-			{"finding_id": "risk-9", "outcome": "refuted", "reason": "src/app.py:2"},
-		}, `^jhon review validate: the refuter answers "risk-9", a finding it was not given\n$`},
+			{"finding_id": "behavior-1", "outcome": "refuted", "reason": "src/app.py:2"},
+			{"finding_id": "safety-9", "outcome": "refuted", "reason": "src/app.py:2"},
+		}, `^jhon review validate: the challenger answers "safety-9", a finding it was not given\n$`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -441,36 +441,36 @@ func TestReviewRunClaudeRefutedDistinct(t *testing.T) {
 			env := withPath(nativeEnv(t, claudeProfile), fake)
 			subject := startReview(t, root, env)["subject"].(string)
 			support.Write(t, fake, map[string]string{
-				"answer.m-risk": envelope(t, mustJSON(t, lensJSON(subject, "risk"))),
-				"answer.m-rel":  envelope(t, mustJSON(t, lensJSON(subject, "reliability", f("src/app.py:2"), f("src/app.py:1")))),
-				"answer.m-ref":  envelope(t, mustJSON(t, role(subject, "refuter", c.results...))),
+				"answer.m-risk": envelope(t, mustJSON(t, facetJSON(subject, "safety"))),
+				"answer.m-rel":  envelope(t, mustJSON(t, facetJSON(subject, "behavior", f("src/app.py:2"), f("src/app.py:1")))),
+				"answer.m-ref":  envelope(t, mustJSON(t, role(subject, "challenger", c.results...))),
 			})
 			r := reviewRun(t, root, env, "", "run")
 			equal(t, r.Code, 1, r.Stderr)
 			match(t, r.Stderr, c.want, c.name)
-			if exists(filepath.Join(root, "openspec/changes/c1/review-4r.md")) {
+			if exists(filepath.Join(root, "openspec/changes/c1/review-prism.md")) {
 				t.Error("nothing is recorded")
 			}
 		})
 	}
-	t.Run("every finding refuted skips the validator", func(t *testing.T) {
+	t.Run("every finding refuted skips the arbiter", func(t *testing.T) {
 		t.Parallel()
 		root := nativeRepo(t)
 		fake := fakeClaude(t)
 		env := withPath(nativeEnv(t, claudeProfile), fake)
 		subject := startReview(t, root, env)["subject"].(string)
 		support.Write(t, fake, map[string]string{
-			"answer.m-risk": envelope(t, mustJSON(t, lensJSON(subject, "risk"))),
-			"answer.m-rel":  envelope(t, mustJSON(t, lensJSON(subject, "reliability", f("src/app.py:2"), f("src/app.py:1")))),
-			"answer.m-ref": envelope(t, mustJSON(t, role(subject, "refuter",
-				map[string]any{"finding_id": "reliability-1", "outcome": "refuted", "reason": "src/app.py:2"},
-				map[string]any{"finding_id": "reliability-2", "outcome": "refuted", "reason": "src/app.py:1"}))),
+			"answer.m-risk": envelope(t, mustJSON(t, facetJSON(subject, "safety"))),
+			"answer.m-rel":  envelope(t, mustJSON(t, facetJSON(subject, "behavior", f("src/app.py:2"), f("src/app.py:1")))),
+			"answer.m-ref": envelope(t, mustJSON(t, role(subject, "challenger",
+				map[string]any{"finding_id": "behavior-1", "outcome": "refuted", "reason": "src/app.py:2"},
+				map[string]any{"finding_id": "behavior-2", "outcome": "refuted", "reason": "src/app.py:1"}))),
 		})
 		r := reviewRun(t, root, env, "", "run")
 		equal(t, r.Code, 0, r.Stderr)
 		match(t, r.Stdout, `(?m)^correction set 0 · for verify 0 · follow-ups 0 · information 0 · refuted 2 · unavailable 0$`)
 		if slices.Contains(lines(t, filepath.Join(fake, "order")), "m-val") {
-			t.Error("no validator call when every finding is refuted")
+			t.Error("no arbiter call when every finding is refuted")
 		}
 	})
 }

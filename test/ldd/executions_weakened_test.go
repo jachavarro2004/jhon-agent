@@ -92,7 +92,7 @@ func TestExecutionsMarkATestTurnedGreenByEditingOnlyItsTest(t *testing.T) {
 				found = found || strings.Contains(n.(string), "b: tests/test_ids.py::test_ids turned green by editing only its test")
 			}
 			equal(t, found, true, "the run's notes name the mark", out["notes"])
-			// A later run keeps the mark: the validator still has it to judge.
+			// A later run keeps the mark: the arbiter still has it to judge.
 			weakenedRun(t, root, 0)
 			equal(t, len(readRecord(t, root)["turned_green"].([]any)), 1, "the mark is carried, once")
 		})

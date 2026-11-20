@@ -1,7 +1,7 @@
 # Efficiency
 
 How a writer keeps the change the size the task needs. It binds the
-writer: the worker.
+writer: the builder.
 
 ## Writer scope
 

@@ -20,7 +20,7 @@ import (
 //
 // `--judge` adds `tests_to_judge` when the change (or, with none named, the
 // change status selects) has tests its record marks as turned green by
-// editing only their test (T137): what verify and the 4R lenses are
+// editing only their test (T137): what verify and the Prism facets are
 // launched with to judge (ldd.TestsToJudge). It asks no Engram.
 //
 // `--save-state --after <sha>` is not a context: route-guard starts it,

@@ -44,7 +44,7 @@ func context7Rows(t *testing.T, settings string, remote bool, probe error) (rows
 
 func TestDoctorContext7MakesNoNetworkCallWithoutRemote(t *testing.T) {
 	rows, asked, failed := context7Rows(t, "", false, nil)
-	want := "  context7 is the hosted https://mcp.context7.com/mcp, for explore and worker: nothing installed or pinned; run 'jhon doctor --remote' to ask whether it answers\n"
+	want := "  context7 is the hosted https://mcp.context7.com/mcp, for jhon-scout and jhon-builder: nothing installed or pinned; run 'jhon doctor --remote' to ask whether it answers\n"
 	if rows != want || asked != 0 || failed != 0 {
 		t.Errorf("doctor without --remote: asked %d time(s), %d failed\n got %q\nwant %q", asked, failed, rows, want)
 	}
@@ -143,7 +143,7 @@ func TestDoctorContext7NamesItsAgentsWhateverTheTree(t *testing.T) {
 	must(t, os.WriteFile(filepath.Join(installed, "prose", "agents.yaml"), agents, 0o644))
 	path := filepath.Join(t.TempDir(), "settings.toml")
 	t.Setenv("JHON_SETTINGS", path)
-	want := "  context7 is the hosted https://mcp.context7.com/mcp, for explore and worker: nothing installed or pinned; run 'jhon doctor --remote' to ask whether it answers\n"
+	want := "  context7 is the hosted https://mcp.context7.com/mcp, for jhon-scout and jhon-builder: nothing installed or pinned; run 'jhon doctor --remote' to ask whether it answers\n"
 	for name, src := range map[string]string{"a checkout": repoRoot(t), "an installed release": installed, "no source": "", "unreadable agents": t.TempDir()} {
 		var b strings.Builder
 		o := &release.Out{W: &b, E: &b}

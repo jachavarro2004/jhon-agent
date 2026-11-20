@@ -87,7 +87,7 @@ func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 	}
 
 	// Out of pi's prompt: Claude Code's tool lines; behind a pointer on both
-	// runtimes: the remote list, the 4R table, the CI-watch
+	// runtimes: the remote list, the Prism table, the CI-watch
 	// and estimate detail.
 	for _, gone := range []string{"(Read, Grep, Glob, Edit)", "- Ambient SSH agents", "| Tool | Pays when | Where |",
 		"`gh run watch <run-id> --exit-status`", "`--dry-run` estimate"} {
@@ -98,14 +98,14 @@ func TestPiPromptCarriesWhatPiUses(t *testing.T) {
 	for ref, pointer := range map[string]string{
 		"contracts/asked-operations.md": e.atInstall(contractsRoot + "asked-operations.md"),
 		"contracts/delivery.md":         "read `contracts/delivery.md`",
-		"contracts/review-4r.md":        "(`contracts/review-4r.md`",
+		"contracts/review-prism.md":     "(`contracts/review-prism.md`",
 		"contracts/ldd.md":              "`contracts/ldd.md`",
 	} {
 		if !exists(filepath.Join(e.prose, ref)) {
 			t.Errorf("%s does not resolve", ref)
 		}
 		holder := got
-		if ref == "contracts/review-4r.md" {
+		if ref == "contracts/review-prism.md" {
 			holder = mustReadText(filepath.Join(e.prose, "contracts/delivery.md"))
 		}
 		if !strings.Contains(flatText(holder), pointer) {
@@ -169,7 +169,7 @@ func TestOrchestratorResearchesDecisionsFirst(t *testing.T) {
 		"{{runtime:mem-search}} for each entity the request names, and the project's file memory when present",
 		"Cite the decision ids found.",
 		"A recorded owner decision overrides the source document's wording: state the deviation, never follow the document against it.",
-		"An explore or worker task carries the standing decisions found, each id with one line, and asks it to search for more on what it covers.",
+		"A scout or builder task carries the standing decisions found, each id with one line, and asks it to search for more on what it covers.",
 		"When the owner corrects a premise, stop the running sub-agent and launch a fresh one with the correction; never continue one whose work rests on the corrected premise.",
 	}
 	p := pi{e}
@@ -198,17 +198,17 @@ func TestOrchestratorKeepsWorkingAndPlansLifecycle(t *testing.T) {
 	wants := []string{
 		"**Continue.** Never end a turn announcing a next step that is already authorized: do it in the same turn.",
 		"End a turn only for an owner decision that is really needed, a refusal, or a blocker you cannot resolve; a progress message is no reason to stop.",
-		"Before launching a worker on a slice, map with CodeGraph (then reads) every integration point it touches",
+		"Before launching a builder on a slice, map with CodeGraph (then reads) every integration point it touches",
 		"permissions and their categories or registries, permission seeds",
-		"A worker stopped on scope is a planning error: fix the plan, never ask the owner.",
+		"A builder stopped on scope is a planning error: fix the plan, never ask the owner.",
 		// T81, re-applied in T87a (L596, L629): from the main checkout, sub-agents and inspect reach the change's worktree.
 		"From the main checkout, pass the change's worktree to sub-agents and inspect (their `cwd` where the tool takes one, else its absolute path in the task and `git -C <worktree>`); never launch agents by running Jhon's internals by hand (`shell/lib`, node imports).",
 		// T95 (L629, L634): fixes after a worker, long suites, worker sizing, delivery order.
-		"A fix needed after a worker returns goes to a worker (continue it, or launch a fresh one), never inline.",
+		"A fix needed after a builder returns goes to a builder (continue it, or launch a fresh one), never inline.",
 		"A suite longer than a few minutes runs once, recorded (`jhon executions run`), in the background; never pipe it through `tail`, `head`, or `grep` (the pipe hides its exit code and failures): read its summary and record.",
 		"A slice's commit holds exactly the tree of its last recorded passing run: RED, GREEN, recorded run, commit.",
 		// T131 (L905, L908): no turn cap; a slice is sized to the context budget.
-		"**Size each worker slice to fit its context budget; the worker checkpoints its progress and partial state at its context notice and returns what is done and what remains: hand the remainder to a fresh worker.**",
+		"**Size each builder slice to fit its context budget; the builder checkpoints its progress and partial state at its context notice and returns what is done and what remains: hand the remainder to a fresh builder.**",
 		"Order: after the GREEN run, commit the tree it tested, then `jhon deliver check`.",
 	}
 	p := pi{e}
@@ -301,17 +301,17 @@ func flatText(s string) string { return strings.Join(strings.Fields(s), " ") }
 func TestAManifestTurnCapRendersForClaudeCodeOnly(t *testing.T) {
 	e := engineAt(t, repo, "--validate")
 	for i := range e.m.Agents {
-		if e.m.Agents[i].Name == "worker" {
+		if e.m.Agents[i].Name == "jhon-builder" {
 			if e.m.Agents[i].MaxTurns != "" {
 				t.Errorf("the release's worker names maxTurns %q", e.m.Agents[i].MaxTurns)
 			}
 			e.m.Agents[i].MaxTurns = "40"
 		}
 	}
-	if got := promptOf(t, pi{e}, filepath.Join(e.piAgents(), "worker.md")); strings.Contains(got, "maxTurns") {
+	if got := promptOf(t, pi{e}, filepath.Join(e.piAgents(), "jhon-builder.md")); strings.Contains(got, "maxTurns") {
 		t.Errorf("pi's worker carries a turn cap:\n%s", got[:min(400, len(got))])
 	}
-	if got := promptOf(t, claude{e}, filepath.Join(e.claudeAgents(), "worker.md")); !strings.Contains(got, "\nmaxTurns: 40\n") {
+	if got := promptOf(t, claude{e}, filepath.Join(e.claudeAgents(), "jhon-builder.md")); !strings.Contains(got, "\nmaxTurns: 40\n") {
 		t.Errorf("Claude Code's worker lost its maxTurns:\n%s", got[:min(400, len(got))])
 	}
 }

@@ -54,15 +54,15 @@ func TestEfficiencyCountsTheRepositorysWorktrees(t *testing.T) {
 	other := filepath.Join(filepath.Dir(repo), "other")
 	must(t, os.MkdirAll(other, 0o755))
 	gitT(t, other, "init", "-q")
-	s := delegate("e01", "worker", chg, writeCall(lane+"/src/a.ts"), writeCall(lane+"/src/b.ts"), writeCall(repo+"/src/c.ts"), writeCall(other+"/x.ts"))
+	s := delegate("e01", "jhon-builder", chg, writeCall(lane+"/src/a.ts"), writeCall(lane+"/src/b.ts"), writeCall(repo+"/src/c.ts"), writeCall(other+"/x.ts"))
 	s.root, s.prompt, s.result = repo, "Add the timeout in `src/a.ts` and `src/c.ts`.", shaped
 	w := auditOf(t, user("go"), s).Efficiency[0]
 	eq(t, "files written in the worktree and the root; another repository is not the root's", w.FilesWritten, 3)
 	eq(t, "relative to the worktree's top", w.OutOfScope, []string{"src/b.ts"})
-	named := delegate("e01", "worker", chg, writeCall(lane+"/src/a.ts"))
+	named := delegate("e01", "jhon-builder", chg, writeCall(lane+"/src/a.ts"))
 	named.root, named.prompt, named.result = repo, "Add the timeout in `"+lane+"/src/a.ts`.", shaped
 	eq(t, "a scope naming the worktree's absolute path", auditOf(t, user("go"), named).Efficiency[0].OutOfScope, []string{})
-	listed := delegate("e01", "worker", chg, writeCall(lane+"/svc/a.py"), writeCall(lane+"/docs/n.md"))
+	listed := delegate("e01", "jhon-builder", chg, writeCall(lane+"/svc/a.py"), writeCall(lane+"/docs/n.md"))
 	listed.root, listed.prompt, listed.result = repo, "Apply 1.1.\n\n## Allowed edit surfaces\n- svc/**", shaped
 	eq(t, "listed surfaces read in the worktree", auditOf(t, user("go"), listed).Efficiency[0].OutOfScope, []string{"docs/n.md"})
 }
@@ -73,7 +73,7 @@ func TestChangeInAWorktreeOnly(t *testing.T) {
 	must(t, os.MkdirAll(dir, 0o755))
 	tasks := "## Slice 1: a\n- [x] 1.1 a\n- [ ] 1.2 b\n\n## Slice 2: b\n- [ ] 2.1 c\n- [ ] 2.2 d\n- [ ] 2.3 e\n"
 	must(t, os.WriteFile(filepath.Join(dir, "tasks.md"), []byte(tasks+"- [ ] 2.4 f\n"), 0o644))
-	d := delegate("o01", "worker", chg)
+	d := delegate("o01", "jhon-builder", chg)
 	d.root = repo
 	s, errs := LoadSession(sessionWith(t, user("go"), d))
 	if len(errs) > 0 {

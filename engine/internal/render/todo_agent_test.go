@@ -12,7 +12,7 @@ func TestExecutorsHoldTodoInPiOnly(t *testing.T) {
 	e := engineAt(t, repo, "--validate")
 	seen := 0
 	for _, a := range e.m.Agents {
-		want := a.Name == "worker" || a.Name == "explore" || a.Name == "verify"
+		want := a.Name == "jhon-builder" || a.Name == "jhon-scout" || a.Name == "jhon-checker"
 		if got := slices.Contains(e.piTools(a), "todo"); got != want {
 			t.Errorf("%s: pi todo %v, want %v", a.Name, got, want)
 		}

@@ -40,7 +40,7 @@ import { shellSettings, type ShellSettings } from "../lib/settings.ts";
 // something without a list gets one nudge per owner message (S34). The list
 // is the agent's own next steps, never the change's tasks, which stay in
 // `jhon status` (L1019): so the start rule and the nudge hold inside an LDD
-// change too (T134; T49 had silenced them there). Worker, explore and verify
+// change too (T134; T49 had silenced them there). jhon-builder, jhon-scout and jhon-checker
 // keep one too (T134), private to their child process, with no card, no
 // keys, no start rule and no nudge, since a child's task is bounded.
 

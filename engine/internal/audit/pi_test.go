@@ -2,6 +2,7 @@ package audit
 
 import (
 	"fmt"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -249,8 +250,8 @@ func TestPiRealSessionsLoad(t *testing.T) {
 		dir, agentType, firstChildTool string
 		mainTools                      []string
 	}{
-		{"pi-main-refusal", "review-risk", "", []string{"Read", "Read", "Bash", "Agent"}},
-		{"pi-worker-refusal", "worker", "Bash", []string{"Read", "Agent"}},
+		{"pi-main-refusal", "prism-safety", "", []string{"Read", "Read", "Bash", "Agent"}},
+		{"pi-worker-refusal", "jhon-builder", "Bash", []string{"Read", "Agent"}},
 	} {
 		s, errs := LoadSession(fixture(t, c.dir))
 		if errs != nil {
@@ -270,7 +271,7 @@ func TestPiRealSessionsLoad(t *testing.T) {
 		eq(t, c.dir+" agent type", a.AgentType, c.agentType)
 		eq(t, c.dir+" launched by the main session's subagent call", slices.ContainsFunc(s.Main.Entries, func(e *Entry) bool {
 			return slices.ContainsFunc(e.ToolUses, func(u ToolUse) bool {
-				return u.ID == a.ToolUseID && u.Name == "Agent" && js.Prop(u.Input, "subagent_type") == c.agentType
+				return u.ID == a.ToolUseID && u.Name == "Agent" && rename.AgentNow(js.String(js.Prop(u.Input, "subagent_type"))) == c.agentType
 			})
 		}), true)
 		launch, _ := strProp(launchInput(s, a), "prompt")
@@ -324,8 +325,8 @@ func TestPiSessionKindIsWhatTheExtensionRecorded(t *testing.T) {
 }
 
 func TestPiGuardRefusalReadsAsTheHookError(t *testing.T) {
-	// The real refusal: the main session's git clean, and the worker's.
-	for _, c := range []struct{ dir, agentType string }{{"pi-main-refusal", main}, {"pi-worker-refusal", "worker"}} {
+	// The real refusal: the main session's git clean, and the jhon-builder's.
+	for _, c := range []struct{ dir, agentType string }{{"pi-main-refusal", main}, {"pi-worker-refusal", "jhon-builder"}} {
 		s, _ := LoadSession(fixture(t, c.dir))
 		var refusals []string
 		for _, tr := range s.transcripts() {
@@ -375,7 +376,7 @@ func TestPiToolsMapOntoTheChecksNames(t *testing.T) {
 		{"read", obj("path", "a.txt", "offset", 1.0, "limit", 9.0), `Read {"file_path":"a.txt","offset":1,"limit":9}`},
 		{"grep", obj("pattern", "x", "path", "src"), `Grep {"pattern":"x","path":"src"}`},
 		{"find", obj("pattern", "*.go"), `Glob {"pattern":"*.go"}`},
-		{"subagent", obj("agent", "worker", "task", "t"), `Agent {"subagent_type":"worker","prompt":"t"}`},
+		{"subagent", obj("agent", "jhon-builder", "task", "t"), `Agent {"subagent_type":"jhon-builder","prompt":"t"}`},
 		{"subagent_continue", obj("id", "toolu_7", "message", "go on"), `SendMessage {"to":"toolu_7","message":"go on"}`},
 		{"inspect", obj("command", "git show HEAD"), `Bash {"command":"git show HEAD"}`},
 		{"ask_user", obj("question", "Delete?", "options", []any{"yes (Recommended)", "no"}),
@@ -393,7 +394,7 @@ func TestPiToolsMapOntoTheChecksNames(t *testing.T) {
 func TestPiSessionErrors(t *testing.T) {
 	errorsOf := func(mutate func(main string)) []string {
 		t.Helper()
-		m := piSessionWith(t, puser("go"), psub("worker", "Do it.\n\n## Allowed edit surfaces\n- a.txt", "done", pbash("true", "")))
+		m := piSessionWith(t, puser("go"), psub("jhon-builder", "Do it.\n\n## Allowed edit surfaces\n- a.txt", "done", pbash("true", "")))
 		mutate(m)
 		_, errs := LoadSession(m)
 		var out []string
@@ -562,36 +563,36 @@ func TestPiRefusalBypass(t *testing.T) {
 	violates(t, "main thread", piFindings(t, "refusal-bypass", puser("go"), pmain(clean), pmain(pbash("env git clean -f -d -x", "Removing untracked.txt"))))
 	eq(t, "main thread, stopped", len(piFindings(t, "refusal-bypass", puser("go"), pmain(clean), preply("refused; stopping"))), 0)
 	// A child does the same.
-	violates(t, "a child", piFindings(t, "refusal-bypass", puser("go"), psub("worker", "Tidy.\n\n## Allowed edit surfaces\n- a.txt", "done", clean, pbash("sh -c 'git clean -fdx'", ""))))
-	eq(t, "a child, stopped", len(piFindings(t, "refusal-bypass", puser("go"), psub("worker", "Tidy.\n\n## Allowed edit surfaces\n- a.txt", "refused", clean, pbash("git status", "")))), 0)
+	violates(t, "a child", piFindings(t, "refusal-bypass", puser("go"), psub("jhon-builder", "Tidy.\n\n## Allowed edit surfaces\n- a.txt", "done", clean, pbash("sh -c 'git clean -fdx'", ""))))
+	eq(t, "a child, stopped", len(piFindings(t, "refusal-bypass", puser("go"), psub("jhon-builder", "Tidy.\n\n## Allowed edit surfaces\n- a.txt", "refused", clean, pbash("git status", "")))), 0)
 	// A refused write reached through the shell.
 	write := pblocked("write", obj("path", testRoot+"/.git/hooks/pre-push", "content", "exit 0"),
 		"vcs-guard: "+testRoot+"/.git/hooks/pre-push is inside a VCS directory (.git); no one writes there through Write")
 	violates(t, "a shell write", piFindings(t, "refusal-bypass", puser("go"), pmain(write), pmain(pbash("printf 'exit 0' > "+testRoot+"/.git/hooks/pre-push", ""))))
 	eq(t, "another path", len(piFindings(t, "refusal-bypass", puser("go"), pmain(write), pmain(pbash("printf x > "+testRoot+"/notes.md", "")))), 0)
 	// After a refusal, a delegation that asks for the effect.
-	f := piFindings(t, "refusal-bypass", puser("go"), pmain(clean), psub("worker", "Run git clean -fdx in the repository.\n\n## Allowed edit surfaces\n- a.txt", "ok"))
+	f := piFindings(t, "refusal-bypass", puser("go"), pmain(clean), psub("jhon-builder", "Run git clean -fdx in the repository.\n\n## Allowed edit surfaces\n- a.txt", "ok"))
 	if len(f) != 1 || f[0].Severity != "suspect" || f[0].Agent != main {
 		t.Errorf("delegated = %+v", f)
 	}
 	eq(t, "a delegation that reports it", len(piFindings(t, "refusal-bypass", puser("go"), pmain(clean),
-		psub("worker", "`git clean -fdx` was refused by the guard; report the state.\n\n## Allowed edit surfaces\n- a.txt", "ok"))), 0)
+		psub("jhon-builder", "`git clean -fdx` was refused by the guard; report the state.\n\n## Allowed edit surfaces\n- a.txt", "ok"))), 0)
 	// The owner declining the guard's question is not read.
 	declined := pblocked("bash", obj("command", "git push origin feat"), "safety-guard: git push: push needs the owner's authorization: the owner did not authorize it")
 	eq(t, "the owner declined", len(piFindings(t, "refusal-bypass", puser("go"), pmain(declined), pmain(pbash("git push origin feat", "")))), 0)
 	// The inspect guard's refusal of a reviewer, which the inspect tool returns as its error.
 	inspect := pcall{name: "inspect", args: obj("command", "git merge feat"), isError: true,
 		result: "inspect-guard: \"git merge feat\" is outside this agent's allowlist\nallowed forms: git diff, git show"}
-	violates(t, "a reviewer", piFindings(t, "refusal-bypass", puser("go"), psub("review-risk", "Review.", "ok", inspect, pbash("env git merge feat", ""))))
-	eq(t, "a reviewer in a declared form", len(piFindings(t, "refusal-bypass", puser("go"), psub("review-risk", "Review.", "ok", inspect, pcall{name: "inspect", args: obj("command", "git diff a b")}))), 0)
+	violates(t, "a reviewer", piFindings(t, "refusal-bypass", puser("go"), psub("prism-safety", "Review.", "ok", inspect, pbash("env git merge feat", ""))))
+	eq(t, "a reviewer in a declared form", len(piFindings(t, "refusal-bypass", puser("go"), psub("prism-safety", "Review.", "ok", inspect, pcall{name: "inspect", args: obj("command", "git diff a b")}))), 0)
 }
 
 func TestPiDeliveredUntested(t *testing.T) {
 	pushed := pbash("git push origin main", "To github.com:o/r.git\n   0000000.."+c1[:7]+"  main -> main")
 	run := pbash("jhon executions run "+chg, executionsOut(c1, t1, []string{"pass", "pass"}))
 	task := "Deliver the change.\nchange: " + chg + "\n\n## Allowed edit surfaces\n- a.txt"
-	violates(t, "an untested push", piFindings(t, "delivered-untested", puser("go"), psub("worker", task, "pushed", pushed)))
-	eq(t, "a tested push", len(piFindings(t, "delivered-untested", puser("go"), psub("worker", task, "pushed", run, pushed))), 0)
+	violates(t, "an untested push", piFindings(t, "delivered-untested", puser("go"), psub("jhon-builder", task, "pushed", pushed)))
+	eq(t, "a tested push", len(piFindings(t, "delivered-untested", puser("go"), psub("jhon-builder", task, "pushed", run, pushed))), 0)
 }
 
 // Resumes counts the times the owner reopened the session: each start entry
@@ -722,7 +723,7 @@ func TestPiIsolationBypassIsTheWriteOutsideItsTree(t *testing.T) {
 	// so a write under another root is read as the pi form (T56), a would-be
 	// violation until real fixtures back it, never a verified one.
 	w := pcall{name: "write", args: obj("path", "/elsewhere/p/a.txt", "content", "x"), result: "ok"}
-	fs := piFindings(t, "isolation-bypass", puser("go"), psub("worker", "Fix.\n\n## Allowed edit surfaces\n- a.txt", "done", w))
+	fs := piFindings(t, "isolation-bypass", puser("go"), psub("jhon-builder", "Fix.\n\n## Allowed edit surfaces\n- a.txt", "done", w))
 	wouldBe(t, fs)
 	eq(t, "status", fs[0].ValidationStatus, "pending-real-fixture")
 }
@@ -734,10 +735,10 @@ func TestPiMeasurements(t *testing.T) {
 		eq(t, a.Agent+" runtime", a.Runtime+" "+a.Version, "pi 3")
 		eq(t, a.Agent+" every turn has usage", a.Turns > 0 && a.TurnsWithoutUsage == 0, true)
 	}
-	eq(t, "the worker's efficiency", len(r.Efficiency), 1)
+	eq(t, "the jhon-builder's efficiency", len(r.Efficiency), 1)
 	// pi asks a writer for no return shape (no SubagentStop hook): its prose return is accepted, never missing.
 	eq(t, "no return shape in pi", r.Efficiency[0].ReturnShape, "n/a")
-	eq(t, "launches", js.StringifyValueCompact(r.Outcomes.Changes[0].Launches), `{"worker":1}`)
+	eq(t, "launches", js.StringifyValueCompact(r.Outcomes.Changes[0].Launches), `{"jhon-builder":1}`)
 }
 
 // The owner's yeses to a guard's question (pi's jhon-owner-authorization
@@ -783,10 +784,10 @@ func TestPiAgentAtItsTurnCapIsUnfinished(t *testing.T) {
 	write := pcall{name: "write", args: obj("path", report, "content", "# Verify\n\nverdict: fail\n\nChecking."), result: "written"}
 	cap := pblocked("bash", obj("command", "uv run pytest"), "jhon: you have spent your 40 turns. Call no more tools: reply now with what is done, what remains, and the decisions the next agent needs; a fresh agent continues from there")
 	verify := psub("verify", "Verify openspec/changes/"+chg+"/ against its specs", "I hit the 40-turn cap before finishing.", write, cap)
-	worker := psub("worker", "Apply openspec/changes/"+chg+"/ task 1.1.\n\n## Allowed edit surfaces\n- a.txt", "I ran out of turns partway.", cap)
+	worker := psub("jhon-builder", "Apply openspec/changes/"+chg+"/ task 1.1.\n\n## Allowed edit surfaces\n- a.txt", "I ran out of turns partway.", cap)
 	x := outcomeOf(piAudit(t, pstart("tui"), puser("go"), worker, verify), chg)
 	eq(t, "verdicts", x.Verdicts, [3]int{0, 0, 1})
 	eq(t, "unfinished", x.Unfinished, 2)
-	done := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("worker", "Apply openspec/changes/"+chg+"/ task 1.1.\n\n## Allowed edit surfaces\n- a.txt", "done")), chg)
-	eq(t, "a worker that finished", done.Unfinished, 0)
+	done := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("jhon-builder", "Apply openspec/changes/"+chg+"/ task 1.1.\n\n## Allowed edit surfaces\n- a.txt", "done")), chg)
+	eq(t, "a jhon-builder that finished", done.Unfinished, 0)
 }

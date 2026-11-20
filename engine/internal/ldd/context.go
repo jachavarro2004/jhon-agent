@@ -53,7 +53,7 @@ import (
 // behalf, and it need not exist yet (explore runs before its directory
 // does).
 
-// NoPhase is the phase of a delegation that is not an LDD phase: a general worker, a judge, a lens.
+// NoPhase is the phase of a delegation that is not an LDD phase: a general worker, a judge, a facet.
 const NoPhase = "none"
 
 // ContextKeys are the keys every context carries, in output order.

@@ -99,7 +99,7 @@ export function claudeCall(toolName: string, input: Record<string, unknown>): Cl
     return { tool_name: "Edit", tool_input: { file_path: input.path, ...(edits && { edits }) } };
   }
   // A sub-agent launch is judged as Claude Code's Agent call: the route guard
-  // runs verify and 4R reviewers only on its route.
+  // runs jhon-checker and Prism reviewers only on its route.
   // Its task is the prompt: the change it names picks the worktree whose route counts.
   if (toolName === "subagent") return { tool_name: "Agent", tool_input: { subagent_type: input.agent, prompt: input.task } };
   if (toolName === "powershell") return { refuse: "jhon: powershell is outside the safety guard's reading; use bash" };

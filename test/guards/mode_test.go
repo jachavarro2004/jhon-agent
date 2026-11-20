@@ -364,9 +364,9 @@ func TestModeNoteThroughPreTool(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
 	s.setMode(t, s.p, "yolo")
-	payload := map[string]any{"tool_name": "Bash", "tool_input": cmd("git push"), "cwd": s.p, "session_id": "s", "agent_id": "a1", "agent_type": "worker", "permission_mode": "bypassPermissions"}
+	payload := map[string]any{"tool_name": "Bash", "tool_input": cmd("git push"), "cwd": s.p, "session_id": "s", "agent_id": "a1", "agent_type": "jhon-builder", "permission_mode": "bypassPermissions"}
 	// The note unwrapped (T128f: the wrap is on by default on Linux).
-	r := hook(t, sandboxEnv(t, s, "off"), "pre-tool", []string{"--agent", "worker", "safety-guard"}, payload)
+	r := hook(t, sandboxEnv(t, s, "off"), "pre-tool", []string{"--agent", "jhon-builder", "safety-guard"}, payload)
 	code(t, r, 0, "pre-tool push")
 	matches(t, modeNote(t, r.Stdout), `^note \(not a refusal; the call ran\): allowed by the owner's yolo mode: push: git push$`, "pre-tool push")
 }
@@ -386,7 +386,7 @@ func TestModeAllowedCallsAreLogged(t *testing.T) {
 		if err := json.Unmarshal([]byte(l), &a); err != nil {
 			t.Fatal(err)
 		}
-		if a["root"] != s.p || a["guard"] != "safety-guard" || a["at"] == nil || a["session"] != "s" || a["agent"] != "worker" {
+		if a["root"] != s.p || a["guard"] != "safety-guard" || a["at"] == nil || a["session"] != "s" || a["agent"] != "jhon-builder" {
 			t.Errorf("allowed line %s", l)
 		}
 		got = append(got, a["mode"].(string)+" "+a["class"].(string))

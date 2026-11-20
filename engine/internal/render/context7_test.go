@@ -74,8 +74,8 @@ func TestContext7ToolsInEachRuntime(t *testing.T) {
 			holders = append(holders, a.Name)
 		}
 	}
-	if !slices.Equal(holders, []string{"explore", "worker"}) {
-		t.Errorf("the agents holding context7 = %v, want explore and worker (L1000)", holders)
+	if !slices.Equal(holders, []string{"jhon-scout", "jhon-builder"}) {
+		t.Errorf("the agents holding context7 = %v, want jhon-scout and jhon-builder (L1000)", holders)
 	}
 }
 

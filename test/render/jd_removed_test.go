@@ -10,7 +10,7 @@ import (
 )
 
 // Judgment Day is removed (T172, L1439, L1440): jhon has no judgment
-// command, and no runtime renders its agents. The 4R stays the one outside
+// command, and no runtime renders its agents. The Prism review stays the one outside
 // review.
 func TestJudgmentDayRemoved(t *testing.T) {
 	t.Parallel()
@@ -58,7 +58,7 @@ func TestJudgmentDayRemoved(t *testing.T) {
 func noJD(t *testing.T, dir string) {
 	t.Helper()
 	files := entries(t, dir)
-	if !contains(files, "worker.md") {
+	if !contains(files, "jhon-builder.md") {
 		t.Errorf("%s renders no worker: %v", dir, files)
 	}
 	for _, f := range files {

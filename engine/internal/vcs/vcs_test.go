@@ -222,9 +222,9 @@ func TestWorkingTreeNamesTheWorkingState(t *testing.T) {
 	}
 }
 
-// A review's frozen candidate is a function of the bytes: every lens that
+// A review's frozen candidate is a function of the bytes: every facet that
 // freezes the same working state gets the same candidate and subject, so a
-// lens can freeze for itself and a differing subject means different bytes.
+// facet can freeze for itself and a differing subject means different bytes.
 func TestFreezeIsTheWorkingStateAgainstItsBase(t *testing.T) {
 	root := repo(t, false)
 	write := func(name, s string) {

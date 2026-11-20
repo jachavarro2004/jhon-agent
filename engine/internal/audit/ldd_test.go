@@ -18,7 +18,7 @@ func TestCommitsOf(t *testing.T) {
 	}{
 		{"two slice commits", []pstep{pmain(commit), pmain(commit)}, 2},
 		{"a refused commit is no commit", []pstep{pmain(pblocked("bash", obj("command", "git commit -m x"), psafety("git commit")))}, 0},
-		{"a sub-agent's commit counts", []pstep{psub("worker", "slice 1", "done", commit)}, 1},
+		{"a sub-agent's commit counts", []pstep{psub("jhon-builder", "slice 1", "done", commit)}, 1},
 	} {
 		s, errs := LoadSession(piSessionWith(t, c.steps...))
 		if len(errs) > 0 {
@@ -75,17 +75,17 @@ func TestByHandCountsAWholeSuiteRunInASubagent(t *testing.T) {
 		calls  []tcall
 		byHand int
 	}{
-		{"a worker's whole suite, three times", []tcall{run, bash("uv run pytest -q", "3 passed"), bash("cd svc && uv run pytest -m unit -q", "3 passed"), bash("go test ./...", "ok")}, 3},
-		{"a worker's focused runs and a directory's", []tcall{run, bash("uv run pytest tests/test_a.py -q", "1 passed"), bash("uv run pytest tests/unit -q", "3 passed"), bash("go test ./internal/audit/ -run TestX", "ok")}, 0},
+		{"a jhon-builder's whole suite, three times", []tcall{run, bash("uv run pytest -q", "3 passed"), bash("cd svc && uv run pytest -m unit -q", "3 passed"), bash("go test ./...", "ok")}, 3},
+		{"a jhon-builder's focused runs and a directory's", []tcall{run, bash("uv run pytest tests/test_a.py -q", "1 passed"), bash("uv run pytest tests/unit -q", "3 passed"), bash("go test ./internal/audit/ -run TestX", "ok")}, 0},
 		{"only through jhon executions", []tcall{run}, 0},
 	} {
-		r := auditOf(t, user("go"), phased("apply", delegate("o01", "worker", chg, c.calls...)))
+		r := auditOf(t, user("go"), phased("apply", delegate("o01", "jhon-builder", chg, c.calls...)))
 		eq(t, c.what, byHand(t, r, chg), c.byHand)
 	}
-	// Another change's worker running at the same time is not this change's.
-	other := phased("apply", delegate("o02", "worker", "other-change", bash("uv run pytest -q", "3 passed")))
+	// Another change's jhon-builder running at the same time is not this change's.
+	other := phased("apply", delegate("o02", "jhon-builder", "other-change", bash("uv run pytest -q", "3 passed")))
 	r := auditOf(t, user("go"), mainBash("jhon status "+chg), other, mainBash("jhon executions run "+chg, executionsOut(c1, t1, []string{"pass"})))
-	eq(t, "another change's worker", byHand(t, r, chg), 0)
+	eq(t, "another change's jhon-builder", byHand(t, r, chg), 0)
 }
 
 // The main session's own count keeps its wider rule: a directory's suite
@@ -100,12 +100,12 @@ func TestByHandKeepsTheMainSessionsRule(t *testing.T) {
 // and the human line, which says it only when a suite ran by hand.
 func TestReportStatesTestsByHand(t *testing.T) {
 	run := bash("jhon executions run "+chg, executionsOut(c1, t1, []string{"pass"}))
-	r := auditOf(t, user("go"), phased("apply", delegate("o01", "worker", chg, run, bash("uv run pytest -q", "3 passed"), bash("go test ./...", "ok"))))
+	r := auditOf(t, user("go"), phased("apply", delegate("o01", "jhon-builder", chg, run, bash("uv run pytest -q", "3 passed"), bash("go test ./...", "ok"))))
 	eq(t, "the report", js.Prop(changeValue(t, r, chg), "tests_by_hand"), any(2.0))
 	if out := Human(r, "s.jsonl", false); !strings.Contains(out, "\n  ldd  "+chg+"  slices 0  owner messages 0  per slice -  tests by hand 2\n") {
 		t.Errorf("the human output states no hand runs:\n%s", out)
 	}
-	none := auditOf(t, user("go"), phased("apply", delegate("o01", "worker", chg, run)))
+	none := auditOf(t, user("go"), phased("apply", delegate("o01", "jhon-builder", chg, run)))
 	eq(t, "none: the report", js.Prop(changeValue(t, none, chg), "tests_by_hand"), any(0.0))
 	if out := Human(none, "s.jsonl", false); !strings.Contains(out, "\n  ldd  "+chg+"  slices 0  owner messages 0  per slice -\n") {
 		t.Errorf("none by hand: the human line changed:\n%s", out)

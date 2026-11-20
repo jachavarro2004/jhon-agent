@@ -49,7 +49,7 @@ function layout() {
 
 const WORKER = "---\nname: explore\ndescription: \"Investigate\"\nmodel: openai/gpt-5\ntools:\n  - read\n---\nLook around.\n";
 
-/** A fake pi child that commits one file where it runs, as a worker commits its slice, and answers. */
+/** A fake pi child that commits one file where it runs, as a jhon-builder commits its slice, and answers. */
 function fakePiBin(): string {
 	const bin = join(tempDir("jhon-wt-fake-"), "pi");
 	writeFileSync(bin, `#!/usr/bin/env node

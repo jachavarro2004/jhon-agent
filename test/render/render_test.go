@@ -98,7 +98,7 @@ func guardName(command string) string {
 	return ""
 }
 
-// treePath is a path as the validator names it: relative to prose/, unless
+// treePath is a path as the arbiter names it: relative to prose/, unless
 // it names one of the tree's other top directories.
 func treePath(root, rel string) string {
 	first, _, _ := strings.Cut(rel, "/")
@@ -533,9 +533,9 @@ func TestRenderArguments(t *testing.T) {
 	t.Run("--print shows the whole frontmatter and writes nothing", func(t *testing.T) {
 		t.Parallel()
 		home := t.TempDir()
-		r := render(t, home, "--print", "review-risk")
+		r := render(t, home, "--print", "prism-safety")
 		wantCode(t, r, 0)
-		match(t, r.Out(), `'hook' 'pre-tool' '--agent' 'review-risk' 'inspect-guard'`)
+		match(t, r.Out(), `'hook' 'pre-tool' '--agent' 'prism-safety' 'inspect-guard'`)
 		equal(t, len(entries(t, home)), 0)
 	})
 }
@@ -590,7 +590,7 @@ func TestRenderSkills(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
 		// T146g G4: a rendered agent names it at the install's real path.
-		match(t, flat(claudeAgent(t, home, "worker")), regexp.QuoteMeta(filepath.Join(home, ".local/share/jhon/current/prose/skills/ldd/references/apply.md")))
+		match(t, flat(claudeAgent(t, home, "jhon-builder")), regexp.QuoteMeta(filepath.Join(home, ".local/share/jhon/current/prose/skills/ldd/references/apply.md")))
 		match(t, flat(support.Read(t, filepath.Join(repoRoot, "runtimes", "claude-code", "plugin", "skills", "jhon-ldd", "SKILL.md"))), `~/\.local/share/jhon/current/prose/skills/ldd/references/verify\.md`)
 		for _, dir := range []string{filepath.Join(home, ".claude", "agents"), filepath.Join(repoRoot, "runtimes", "claude-code", "plugin"), filepath.Join(repoRoot, "prose", "skills")} {
 			for _, f := range walkFiles(t, dir) {
@@ -686,7 +686,7 @@ func TestRenderValidateRules(t *testing.T) {
 		{"the allowed-form anchor with no entry",
 			"  - anchor: runtime-boundaries/allowed-form\n", "  - anchor: runtime-boundaries/removed-form\n",
 			`runtime-boundaries/allowed-form has no audit_rules entry`},
-		{"an entry for an anchor the validator does not enumerate",
+		{"an entry for an anchor the arbiter does not enumerate",
 			"  - anchor: ldd/slices\n", "  - anchor: ldd/bogus\n    check: none\n    reason: x\n  - anchor: ldd/slices\n",
 			`ldd/bogus is not a behavioural anchor`},
 	} {
@@ -804,30 +804,30 @@ func TestRenderAgentTools(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
 		_, pi := sharedPiHome(t)
-		if !contains(claudeTools(frontmatter(claudeAgent(t, home, "worker"))), "mcp__codegraph__codegraph_explore") {
+		if !contains(claudeTools(frontmatter(claudeAgent(t, home, "jhon-builder"))), "mcp__codegraph__codegraph_explore") {
 			t.Error("the Claude Code worker lacks codegraph_explore")
 		}
-		if !contains(listItems(frontmatter(support.Read(t, filepath.Join(pi, "agents", "worker.md")))), "mcp__codegraph__codegraph_explore") {
+		if !contains(listItems(frontmatter(support.Read(t, filepath.Join(pi, "agents", "jhon-builder.md")))), "mcp__codegraph__codegraph_explore") {
 			t.Error("the pi worker lacks codegraph_explore")
 		}
 		for _, rt := range []struct{ label, dir string }{{"claude-code", filepath.Join(home, ".claude", "agents")}, {"pi", filepath.Join(pi, "agents")}} {
-			worker := flat(support.Read(t, filepath.Join(rt.dir, "worker.md")))
+			worker := flat(support.Read(t, filepath.Join(rt.dir, "jhon-builder.md")))
 			match(t, worker, `Use codegraph_explore before grep/find to locate code\.`, rt.label)
-			match(t, worker, `Your slice is sized to fit your context budget; at the context notice, checkpoint: stop and return what is done, the partial state, and what is left, so the orchestrator can hand the rest to a fresh worker\.`, rt.label)
-			explore := flat(support.Read(t, filepath.Join(rt.dir, "explore.md")))
+			match(t, worker, `Your slice is sized to fit your context budget; at the context notice, checkpoint: stop and return what is done, the partial state, and what is left, so the orchestrator can hand the rest to a fresh builder\.`, rt.label)
+			explore := flat(support.Read(t, filepath.Join(rt.dir, "jhon-scout.md")))
 			match(t, explore, "Cite `file:line` for every claim\\. At the context notice, return what you found\\.", rt.label)
-			for name, body := range map[string]string{"worker": worker, "explore": explore} {
+			for name, body := range map[string]string{"jhon-builder": worker, "jhon-scout": explore} {
 				noMatch(t, body, `(?i)turn cap|before the cap|\d+ turns`, rt.label+" "+name)
 			}
 			// The worker's tests are a unit's run, never by hand (T133); the
 			// verifier checks the slice or the change, so its run names a base.
 			for name, run := range map[string]string{
-				"worker": "Run tests through `jhon executions run <change> --affected` \\(the unit's run\\), never by hand; pipe",
-				"verify": "Run tests through `jhon executions run <change> --affected <base>` or with quiet flags; pipe",
+				"jhon-builder": "Run tests through `jhon executions run <change> --affected` \\(the unit's run\\), never by hand; pipe",
+				"jhon-checker": "Run tests through `jhon executions run <change> --affected <base>` or with quiet flags; pipe",
 			} {
 				body := flat(support.Read(t, filepath.Join(rt.dir, name+".md")))
 				match(t, body, run, rt.label+" "+name)
-				if name == "worker" {
+				if name == "jhon-builder" {
 					noMatch(t, body, `or with quiet flags`, rt.label+" "+name)
 				}
 				match(t, body, "pipe long output through `\\| tail -n 40` or a filter, and read only the failures", rt.label+" "+name)
@@ -838,13 +838,13 @@ func TestRenderAgentTools(t *testing.T) {
 	t.Run("an inspect agent's Claude Code frontmatter runs the inspect guard with the allowlist", func(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
-		fm := frontmatter(claudeAgent(t, home, "review-risk"))
-		inspect := guardsOf(t, home, "review-risk", guardWords(home, "inspect-guard"))
+		fm := frontmatter(claudeAgent(t, home, "prism-safety"))
+		inspect := guardsOf(t, home, "prism-safety", guardWords(home, "inspect-guard"))
 		if len(inspect) != 1 || inspect[0].matcher != "Bash" {
 			t.Fatal(fm)
 		}
 		command := inspect[0].command
-		if !strings.HasPrefix(command, quoted(guardWords(home, "inspect-guard"))+" '--agent' 'review-risk' ") {
+		if !strings.HasPrefix(command, quoted(guardWords(home, "inspect-guard"))+" '--agent' 'prism-safety' ") {
 			t.Error(command)
 		}
 		for _, p := range inspectPrefixes {
@@ -975,7 +975,7 @@ func TestRenderAgentTools(t *testing.T) {
 	t.Run("a bounded writer carries scope-guard on its writes and Bash; no other agent does", func(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
-		for _, name := range []string{"worker"} {
+		for _, name := range []string{"jhon-builder"} {
 			var h []hookEntry
 			for _, x := range preToolUse(t, frontmatter(claudeAgent(t, home, name))) {
 				if guardName(x.command) == "scope-guard" {
@@ -987,14 +987,14 @@ func TestRenderAgentTools(t *testing.T) {
 			}
 			equal(t, h[0].matcher, "Edit|MultiEdit|Write|NotebookEdit|Bash", name)
 		}
-		for _, name := range []string{"jhon-orchestrator", "verify", "explore", "review-risk"} {
+		for _, name := range []string{"jhon-orchestrator", "jhon-checker", "jhon-scout", "prism-safety"} {
 			noMatch(t, frontmatter(claudeAgent(t, home, name)), `scope-guard`, name)
 		}
 	})
 
 	t.Run("an agent whose tools contain no comma keeps the one-line tools field", func(t *testing.T) {
 		t.Parallel()
-		match(t, frontmatter(claudeAgent(t, renderedHome(t), "explore")), `(?m)^tools: Read, Grep, Glob, `)
+		match(t, frontmatter(claudeAgent(t, renderedHome(t), "jhon-scout")), `(?m)^tools: Read, Grep, Glob, `)
 	})
 
 	// verify must write verify-report.md into the change directory, and the
@@ -1002,7 +1002,7 @@ func TestRenderAgentTools(t *testing.T) {
 	// can only return the report as text, so no change could ever reach archive.
 	t.Run("verify may write its report", func(t *testing.T) {
 		t.Parallel()
-		tools := lineTools(t, frontmatter(claudeAgent(t, renderedHome(t), "verify")))
+		tools := lineTools(t, frontmatter(claudeAgent(t, renderedHome(t), "jhon-checker")))
 		for _, x := range []string{"Write", "Edit"} {
 			if !contains(tools, x) {
 				t.Errorf("%s missing: %v", x, tools)
@@ -1015,7 +1015,7 @@ func TestRenderAgentTools(t *testing.T) {
 	// can never resolve, which is what a live orchestrator session hit.
 	t.Run("an agent with the memory capability can resolve an Engram conflict", func(t *testing.T) {
 		t.Parallel()
-		tools := lineTools(t, frontmatter(claudeAgent(t, renderedHome(t), "worker")))
+		tools := lineTools(t, frontmatter(claudeAgent(t, renderedHome(t), "jhon-builder")))
 		for _, x := range []string{"mcp__engram__mem_judge", "mcp__plugin_engram_engram__mem_judge"} {
 			if !contains(tools, x) {
 				t.Errorf("%s missing: %v", x, tools)
@@ -1030,7 +1030,7 @@ func TestRenderAgentTools(t *testing.T) {
 	// rationale as ldd/<change>/explore, so it holds the whole memory capability.
 	t.Run("explore can search, read, and save Engram", func(t *testing.T) {
 		t.Parallel()
-		tools := lineTools(t, frontmatter(claudeAgent(t, renderedHome(t), "explore")))
+		tools := lineTools(t, frontmatter(claudeAgent(t, renderedHome(t), "jhon-scout")))
 		for _, p := range []string{"mcp__engram__", "mcp__plugin_engram_engram__"} {
 			for _, x := range []string{"mem_search", "mem_get_observation", "mem_save", "mem_judge"} {
 				if !contains(tools, p+x) {
@@ -1063,7 +1063,7 @@ func TestRenderAgentTools(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
 		_, delegable := manifestAgents(t)
-		if !contains(delegable, "verify") {
+		if !contains(delegable, "jhon-checker") {
 			t.Fatal(delegable)
 		}
 		for _, name := range delegable {
@@ -1086,7 +1086,7 @@ func TestRenderAgentTools(t *testing.T) {
 			"caps: [read, write, bash, memory, codegraph, todo, context7]\n    description: \"Implement a scoped task",
 			"caps: [read, write, bash, memory, memory-session, codegraph, todo, context7]\n    description: \"Implement a scoped task"))
 		wantCode(t, r, 1)
-		match(t, r.Out(), `top-level-tools\s+agents\.yaml\s+worker: .*mcp__engram__mem_session_summary`)
+		match(t, r.Out(), `top-level-tools\s+agents\.yaml\s+jhon-builder: .*mcp__engram__mem_session_summary`)
 	})
 
 	t.Run("a top-level tool smuggled into a shared capability fails the top-level-tools rule", func(t *testing.T) {
@@ -1094,7 +1094,7 @@ func TestRenderAgentTools(t *testing.T) {
 		r := validate(t, repoWithManifest(t, "mcp__plugin_engram_engram__mem_judge]",
 			"mcp__plugin_engram_engram__mem_judge, mcp__plugin_engram_engram__mem_context]"))
 		wantCode(t, r, 1)
-		match(t, r.Out(), `top-level-tools\s+agents\.yaml\s+worker: .*mcp__plugin_engram_engram__mem_context`)
+		match(t, r.Out(), `top-level-tools\s+agents\.yaml\s+jhon-builder: .*mcp__plugin_engram_engram__mem_context`)
 	})
 
 	t.Run("the orchestrator missing a top-level tool fails the top-level-tools rule", func(t *testing.T) {
@@ -1226,7 +1226,7 @@ func TestRenderRuntimeModel(t *testing.T) {
 	t.Run("every Claude Code agent definition ends with a brief claude-code guarantees declaration", func(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
-		for _, name := range []string{"jhon-orchestrator", "worker", "review-risk"} {
+		for _, name := range []string{"jhon-orchestrator", "jhon-builder", "prism-safety"} {
 			md := claudeAgent(t, home, name)
 			tail := md[strings.LastIndex(md, "\n## Runtime guarantees\n"):]
 			match(t, tail, "(?m)^\n## Runtime guarantees\n\nRuntime guarantees in claude-code \\(agents\\.yaml `guarantees`\\): \\d+ enforced, \\d+ behavioural \\(measured by jhon audit\\), \\d+ unsupported\\.$", name)
@@ -1259,7 +1259,7 @@ func TestRenderRuntimeModel(t *testing.T) {
 			edits = append(edits, [2]string{rule + ": { by: blocking-hook-agent, claude-code: enforced, pi: enforced }", rule + ": { claude-code: unsupported, pi: unsupported }"})
 		}
 		home := renderManifestEdits(t, edits...)
-		for _, name := range []string{"jhon-orchestrator", "worker", "review-risk", "explore"} {
+		for _, name := range []string{"jhon-orchestrator", "jhon-builder", "prism-safety", "jhon-scout"} {
 			noMatch(t, frontmatter(claudeAgent(t, home, name)), `(?m)^hooks:`, name)
 		}
 		match(t, claudeAgent(t, home, "jhon-orchestrator"), `(?m)^Absent here: blocking-hook-agent\.$`)
@@ -1343,7 +1343,7 @@ func TestRenderRoster(t *testing.T) {
 	t.Run("artifact writers hold generic write, their writes guarded by the write, framework, secrets, and route guards alone", func(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
-		for _, name := range []string{"explore", "verify"} {
+		for _, name := range []string{"jhon-scout", "jhon-checker"} {
 			if !contains(manifestCaps(t, name), "write") {
 				t.Errorf("%s: %v", name, manifestCaps(t, name))
 			}
@@ -1369,9 +1369,8 @@ func TestRenderRoster(t *testing.T) {
 	t.Run("the manifest holds the lean roster and none of the retired agents", func(t *testing.T) {
 		t.Parallel()
 		equal(t, sorted(allManifestAgents(t)), []string{
-			"explore", "jhon-orchestrator",
-			"review-readability", "review-refuter", "review-reliability", "review-resilience", "review-risk",
-			"review-validator", "verify", "worker",
+			"jhon-builder", "jhon-checker", "jhon-orchestrator", "jhon-scout",
+			"prism-arbiter", "prism-behavior", "prism-challenger", "prism-clarity", "prism-failure", "prism-safety",
 		})
 		if _, err := os.Stat(filepath.Join(repoRoot, "prose", "coordinator.md")); err == nil {
 			t.Error("the retired coordinator's body remains: prose/coordinator.md")
@@ -1387,7 +1386,7 @@ func TestRenderRoster(t *testing.T) {
 	// explore also collects external evidence (the research phase).
 	t.Run("explore holds the web tools beside the repository ones", func(t *testing.T) {
 		t.Parallel()
-		tools := claudeTools(frontmatter(claudeAgent(t, renderedHome(t), "explore")))
+		tools := claudeTools(frontmatter(claudeAgent(t, renderedHome(t), "jhon-scout")))
 		for _, x := range []string{"Read", "WebFetch", "WebSearch"} {
 			if !contains(tools, x) {
 				t.Errorf("%s missing: %v", x, tools)
@@ -1561,16 +1560,16 @@ func TestRenderManifest(t *testing.T) {
 
 	t.Run("an unknown per-agent manifest key fails the manifest rule", func(t *testing.T) {
 		t.Parallel()
-		r := validateManifest(t, rep("  - name: worker\n    tier: strong\n", "  - name: worker\n    tier: strong\n    teir: strong\n"))
+		r := validateManifest(t, rep("  - name: jhon-builder\n    tier: strong\n", "  - name: jhon-builder\n    tier: strong\n    teir: strong\n"))
 		wantCode(t, r, 1)
-		match(t, r.Out(), `manifest\s+agents\.yaml:\d+\s+worker: unknown key 'teir'`)
+		match(t, r.Out(), `manifest\s+agents\.yaml:\d+\s+jhon-builder: unknown key 'teir'`)
 	})
 
 	t.Run("an agent whose tier is not declared fails the manifest rule", func(t *testing.T) {
 		t.Parallel()
-		r := validateManifest(t, rep("  - name: worker\n    tier: strong\n", "  - name: worker\n    tier: turbo\n"))
+		r := validateManifest(t, rep("  - name: jhon-builder\n    tier: strong\n", "  - name: jhon-builder\n    tier: turbo\n"))
 		wantCode(t, r, 1)
-		match(t, r.Out(), `manifest\s+agents\.yaml\s+worker: tier 'turbo' undefined for claude-code`)
+		match(t, r.Out(), `manifest\s+agents\.yaml\s+jhon-builder: tier 'turbo' undefined for claude-code`)
 	})
 
 	// Claude Code receives the concrete model of the agent's tier, pinned by
@@ -1587,8 +1586,8 @@ func TestRenderManifest(t *testing.T) {
 		}
 		// Docket AX1: no role defaults to frontier; frontier is a per-review opt-in.
 		// Every role defaults to Opus at medium effort (the owner's choice, 2026-10-28).
-		strong := []string{"explore", "worker", "verify",
-			"review-risk", "review-resilience", "review-readability", "review-reliability", "review-refuter", "review-validator", "jhon-orchestrator"}
+		strong := []string{"jhon-scout", "jhon-builder", "jhon-checker",
+			"prism-safety", "prism-failure", "prism-clarity", "prism-behavior", "prism-challenger", "prism-arbiter", "jhon-orchestrator"}
 		mid := []string{}
 		cheap := []string{}
 		for _, name := range strong {
@@ -1609,14 +1608,14 @@ func TestRenderManifest(t *testing.T) {
 		yaml := filepath.Join(repo, "prose", "agents.yaml")
 		src := support.Read(t, yaml)
 		edited := strings.Replace(strings.Replace(src, "cheap: claude-haiku-5-5@medium", "cheap: claude-haiku-5-5", 1),
-			"  - name: worker\n    tier: strong\n", "  - name: worker\n    tier: cheap\n", 1)
+			"  - name: jhon-builder\n    tier: strong\n", "  - name: jhon-builder\n    tier: cheap\n", 1)
 		if edited == src {
 			t.Fatal("the anchor must match")
 		}
 		write(t, yaml, edited)
 		home := t.TempDir()
 		wantCode(t, install(t, home, repo), 0)
-		md := claudeAgent(t, home, "worker")
+		md := claudeAgent(t, home, "jhon-builder")
 		m, _ := fmField(md, "model")
 		equal(t, m, "claude-haiku-5-5")
 		if e, ok := fmField(md, "effort"); ok {
@@ -1651,33 +1650,33 @@ func TestRenderManifest(t *testing.T) {
 
 	t.Run("a maxTurns that is not a positive integer fails the manifest rule", func(t *testing.T) {
 		t.Parallel()
-		r := validateManifest(t, rep("  - name: worker\n    tier: strong\n", "  - name: worker\n    tier: strong\n    maxTurns: lots\n"))
+		r := validateManifest(t, rep("  - name: jhon-builder\n    tier: strong\n", "  - name: jhon-builder\n    tier: strong\n    maxTurns: lots\n"))
 		wantCode(t, r, 1)
-		match(t, r.Out(), `worker: maxTurns 'lots' is not a positive integer`)
+		match(t, r.Out(), `jhon-builder: maxTurns 'lots' is not a positive integer`)
 	})
 
 	t.Run("an omitClaudeMd other than true fails the manifest rule", func(t *testing.T) {
 		t.Parallel()
-		r := validateManifest(t, rep("  - name: explore\n    tier: strong\n", "  - name: explore\n    tier: strong\n    omitClaudeMd: yes\n"))
+		r := validateManifest(t, rep("  - name: jhon-scout\n    tier: strong\n", "  - name: jhon-scout\n    tier: strong\n    omitClaudeMd: yes\n"))
 		wantCode(t, r, 1)
-		match(t, r.Out(), `explore: omitClaudeMd 'yes' must be true`)
+		match(t, r.Out(), `jhon-scout: omitClaudeMd 'yes' must be true`)
 	})
 
 	t.Run("an agent effort the runtime does not document fails the manifest rule", func(t *testing.T) {
 		t.Parallel()
-		r := validateManifest(t, rep("  - name: worker\n    tier: strong\n", "  - name: worker\n    tier: strong\n    effort: turbo\n"))
+		r := validateManifest(t, rep("  - name: jhon-builder\n    tier: strong\n", "  - name: jhon-builder\n    tier: strong\n    effort: turbo\n"))
 		wantCode(t, r, 1)
-		match(t, r.Out(), `manifest\s+agents\.yaml\S*\s+worker: effort 'turbo' is not one of low, medium, high, xhigh, max`)
+		match(t, r.Out(), `manifest\s+agents\.yaml\S*\s+jhon-builder: effort 'turbo' is not one of low, medium, high, xhigh, max`)
 	})
 
 	t.Run("an agent effort on a tier whose Claude model takes none fails the manifest rule", func(t *testing.T) {
 		t.Parallel()
 		r := validateManifest(t, func(s string) string {
 			return strings.Replace(strings.Replace(s, "cheap: claude-haiku-5-5@medium", "cheap: claude-haiku-5-5", 1),
-				"  - name: worker\n    tier: strong\n", "  - name: worker\n    tier: cheap\n    effort: high\n", 1)
+				"  - name: jhon-builder\n    tier: strong\n", "  - name: jhon-builder\n    tier: cheap\n    effort: high\n", 1)
 		})
 		wantCode(t, r, 1)
-		match(t, r.Out(), `manifest\s+agents\.yaml\S*\s+worker: tier cheap \(claude-haiku-5-5\) takes no effort`)
+		match(t, r.Out(), `manifest\s+agents\.yaml\S*\s+jhon-builder: tier cheap \(claude-haiku-5-5\) takes no effort`)
 	})
 
 	t.Run("a tier value with an empty model or effort fails the manifest rule", func(t *testing.T) {
@@ -1692,7 +1691,7 @@ func TestRenderManifest(t *testing.T) {
 
 	t.Run("an unparseable manifest line fails the manifest rule", func(t *testing.T) {
 		t.Parallel()
-		r := validateManifest(t, rep("  - name: worker\n", "  - name: worker\n    just some words\n"))
+		r := validateManifest(t, rep("  - name: jhon-builder\n", "  - name: jhon-builder\n    just some words\n"))
 		wantCode(t, r, 1)
 		match(t, r.Out(), `manifest\s+agents\.yaml:\d+\s+cannot parse`)
 	})
@@ -1702,23 +1701,23 @@ func TestRenderManifest(t *testing.T) {
 	// the expansion: a defect in a template is a defect in each agent it generates.
 	t.Run("a template placeholder the manifest does not supply fails validation", func(t *testing.T) {
 		t.Parallel()
-		r := validateEdited(t, "agents/templates/review-lens.md", rep("## Scope", "## Scope for {{audience}}"))
+		r := validateEdited(t, "agents/templates/prism-facet.md", rep("## Scope", "## Scope for {{audience}}"))
 		wantCode(t, r, 1)
-		match(t, r.Out(), `agent-template\s+.*review-risk: template placeholder \{\{audience\}\} has no value`)
+		match(t, r.Out(), `agent-template\s+.*prism-safety: template placeholder \{\{audience\}\} has no value`)
 	})
 
 	t.Run("a manifest var the template never uses fails validation", func(t *testing.T) {
 		t.Parallel()
-		r := validateEdited(t, "agents.yaml", rep("      code: R1\n", "      code: R1\n      colour: red\n"))
+		r := validateEdited(t, "agents.yaml", rep("      title: Safety\n", "      title: Safety\n      colour: red\n"))
 		wantCode(t, r, 1)
-		match(t, r.Out(), `agent-template\s+.*review-risk: var 'colour' is not used by template review-lens`)
+		match(t, r.Out(), `agent-template\s+.*prism-safety: var 'colour' is not used by template prism-facet`)
 	})
 
 	t.Run("a defect in a template is reported against every agent it generates", func(t *testing.T) {
 		t.Parallel()
-		r := validateEdited(t, "agents/templates/review-lens.md", rep("## Scope", "See `contracts/ghost.md`.\n\n## Scope"))
+		r := validateEdited(t, "agents/templates/prism-facet.md", rep("## Scope", "See `contracts/ghost.md`.\n\n## Scope"))
 		wantCode(t, r, 1)
-		for _, name := range []string{"review-risk", "review-resilience", "review-readability", "review-reliability"} {
+		for _, name := range []string{"prism-safety", "prism-failure", "prism-clarity", "prism-behavior"} {
 			match(t, r.Out(), `broken-ref\s+agents/`+name+`\.md`)
 		}
 	})
@@ -1870,7 +1869,7 @@ func TestRenderClaudeMd(t *testing.T) {
 
 	t.Run("a writer carries the always-on layer, as every agent does", func(t *testing.T) {
 		t.Parallel()
-		match(t, claudeAgent(t, renderedHome(t), "worker"), `\*\*A safety refusal is a stop\.\*\*`, "the worker's layer")
+		match(t, claudeAgent(t, renderedHome(t), "jhon-builder"), `\*\*A safety refusal is a stop\.\*\*`, "the worker's layer")
 	})
 }
 
@@ -1930,7 +1929,7 @@ func TestRenderGuards(t *testing.T) {
 				equal(t, len(gs), 0, name+" has no Bash and must carry no safety guard")
 			}
 		}
-		for _, name := range []string{"jhon-orchestrator", "worker", "verify", "review-risk"} {
+		for _, name := range []string{"jhon-orchestrator", "jhon-builder", "jhon-checker", "prism-safety"} {
 			if !contains(withBash, name) {
 				t.Error(name)
 			}
@@ -1940,7 +1939,7 @@ func TestRenderGuards(t *testing.T) {
 	t.Run("only the reviewers carry the read-only inspect guard", func(t *testing.T) {
 		t.Parallel()
 		home := renderedHome(t)
-		reviewers := []string{"review-risk", "review-resilience", "review-readability", "review-reliability", "review-refuter", "review-validator"}
+		reviewers := []string{"prism-safety", "prism-failure", "prism-clarity", "prism-behavior", "prism-challenger", "prism-arbiter"}
 		for _, name := range allManifestAgents(t) {
 			want := 0
 			if contains(reviewers, name) {
@@ -2172,7 +2171,7 @@ func TestRenderPlugin(t *testing.T) {
 				}
 			}
 		}
-		for _, name := range []string{"worker", "verify", "explore"} {
+		for _, name := range []string{"jhon-builder", "jhon-checker", "jhon-scout"} {
 			if slices.ContainsFunc(claudeTools(frontmatter(claudeAgent(t, home, name))), func(s string) bool { return strings.HasPrefix(s, "mcp__plugin_jhon_") }) {
 				t.Error(name)
 			}
@@ -2293,7 +2292,7 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		match(t, b, "`contracts/<name>\\.md` here is `"+regexp.QuoteMeta(filepath.Join(renderedHome(t), ".local/share/jhon/current/prose/contracts"))+"/<name>\\.md`, binding once its trigger applies", "a contract the orchestrator names resolves")
 		delivery := flat(support.Read(t, treePath(repoRoot, "contracts/delivery.md")))
 		delegation := flat(support.Read(t, treePath(repoRoot, "contracts/delegation.md")))
-		match(t, delivery, "`verify` and an automatic 4R with only the pertinent lenses", "L9: risk high gets verify and a 4R by need")
+		match(t, delivery, "`jhon-checker` and an automatic Prism review with only the pertinent facets", "L9: risk high gets jhon-checker and a Prism review by need")
 		match(t, delivery, "`review_required` always wins", "L9, S17: review_required wins")
 		match(t, delivery, `The record is always; the rigor is the change's, not\s+yours`, "LDD: the record goes with every change; the route sets only the rigor")
 		match(t, delegation, `the owner's request verbatim`, "handoffs carry the request")
@@ -2302,10 +2301,10 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		match(t, b, `Once the owner accepts the plan, ask only a real doubt it does not\s+answer, one that changes the scope`, "the question triggers ride in the always-on layer")
 		match(t, b, `Every question names the answer you recommend and\s+why, from the project's context`, "each question carries a recommended answer (L179)")
 		match(t, b, `Inside an authorized change the next step is not a question`, "a slice's next phase follows its report")
-		match(t, delegation, `Size each worker slice to fit its context budget; the worker checkpoints its progress and partial state at its context notice and returns what is done and what remains: hand the remainder to a fresh worker`, "T131, L905, L908: no turn cap; the context budget sizes a slice")
+		match(t, delegation, `Size each builder slice to fit its context budget; the builder checkpoints its progress and partial state at its context notice and returns what is done and what remains: hand the remainder to a fresh builder`, "T131, L905, L908: no turn cap; the context budget sizes a slice")
 		noMatch(t, b, `(?i)turn cap|\d+-turn|before the cap`, "T131: the orchestrator names no turn cap")
 		noMatch(t, delegation, `(?i)turn cap|\d+-turn|before the cap`, "T131: the delegation rules name no turn cap")
-		match(t, delegation, `A slice that crosses layers runs as passes, one layer each, in\s+dependency order: pure domain; persistence \(migration, models, migration\s+test\); application \(commands, handlers, repository port and adapter\);\s+API and record \(route, schemas, permission rows, contract test, docs\)\.\s+One worker per pass, its brief naming its exact files from tasks\.md, its\s+Allowed edit surfaces and its one commit, each under the child\s+budget \(wrap-up 80K/40%, cap 150K/75%\); independent passes run in\s+parallel, each in its own worktree\.`, "T126, L797: a multi-layer slice runs as one worker per layer pass")
+		match(t, delegation, `A slice that crosses layers runs as passes, one layer each, in\s+dependency order: pure domain; persistence \(migration, models, migration\s+test\); application \(commands, handlers, repository port and adapter\);\s+API and record \(route, schemas, permission rows, contract test, docs\)\.\s+One builder per pass, its brief naming its exact files from tasks\.md, its\s+Allowed edit surfaces and its one commit, each under the child\s+budget \(wrap-up 80K/40%, cap 150K/75%\); independent passes run in\s+parallel, each in its own worktree\.`, "T126, L797: a multi-layer slice runs as one builder per layer pass")
 		match(t, b, `One session per change`, "S35: a fresh session after an archive or at half the context")
 		match(t, delivery, `A suite the PR's CI runs whole is never run whole here too`, "in a client project a local full integration suite (35 to 56 min) repeated CI's")
 		match(t, delivery, "For a wide or long run, tell the owner the `--dry-run` estimate, and when it should end, as you start the run, never a guess from the files changed", "the owner asked how it was going 4 times in a client project; L38, S22: an estimate only for wide or long runs")
@@ -2343,7 +2342,7 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		for _, name := range []string{"jhon-orchestrator"} {
 			match(t, claudeFull(t, home), `## Response Length Contract`, name)
 		}
-		for _, name := range []string{"verify", "review-risk", "explore"} {
+		for _, name := range []string{"jhon-checker", "prism-safety", "jhon-scout"} {
 			md := claudeAgent(t, home, name)
 			noMatch(t, md, `## Response Length Contract`, name+" carries the persona")
 			match(t, md, `\*\*A safety refusal is a stop\.\*\*`, name+" lacks the contracts")
@@ -2377,7 +2376,7 @@ func TestRenderOrchestratorBody(t *testing.T) {
 		match(t, read("skills/ldd/references/explore.md"), `already exists, read it first and extend it`)
 		match(t, read("skills/ldd/references/design.md"), `Read budget:`)
 		match(t, read("skills/ldd/references/design.md"), `exploration\.md`)
-		match(t, read("contracts/delegation.md"), `One explore per change`)
+		match(t, read("contracts/delegation.md"), `One scout per change`)
 		match(t, read("orchestrator.md"), "Before writing a delegation prompt, read `contracts/delegation\\.md`")
 	})
 
@@ -2499,7 +2498,7 @@ func TestRenderPi(t *testing.T) {
 		match(t, w, "Every sub-agent and long job runs in the background\\.", "background")
 		// T117e (L746): the bound counts per owner request; reading past one batch goes to the brief.
 		match(t, w, "The guard sums changed lines across calls since the owner's last message", "the per-request bound")
-		match(t, w, "Reading beyond one read batch goes into the worker's brief", "the brief carries the reading")
+		match(t, w, "Reading beyond one read batch goes into the builder's brief", "the brief carries the reading")
 		prompt := support.Read(t, filepath.Join(pi, "jhon-orchestrator.md"))
 		b, e := strings.Index(prompt, "<!-- delegation:begin -->"), strings.Index(prompt, "<!-- delegation:end -->")
 		equal(t, strings.Count(prompt, "<!-- delegation:begin -->"), 1, "begin markers")
@@ -2527,26 +2526,26 @@ func TestRenderPi(t *testing.T) {
 		}
 		equal(t, sorted(defs), sorted(delegable))
 		fm := func(name string) string { return frontmatter(support.Read(t, filepath.Join(pi, "agents", name+".md"))) }
-		match(t, fm("worker"), `(?m)^model: claude-bridge/claude-opus-5-5\nthinking: medium$`)
-		match(t, fm("verify"), `(?m)^model: claude-bridge/claude-opus-5-5$`)
+		match(t, fm("jhon-builder"), `(?m)^model: claude-bridge/claude-opus-5-5\nthinking: medium$`)
+		match(t, fm("jhon-checker"), `(?m)^model: claude-bridge/claude-opus-5-5$`)
 		// T131 (L905, L908): no agent has a turn cap; every executor runs until it returns.
 		for _, name := range delegable {
 			noMatch(t, fm(name), `(?m)^maxTurns:`, name)
 		}
-		equal(t, listItems(fm("worker")), []string{"read", "grep", "find", "ls", "edit", "write", "bash", "mcp__engram__mem_search", "mcp__engram__mem_get_observation",
+		equal(t, listItems(fm("jhon-builder")), []string{"read", "grep", "find", "ls", "edit", "write", "bash", "mcp__engram__mem_search", "mcp__engram__mem_get_observation",
 			"mcp__engram__mem_save", "mcp__engram__mem_update", "mcp__engram__mem_judge", "mcp__codegraph__codegraph_explore", "todo", "mcp__context7__resolve_library_id", "mcp__context7__query_docs"})
 		// T134 H7a (L1019): the executors keep their own todo list in pi; no other agent has it.
 		for _, name := range delegable {
 			holds := contains(listItems(fm(name)), "todo")
-			if want := name == "worker" || name == "explore" || name == "verify"; holds != want {
+			if want := name == "jhon-builder" || name == "jhon-scout" || name == "jhon-checker"; holds != want {
 				t.Errorf("pi %s: holds todo %v, want %v", name, holds, want)
 			}
 		}
-		equal(t, listItems(fm("review-risk")), []string{"inspect", "mcp__codegraph__codegraph_explore"}, "a reviewer inspects without a shell")
-		if ex := listItems(fm("explore")); !contains(ex, "web_search") || !contains(ex, "fetch_content") {
+		equal(t, listItems(fm("prism-safety")), []string{"inspect", "mcp__codegraph__codegraph_explore"}, "a reviewer inspects without a shell")
+		if ex := listItems(fm("jhon-scout")); !contains(ex, "web_search") || !contains(ex, "fetch_content") {
 			t.Error(ex)
 		}
-		for _, name := range []string{"worker", "verify"} {
+		for _, name := range []string{"jhon-builder", "jhon-checker"} {
 			match(t, support.Read(t, filepath.Join(pi, "agents", name+".md")), `\*\*A safety refusal is a stop\.\*\*`, name)
 		}
 	})
@@ -2794,15 +2793,15 @@ func TestRenderProfiles(t *testing.T) {
 		t.Parallel()
 		// worker declares its own effort, which the profile's override for it replaces.
 		repo := support.CopyRepo(t)
-		editFile(t, filepath.Join(repo, "prose", "agents.yaml"), "  - name: worker\n    tier: strong\n", "  - name: worker\n    tier: strong\n    effort: low\n")
+		editFile(t, filepath.Join(repo, "prose", "agents.yaml"), "  - name: jhon-builder\n    tier: strong\n", "  - name: jhon-builder\n    tier: strong\n    effort: low\n")
 		home := t.TempDir()
 		if err := os.MkdirAll(filepath.Join(home, ".pi"), 0o777); err != nil {
 			t.Fatal(err)
 		}
-		write(t, filepath.Join(home, ".config", "jhon", "profiles.json"), `{"active":"x","profiles":{"x":{"tiers":{"pi":{"strong":"claude-bridge/claude-fable-5-1@high"}},"agents":{"worker":{"claude-code":"claude-opus-5-5@max"}}}}}`)
+		write(t, filepath.Join(home, ".config", "jhon", "profiles.json"), `{"active":"x","profiles":{"x":{"tiers":{"pi":{"strong":"claude-bridge/claude-fable-5-1@high"}},"agents":{"jhon-builder":{"claude-code":"claude-opus-5-5@max"}}}}}`)
 		wantCode(t, install(t, home, repo), 0)
-		match(t, frontmatter(claudeAgent(t, home, "worker")), `(?m)^model: claude-opus-5-5\neffort: max$`)
-		match(t, support.Read(t, filepath.Join(home, ".pi", "jhon", "agents", "verify.md")), `(?m)^model: claude-bridge/claude-fable-5-1\nthinking: high$`)
+		match(t, frontmatter(claudeAgent(t, home, "jhon-builder")), `(?m)^model: claude-opus-5-5\neffort: max$`)
+		match(t, support.Read(t, filepath.Join(home, ".pi", "jhon", "agents", "jhon-checker.md")), `(?m)^model: claude-bridge/claude-fable-5-1\nthinking: high$`)
 	})
 
 	t.Run("settings' pi.profile picks the rendered profile over profiles.json's active (T56b)", func(t *testing.T) {
@@ -2814,16 +2813,16 @@ func TestRenderProfiles(t *testing.T) {
 		write(t, filepath.Join(home, ".config", "jhon", "profiles.json"), `{"active":"y","profiles":{"x":{"tiers":{"pi":{"strong":"claude-bridge/claude-fable-5-1@high"}}},"y":{}}}`)
 		write(t, filepath.Join(home, ".config", "jhon", "settings.toml"), "schema = 1\n[pi]\nprofile = \"x\"\n")
 		wantCode(t, install(t, home, repoRoot), 0)
-		match(t, support.Read(t, filepath.Join(home, ".pi", "jhon", "agents", "verify.md")), `(?m)^model: claude-bridge/claude-fable-5-1\nthinking: high$`)
+		match(t, support.Read(t, filepath.Join(home, ".pi", "jhon", "agents", "jhon-checker.md")), `(?m)^model: claude-bridge/claude-fable-5-1\nthinking: high$`)
 	})
 }
 
-// 4R is the pertinent lenses, one bounded correction by a worker, then
+// Prism review is the pertinent facets, one bounded correction by a worker, then
 // verify (S18, L19); the grant classes review and verified stay retired
-// (S19). The refuter and validator agents return as the fallback after the
-// lens agents (T118f, L730): both render read-only, and the contract runs
-// them in "Fallback: lens agents".
-func TestRenderSimplifiedFourR(t *testing.T) {
+// (S19). The challenger and arbiter agents return as the fallback after the
+// facet agents (T118f, L730): both render read-only, and the contract runs
+// them in "Fallback: facet agents".
+func TestRenderSimplifiedPrism(t *testing.T) {
 	t.Parallel()
 	retired := regexp.MustCompile("jhon grant (?:verified|review)\\b|grant `(?:verified|review)`")
 	var docs []string
@@ -2846,7 +2845,7 @@ func TestRenderSimplifiedFourR(t *testing.T) {
 		}
 	}
 	home := renderedHome(t)
-	for name, role := range map[string]string{"review-refuter": "refuter", "review-validator": "validator"} {
+	for name, role := range map[string]string{"prism-challenger": "challenger", "prism-arbiter": "arbiter"} {
 		fm := frontmatter(claudeAgent(t, home, name))
 		if regexp.MustCompile(`(?m)^tools:.*\b(Edit|Write|MultiEdit)\b|^  - (Edit|Write|MultiEdit)$`).MatchString(fm) {
 			t.Errorf("%s can write: %s", name, fm)
@@ -2855,45 +2854,45 @@ func TestRenderSimplifiedFourR(t *testing.T) {
 		match(t, body, `jhon review freeze --base <ref>`, name+" freezes")
 		match(t, body, `"role":"`+role+`","results":\[\{"finding_id"`, name+" answers in its role schema")
 	}
-	fallback := support.Read(t, filepath.Join(repoRoot, "prose", "contracts", "review-4r.md"))
-	if i := strings.Index(fallback, "## Fallback: lens agents"); i >= 0 {
-		fallback = flat(fallback[i:strings.Index(fallback, "## Lenses")])
+	fallback := support.Read(t, filepath.Join(repoRoot, "prose", "contracts", "review-prism.md"))
+	if i := strings.Index(fallback, "## Fallback: facet agents"); i >= 0 {
+		fallback = flat(fallback[i:strings.Index(fallback, "## Facets")])
 	}
-	match(t, fallback, "Then `review-refuter` \\(each finding `refuted` or `stands`\\) and `review-validator`", "the fallback runs the refuter, then the validator")
+	match(t, fallback, "Then `prism-challenger` \\(each finding `refuted` or `stands`\\) and `prism-arbiter`", "the fallback runs the challenger, then the arbiter")
 	match(t, fallback, "`jhon review record --subject` with the native path's JSON", "the fallback records as the native path does")
-	reduction := support.Read(t, filepath.Join(repoRoot, "prose", "contracts", "review-4r.md"))
+	reduction := support.Read(t, filepath.Join(repoRoot, "prose", "contracts", "review-prism.md"))
 	if i := strings.Index(reduction, "## Reduction"); i >= 0 {
 		reduction = flat(reduction[i:])
 	}
 	match(t, reduction, "Deterministic severe findings block", "deterministic severe findings block")
-	match(t, reduction, `[Ii]nferential severe findings are listed in\s+review-4r\.md for .verify. to confirm or drop`, "inferential ones wait for verify")
-	match(t, reduction, "one bounded correction by a `worker`", "the correction is a worker's")
+	match(t, reduction, `[Ii]nferential severe findings are listed in\s+review-prism\.md for .jhon-checker. to confirm or drop`, "inferential ones wait for verify")
+	match(t, reduction, "one bounded correction by a `jhon-builder`", "the correction is a builder's")
 	match(t, reduction, "`## Allowed edit surfaces`", "the worker is held to its scope")
-	match(t, reduction, "`verify` confirms", "verify confirms the correction")
+	match(t, reduction, "`jhon-checker` confirms", "jhon-checker confirms the correction")
 }
 
-// The 4R is native first: one tool call, tool-less lens completions, a
-// refuter and a validator, a record bound to the subject; the lens agents
+// The Prism review is native first: one tool call, tool-less facet completions, a
+// challenger and an arbiter, a record bound to the subject; the facet agents
 // are only the fallback (T118b, L726, L727).
-func TestRenderFourRNativeFirst(t *testing.T) {
+func TestRenderPrismNativeFirst(t *testing.T) {
 	t.Parallel()
-	c := flat(support.Read(t, filepath.Join(repoRoot, "prose", "contracts", "review-4r.md")))
-	native, fallback := strings.Index(c, "## Native review"), strings.Index(c, "## Fallback: lens agents")
+	c := flat(support.Read(t, filepath.Join(repoRoot, "prose", "contracts", "review-prism.md")))
+	native, fallback := strings.Index(c, "## Native review"), strings.Index(c, "## Fallback: facet agents")
 	if native < 0 || fallback < native {
-		t.Fatalf("the contract must describe the native review before the lens-agent fallback (native %d, fallback %d)", native, fallback)
+		t.Fatalf("the contract must describe the native review before the facet-agent fallback (native %d, fallback %d)", native, fallback)
 	}
 	match(t, c, "one tool call \\(`jhon_review` in pi", "one tool call")
-	match(t, c, "completions in parallel, then a refuter and a validator", "lenses in parallel, then refuter and validator")
-	match(t, c, "`jhon review record` re-freezes and writes review-4r\\.md bound to the frozen subject", "the record is bound to the subject")
-	match(t, c, "~100K tokens means the slice is too big: split it", "an oversized lens prompt splits the slice")
-	match(t, c, "When the native review cannot run \\(no model or registry, or `jhon review run` names the lens agents\\), launch the read-only `review-<lens>` agents", "agents are the fallback")
+	match(t, c, "completions in parallel, then a challenger and an arbiter", "facets in parallel, then challenger and arbiter")
+	match(t, c, "`jhon review record` re-freezes and writes review-prism\\.md bound to the frozen subject", "the record is bound to the subject")
+	match(t, c, "~100K tokens means the slice is too big: split it", "an oversized facet prompt splits the slice")
+	match(t, c, "When the native review cannot run \\(no model or registry, or `jhon review run` names the facet agents\\), launch the read-only `prism-<facet>` agents", "agents are the fallback")
 	match(t, c, "in Claude Code, one Bash call to `jhon review run`", "Claude Code's native review is one Bash call (T118d)")
 	match(t, c, "In Claude Code, `jhon review run \\[--base <ref>\\]` does all of it in one Bash call: each prompt runs through `claude -p`", "through claude -p")
-	match(t, c, "records nothing: its one line says why and names the lens agents", "a failed call falls back to the lens agents")
-	match(t, c, "Run it as a Bash call with `run_in_background: true`", "F3 (L1159): in the background, past the Bash tool's 2-minute default")
-	match(t, c, "Independence stays with `verify`", "independence stays with verify")
+	match(t, c, "records nothing: its one line says why and names the facet agents", "a failed call falls back to the facet agents")
+	match(t, c, "Run it with `run_in_background: true`", "F3 (L1159): in the background, past the Bash tool's 2-minute default")
+	match(t, c, "Independence stays with `jhon-checker`", "independence stays with jhon-checker")
 	o := flat(support.Read(t, filepath.Join(repoRoot, "prose", "orchestrator.md")))
-	match(t, o, "A 4R is one call to the native review \\(\\{\\{runtime:native-review\\}\\}\\), the lens agents only when it cannot run", "the orchestrator calls the native review first, in each runtime's own words")
+	match(t, o, "A Prism review is one call to the native review \\(\\{\\{runtime:native-review\\}\\}\\), the facet agents only when it cannot run", "the orchestrator calls the native review first, in each runtime's own words")
 }
 
 // T146g G4 (L1273, L1274): a model told the install is at `~/...` expands

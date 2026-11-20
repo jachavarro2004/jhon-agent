@@ -13,6 +13,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/guard"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
@@ -44,8 +45,8 @@ import (
 //     path listed matches something (guard.MissingSurfaces: a file or
 //     folder there, a glob's match, or a new file's parent folder; T153,
 //     L1364 b), so a wrong path is fixed before the launch.
-//   - The verify agent may always be launched, on any route. 4R reviewers run
-//     without asking when 4R is due (risk at the verified tier, or
+//   - The jhon-checker agent may always be launched, on any route. Prism reviewers run
+//     without asking when Prism review is due (risk at the verified tier, or
 //     review_required naming 4r), which the owner approved; its correction
 //     is a worker's. Otherwise a reviewer is asked for at the top level, where the owner answers, and refused
 //     from a sub-agent; no grant stands in for that answer, but the
@@ -54,7 +55,7 @@ import (
 //     size alone never puts a change on it) a PR opens only once the branch's
 //     change has its independent verification (ldd.BranchVerified), and a
 //     commit that closes a slice before then passes with a note that verify
-//     is due; on a risk-high route it waits for its 4R too, and on any route
+//     is due; on a risk-high route it waits for its Prism review too, and on any route
 //     for what review_required names (ldd.ReviewsOf).
 //   - A commit that closes a slice adding more lines of code than the
 //     advisory size (ldd.SliceLines) passes with a note that says so;
@@ -94,7 +95,10 @@ func RouteGuard(args []string, io IO) int {
 		return 0
 	}
 	// A bounded writer is launched with its scope, in any project.
-	if kind := strings.TrimSpace(p.Obj("tool_input").Str("subagent_type")); p.Str("tool_name") == "Agent" && slices.Contains(bounded, kind) {
+	for i, b := range bounded {
+		bounded[i] = rename.AgentNow(b)
+	}
+	if kind := rename.AgentNow(strings.TrimSpace(p.Obj("tool_input").Str("subagent_type"))); p.Str("tool_name") == "Agent" && slices.Contains(bounded, kind) {
 		surfaces, ok := guard.SurfacesOf(p.Obj("tool_input").Str("prompt"))
 		if !ok {
 			return block("a " + kind + " is launched with its scope: list the files it may edit under a `## Allowed edit surfaces` heading, one path or narrow glob per line; without it nothing holds the writer to its task (contracts/efficiency.md, \"Writer scope\").")
@@ -145,18 +149,18 @@ func RouteGuard(args []string, io IO) int {
 
 	switch tool := p.Str("tool_name"); tool {
 	case "Agent":
-		kind := strings.TrimSpace(p.Obj("tool_input").Str("subagent_type"))
+		kind := rename.AgentNow(strings.TrimSpace(p.Obj("tool_input").Str("subagent_type")))
 		switch {
-		case strings.HasPrefix(kind, "review-") && owes(reviewsOf(), ldd.ReviewFourR):
-			// A 4R runs only the lenses its diff calls for (L46); another
-			// lens is the owner's call.
-			lens := strings.TrimPrefix(kind, "review-")
-			if pertinent := routeOf().Lenses; slices.Contains(ldd.Lenses, lens) && !slices.Contains(pertinent, lens) {
-				return ask("review", "the "+lens+" lens is not pertinent to this change: its diff calls for ("+strings.Join(pertinent, ", ")+") (contracts/review-4r.md, \"Lenses\")")
+		case strings.HasPrefix(kind, "prism-") && owes(reviewsOf(), ldd.ReviewPrism):
+			// A Prism review runs only the facets its diff calls for (L46); another
+			// facet is the owner's call.
+			facet := strings.TrimPrefix(kind, "prism-")
+			if pertinent := routeOf().Facets; slices.Contains(ldd.Facets, facet) && !slices.Contains(pertinent, facet) {
+				return ask("review", "the "+facet+" facet is not pertinent to this change: its diff calls for ("+strings.Join(pertinent, ", ")+") (contracts/review-prism.md, \"Facets\")")
 			}
 			return 0
-		case strings.HasPrefix(kind, "review-"):
-			return ask("review", "a "+kind+" reviewer runs only when the owner asks for a 4R review")
+		case strings.HasPrefix(kind, "prism-"):
+			return ask("review", "a "+kind+" reviewer runs only when the owner asks for a Prism review")
 		}
 		return 0
 	case "Bash":
@@ -228,7 +232,7 @@ func RouteGuard(args []string, io IO) int {
 				r, _ := judgedAt(root)
 				var due []string
 				if why, ok := verifyDue(root, r()); ok {
-					due = append(due, "route verified ("+why+"): verify is due before delivery; launch the verify agent and record verify-report.md before the PR")
+					due = append(due, "route verified ("+why+"): verify is due before delivery; launch the jhon-checker agent and record verify-report.md before the PR")
 				}
 				due = append(due, ldd.DesignDueNotes(root, r())...)
 				for _, s := range ldd.ClosedSliceLines(root, r()) {
@@ -335,7 +339,7 @@ func memberRefusal(member, primary, command string, routeOf func() ldd.Route) (w
 		return "", lightVerifyNote(change)
 	case r.Level == ldd.RouteVerified:
 		if ldd.IndependentVerification(primary, change) == nil {
-			return lead + "has no independent verification on record: the route is verified (" + strings.Join(r.Reasons, "; ") + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) for " + change + " in " + primary + " before the PR (contracts/ldd.md, \"Delivery\")." + route, ""
+			return lead + "has no independent verification on record: the route is verified (" + strings.Join(r.Reasons, "; ") + "): launch the `jhon-checker` agent and record its verify-report.md (`verdict: pass`) for " + change + " in " + primary + " before the PR (contracts/ldd.md, \"Delivery\")." + route, ""
 		}
 	}
 	return "", ""
@@ -347,7 +351,7 @@ func memberRefusal(member, primary, command string, routeOf func() ldd.Route) (w
 // caught a defect the recorded runs missed.
 func lightVerifyNote(change string) string {
 	return modeNotePrefix + "the PR runs with no passing light verify of the tree its last run tested on record for " + change +
-		" (contracts/ldd.md, \"Light verify\"): an advisory, as no light verify has caught a defect on record; the `verify` agent in light mode records one with `jhon executions verify " + change + " --verdict pass|fail`"
+		" (contracts/ldd.md, \"Light verify\"): an advisory, as no light verify has caught a defect on record; the `jhon-checker` agent in light mode records one with `jhon executions verify " + change + " --verdict pass|fail`"
 }
 
 // judged is the route and the reviews of the branch in the repository at
@@ -524,7 +528,7 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		}
 	}
 	if why, due := verifyDue(top, routeOf()); due {
-		return "the route is verified (" + why + "): verify is due before delivery: launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/<change>/ before the PR (contracts/ldd.md, \"Delivery\").", ""
+		return "the route is verified (" + why + "): verify is due before delivery: launch the `jhon-checker` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/<change>/ before the PR (contracts/ldd.md, \"Delivery\").", ""
 	}
 	change := "<change>"
 	if active, _ := ldd.BranchChanges(top); len(active) == 1 {
@@ -537,16 +541,16 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 			continue
 		}
 		why := strings.Join(v.By, "; ")
-		if v.Review == ldd.ReviewFourR {
+		if v.Review == ldd.ReviewPrism {
 			why = strings.Replace(why, byRisk, fmt.Sprintf("%s reaches the verified tier (%s)", byRisk, r.VerifiedTier), 1)
 		}
 		switch v.Review {
 		case ldd.ReviewUnreadable:
 			return v.Line(), ""
-		case ldd.ReviewVerify:
-			return "verify is due before delivery (" + why + "): launch the `verify` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/" + change + "/ before the PR (contracts/ldd.md, \"Delivery\").", ""
-		case ldd.ReviewFourR:
-			return "4R is due before delivery (" + why + "): run the pertinent lenses (" + strings.Join(r.Lenses, ", ") + ") with the native review (`jhon_review` in pi, `jhon review run` in Claude Code; the lens agents when it cannot run), only those its diff calls for (contracts/review-4r.md, \"Lenses\"), and record openspec/changes/" + change + "/review-4r.md with the lenses it ran (`lenses: " + strings.Join(r.Lenses, ", ") + "`) and `verdict: pass` before the PR.", ""
+		case ldd.ReviewChecker:
+			return "checker is due before delivery (" + why + "): launch the `jhon-checker` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/" + change + "/ before the PR (contracts/ldd.md, \"Delivery\").", ""
+		case ldd.ReviewPrism:
+			return "Prism review is due before delivery (" + why + "): run the pertinent facets (" + strings.Join(r.Facets, ", ") + ") with the native review (`jhon_review` in pi, `jhon review run` in Claude Code; the facet agents when it cannot run), only those its diff calls for (contracts/review-prism.md, \"Facets\"), and record openspec/changes/" + change + "/review-prism.md with the facets it ran (`facets: " + strings.Join(r.Facets, ", ") + "`) and `verdict: pass` before the PR.", ""
 		}
 	}
 	return "", note

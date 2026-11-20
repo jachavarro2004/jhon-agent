@@ -173,7 +173,7 @@ func TestDialogueCountsTurnsThatEndInAPlainQuestion(t *testing.T) {
 // its own, and the notice of its end is not the owner's answer.
 func TestDialogueLeavesSubAgentsOut(t *testing.T) {
 	question := "Which one?"
-	sub := delegate("d01", "worker", chg, tcall{name: "AskUserQuestion", input: obj("questions", []any{obj("question", "Sure?")}), text: &question}, bash("ls"))
+	sub := delegate("d01", "jhon-builder", chg, tcall{name: "AskUserQuestion", input: obj("questions", []any{obj("question", "Sure?")}), text: &question}, bash("ls"))
 	sub.result = "Shall I go on?"
 	r := auditOf(t, user("go"), step{kind: "reply", text: "Start?"}, user("yes"), sub, step{kind: "reply", text: "Done."})
 	eq(t, "ask-tool calls", r.Dialogue.AskCalls, 0)
@@ -185,7 +185,7 @@ func TestDialogueLeavesSubAgentsOut(t *testing.T) {
 	}
 
 	p := piAudit(t, puser("go"), preply("Start?"), puser("yes"),
-		psub("worker", "Do it.\n\n## Allowed edit surfaces\n- a.txt", "Shall I go on?", pcall{name: "ask_user", args: obj("question", "Sure?", "options", []any{"a", "b"}), result: "a"}), preply("Done."))
+		psub("jhon-builder", "Do it.\n\n## Allowed edit surfaces\n- a.txt", "Shall I go on?", pcall{name: "ask_user", args: obj("question", "Sure?", "options", []any{"a", "b"}), result: "a"}), preply("Done."))
 	eq(t, "pi: ask-tool calls", p.Dialogue.AskCalls, 0)
 	eq(t, "pi: prose questions", p.Dialogue.ProseQuestions, 1)
 	eq(t, "pi: owner answers", len(p.Dialogue.Answers), 1)

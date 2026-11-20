@@ -6,39 +6,39 @@ import (
 	"testing"
 )
 
-// A 4R record is review-4r.md naming at least one lens, only the four, and
+// A Prism record is review-prism.md naming at least one facet, only the four, and
 // `verdict: pass` (L9, L15); a Judgment Day record is none (T172).
-func TestFourRRecord(t *testing.T) {
+func TestPrismRecord(t *testing.T) {
 	for src, want := range map[string]bool{
-		"# 4R\n\nlenses: risk\nverdict: pass\n":                   true,
-		"lenses: risk, reliability, readability\nverdict: PASS\n": true,
-		"lenses: [resilience, risk]\n**Verdict**: pass\n":         true,
-		"lenses: risk\nverdict: fail\n":                           false,
-		"verdict: pass\n":                                         false,
-		"lenses:\nverdict: pass\n":                                false,
-		"lenses: risk, speed\nverdict: pass\n":                    false,
-		"lenses: risk\n":                                          false,
-		"lenses: risk reliability\nverdict: pass\n":               true,
-		"- lenses: [risk]\n- verdict: pass\n":                     true,
+		"# Prism review\n\nfacets: safety\nverdict: pass\n":  true,
+		"facets: safety, behavior, clarity\nverdict: PASS\n": true,
+		"facets: [resilience, risk]\n**Verdict**: pass\n":    true,
+		"facets: safety\nverdict: fail\n":                    false,
+		"verdict: pass\n":                                    false,
+		"facets:\nverdict: pass\n":                           false,
+		"facets: safety, speed\nverdict: pass\n":             false,
+		"facets: safety\n":                                   false,
+		"facets: safety behavior\nverdict: pass\n":           true,
+		"- facets: [risk]\n- verdict: pass\n":                true,
 	} {
 		root, _ := filepath.EvalSymlinks(t.TempDir())
-		write(t, filepath.Join(root, "openspec/changes/c1/review-4r.md"), src)
-		if got := FourRDone(root, "c1") != ""; got != want {
-			t.Errorf("FourRDone(%q) = %t, want %t", src, got, want)
+		write(t, filepath.Join(root, "openspec/changes/c1/review-prism.md"), src)
+		if got := PrismDone(root, "c1") != ""; got != want {
+			t.Errorf("PrismDone(%q) = %t, want %t", src, got, want)
 		}
 	}
 	root, _ := filepath.EvalSymlinks(t.TempDir())
-	if got := FourRDone(root, "c1"); got != "" {
+	if got := PrismDone(root, "c1"); got != "" {
 		t.Errorf("no record: %q", got)
 	}
-	write(t, filepath.Join(root, "openspec/changes/c1/review-4r.md"), "lenses: risk\nverdict: pass\n")
-	if got := FourRDone(root, "c1"); got != "review-4r.md (lenses: risk; verdict: pass)" {
+	write(t, filepath.Join(root, "openspec/changes/c1/review-prism.md"), "facets: safety\nverdict: pass\n")
+	if got := PrismDone(root, "c1"); got != "review-prism.md (facets: safety; verdict: pass)" {
 		t.Errorf("the record: %q", got)
 	}
 	jd, _ := filepath.EvalSymlinks(t.TempDir())
 	write(t, filepath.Join(jd, "openspec/changes/c1/judgments/2026-11-03.md"), closed)
-	if got := FourRDone(jd, "c1"); got != "" {
-		t.Errorf("a Judgment Day record is no 4R: %q", got)
+	if got := PrismDone(jd, "c1"); got != "" {
+		t.Errorf("a Judgment Day record is no Prism review: %q", got)
 	}
 }
 
@@ -47,7 +47,7 @@ func TestFourRRecord(t *testing.T) {
 func TestRequiredReviews(t *testing.T) {
 	config := "schema: spec-driven\nreview_required:\n  - change: c1\n    review: verify\n  - area: \"src/auth/**\"\n    review: [verify, 4r]\n  - area: src/pay\n    review: 4r\n  - change: c2\n    review: nonsense\nother: x\n"
 	got := RequiredReviews(config)
-	want := []Required{{Change: "c1", Reviews: []string{"verify"}}, {Area: "src/auth/**", Reviews: []string{"verify", "4r"}}, {Area: "src/pay", Reviews: []string{"4r"}}}
+	want := []Required{{Change: "c1", Reviews: []string{"checker"}}, {Area: "src/auth/**", Reviews: []string{"checker", "prism"}}, {Area: "src/pay", Reviews: []string{"prism"}}}
 	if len(got) != len(want) {
 		t.Fatalf("RequiredReviews = %#v", got)
 	}
@@ -75,7 +75,7 @@ func TestRequiredReviews(t *testing.T) {
 	}
 }
 
-// The reviews a change owes: verify on the verified route, 4R when its risk
+// The reviews a change owes: verify on the verified route, Prism review when its risk
 // reaches the verified tier (not by size alone), and what review_required
 // names for it by its name or its diff's paths; each done or due.
 func TestReviewsOf(t *testing.T) {
@@ -88,19 +88,19 @@ func TestReviewsOf(t *testing.T) {
 	}
 	high := Route{Level: RouteVerified, Tier: High, VerifiedTier: High}
 	got := ReviewsOf(root, []string{"c1"}, high)
-	if !slices.Equal(kinds(got), []string{"verify", "4r"}) || got[1].Done || !slices.Equal(got[1].By, []string{"risk high"}) {
+	if !slices.Equal(kinds(got), []string{"checker", "prism"}) || got[1].Done || !slices.Equal(got[1].By, []string{"risk high"}) {
 		t.Fatalf("risk high: %#v", got)
 	}
-	if line := got[1].Line(); line != "4R due (risk high): pick the pertinent lenses (risk, resilience, reliability, readability) by what the change touches and record them in review-4r.md with `lenses:` and `verdict: pass`" {
-		t.Errorf("the 4R line: %q", line)
+	if line := got[1].Line(); line != "Prism review due (risk high): pick the pertinent facets (safety, failure, behavior, clarity) by what the change touches and record them in review-prism.md with `facets:` and `verdict: pass`" {
+		t.Errorf("the Prism line: %q", line)
 	}
-	write(t, filepath.Join(root, "openspec/changes/c1/review-4r.md"), "lenses: risk\nverdict: pass\n")
-	if got := ReviewsOf(root, []string{"c1"}, high); !got[1].Done || got[1].Line() != "4R done (risk high): review-4r.md (lenses: risk; verdict: pass)" {
-		t.Errorf("4R on record: %#v", got[1])
+	write(t, filepath.Join(root, "openspec/changes/c1/review-prism.md"), "facets: safety\nverdict: pass\n")
+	if got := ReviewsOf(root, []string{"c1"}, high); !got[1].Done || got[1].Line() != "Prism review done (risk high): review-prism.md (facets: safety; verdict: pass)" {
+		t.Errorf("Prism review on record: %#v", got[1])
 	}
 	bySize := Route{Level: RouteVerified, Tier: Medium, VerifiedTier: High}
-	if got := ReviewsOf(root, []string{"c1"}, bySize); !slices.Equal(kinds(got), []string{"verify"}) {
-		t.Errorf("verified by size asks verify alone: %#v", got)
+	if got := ReviewsOf(root, []string{"c1"}, bySize); !slices.Equal(kinds(got), []string{"checker"}) {
+		t.Errorf("verified by size asks checker alone: %#v", got)
 	}
 	standard := Route{Level: RouteStandard, Tier: Medium, VerifiedTier: High, files: []string{"src/auth/login.py"}}
 	if got := ReviewsOf(root, []string{"c1"}, standard); len(got) != 0 {
@@ -109,11 +109,11 @@ func TestReviewsOf(t *testing.T) {
 
 	write(t, filepath.Join(root, "openspec/config.yaml"), "review_required:\n  - change: c1\n    review: verify\n  - area: \"src/auth/**\"\n    review: 4r\n  - area: \"src/pay/**\"\n    review: verify\n")
 	got = ReviewsOf(root, []string{"c1"}, standard)
-	if !slices.Equal(kinds(got), []string{"verify", "4r"}) || got[0].Done || !got[1].Done ||
+	if !slices.Equal(kinds(got), []string{"checker", "prism"}) || got[0].Done || !got[1].Done ||
 		!slices.Equal(got[0].By, []string{"review_required: change c1"}) || !slices.Equal(got[1].By, []string{"review_required: area src/auth/**"}) {
 		t.Fatalf("review_required on a standard route: %#v", got)
 	}
-	if line := got[0].Line(); line != "verify due (review_required: change c1): launch the verify agent and record verify-report.md with `verdict: pass`" {
+	if line := got[0].Line(); line != "checker due (review_required: change c1): launch the jhon-checker agent and record verify-report.md with `verdict: pass`" {
 		t.Errorf("the verify line: %q", line)
 	}
 	if got := ReviewsOf(root, []string{"c2"}, Route{Level: RouteStandard, Tier: Medium, VerifiedTier: High, files: []string{"src/other.py"}}); len(got) != 0 {
@@ -123,7 +123,7 @@ func TestReviewsOf(t *testing.T) {
 	if got := ReviewsOf(root, []string{"c1"}, standard); got[0].Done {
 		t.Errorf("a Judgment Day record is no verification: %#v", got)
 	}
-	if got := ReviewsOf(root, []string{"archive/c1"}, standard); !slices.Equal(kinds(got), []string{"verify", "4r"}) {
+	if got := ReviewsOf(root, []string{"archive/c1"}, standard); !slices.Equal(kinds(got), []string{"checker", "prism"}) {
 		t.Errorf("an archived change goes by its name: %#v", got)
 	}
 }
@@ -132,15 +132,15 @@ func TestReviewsOf(t *testing.T) {
 // jhon cannot read is reported with its line and why, never dropped (L17).
 func TestReadRequired(t *testing.T) {
 	for config, want := range map[string][]Required{
-		"review_required:\n- change: c1\n  review: 4r\n":                                                                 {{Change: "c1", Reviews: []string{"4r"}}},
-		"review_required:\n  - change: c1 # billing\n    review: 4r  # owner\n":                                          {{Change: "c1", Reviews: []string{"4r"}}},
-		"review_required:\n  - {change: c1, review: 4r}\n":                                                               {{Change: "c1", Reviews: []string{"4r"}}},
-		"review_required:\n  - change: c1\n    review: VERIFY\n":                                                         {{Change: "c1", Reviews: []string{"verify"}}},
-		"review_required: # owner\n    - change: 'c1'\n      review: [Verify, \"4R\"]\n":                                 {{Change: "c1", Reviews: []string{"verify", "4r"}}},
-		"review_required:\n  - area: \"src/#a/**\"\n    review:\n      - verify\n      - 4r\n":                           {{Area: "src/#a/**", Reviews: []string{"verify", "4r"}}},
-		"review_required:\n-\n  change: c1\n  review:\n  - 4r\n# done\nother: x\n":                                       {{Change: "c1", Reviews: []string{"4r"}}},
-		"review_required:\n  - {area: /src/**, review: [verify, 4r]}\n\n  # a comment\n  - change: c2\n    review: 4r\n": {{Area: "/src/**", Reviews: []string{"verify", "4r"}}, {Change: "c2", Reviews: []string{"4r"}}},
-		"review_required: [{change: c1, review: 4r}]\n":                                                                  {{Change: "c1", Reviews: []string{"4r"}}},
+		"review_required:\n- change: c1\n  review: 4r\n":                                                                 {{Change: "c1", Reviews: []string{"prism"}}},
+		"review_required:\n  - change: c1 # billing\n    review: 4r  # owner\n":                                          {{Change: "c1", Reviews: []string{"prism"}}},
+		"review_required:\n  - {change: c1, review: 4r}\n":                                                               {{Change: "c1", Reviews: []string{"prism"}}},
+		"review_required:\n  - change: c1\n    review: VERIFY\n":                                                         {{Change: "c1", Reviews: []string{"checker"}}},
+		"review_required: # owner\n    - change: 'c1'\n      review: [Verify, \"4R\"]\n":                                 {{Change: "c1", Reviews: []string{"checker", "prism"}}},
+		"review_required:\n  - area: \"src/#a/**\"\n    review:\n      - verify\n      - 4r\n":                           {{Area: "src/#a/**", Reviews: []string{"checker", "prism"}}},
+		"review_required:\n-\n  change: c1\n  review:\n  - 4r\n# done\nother: x\n":                                       {{Change: "c1", Reviews: []string{"prism"}}},
+		"review_required:\n  - {area: /src/**, review: [verify, 4r]}\n\n  # a comment\n  - change: c2\n    review: 4r\n": {{Area: "/src/**", Reviews: []string{"checker", "prism"}}, {Change: "c2", Reviews: []string{"prism"}}},
+		"review_required: [{change: c1, review: 4r}]\n":                                                                  {{Change: "c1", Reviews: []string{"prism"}}},
 		"review_required: []\nother: x\n":                                                                                {},
 		"schema: spec-driven\n":                                                                                          {},
 	} {
@@ -156,8 +156,8 @@ func TestReadRequired(t *testing.T) {
 		}
 	}
 	for config, want := range map[string]Unreadable{
-		"review_required:\n  - change: c1\n    review: 5r\n":            {Line: 3, Text: "review: 5r", Why: "`5r` is not a review: verify or 4r"},
-		"review_required:\n  - change: c1\n    review: jd\n":            {Line: 3, Text: "review: jd", Why: "`jd` is not a review: verify or 4r"},
+		"review_required:\n  - change: c1\n    review: 5r\n":            {Line: 3, Text: "review: 5r", Why: "`5r` is not a review: checker or prism"},
+		"review_required:\n  - change: c1\n    review: jd\n":            {Line: 3, Text: "review: jd", Why: "`jd` is not a review: checker or prism"},
 		"review_required:\n  - change: c1\n    this is not yaml\n":      {Line: 3, Text: "this is not yaml", Why: "it is not `change:`, `area:`, or `review:` of an entry"},
 		"review_required:\n  - review: 4r\n":                            {Line: 2, Text: "- review: 4r", Why: "the entry names neither `change` nor `area`"},
 		"review_required:\n  - change: c1\n":                            {Line: 2, Text: "- change: c1", Why: "the entry names no review"},
@@ -185,7 +185,7 @@ func TestReviewsOfUnreadable(t *testing.T) {
 	if len(got) != 1 || got[0].Review != ReviewUnreadable || got[0].Done {
 		t.Fatalf("an unreadable entry: %#v", got)
 	}
-	if line := got[0].Line(); line != "review_required in openspec/config.yaml has an entry jhon cannot read (line 3: review: 5r): `5r` is not a review: verify or 4r; fix it before the PR" {
+	if line := got[0].Line(); line != "review_required in openspec/config.yaml has an entry jhon cannot read (line 3: review: 5r): `5r` is not a review: checker or prism; fix it before the PR" {
 		t.Errorf("the line: %q", line)
 	}
 }
@@ -199,7 +199,7 @@ func TestFlowFormsNeedBothBrackets(t *testing.T) {
 	if _, ok := flowList("verify, 4r]", 1, "x"); ok {
 		t.Error("a list without its opening bracket was read")
 	}
-	if out, bad := flowEntries("{change: c1, review: 4r}]", 1, "x"); out != nil || len(bad) != 1 {
+	if out, bad := flowEntries("{change: c1, review: 4r}]", 1, "x", nil); out != nil || len(bad) != 1 {
 		t.Errorf("entries without their opening bracket: %+v, %+v", out, bad)
 	}
 	if _, ok := flowMapping("{change: c1, review: 4r}", 1, "x"); !ok {

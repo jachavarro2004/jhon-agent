@@ -286,9 +286,9 @@ a sub-agent's own `Agent` call. Each block is left out on any failure,
 timeout or empty result; with neither, the launch is the brief alone. The
 blocks open with their own `## ` heading, so a writer's `## Allowed edit
 surfaces` ends where they begin.
-Verify and the 4R lenses also get `## Tests to judge`: each test the
+`jhon-checker` and the Prism facets also get `## Tests to judge`: each test the
 change's execution record marks as turned green while only its own test
-file changed in its project (`jhon context --judge`), for the validator to
+file changed in its project (`jhon context --judge`), for the arbiter to
 judge whether it was weakened; absent when there is none.
 
 ## The retired `jhon ldd on|off`

@@ -62,17 +62,17 @@ func TestProfiles(t *testing.T) {
 	t.Run("jhon profile show names each agent's model in each runtime and where it comes from", func(t *testing.T) {
 		t.Parallel()
 		home, profiles := profileHome(t)
-		write(t, profiles, `{"profiles":{"mixed":{"agents":{"review-risk":{"pi":"claude-bridge/claude-fable-5-1@high"}}}}}`)
+		write(t, profiles, `{"profiles":{"mixed":{"agents":{"prism-safety":{"pi":"claude-bridge/claude-fable-5-1@high"}}}}}`)
 		r := profileRun(t, home, "profile", "show", "mixed")
 		wantCode(t, r, 0)
-		match(t, r.Out(), `(?m)^  review-risk +pi +claude-bridge/claude-fable-5-1@high +profile agent review-risk\.pi$`)
-		match(t, r.Out(), `(?m)^  worker +claude-code +claude-opus-5-5@medium +agents\.yaml tiers\.claude-code\.strong$`)
+		match(t, r.Out(), `(?m)^  prism-safety +pi +claude-bridge/claude-fable-5-1@high +profile agent prism-safety\.pi$`)
+		match(t, r.Out(), `(?m)^  jhon-builder +claude-code +claude-opus-5-5@medium +agents\.yaml tiers\.claude-code\.strong$`)
 	})
 
 	t.Run("jhon profile json gives the shell's panel every profile, the active one, and each agent's model in each runtime", func(t *testing.T) {
 		t.Parallel()
 		home, profiles := profileHome(t)
-		write(t, profiles, `{"active":"mixed","profiles":{"mixed":{"agents":{"review-risk":{"pi":"claude-bridge/claude-fable-5-1@high"}}}}}`)
+		write(t, profiles, `{"active":"mixed","profiles":{"mixed":{"agents":{"prism-safety":{"pi":"claude-bridge/claude-fable-5-1@high"}}}}}`)
 		r := profileRun(t, home, "profile", "json")
 		wantCode(t, r, 0)
 		var got struct {
@@ -92,7 +92,7 @@ func TestProfiles(t *testing.T) {
 		equal(t, []string{got.Profiles[0].Provider, got.Profiles[1].Provider}, []string{"claude-bridge", "claude-bridge"}, "pi's provider, per profile")
 		found := false
 		for _, a := range got.Profiles[1].Agents {
-			found = found || (a["agent"] == "review-risk" && a["runtime"] == "pi" && a["model"] == "claude-bridge/claude-fable-5-1@high" && a["source"] == "profile agent review-risk.pi")
+			found = found || (a["agent"] == "prism-safety" && a["runtime"] == "pi" && a["model"] == "claude-bridge/claude-fable-5-1@high" && a["source"] == "profile agent prism-safety.pi")
 		}
 		equal(t, found, true)
 	})
@@ -100,19 +100,19 @@ func TestProfiles(t *testing.T) {
 	t.Run("jhon profile new, set, and rm edit the profiles, each checked whole before it is written", func(t *testing.T) {
 		t.Parallel()
 		home, profiles := profileHome(t)
-		write(t, profiles, `{"profiles":{"base":{"agents":{"verify":{"pi":"claude-bridge/claude-opus-5-5@high"}}}}}`)
+		write(t, profiles, `{"profiles":{"base":{"agents":{"jhon-checker":{"pi":"claude-bridge/claude-opus-5-5@high"}}}}}`)
 		wantCode(t, profileRun(t, home, "profile", "new", "fast", "--from", "base"), 0)
-		wantCode(t, profileRun(t, home, "profile", "set", "fast", "worker", "pi", "claude-bridge/claude-sonnet-5-5@low"), 0)
+		wantCode(t, profileRun(t, home, "profile", "set", "fast", "jhon-builder", "pi", "claude-bridge/claude-sonnet-5-5@low"), 0)
 		got := readJSON(t, profiles).(map[string]any)["profiles"].(map[string]any)["fast"].(map[string]any)["agents"].(map[string]any)
-		equal(t, got["worker"].(map[string]any)["pi"], "claude-bridge/claude-sonnet-5-5@low")
-		equal(t, got["verify"].(map[string]any)["pi"], "claude-bridge/claude-opus-5-5@high", "a copy of base")
+		equal(t, got["jhon-builder"].(map[string]any)["pi"], "claude-bridge/claude-sonnet-5-5@low")
+		equal(t, got["jhon-checker"].(map[string]any)["pi"], "claude-bridge/claude-opus-5-5@high", "a copy of base")
 		before := support.Read(t, profiles)
-		bad := profileRun(t, home, "profile", "set", "fast", "worker", "pi", "m@ultra")
+		bad := profileRun(t, home, "profile", "set", "fast", "jhon-builder", "pi", "m@ultra")
 		wantCode(t, bad, 1)
 		match(t, bad.Out(), `thinking 'ultra' is not one of`)
 		equal(t, support.Read(t, profiles), before, "a refused edit writes nothing")
-		wantCode(t, profileRun(t, home, "profile", "set", "fast", "worker", "pi", "-"), 0)
-		_, has := readJSON(t, profiles).(map[string]any)["profiles"].(map[string]any)["fast"].(map[string]any)["agents"].(map[string]any)["worker"]
+		wantCode(t, profileRun(t, home, "profile", "set", "fast", "jhon-builder", "pi", "-"), 0)
+		_, has := readJSON(t, profiles).(map[string]any)["profiles"].(map[string]any)["fast"].(map[string]any)["agents"].(map[string]any)["jhon-builder"]
 		equal(t, has, false, "- puts the agent back on agents.yaml")
 		match(t, profileRun(t, home, "profile", "new", "default").Out(), `agents.yaml itself`)
 		match(t, profileRun(t, home, "profile", "new", "base").Out(), `already exists`)
@@ -125,8 +125,8 @@ func TestProfiles(t *testing.T) {
 		t.Parallel()
 		home, profiles := profileHome(t)
 		write(t, profiles, `{"active":"mine","profiles":{"mine":{}}}`)
-		wantCode(t, profileRun(t, home, "profile", "set", "mine", "review-risk", "pi", "claude-bridge/claude-fable-5-1@high"), 0)
-		match(t, support.Read(t, filepath.Join(home, ".pi", "jhon", "agents", "review-risk.md")), `(?m)^model: claude-bridge/claude-fable-5-1\nthinking: high$`)
+		wantCode(t, profileRun(t, home, "profile", "set", "mine", "prism-safety", "pi", "claude-bridge/claude-fable-5-1@high"), 0)
+		match(t, support.Read(t, filepath.Join(home, ".pi", "jhon", "agents", "prism-safety.md")), `(?m)^model: claude-bridge/claude-fable-5-1\nthinking: high$`)
 		r := profileRun(t, home, "profile", "rm", "mine")
 		wantCode(t, r, 1)
 		match(t, r.Out(), `mine is the active profile`)
@@ -135,15 +135,15 @@ func TestProfiles(t *testing.T) {
 	t.Run("jhon profile use activates a profile and re-renders from the active release; use default restores agents.yaml", func(t *testing.T) {
 		t.Parallel()
 		home, profiles := profileHome(t)
-		write(t, profiles, `{"profiles":{"mixed":{"tiers":{"claude-code":{"strong":"claude-opus-5-5@high"}},"agents":{"review-risk":{"pi":"claude-bridge/claude-fable-5-1@high"}}}}}`)
+		write(t, profiles, `{"profiles":{"mixed":{"tiers":{"claude-code":{"strong":"claude-opus-5-5@high"}},"agents":{"prism-safety":{"pi":"claude-bridge/claude-fable-5-1@high"}}}}}`)
 		r := profileRun(t, home, "profile", "use", "mixed")
 		wantCode(t, r, 0)
 		equal(t, readJSON(t, profiles).(map[string]any)["active"], "mixed")
-		match(t, support.Read(t, filepath.Join(home, ".claude", "agents", "worker.md")), `(?m)^model: claude-opus-5-5\neffort: high$`)
-		match(t, support.Read(t, filepath.Join(home, ".pi", "jhon", "agents", "review-risk.md")), `(?m)^model: claude-bridge/claude-fable-5-1\nthinking: high$`)
+		match(t, support.Read(t, filepath.Join(home, ".claude", "agents", "jhon-builder.md")), `(?m)^model: claude-opus-5-5\neffort: high$`)
+		match(t, support.Read(t, filepath.Join(home, ".pi", "jhon", "agents", "prism-safety.md")), `(?m)^model: claude-bridge/claude-fable-5-1\nthinking: high$`)
 		back := profileRun(t, home, "profile", "use", "default")
 		wantCode(t, back, 0)
-		match(t, support.Read(t, filepath.Join(home, ".claude", "agents", "worker.md")), `(?m)^model: claude-opus-5-5\neffort: medium$`)
+		match(t, support.Read(t, filepath.Join(home, ".claude", "agents", "jhon-builder.md")), `(?m)^model: claude-opus-5-5\neffort: medium$`)
 	})
 
 	t.Run("the active profile is settings' pi.profile, else profiles.json's active; jhon profile use writes both (T56b)", func(t *testing.T) {

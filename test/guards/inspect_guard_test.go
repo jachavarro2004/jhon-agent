@@ -1,4 +1,4 @@
-// inspect-guard, the PreToolUse hook that confines the review lenses' Bash
+// inspect-guard, the PreToolUse hook that confines the review facets' Bash
 // to the read-only prefixes declared in agents.yaml.
 //
 // The guard is spawned exactly as Claude Code runs it: the hook payload on
@@ -46,7 +46,7 @@ func TestInspectGuardAllows(t *testing.T) {
 		"git show CANDIDATE:src/x.ts",
 		"git diff HEAD~1 HEAD",
 		"codegraph callers foo",
-		"jhon review freeze --base main", // each lens freezes for itself (contracts/review-4r.md)
+		"jhon review freeze --base main", // each facet freezes for itself (contracts/review-prism.md)
 	} {
 		t.Run(command, func(t *testing.T) {
 			t.Parallel()
@@ -132,16 +132,16 @@ func TestInspectGuardOwnerScoping(t *testing.T) {
 		agentType      *string
 		want           int
 	}{
-		{"review-risk", "uv add pytest", ptr("general"), 0},
-		{"review-risk", "uv run pytest", ptr("explore"), 0},
-		{"review-risk", "uv add pytest", ptr("review-risk"), 2},
-		{"review-risk", "uv add pytest", nil, 2},
-		{"review-risk", "uv add pytest", ptr(""), 2},
-		{"review-risk", "git push", ptr("review-risk"), 2},
-		{"review-risk", "git log --oneline -5", ptr("review-risk"), 0},
-		{"review-risk", "git status --short", ptr("review-risk"), 0},
-		{"review-risk", "git log --output=f", ptr("review-risk"), 2},
-		{"review-risk", "git diff a b", ptr("review-risk"), 0},
+		{"prism-safety", "uv add pytest", ptr("general"), 0},
+		{"prism-safety", "uv run pytest", ptr("explore"), 0},
+		{"prism-safety", "uv add pytest", ptr("prism-safety"), 2},
+		{"prism-safety", "uv add pytest", nil, 2},
+		{"prism-safety", "uv add pytest", ptr(""), 2},
+		{"prism-safety", "git push", ptr("prism-safety"), 2},
+		{"prism-safety", "git log --oneline -5", ptr("prism-safety"), 0},
+		{"prism-safety", "git status --short", ptr("prism-safety"), 0},
+		{"prism-safety", "git log --output=f", ptr("prism-safety"), 2},
+		{"prism-safety", "git diff a b", ptr("prism-safety"), 0},
 	} {
 		at := "undefined"
 		if c.agentType != nil {

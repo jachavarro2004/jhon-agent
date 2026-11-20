@@ -1,5 +1,5 @@
 # Jhon agent manifest — the only place agent metadata is declared.
-# Prose bodies live in agents/. The renderer (internal/render) projects this to each runtime.
+# Bodies live in agents/; internal/render projects this to each runtime.
 # An agent with `template: <t>` has no hand-written body: the renderer expands
 # agents/templates/<t>.md with the agent's `vars:` block ({{name}} -> value)
 # and writes the result to agents/<name>.md, which git ignores. Keys this
@@ -8,13 +8,12 @@
 version: 1
 
 # Tier -> concrete model, per runtime. Resolves the model divergence.
-# A tier follows the judgment an agent exercises and the cost of its errors.
-# Model selection is the user's. No role defaults to frontier (docket AX1):
-# frontier is a per-review opt-in for a judgment. Every role sits at strong by
+# A tier follows an agent's judgment and the cost of its errors.
+# No role defaults to frontier (docket AX1); every role sits at strong by
 # default (the owner's choice, 2026-10-28); cheap and mid stay for a profile.
 # A value is `model` or `model@effort` (docket AX2).
-# The claude-code row pins exact model IDs, not family aliases: an alias can
-# inherit the parent session's exact model, and a trial must be reproducible.
+# The claude-code row pins exact model IDs, not family aliases: an alias may
+# inherit the parent session's model, and a trial must be reproducible.
 # Its effort renders as each agent's `effort:` frontmatter, from the values
 # Claude Code documents (low, medium, high, xhigh, max). Equal effort names
 # are not equal compute across providers.
@@ -38,7 +37,7 @@ capabilities:
   memory-read: [mcp__engram__mem_search, mcp__plugin_engram_engram__mem_search, mcp__engram__mem_get_observation, mcp__plugin_engram_engram__mem_get_observation]   # search and read only, for agents that must not write memory (docket AS1)
   memory-session: [mcp__engram__mem_session_summary, mcp__plugin_engram_engram__mem_session_summary, mcp__engram__mem_context, mcp__plugin_engram_engram__mem_context, mcp__engram__mem_current_project, mcp__plugin_engram_engram__mem_current_project, mcp__engram__mem_review, mcp__plugin_engram_engram__mem_review]   # top-level agent only (contracts/vocabulary.yaml, top_level_tools)
   codegraph: [mcp__codegraph__codegraph_explore]
-  context7:  [mcp__context7__resolve-library-id, mcp__context7__query-docs]   # library and framework documentation, context7's hosted MCP server: explore and worker only (L1000); integrations.context7 = false drops it; in Claude Code the tools exist where the owner's has a server named context7
+  context7:  [mcp__context7__resolve-library-id, mcp__context7__query-docs]   # library and framework documentation, context7's hosted MCP server: jhon-scout and jhon-builder only (L1000); integrations.context7 = false drops it; in Claude Code the tools exist where the owner's has a server named context7
   jhon-mcp:  [mcp__plugin_jhon_jhon__audit, mcp__plugin_jhon_jhon__status]   # the read-only jhon MCP server of the release plugin, which jhon start loads
   ms365:     [mcp__claude_ai_Microsoft_365]   # the owner's claude.ai Microsoft 365 connector; a server name grants every tool of it (verified on Claude Code 2.1.304)
   web-search: [WebSearch]   # search only; fetching a page stays with `web`
@@ -79,8 +78,8 @@ platforms: [linux, macos, windows]
 runtime_primitives:
   claude-code:
     global-instructions: { capability: true, verification: documented, version: "2.1.280", source: "Claude Code memory documentation: ~/.claude/CLAUDE.md with @ imports; Jhon leaves it to the user and inlines its always-on layer into each agent" }
-    named-subagents: { capability: true, verification: verified, version: "2.1.280", source: "test/testdata/audit/apply-tdd-evidence: a real session whose orchestrator launches worker by subagent_type, its transcript under subagents/" }
-    agent-tool-allowlist: { capability: true, verification: verified, version: "2.1.280", source: "test/testdata/spikes/claude-code-tool-allowlist/record.json (explore was not offered Bash or Write and created nothing; general, holding Bash, did)" }
+    named-subagents: { capability: true, verification: verified, version: "2.1.280", source: "test/testdata/audit/apply-tdd-evidence: a real session whose orchestrator launches worker (now jhon-builder) by subagent_type, its transcript under subagents/" }
+    agent-tool-allowlist: { capability: true, verification: verified, version: "2.1.280", source: "test/testdata/spikes/claude-code-tool-allowlist/record.json (explore, now jhon-scout, was not offered Bash or Write and created nothing; general, holding Bash, did)" }
     blocking-hook-agent: { capability: true, verification: verified, version: "2.1.310", source: "test/testdata/spikes/claude-code-plugin-agent-hooks/record.json (2.1.310 runs no agent frontmatter hooks; the plugin runs the rendered hooks of each calling agent, and git push was refused under bypassPermissions in a session without --agent)" }
     skills: { capability: true, verification: documented, version: "2.1.280", source: "Claude Code skills documentation: SKILL.md under a skills root" }
     mcp: { capability: true, verification: verified, version: "2.1.280", source: "test/testdata/audit/apply-bypass-archive: a real session calling an mcp__plugin_engram_engram__ tool" }
@@ -127,7 +126,7 @@ guarantees:
   runtime-boundaries/no-technique: { claude-code: unsupported, pi: unsupported }
   runtime-boundaries/orchestrator-no-bypass: { claude-code: behavioural, pi: behavioural }
   top-level-tools/executor-never-calls: { by: agent-tool-allowlist, claude-code: enforced, pi: enforced }
-  # pi has no runtime isolation; jhon audit reads a pi worker or verify
+  # pi has no runtime isolation; jhon audit reads a pi builder or checker
   # child's write outside its own cwd (isolation-bypass, pending on pi).
   isolation/no-other-tree: { claude-code: behavioural, pi: behavioural }
   delivery/tested-revision: { claude-code: behavioural, pi: behavioural }
@@ -156,102 +155,95 @@ guarantees:
   # record (contracts/ldd.md); jhon audit's edit-before-red reads it.
   ldd/red-first: { claude-code: behavioural, pi: behavioural }
   # A verify agent writes only its verify-report.md; jhon audit's
-  # verify-wrote reads any other write (T56).
+  # checker-wrote reads any other write (T56).
   ldd/independent-verify: { claude-code: behavioural, pi: behavioural }
-  # explore writes only its change's exploration.md or research.md: jhon hook
-  # vcs-guard notes any other Edit/Write of explore's (Claude Code by
-  # `--agent explore`, pi by the child's JHON_PI_AGENT); explore holds no
-  # Bash. jhon audit's explore-wrote reads such a write (T123, T153).
-  ldd/explore-scope: { claude-code: behavioural, pi: behavioural }
+  # jhon-scout writes only its change's exploration.md or research.md:
+  # vcs-guard notes any other Edit/Write of its (Claude Code by `--agent`, pi
+  # by JHON_PI_AGENT); it holds no Bash. audit's scout-wrote reads it (T123).
+  ldd/scout-scope: { claude-code: behavioural, pi: behavioural }
   # A failing test is made to pass by the code, never skipped or removed;
   # jhon audit's test-weakened reads the edit between a RED and its pass (T56).
   tdd/no-weaken: { claude-code: behavioural, pi: behavioural }
 
 agents:
-  # The lean roster: three executors (explore, worker, verify) carry every
-  # LDD step that leaves the orchestrator's thread. Propose, spec, design,
-  # tasks, init, and archive run inline in the orchestrator with their phase's
-  # reference in skills/ldd;
-  # their artifacts and `jhon status` are unchanged.
-  - name: explore
+  # Three executors (scout, builder, checker) carry every LDD step that
+  # leaves the orchestrator's thread; the other phases run inline with their
+  # reference in skills/ldd.
+  - name: jhon-scout
     tier: strong
     caps: [read, write, web, memory, codegraph, todo, context7]
     description: "Investigate before a change: the codebase, prior decisions, approaches, and external evidence. Writes only the change's exploration.md or research.md, never code"
-  - name: worker
+  - name: jhon-builder
     tier: strong
     bounded: true
     caps: [read, write, bash, memory, codegraph, todo, context7]
     description: "Implement a scoped task: an LDD apply, or any bounded change the orchestrator hands off. Edits only the files named, runs the focused tests, never launches sub-agents"
-  - name: verify
+  - name: jhon-checker
     tier: strong
     caps: [read, write, bash, memory, codegraph, todo]
     description: "Independent verifier: checks an implementation against its specs, design, and tasks, or a change against its stated outcome, from tests that actually ran. Writes only verify-report.md; fixes nothing"
-  - name: review-risk
+  - name: prism-safety
     tier: strong
     caps: [inspect, codegraph]
     note: frozen-tree only
-    template: review-lens
+    template: prism-facet
     vars:
-      code: R1
-      title: Risk
-      lens: risk
+      title: Safety
+      facet: safety
       scope: "Inspect security, authorization, data exposure or loss, unsafe input handling, secrets, and dependency vulnerabilities. Require backend enforcement and concrete exploit or scanner evidence; do not report hypothetical risk without a reachable impact."
-    description: "Fallback R1 Risk lens when the native 4R cannot run \u2014 security, privilege boundaries, data exposure, dependency risks"
-  - name: review-resilience
+    description: "Fallback safety facet when the native Prism review cannot run \u2014 security, privilege boundaries, data exposure, dependency risks"
+  - name: prism-failure
     tier: strong
     caps: [inspect, codegraph]
     note: frozen-tree only
-    template: review-lens
+    template: prism-facet
     vars:
-      code: R4
-      title: Resilience
-      lens: resilience
+      title: Failure
+      facet: failure
       scope: "Inspect failure handling, rollback or fix-forward behavior, retry safety, graceful degradation, observability, latency, and load. Require a concrete production failure mode or measured impact; do not report generic operational speculation."
-    description: "Fallback R4 Resilience lens when the native 4R cannot run \u2014 retry/backoff, degradation, observability, load, rollback"
-  - name: review-readability
+    description: "Fallback failure facet when the native Prism review cannot run \u2014 retry/backoff, degradation, observability, load, rollback"
+  - name: prism-clarity
     tier: strong
     caps: [inspect, codegraph]
     note: frozen-tree only
-    template: review-lens
+    template: prism-facet
     vars:
-      code: R2
-      title: Readability
-      lens: readability
+      title: Clarity
+      facet: clarity
       scope: "Inspect maintainability defects that obscure behavior: misleading names, duplicated or dead logic, unexplained business constants, unsafe complexity, and missing change context. Report style only when it hides a concrete defect or makes the change unsafe to maintain. A reuse or simplification finding is admitted when it gives a concrete comparison confirmed against the frozen revision: where X and Y are, their equivalence, their differences, and the avoidable cost; with unproven impact it is a SUGGESTION."
-    description: "Fallback R2 Readability lens when the native 4R cannot run \u2014 naming, complexity, intention, maintainability"
-  - name: review-reliability
+    description: "Fallback clarity facet when the native Prism review cannot run \u2014 naming, complexity, intention, maintainability"
+  - name: prism-behavior
     tier: strong
     caps: [inspect, codegraph]
     note: frozen-tree only
-    template: review-lens
+    template: prism-facet
     vars:
-      code: R3
-      title: Reliability
-      lens: reliability
+      title: Behavior
+      facet: behavior
       scope: "Inspect behavior, tests, boundaries, invalid inputs, failure paths, determinism, and regressions. Require externally observable assertions at the cheapest useful test level; report missing coverage only when it leaves candidate behavior unproved."
-    description: "Fallback R3 Reliability lens when the native 4R cannot run \u2014 behavior-first tests, edge cases, determinism, regressions"
-  - name: review-refuter
+    description: "Fallback behavior facet when the native Prism review cannot run \u2014 behavior-first tests, edge cases, determinism, regressions"
+  - name: prism-challenger
     tier: strong
     caps: [inspect, codegraph]
     note: frozen-tree only
-    template: review-role
+    template: prism-role
     vars:
-      title: Refuter
-      role: refuter
-      task: "The prompt gives the lens agents' findings, each with its id (`<lens>-<n>`, from 1 in each lens's order). Try to refute each from the frozen tree: it is `refuted` when the content shows the claim false, unreachable, or outside this change; otherwise it `stands`. Give each a short reason citing path:line."
-      result: "{\"finding_id\":\"risk-1\",\"outcome\":\"refuted\",\"reason\":\"path:line shows ...\"}"
-    description: "Fallback 4R refuter when the native 4R cannot run \u2014 refutes each lens finding or lets it stand"
-  - name: review-validator
+      title: Challenger
+      role: challenger
+      task: "The prompt gives the facet agents' findings, each with its id (`<facet>-<n>`, from 1 in each facet's order). Try to refute each from the frozen tree: it is `refuted` when the content shows the claim false, unreachable, or outside this change; otherwise it `stands`. Give each a short reason citing path:line."
+      result: "{\"finding_id\":\"safety-1\",\"outcome\":\"refuted\",\"reason\":\"path:line shows ...\"}"
+    description: "Fallback Prism challenger when the native Prism review cannot run \u2014 refutes each facet finding or lets it stand"
+  - name: prism-arbiter
     tier: strong
     caps: [inspect, codegraph]
     note: frozen-tree only
-    template: review-role
+    template: prism-role
     vars:
-      title: Validator
-      role: validator
-      task: "The prompt gives the findings that stand after the refuter, each with its id. Mark one `confirmed` only when the frozen tree proves it, with proof_refs (path:line) that show it; otherwise `unconfirmed`. Give each a short reason."
-      result: "{\"finding_id\":\"risk-1\",\"outcome\":\"confirmed\",\"reason\":\"...\",\"proof_refs\":[\"path:line\"]}"
-    description: "Fallback 4R validator when the native 4R cannot run \u2014 confirms each standing finding with proof or leaves it unconfirmed"
+      title: Arbiter
+      role: arbiter
+      task: "The prompt gives the findings that stand after the challenger, each with its id. Mark one `confirmed` only when the frozen tree proves it, with proof_refs (path:line) that show it; otherwise `unconfirmed`. Give each a short reason."
+      result: "{\"finding_id\":\"safety-1\",\"outcome\":\"confirmed\",\"reason\":\"...\",\"proof_refs\":[\"path:line\"]}"
+    description: "Fallback Prism arbiter when the native Prism review cannot run \u2014 confirms each standing finding with proof or leaves it unconfirmed"
   - name: jhon-orchestrator
     tier: strong
     mode: primary

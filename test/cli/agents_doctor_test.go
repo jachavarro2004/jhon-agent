@@ -97,7 +97,7 @@ func TestDoctorSaysHowContext7IsMountedAndSettingsTurnItOff(t *testing.T) {
 	// A proxy nobody listens on: a network call by a plain doctor would fail, not pass unseen.
 	env := append(append([]string{}, m.env...), "JHON_SETTINGS="+file, "HTTPS_PROXY=http://127.0.0.1:1", "HTTP_PROXY=http://127.0.0.1:1")
 	support.Write(t, m.home, map[string]string{"settings.toml": "schema = 1\n"})
-	mounted := "context7 is the hosted https://mcp.context7.com/mcp, for explore and worker: nothing installed or pinned; run 'jhon doctor --remote' to ask whether it answers\n"
+	mounted := "context7 is the hosted https://mcp.context7.com/mcp, for jhon-scout and jhon-builder: nothing installed or pinned; run 'jhon doctor --remote' to ask whether it answers\n"
 	off := "context7 is off (integrations.context7 = false)\n"
 	row := func() string {
 		t.Helper()

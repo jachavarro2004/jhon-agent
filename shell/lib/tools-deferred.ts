@@ -13,7 +13,7 @@
  * keeps its own loader. A child keeps its `--tools` list.
  *
  * T133e (L1016): mcp.json also mounts context7 `direct`, the only exposure a
- * child's `--tools` can name. Its tools are explore's and worker's: the main
+ * child's `--tools` can name. Its tools are jhon-scout's and jhon-builder's: the main
  * session never declares them, and tools_more neither lists nor enables them.
  */
 

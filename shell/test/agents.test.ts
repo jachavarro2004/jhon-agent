@@ -25,7 +25,7 @@ function tempDir(prefix: string): string {
 }
 
 const WORKER = `---
-name: worker
+name: jhon-builder
 description: "Implement a scoped task: edits only the files named"
 model: anthropic/claude-sonnet-4-5
 thinking: medium
@@ -44,7 +44,7 @@ Do the work.
 `;
 
 const EXPLORE = `---
-name: explore
+name: jhon-scout
 description: "Investigate before a change"
 model: openai/gpt-5
 tools:
@@ -57,8 +57,8 @@ Look around.
 function agentDir(): string {
   const dir = tempDir("jhon-pi-agents-");
   mkdirSync(join(dir, "agents"));
-  writeFileSync(join(dir, "agents", "worker.md"), WORKER);
-  writeFileSync(join(dir, "agents", "explore.md"), EXPLORE);
+  writeFileSync(join(dir, "agents", "jhon-builder.md"), WORKER);
+  writeFileSync(join(dir, "agents", "jhon-scout.md"), EXPLORE);
   return dir;
 }
 
@@ -97,11 +97,11 @@ function withEnv<T>(env: Record<string, string | undefined>, f: () => T): T {
 test("the frontmatter gives the name, the JSON-quoted description, the model, thinking, the tool list, and bounded", () => {
   const a = parseAgent(WORKER, "fallback");
   assert.deepEqual({ ...a, body: undefined }, {
-    name: "worker", description: "Implement a scoped task: edits only the files named", model: "anthropic/claude-sonnet-4-5",
+    name: "jhon-builder", description: "Implement a scoped task: edits only the files named", model: "anthropic/claude-sonnet-4-5",
     thinking: "medium", tools: ["read", "edit", "write", "bash", "mcp__engram__mem_save"], bounded: true, body: undefined,
   });
   assert.equal(a.body, "# Worker\n\nDo the work.");
-  const e = parseAgent(EXPLORE, "explore");
+  const e = parseAgent(EXPLORE, "jhon-scout");
   assert.equal(e.bounded, false);
   assert.equal(e.thinking, undefined);
   assert.deepEqual(parseFrontmatter("---\ntools: [read, bash]\n---\nbody").fields.tools, ["read", "bash"]);
@@ -113,9 +113,9 @@ test("the frontmatter gives the name, the JSON-quoted description, the model, th
 // are a child's limits. An agent file that still carries a `maxTurns` line
 // (an older install) loads without error and the line is ignored.
 test("an agent file's maxTurns line is ignored: the agent loads as without it and no cap reaches its child", () => {
-  const plain = parseAgent(WORKER, "worker");
+  const plain = parseAgent(WORKER, "jhon-builder");
   for (const line of ["maxTurns: 80", "maxTurns: lots", "maxTurns: 0"]) {
-    const old = parseAgent(WORKER.replace("bounded: true", `bounded: true\n${line}`), "worker");
+    const old = parseAgent(WORKER.replace("bounded: true", `bounded: true\n${line}`), "jhon-builder");
     assert.deepEqual(old, plain, line);
     assert.deepEqual(childEnv(old, undefined, {}), childEnv(plain, undefined, {}), line);
     assert.equal(childEnv(old, undefined, {}).JHON_PI_MAX_TURNS, undefined, line);
@@ -124,48 +124,48 @@ test("an agent file's maxTurns line is ignored: the agent loads as without it an
 
 test("an agent resolves by name; an unknown one is refused with the agents there are", () => {
   const dir = agentDir();
-  assert.deepEqual(knownAgents(dir), ["explore", "worker"]);
-  assert.equal(resolveAgent(dir, "explore").model, "openai/gpt-5");
-  assert.throws(() => resolveAgent(dir, "ghost"), /no sub-agent named "ghost"; known agents: explore, worker/);
+  assert.deepEqual(knownAgents(dir), ["jhon-builder", "jhon-scout"]);
+  assert.equal(resolveAgent(dir, "jhon-scout").model, "openai/gpt-5");
+  assert.throws(() => resolveAgent(dir, "ghost"), /no sub-agent named "ghost"; known agents: jhon-builder, jhon-scout/);
   assert.throws(() => resolveAgent(dir, "../jhon"), /no sub-agent named/);
-  assert.throws(() => resolveAgent(tempDir("jhon-pi-none-"), "worker"), /known agents: \(none\)/);
+  assert.throws(() => resolveAgent(tempDir("jhon-pi-none-"), "jhon-builder"), /known agents: \(none\)/);
 });
 
 test("a bounded agent's task must name its allowed edit surfaces", () => {
-  const worker = parseAgent(WORKER, "worker");
+  const worker = parseAgent(WORKER, "jhon-builder");
   assert.match(refuseTask(worker, "Fix the bug in a.ts.")!, /bounded agent.*## Allowed edit surfaces/);
   assert.equal(refuseTask(worker, "Fix the bug.\n\n## Allowed edit surfaces\n\n- src/a.ts\n"), null);
-  assert.equal(refuseTask(parseAgent(EXPLORE, "explore"), "Look at a.ts."), null);
-  assert.match(refuseTask(parseAgent(EXPLORE, "explore"), "  ")!, /empty/);
+  assert.equal(refuseTask(parseAgent(EXPLORE, "jhon-scout"), "Look at a.ts."), null);
+  assert.match(refuseTask(parseAgent(EXPLORE, "jhon-scout"), "  ")!, /empty/);
 });
 
 // ── the child process ──────────────────────────────────────────────────────
 
 test("the child runs pi one-shot with the agent's model, thinking, tools, and prompt, marked as a child", () => {
-  const worker = parseAgent(WORKER, "worker");
+  const worker = parseAgent(WORKER, "jhon-builder");
   assert.deepEqual(childArgs(worker, "do it"), [
     "--print", "--no-session", "--model", "anthropic/claude-sonnet-4-5", "--thinking", "medium",
     "--tools", "read,edit,write,bash,mcp__engram__mem_save", "--no-skills", "--no-context-files",
     "--append-system-prompt", "# Worker\n\nDo the work.", "--", "do it",
   ]);
-  assert.deepEqual(childArgs(parseAgent(EXPLORE, "explore"), "@a.ts"), [
+  assert.deepEqual(childArgs(parseAgent(EXPLORE, "jhon-scout"), "@a.ts"), [
     "--print", "--no-session", "--model", "openai/gpt-5", "--tools", "read,mcp__codegraph__codegraph_explore",
     "--no-skills", "--no-context-files", "--append-system-prompt", "Look around.", "--", " @a.ts",
   ]);
   const env = childEnv(worker, "/t/task.md", { PI_CODING_AGENT_DIR: "/a", JHON_PI_CHILD: "0", JHON_PI_TOOLS: "bash", JHON_PI_TASK_FILE: "/outer" });
-  assert.deepEqual(env, { PI_CODING_AGENT_DIR: "/a", JHON_PI_CHILD: "1", JHON_PI_AGENT: "worker",
+  assert.deepEqual(env, { PI_CODING_AGENT_DIR: "/a", JHON_PI_CHILD: "1", JHON_PI_AGENT: "jhon-builder",
     JHON_PI_TOOLS: "read,edit,write,bash,mcp__engram__mem_save", JHON_PI_TASK_FILE: "/t/task.md" });
   assert.deepEqual(childEnv(parseAgent("---\nname: x\nmodel: a/b\n---\n", "x"), undefined, { JHON_PI_TOOLS: "bash" }),
     { JHON_PI_CHILD: "1", JHON_PI_AGENT: "x" }, "an agent with no tools and no task file inherits neither");
 });
 
 test("a child's session is saved under the parent's, named for the subagent call; an unsaved parent saves none", () => {
-  const worker = parseAgent(WORKER, "worker");
+  const worker = parseAgent(WORKER, "jhon-builder");
   const parent = { file: "/s/--p--/2026-10-25T00-00-00-000Z_abc.jsonl", id: "abc" };
   const session = childSession(worker, parent, "toolu_01X|fc/2");
   assert.deepEqual(session, {
     dir: "/s/--p--/2026-10-25T00-00-00-000Z_abc/subagents", id: "toolu_01X-fc-2",
-    meta: { agentType: "worker", toolUseId: "toolu_01X|fc/2", parentSession: "abc" },
+    meta: { agentType: "jhon-builder", toolUseId: "toolu_01X|fc/2", parentSession: "abc" },
   });
   assert.deepEqual(childArgs(worker, "do it", session).slice(0, 7), [
     "--print", "--session-dir", "/s/--p--/2026-10-25T00-00-00-000Z_abc/subagents", "--session-id", "toolu_01X-fc-2", "--model", "anthropic/claude-sonnet-4-5",
@@ -187,16 +187,16 @@ test("the subagent tool saves the child's session under the parent's, with a met
   const file = join(sessions, "2026-10-25T00-00-00-000Z_parent-1.jsonl");
   const sessionManager = { getSessionFile: () => file, getSessionId: () => "parent-1" };
   await withEnv({ JHON_PI_BIN: bin, FAKE_PI_EXIT: undefined }, () =>
-    subagent.execute("toolu_9", { agent: "explore", task: "look" }, undefined, undefined, { cwd, sessionManager }));
+    subagent.execute("toolu_9", { agent: "jhon-scout", task: "look" }, undefined, undefined, { cwd, sessionManager }));
   const children = join(sessions, "2026-10-25T00-00-00-000Z_parent-1", "subagents");
-  assert.deepEqual(JSON.parse(readFileSync(join(children, "toolu_9.meta.json"), "utf8")), { agentType: "explore", toolUseId: "toolu_9", parentSession: "parent-1" });
+  assert.deepEqual(JSON.parse(readFileSync(join(children, "toolu_9.meta.json"), "utf8")), { agentType: "jhon-scout", toolUseId: "toolu_9", parentSession: "parent-1" });
   assert.deepEqual(JSON.parse(readFileSync(log, "utf8")).argv.slice(0, 5), ["--print", "--session-dir", children, "--session-id", "toolu_9"]);
 
   // A parent session pi cannot write under: the child still runs, unsaved.
   const blocked = join(sessions, "file");
   writeFileSync(blocked, "");
   await withEnv({ JHON_PI_BIN: bin, FAKE_PI_EXIT: undefined }, () =>
-    subagent.execute("toolu_10", { agent: "explore", task: "look" }, undefined, undefined, { cwd, sessionManager: { getSessionFile: () => join(blocked, "x.jsonl"), getSessionId: () => "x" } }));
+    subagent.execute("toolu_10", { agent: "jhon-scout", task: "look" }, undefined, undefined, { cwd, sessionManager: { getSessionFile: () => join(blocked, "x.jsonl"), getSessionId: () => "x" } }));
   assert.deepEqual(JSON.parse(readFileSync(log, "utf8")).argv.slice(0, 2), ["--print", "--no-session"]);
   assert.equal(existsSync(join(blocked, "x")), false);
 });
@@ -208,22 +208,22 @@ test("the subagent tool runs the fake pi in the parent's cwd and returns its out
   const tools: any[] = [];
   withEnv({ PI_CODING_AGENT_DIR: dir, JHON_PI_CHILD: "1" }, () => jhon({ on: () => {}, registerTool: (t: any) => tools.push(t), registerCommand: () => {} }));
   const subagent = tools.find((t) => t.name === "subagent");
-  assert.match(subagent.description, /Agents: explore, worker/);
+  assert.match(subagent.description, /Agents: jhon-builder, jhon-scout/);
 
   const task = "Investigate.\n\n## Allowed edit surfaces\n\n- a.ts";
   const r = await withEnv({ JHON_PI_BIN: bin, PI_CODING_AGENT_DIR: dir, FAKE_PI_EXIT: undefined },
-    () => subagent.execute("1", { agent: "worker", task }, undefined, undefined, { cwd }));
+    () => subagent.execute("1", { agent: "jhon-builder", task }, undefined, undefined, { cwd }));
   assert.equal(r.content[0].text, "final answer from the child");
   const seen = JSON.parse(readFileSync(log, "utf8"));
   assert.equal(seen.cwd, cwd);
-  assert.deepEqual(seen.env, { PI_CODING_AGENT_DIR: dir, JHON_PI_CHILD: "1", JHON_PI_AGENT: "worker" });
+  assert.deepEqual(seen.env, { PI_CODING_AGENT_DIR: dir, JHON_PI_CHILD: "1", JHON_PI_AGENT: "jhon-builder" });
   assert.deepEqual(seen.argv.slice(0, 4), ["--print", "--no-session", "--model", "anthropic/claude-sonnet-4-5"], "a parent with no saved session saves none for its child");
   assert.equal(seen.argv.at(-1), task);
 
   await withEnv({ JHON_PI_BIN: bin, FAKE_PI_EXIT: "3" }, () =>
-    assert.rejects(subagent.execute("2", { agent: "explore", task: "look" }, undefined, undefined, { cwd }), /"explore" exited 3:\nmodel unavailable/));
-  await assert.rejects(subagent.execute("3", { agent: "ghost", task: "x" }, undefined, undefined, { cwd }), /known agents: explore, worker/);
-  await assert.rejects(subagent.execute("4", { agent: "worker", task: "no surfaces" }, undefined, undefined, { cwd }), /Allowed edit surfaces/);
+    assert.rejects(subagent.execute("2", { agent: "jhon-scout", task: "look" }, undefined, undefined, { cwd }), /"jhon-scout" exited 3:\nmodel unavailable/));
+  await assert.rejects(subagent.execute("3", { agent: "ghost", task: "x" }, undefined, undefined, { cwd }), /known agents: jhon-builder, jhon-scout/);
+  await assert.rejects(subagent.execute("4", { agent: "jhon-builder", task: "no surfaces" }, undefined, undefined, { cwd }), /Allowed edit surfaces/);
 });
 
 // ── continuing a saved sub-agent ───────────────────────────────────────────
@@ -363,10 +363,10 @@ test("a foreground sub-agent shows what it is doing as it works, and answers wit
   const { bin, log } = streamingPi();
   const updates: string[] = [];
   const r = await withEnv({ JHON_PI_BIN: bin, FAKE_PI_HANG: undefined }, () =>
-    subagentTools(dir).get("subagent").execute("1", { agent: "explore", task: "who calls parse?" }, undefined, (u: any) => updates.push(u.content[0].text), { cwd: tmpdir() }));
+    subagentTools(dir).get("subagent").execute("1", { agent: "jhon-scout", task: "who calls parse?" }, undefined, (u: any) => updates.push(u.content[0].text), { cwd: tmpdir() }));
   assert.equal(r.content[0].text, "found 3 callers");
   assert.deepEqual(JSON.parse(readFileSync(log, "utf8")).argv.slice(0, 2), ["--mode", "json"], "it streams its events");
-  assert.match(updates[0]!, /^explore is working \(\d+s\)\ngrep parse\($/);
+  assert.match(updates[0]!, /^jhon-scout is working \(\d+s\)\ngrep parse\($/);
   assert.match(updates.at(-1)!, /grep parse\(\n» found 3 callers$/);
 });
 
@@ -375,13 +375,13 @@ test("a sub-agent past its timeout is stopped and the call fails, keeping what i
   const { bin } = streamingPi();
   const subagent = subagentTools(dir).get("subagent");
   await withEnv({ JHON_PI_BIN: bin, FAKE_PI_HANG: "1" }, () =>
-    assert.rejects(subagent.execute("1", { agent: "explore", task: "look", timeout_seconds: 1 }, undefined, () => {}, { cwd: tmpdir() }),
-      /"explore" ran past its 1s timeout and was stopped; it had said:\nfound 3 callers/));
-  await assert.rejects(subagent.execute("2", { agent: "explore", task: "look", timeout_seconds: 0 }, undefined, undefined, { cwd: tmpdir() }), /timeout_seconds must be a whole number/);
+    assert.rejects(subagent.execute("1", { agent: "jhon-scout", task: "look", timeout_seconds: 1 }, undefined, () => {}, { cwd: tmpdir() }),
+      /"jhon-scout" ran past its 1s timeout and was stopped; it had said:\nfound 3 callers/));
+  await assert.rejects(subagent.execute("2", { agent: "jhon-scout", task: "look", timeout_seconds: 0 }, undefined, undefined, { cwd: tmpdir() }), /timeout_seconds must be a whole number/);
 });
 
 test("a missing pi binary is an error result, not a crash", async () => {
-  const r = await withEnv({ JHON_PI_BIN: "/nonexistent/pi" }, () => runAgent(parseAgent(EXPLORE, "explore"), "look", tmpdir()));
+  const r = await withEnv({ JHON_PI_BIN: "/nonexistent/pi" }, () => runAgent(parseAgent(EXPLORE, "jhon-scout"), "look", tmpdir()));
   assert.equal(r.ok, false);
   assert.match(r.text, /could not run \/nonexistent\/pi/);
 });
@@ -460,7 +460,7 @@ test("JHON_PI_CHILD=1 marks a child; anything else is the main session", () => {
 // ── JSON event mode, for background sub-agents ────────────────────────────
 
 test("in json mode the child streams pi's JSONL events instead of printing", () => {
-  const worker = parseAgent(WORKER, "worker");
+  const worker = parseAgent(WORKER, "jhon-builder");
   const args = childArgs(worker, "do it", null, "json");
   assert.deepEqual(args.slice(0, 3), ["--mode", "json", "--no-session"]);
   assert.ok(!args.includes("--print"));
@@ -486,7 +486,7 @@ process.stdout.write(s.slice(0, 37)); setTimeout(() => process.stdout.write(s.sl
 `);
   chmodSync(bin, 0o755);
   const seen: string[] = [];
-  const explore = parseAgent(EXPLORE, "explore");
+  const explore = parseAgent(EXPLORE, "jhon-scout");
   const r = await withEnv({ JHON_PI_BIN: bin }, () => runAgent(explore, "look", dir, { onEvent: (event) => seen.push(String(event.type)) }));
   assert.deepEqual(r, { ok: true, text: "final answer" });
   assert.deepEqual(seen, events.map((e) => e.type));
@@ -535,15 +535,15 @@ test("an ask_user that asks no one (bad questions, a child) emits no owner wait"
 test("a child pi refused for a missing credential is reported with its model, the provider and that no other model ran; another failure is as before", async () => {
   const { childFailure } = await import("../lib/agents.ts");
   const pi = "No API key found for anthropic.\n\nUse /login to log into a provider via OAuth or API key. See:\n  docs/providers.md";
-  assert.equal(childFailure({ name: "worker", model: "anthropic/claude-opus-4-5" }, 1, null, pi),
-    `jhon: the sub-agent "worker" exited 1: pi found no credential for the provider anthropic; the agent was launched on the model anthropic/claude-opus-4-5.\n${pi}`);
+  assert.equal(childFailure({ name: "jhon-builder", model: "anthropic/claude-opus-4-5" }, 1, null, pi),
+    `jhon: the sub-agent "jhon-builder" exited 1: pi found no credential for the provider anthropic; the agent was launched on the model anthropic/claude-opus-4-5.\n${pi}`);
   // L926: the sentence says what pi's line proves, also when the provider is not the agent's.
-  assert.equal(childFailure({ name: "worker", model: "nan/alpha" }, 1, null, "No API key found for openai."),
-    `jhon: the sub-agent "worker" exited 1: pi found no credential for the provider openai; the agent was launched on the model nan/alpha.\nNo API key found for openai.`);
+  assert.equal(childFailure({ name: "jhon-builder", model: "nan/alpha" }, 1, null, "No API key found for openai."),
+    `jhon: the sub-agent "jhon-builder" exited 1: pi found no credential for the provider openai; the agent was launched on the model nan/alpha.\nNo API key found for openai.`);
   // L930: only pi's whole line counts; anything else is reported as printed.
   for (const printed of ["note: No API key found for openai. See the docs", "No API key found for openai. See the docs", "No API key found for openai", "  No API key found for openai."]) {
-    assert.equal(childFailure({ name: "worker", model: "nan/alpha" }, 1, null, printed), `jhon: the sub-agent "worker" exited 1:\n${printed}`, printed);
+    assert.equal(childFailure({ name: "jhon-builder", model: "nan/alpha" }, 1, null, printed), `jhon: the sub-agent "jhon-builder" exited 1:\n${printed}`, printed);
   }
-  assert.equal(childFailure({ name: "explore", model: "x/y" }, 3, null, "model unavailable"), `jhon: the sub-agent "explore" exited 3:\nmodel unavailable`);
-  assert.equal(childFailure({ name: "explore", model: "x/y" }, null, "SIGKILL", ""), `jhon: the sub-agent "explore" exited on SIGKILL`);
+  assert.equal(childFailure({ name: "jhon-scout", model: "x/y" }, 3, null, "model unavailable"), `jhon: the sub-agent "jhon-scout" exited 3:\nmodel unavailable`);
+  assert.equal(childFailure({ name: "jhon-scout", model: "x/y" }, null, "SIGKILL", ""), `jhon: the sub-agent "jhon-scout" exited on SIGKILL`);
 });

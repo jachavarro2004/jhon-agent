@@ -77,7 +77,7 @@ func TestRenderContext7(t *testing.T) {
 		for _, name := range delegable {
 			file := support.Read(t, filepath.Join(pi, "agents", name+".md"))
 			tools := listItems(frontmatter(file))
-			if name == "explore" || name == "worker" {
+			if name == "jhon-scout" || name == "jhon-builder" {
 				if n := len(tools); n < 2 {
 					t.Fatal(name, tools)
 				}
@@ -99,7 +99,7 @@ func TestRenderContext7(t *testing.T) {
 		for _, name := range append(primary, delegable...) {
 			file := claudeAgent(t, home, name)
 			tools := claudeTools(frontmatter(file))
-			if name == "explore" || name == "worker" {
+			if name == "jhon-scout" || name == "jhon-builder" {
 				equal(t, tools[len(tools)-2:], context7Claude, name)
 				match(t, flat(file), `(?i)library or framework documentation: context7 before guessing`, name)
 				continue
@@ -120,9 +120,9 @@ func TestRenderContext7(t *testing.T) {
 			"engram":    map[string]any{"command": "engram", "args": []any{"mcp", "--tools=agent"}, "exposure": "direct"},
 			"codegraph": map[string]any{"command": "codegraph", "args": []any{"serve", "--mcp"}, "exposure": "direct"},
 			"jhon":      map[string]any{"command": filepath.Join(current, "build", "jhon"), "args": []any{"mcp"}, "exposure": "direct"}}}))
-		equal(t, listItems(frontmatter(support.Read(t, filepath.Join(pi, "agents", "worker.md")))), []string{"read", "grep", "find", "ls", "edit", "write", "bash", "mcp__engram__mem_search", "mcp__engram__mem_get_observation",
+		equal(t, listItems(frontmatter(support.Read(t, filepath.Join(pi, "agents", "jhon-builder.md")))), []string{"read", "grep", "find", "ls", "edit", "write", "bash", "mcp__engram__mem_search", "mcp__engram__mem_get_observation",
 			"mcp__engram__mem_save", "mcp__engram__mem_update", "mcp__engram__mem_judge", "mcp__codegraph__codegraph_explore", "todo"}, "the worker's tools as they were")
-		explore := listItems(frontmatter(support.Read(t, filepath.Join(pi, "agents", "explore.md"))))
+		explore := listItems(frontmatter(support.Read(t, filepath.Join(pi, "agents", "jhon-scout.md"))))
 		equal(t, explore[len(explore)-1], "todo", "explore's tools end as they did")
 	})
 
@@ -141,7 +141,7 @@ func TestRenderContext7(t *testing.T) {
 			}
 		}
 		sort.Strings(differ)
-		equal(t, differ, []string{"~/.claude/agents/explore.md", "~/.claude/agents/worker.md", "~/.pi/jhon/agents/explore.md", "~/.pi/jhon/agents/worker.md", "~/.pi/jhon/mcp.json"})
+		equal(t, differ, []string{"~/.claude/agents/jhon-builder.md", "~/.claude/agents/jhon-scout.md", "~/.pi/jhon/agents/jhon-builder.md", "~/.pi/jhon/agents/jhon-scout.md", "~/.pi/jhon/mcp.json"})
 		// What an agent file gains is its tools and the one sentence, whole lines of it.
 		without := func(text string, drop func(line string) bool) string {
 			var kept []string
@@ -153,7 +153,7 @@ func TestRenderContext7(t *testing.T) {
 			return strings.Join(kept, "\n")
 		}
 		sentence := func(line string) bool { return strings.Contains(line, "context7 before guessing") }
-		for _, name := range []string{"explore", "worker"} {
+		for _, name := range []string{"jhon-scout", "jhon-builder"} {
 			pi := "~/.pi/jhon/agents/" + name + ".md"
 			equal(t, without(on[pi], func(line string) bool {
 				return sentence(line) || line == "  - "+context7Pi[0] || line == "  - "+context7Pi[1]

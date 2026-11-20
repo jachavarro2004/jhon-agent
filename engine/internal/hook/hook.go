@@ -13,6 +13,7 @@ import (
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/session"
 )
 
@@ -110,7 +111,8 @@ func staleNote(p Payload) string {
 func owner(args []string) (scoped bool, name string, rest []string) {
 	if len(args) > 0 && args[0] == "--agent" {
 		if len(args) > 1 {
-			return true, strings.TrimSpace(args[1]), args[2:]
+			// A runtime file rendered before T177 names the agent by its old name.
+			return true, rename.AgentNow(strings.TrimSpace(args[1])), args[2:]
 		}
 		return true, "", nil
 	}
@@ -121,7 +123,7 @@ func owner(args []string) (scoped bool, name string, rest []string) {
 // to that agent's own hooks. A guard scoped to `*` is every agent's: pi,
 // whose payloads name no agent, gives it every call.
 func othersCall(scoped bool, name string, p Payload) bool {
-	caller := strings.TrimSpace(p.Str("agent_type"))
+	caller := rename.AgentNow(strings.TrimSpace(p.Str("agent_type")))
 	return scoped && name != "*" && caller != "" && caller != name
 }
 
@@ -134,10 +136,10 @@ func caller(name string, p Payload) string {
 		return name
 	}
 	if t := strings.TrimSpace(p.Str("agent_type")); t != "" {
-		return t
+		return rename.AgentNow(t)
 	}
 	if os.Getenv("JHON_PI_CHILD") == "1" {
-		return strings.TrimSpace(os.Getenv("JHON_PI_AGENT"))
+		return rename.AgentNow(strings.TrimSpace(os.Getenv("JHON_PI_AGENT")))
 	}
 	return ""
 }

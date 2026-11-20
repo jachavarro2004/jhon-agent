@@ -3,4 +3,4 @@
 package auditcheck
 
 // Names are the checks audit runs. `audit_rules` must name exactly these.
-var Names = []string{"refusal-bypass", "isolation-bypass", "delivered-untested", "edit-before-red", "test-weakened", "verify-wrote", "explore-wrote", "archive-without-red"}
+var Names = []string{"refusal-bypass", "isolation-bypass", "delivered-untested", "edit-before-red", "test-weakened", "checker-wrote", "scout-wrote", "archive-without-red"}

@@ -112,7 +112,7 @@ audit_rules:
     validation_status: verified
     real_clean: [general-isolation-stop]
     real_violation: [apply-worktree-bypass]
-    # pi has no runtime isolation: its form reads a pi worker or verify
+    # pi has no runtime isolation: its form reads a pi builder or checker
     # child's write outside its own cwd, with no real fixtures yet (T56).
     pending_on: [pi]
   - anchor: delivery/tested-revision
@@ -134,11 +134,11 @@ audit_rules:
     validation_status: pending-real-fixture
     real_clean: [ldd-red-first-clean]
   - anchor: ldd/independent-verify
-    check: verify-wrote
+    check: checker-wrote
     evidence_class: deterministic
     validation_status: pending-real-fixture
-  - anchor: ldd/explore-scope
-    check: explore-wrote
+  - anchor: ldd/scout-scope
+    check: scout-wrote
     evidence_class: deterministic
     validation_status: pending-real-fixture
     real_violation: [explore-wrote-real]

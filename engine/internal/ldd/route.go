@@ -68,12 +68,12 @@ type Route struct {
 	// the verified route.
 	VerifiedLines int `json:"verified_lines"`
 	DesignLines   int `json:"design_lines"`
-	// Lenses are the 4R lenses the diff calls for: a 4R runs only these.
-	Lenses []string `json:"lenses"`
+	// Facets are the Prism facets the diff calls for: a Prism review runs only these.
+	Facets []string `json:"facets"`
 	// Slice is the size of the slice in progress, set by status (SliceLinesOf).
 	Slice *SliceLines `json:"slice,omitempty"`
 	// Reviews are the reviews the selected change owes, set by status
-	// (ReviewsOf): verify on this route, 4R when its risk reaches the
+	// (ReviewsOf): verify on this route, Prism review when its risk reaches the
 	// verified tier, and what review_required names for it.
 	Reviews []Review `json:"reviews,omitempty"`
 	// risk is the reasons `jhon risk` gives the change's files, what
@@ -122,7 +122,7 @@ func (g gitReads) routeOf(dir string) (Route, error) {
 		r.DesignLines = n
 	}
 	r.risk = risk.Reasons
-	r.Lenses = risk.Lenses
+	r.Facets = risk.Facets
 	var files []string
 	added := map[string]int{}
 	if base, _, ok := g.baseOf(top, nil); ok && top != "" {
@@ -352,10 +352,10 @@ func ProjectBrief(dir string) string {
 		if OneLineRecord(r.Tier) {
 			record = "its record (its RED and GREEN runs in `jhon executions`; a small change (`jhon status` says so) " + SmallKeepsNo + "; else tasks.md only when the work cannot be resumed from the diff, below high risk a one-line `## Intent` and `Delivers:`; a spec delta only when a main spec changes or is added),"
 		}
-		lines = append(lines, "- Route, from the change's diff now: "+r.String()+". The method is LDD (contracts/ldd.md): every change that alters behaviour carries "+record+" and a PR without it is refused; the route sets only the rigor, which rises with the diff's risk (size alone is a note); a proposal or design is written when the change needs one or the owner asks, verify may always run, and a 4R the route does not ask for is asked of the owner.")
+		lines = append(lines, "- Route, from the change's diff now: "+r.String()+". The method is LDD (contracts/ldd.md): every change that alters behaviour carries "+record+" and a PR without it is refused; the route sets only the rigor, which rises with the diff's risk (size alone is a note); a proposal or design is written when the change needs one or the owner asks, verify may always run, and a Prism review the route does not ask for is asked of the owner.")
 	}
 	lines = append(lines,
-		"- Reviews by risk (contracts/review-4r.md): a change at the verified tier gets verify and an automatic 4R with only the lenses it touches, recorded in review-4r.md (`lenses:`, `verdict: pass`); `review_required` in this file always wins.",
+		"- Reviews by risk (contracts/review-prism.md): a change at the verified tier gets jhon-checker and an automatic Prism review with only the facets it touches, recorded in review-prism.md (`facets:`, `verdict: pass`); `review_required` in this file always wins.",
 		"- This file and the framework's contracts outrank every memory: a memory that contradicts them is stale; correct it, never follow it.")
 	if v := contract.Scalar(config, "executions_inert"); v != "" {
 		lines = append(lines, "- executions_inert: "+v)

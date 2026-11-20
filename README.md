@@ -47,7 +47,7 @@ within safety limits**, and **nothing is delivered without evidence**.
 | Part | What it does |
 |---|---|
 | One orchestrator | The main session. It talks with you, plans the slices, reads the risk, and decides when to delegate. |
-| Focused agents | `explore`, `worker`, `verify` and the 4R reviewers, each with its own tools and a launch message that carries what it needs. |
+| Focused agents | `jhon-scout`, `jhon-builder`, `jhon-checker` and the Prism reviewers, each with its own tools and a launch message that carries what it needs. |
 | Guards | Seven checks on every tool call, the same in both runtimes, run by one binary. |
 | LDD | The delivery method: slices, recorded test runs, the slice commit and delivery checks. Always on. |
 | Memory and the code map | Engram keeps decisions and each change's state; CodeGraph gives agents the code's symbols and callers. Both always on. |
@@ -100,16 +100,16 @@ keeps its record in `openspec/` or in a native `ldd/` of the same shape
 | RED | A failing test, recorded before the code. | `jhon executions run <change>` |
 | GREEN | The code, then the affected tests, recorded. A pytest project is narrowed by pytest-testmon; `jhon executions prime` builds the missing records. | `jhon executions run <change> --affected <base>` |
 | Slice commit | Under `delivery: change`, the commit that closes a slice must be the tree its last run tested. | checked by `route-guard` |
-| Verify | A light verify by the `verify` agent on the standard route; a full `verify-report.md` and the 4R lenses at high risk. | `jhon executions verify <change> --verdict pass` |
+| Verify | A light verify by the `jhon-checker` agent on the standard route; a full `verify-report.md` and the Prism facets at high risk. | `jhon executions verify <change> --verdict pass` |
 | Delivery | Ready when the tree is clean and HEAD's tree is the last passing run's. The pull request opens only with RED before GREEN, and a passing verify on the verified route. | `jhon deliver check <change>` |
 
 **The rigor rises with the risk.** `jhon risk` reads a tier (passive,
 medium, high) from the paths a change touches, and the route follows it:
 
-| Route | When | Verification | 4R |
+| Route | When | Verification | Prism review |
 |---|---|---|---|
 | `standard` | risk under the verified tier, whatever its size | the affected tests of each slice; a light verify is an advisory | when you ask, or `review_required` names it |
-| `verified` | risk at the verified tier (`high`), or `review_required` names `verify` | an independent verification before delivery (`verify-report.md`) | automatic, with only the pertinent lenses |
+| `verified` | risk at the verified tier (`high`), or `review_required` names `checker` | an independent verification before delivery (`verify-report.md`) | automatic, with only the pertinent facets |
 
 **What the slice commit is checked for**, under `delivery: change`:
 
@@ -120,8 +120,8 @@ medium, high) from the paths a change touches, and the route follows it:
 | Real-database reach | the slice changes a declared data-access file (`executions_data_access`) and no declared real-database test (`executions_database_tests`) of its recorded run reached it in pytest-testmon's record (with no record, the run and `jhon status` say the reach could not be checked) |
 
 A test that turned green while only its own test file changed is never
-refused: it is marked in the record and handed to verify and the 4R
-lenses to judge whether it was weakened.
+refused: it is marked in the record and handed to `jhon-checker` and the Prism review
+facets to judge whether it was weakened.
 
 ## Guards: around every tool call
 
@@ -136,9 +136,9 @@ counts what each one costs).
 
 | Guard | Judges | Covers |
 |---|---|---|
-| `inspect-guard` | Bash | a reviewer changing what it reviews: 4R reviewers stay read-only |
+| `inspect-guard` | Bash | a reviewer changing what it reviews: Prism reviewers stay read-only |
 | `safety-guard` | Bash | a destructive or irreversible command (refused), a write or delete of a credentials file (refused), an outward-facing one without your consent (asked), a sub-agent's unbounded wait; a read, a write outside the project or one it cannot resolve is not limited (the sandbox bounds it) |
-| `vcs-guard` | Edit, Write | a write into `.git/` or the grants, an agent writing Claude Code's settings, a write outside the project (asked at the top level); explore's write beyond its record runs with a note |
+| `vcs-guard` | Edit, Write | a write into `.git/` or the grants, an agent writing Claude Code's settings, a write outside the project (asked at the top level); `jhon-scout`'s write beyond its record runs with a note |
 | `framework-guard` | Edit, Write, Bash | an agent editing Jhon or its installed release while it runs on it (Edit, Write), or running Jhon's own code by hand (Bash); a Bash write or git there is the sandbox's, where they are read-only |
 | `secrets-guard` | Read, Grep, Glob, Edit, Write | a file that holds credentials (`.env`, keys) or a home credentials directory; a template such as `.env.example` passes |
 | `scope-guard` | Edit, Write, Bash | a writer editing outside the edit surfaces its handoff names; a shell write whose target it cannot resolve runs with a note |
@@ -197,10 +197,10 @@ rule and runtime, how it holds, and `jhon doctor --runtime <name>` prints it:
 
 The enforced rules are the safety guard's destructive and outward-facing
 rules, the framework boundary, a writer's scope, and the tool list a
-sub-agent gets; explore's writes beyond its record run with a note, which
-`jhon audit`'s explore-wrote reads. pi has no runtime isolation, so `jhon audit`
-reads a pi worker or verify child's write outside its own tree; that check,
-like test-weakened, verify-wrote, and archive-without-red, reports a
+sub-agent gets; `jhon-scout`'s writes beyond its record run with a note, which
+`jhon audit`'s scout-wrote reads. pi has no runtime isolation, so `jhon audit`
+reads a pi `jhon-builder` or `jhon-checker` child's write outside its own tree; that check,
+like test-weakened, checker-wrote, and archive-without-red, reports a
 would-be violation until real fixtures back it.
 
 ## Agents: one orchestrator, focused helpers
@@ -211,20 +211,20 @@ The orchestrator keeps the conversation and the plan. Propose, spec,
 design, tasks, init and archive run inline in it; three executors carry
 every LDD step that leaves its thread. Its delegation mode is the
 profile's: `inline` (the default: understood work stays with it, and it
-delegates on objective triggers) or `writer` (workers write; it edits at
+delegates on objective triggers) or `writer` (builders write; it edits at
 most about 20 lines per request).
 
 | Agent | Does | Writes |
 |---|---|---|
-| `explore` | investigates before a change: the code, prior decisions, approaches, outside evidence | only its change's exploration.md or research.md (another write runs with a note) |
-| `worker` | builds a slice, or one layer of it | only the edit surfaces its handoff names |
-| `verify` | checks a slice or a change independently, from tests that actually ran; fixes nothing | only verify-report.md |
-| 4R lenses | review a frozen diff through risk, resilience, reliability and readability; a refuter and a validator then challenge the findings | nothing: the verdict goes to `review-4r.md` |
+| `jhon-scout` | investigates before a change: the code, prior decisions, approaches, outside evidence | only its change's exploration.md or research.md (another write runs with a note) |
+| `jhon-builder` | builds a slice, or one layer of it | only the edit surfaces its handoff names |
+| `jhon-checker` | checks a slice or a change independently, from tests that actually ran; fixes nothing | only verify-report.md |
+| Prism facets (`prism-safety`, `prism-failure`, `prism-clarity`, `prism-behavior`) | review a frozen diff through four facets: safety, failure, clarity and behavior; then `prism-challenger` tries to refute each finding and `prism-arbiter` confirms the ones that stand | nothing: the verdict goes to `review-prism.md` |
 
-In pi the 4R runs natively in one tool call (`jhon review start`, then
-every pertinent lens at once, then the refuter and validator, then
+In pi the Prism review runs natively in one tool call (`jhon review start`, then
+every pertinent facet at once, then the challenger and arbiter, then
 `jhon review record`); in Claude Code, `jhon review run` does the same in
-one Bash call through `claude -p`. The `review-*` lens agents are its fallback.
+one Bash call through `claude -p`. The `prism-*` facet agents are its fallback.
 
 **What each launch carries.** A sub-agent's first message is its brief,
 followed by what Jhon found for it, each block left out on any failure,
@@ -235,7 +235,7 @@ timeout or empty result:
 | `## Allowed edit surfaces` | the orchestrator | a writer: its scope, which `scope-guard` holds it to |
 | `## Decisions on record` | Engram, through `jhon context --handoff` | every sub-agent |
 | `## Code map` | CodeGraph: `query` and `callers` for the files and symbols the brief names | every sub-agent, where the project has a `.codegraph/` index |
-| `## Tests to judge` | the execution record, through `jhon context --judge` | verify and the 4R lenses |
+| `## Tests to judge` | the execution record, through `jhon context --judge` | `jhon-checker` and the Prism facets |
 
 **Memory.** Engram holds decisions, and the engine keeps one state record
 per change in it (phase, slices, last run, delivery, code refs), written
@@ -259,8 +259,8 @@ Every rule is a hypothesis with its evidence, and the evidence is measured.
   synthetic tasks with Jhon and without it, in both runtimes (`jhon`
   against `clean` Claude Code, `pi-jhon` against `pi-clean`), and judges
   Jhon by equal or better quality and better discipline, with the extra
-  cost shown. `bench review-compare` gated the native 4R: on five fixtures
-  with seeded defects it found the same 9 of 9 known defects as the lens
+  cost shown. `bench review-compare` gated the native Prism review: on five fixtures
+  with seeded defects it found the same 9 of 9 known defects as the facet
   agents for about 3.4× fewer quota-weighted tokens and 2.7× less wall time.
 
 ## Where you work
@@ -299,7 +299,7 @@ own terminal in pi).
 | Mode (`jhon mode`) | Passes without asking |
 |---|---|
 | `normal` | nothing beyond your live grants: the guards as they are |
-| `yolo` | every grant class but `destroy`, and a 4R reviewer you did not ask for |
+| `yolo` | every grant class but `destroy`, and a Prism reviewer you did not ask for |
 | `super-yolo` | that, plus `destroy` and a command the guard cannot read |
 
 | Grant class (`jhon grant <class> --for 30m`) | Covers |
@@ -330,7 +330,7 @@ after a backup. The main groups:
 | Group | Holds |
 |---|---|
 | `[runtimes]` | `claude_code`, `pi`: which runtimes are installed (both by default, at least one) |
-| `[integrations]` | `engram` and `codegraph` (always on), `context7` (hosted documentation for explore and worker, on by default), telemetry (opt-in), the palette |
+| `[integrations]` | `engram` and `codegraph` (always on), `context7` (hosted documentation for `jhon-scout` and `jhon-builder`, on by default), telemetry (opt-in), the palette |
 | `[sandbox]` | `mode` (`on` or `off`, on by default on Linux where the sandbox can run, off elsewhere), `allow_write` |
 | `[agents]` | `act_on_announce`: a turn that announces an action and takes none is sent back once |
 | `[pi]`, `[shell.*]` | the active profile, and the shell's appearance, behaviour and keys |
@@ -340,7 +340,11 @@ after a backup. The main groups:
 written `provider/model[@thinking]`, so a profile can run pi on Claude
 through Claude Code (`claude-bridge`, the default), an API key, or another
 provider. `jhon profile mode <profile> inline|writer` sets its delegation
-mode.
+mode. The agents' old names (explore, worker, verify, review-risk and
+the other review-* agents) are still read in a profile for now, each with
+a one-line warning naming its new name, as are `review_required` values 4r
+and verify in a project's LDD config (now prism and checker); jhon settings
+migrate rewrites both.
 
 ## Get started
 
@@ -396,7 +400,7 @@ own help.
 | `jhon risk` | the change's risk tier against the default branch, with a reason per file |
 | `jhon executions run <change>` | run and record the change's tests (`--affected`, `prime`, `verify`) |
 | `jhon deliver check <change>` | whether HEAD is the change's tested revision |
-| `jhon review start` | the native 4R (`freeze`, `refute`, `validate`, `record`; `run` is all of it through `claude -p`, for Claude Code) |
+| `jhon review start` | the native Prism review (`freeze`, `refute`, `validate`, `record`; `run` is all of it through `claude -p`, for Claude Code) |
 | `jhon context` | one delegation's launch context as JSON |
 | `jhon compose` | apply a delta spec to a main spec, atomically |
 | `jhon archive` | move a change into the archive and verify it |

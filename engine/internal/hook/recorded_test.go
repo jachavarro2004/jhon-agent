@@ -56,7 +56,7 @@ func TestRecordedPassesTheHookThroughAndRecordsIt(t *testing.T) {
 	}
 	a := rec.attrs
 	if rec.calls != 1 || rec.name != "jhon.hook" || rec.severity != "WARN" || a["jhon.hook.name"] != "safety-guard" || a["jhon.decision"] != "deny" ||
-		a["jhon.hook.args"] != "--agent *" || a["session.id"] != "s1" || a["gen_ai.tool.name"] != "Bash" || a["gen_ai.agent.name"] != "worker" ||
+		a["jhon.hook.args"] != "--agent *" || a["session.id"] != "s1" || a["gen_ai.tool.name"] != "Bash" || a["gen_ai.agent.name"] != "jhon-builder" ||
 		a["jhon.hook.event"] != "PreToolUse" || a["process.exit.code"] != 2 || a["jhon.reason"] != `safety-guard: refused: {"ses` {
 		t.Errorf("%d %s %s %v", rec.calls, rec.name, rec.severity, a)
 	}

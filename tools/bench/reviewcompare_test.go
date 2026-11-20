@@ -14,7 +14,7 @@ import (
 
 // The fixtures under review/ load, each defect's lines exist in its
 // candidate, every fixture's own tests pass on base+candidate, and there is
-// at least one clean fixture and every lens is seeded at least once.
+// at least one clean fixture and every facet is seeded at least once.
 func TestReviewFixtures(t *testing.T) {
 	fxs, err := LoadReviewFixtures(filepath.Join(source(), "review"), nil)
 	if err != nil {
@@ -23,13 +23,13 @@ func TestReviewFixtures(t *testing.T) {
 	if len(fxs) < 4 || len(fxs) > 6 {
 		t.Fatalf("%d fixtures, want 4-6", len(fxs))
 	}
-	lenses, clean := map[string]bool{}, 0
+	facets, clean := map[string]bool{}, 0
 	for _, fx := range fxs {
 		if fx.Clean {
 			clean++
 		}
 		for _, d := range fx.Defects {
-			lenses[d.Lens] = true
+			facets[d.Facet] = true
 		}
 		dir := t.TempDir()
 		for _, part := range []string{"base", "candidate"} {
@@ -46,8 +46,8 @@ func TestReviewFixtures(t *testing.T) {
 	if clean != 1 {
 		t.Errorf("%d clean fixtures, want 1", clean)
 	}
-	for _, l := range reviewLenses {
-		if !lenses[l] {
+	for _, l := range reviewFacets {
+		if !facets[l] {
 			t.Errorf("no fixture seeds a %s defect", l)
 		}
 	}
@@ -66,7 +66,7 @@ func TestParseReviewManifestRefuses(t *testing.T) {
 	}
 	write("candidate/a.py", "1\n2\n3\n")
 	write("candidate/ldd/changes/c/tasks.md", "x\n")
-	good := `{"id":"fx","title":"t","change":"c","defects":[{"id":"D1","file":"a.py","lines":[2,3],"lens":"risk","severity":"CRITICAL","what":"w"}]}`
+	good := `{"id":"fx","title":"t","change":"c","defects":[{"id":"D1","file":"a.py","lines":[2,3],"facet":"safety","severity":"CRITICAL","what":"w"}]}`
 	fx, err := parseReviewManifest([]byte(good), dir)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestParseReviewManifestRefuses(t *testing.T) {
 		{strings.Replace(good, `"id":"fx"`, `"id":"other"`, 1), `id "other" is not the directory's name "fx"`},
 		{strings.Replace(good, `"change":"c"`, `"change":"C c"`, 1), `change "C c"`},
 		{strings.Replace(good, `"change":"c"`, `"change":"d"`, 1), "no candidate/ldd/changes/d/"},
-		{strings.Replace(good, `"lens":"risk"`, `"lens":"style"`, 1), `lens "style" is not one of`},
+		{strings.Replace(good, `"facet":"safety"`, `"facet":"style"`, 1), `facet "style" is not one of`},
 		{strings.Replace(good, `"CRITICAL"`, `"HIGH"`, 1), `severity "HIGH"`},
 		{strings.Replace(good, `[2,3]`, `[3,2]`, 1), "are not a range from 1"},
 		{strings.Replace(good, `[2,3]`, `[2,9]`, 1), "pass the end of a.py (3 lines)"},
@@ -87,7 +87,7 @@ func TestParseReviewManifestRefuses(t *testing.T) {
 		{strings.Replace(good, `"title":"t"`, `"title":"t","clean":true`, 1), "a clean fixture lists no defect"},
 		{`{"id":"fx","title":"t","change":"c","defects":[]}`, "no defect: list them, or mark the fixture clean"},
 		{strings.Replace(good, `"title"`, `"tittle"`, 1), "unknown field"},
-		{strings.Replace(good, `}]}`, `},{"id":"D1","file":"a.py","lines":[1,1],"lens":"risk","severity":"WARNING","what":"w"}]}`, 1), `defect id "D1" is empty or repeated`},
+		{strings.Replace(good, `}]}`, `},{"id":"D1","file":"a.py","lines":[1,1],"facet":"safety","severity":"WARNING","what":"w"}]}`, 1), `defect id "D1" is empty or repeated`},
 	} {
 		if _, err := parseReviewManifest([]byte(c.body), dir); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: got %v, want %q", c.body, err, c.want)
@@ -95,50 +95,50 @@ func TestParseReviewManifestRefuses(t *testing.T) {
 	}
 }
 
-// recordSample is review-4r.md as ldd.RecordText writes it.
-const recordSample = `# 4R: late-fees
+// recordSample is review-prism.md as ldd.RecordText writes it.
+const recordSample = `# Prism review: late-fees
 
-lenses: reliability, risk
+facets: behavior, safety
 verdict: fail
 subject: abc123
 base: 0f0f
 
 ## Correction set
 
-- [reliability-1] CRITICAL billing/fees.py:16-18: except Exception: pass drops a fee (proof: billing/fees.py:17; tests)
+- [behavior-1] CRITICAL billing/fees.py:16-18: except Exception: pass drops a fee (proof: billing/fees.py:17; tests)
 
 ## For verify (unconfirmed)
 
-- [reliability-2] CRITICAL ./billing/fees.py:L24: divides by zero: on an empty batch
+- [behavior-2] CRITICAL ./billing/fees.py:L24: divides by zero: on an empty batch
 
 ## Findings (information)
 
-- [risk-1] SUGGESTION billing/fees.py: name the constant
+- [safety-1] SUGGESTION billing/fees.py: name the constant
 
 ## Refuted
 
-- [risk-2] WARNING billing/fees.py:7: min() is wrong
+- [safety-2] WARNING billing/fees.py:7: min() is wrong
 
-## Unavailable lenses
+## Unavailable facets
 
-- readability: the completion failed
+- clarity: the completion failed
 `
 
 func TestParseReviewRecord(t *testing.T) {
 	r := parseReviewRecord(recordSample)
-	if r.Verdict != "fail" || r.Subject != "abc123" || !slices.Equal(r.Lenses, []string{"reliability", "risk"}) {
+	if r.Verdict != "fail" || r.Subject != "abc123" || !slices.Equal(r.Facets, []string{"behavior", "safety"}) {
 		t.Errorf("head %+v", r)
 	}
 	want := []RecordFinding{
-		{"reliability-1", "CRITICAL", "billing/fees.py:16-18", "except Exception: pass drops a fee", "correction_set"},
-		{"reliability-2", "CRITICAL", "./billing/fees.py:L24", "divides by zero: on an empty batch", "for_verify"},
-		{"risk-1", "SUGGESTION", "billing/fees.py", "name the constant", "information"},
-		{"risk-2", "WARNING", "billing/fees.py:7", "min() is wrong", "refuted"},
+		{"behavior-1", "CRITICAL", "billing/fees.py:16-18", "except Exception: pass drops a fee", "correction_set"},
+		{"behavior-2", "CRITICAL", "./billing/fees.py:L24", "divides by zero: on an empty batch", "for_verify"},
+		{"safety-1", "SUGGESTION", "billing/fees.py", "name the constant", "information"},
+		{"safety-2", "WARNING", "billing/fees.py:7", "min() is wrong", "refuted"},
 	}
 	if !slices.Equal(r.Findings, want) {
 		t.Errorf("findings\n got %+v\nwant %+v", r.Findings, want)
 	}
-	if !slices.Equal(r.Unavailable, []string{"readability: the completion failed"}) {
+	if !slices.Equal(r.Unavailable, []string{"clarity: the completion failed"}) {
 		t.Errorf("unavailable %v", r.Unavailable)
 	}
 }
@@ -168,9 +168,9 @@ func TestParseLocation(t *testing.T) {
 
 func lateFees() ReviewFixture {
 	return ReviewFixture{ID: "late-fees", Change: "late-fees", Defects: []ReviewDefect{
-		{ID: "D1", File: "billing/fees.py", Lines: [2]int{16, 18}, Lens: "reliability", Severity: "CRITICAL"},
-		{ID: "D2", File: "billing/fees.py", Lines: [2]int{24, 24}, Lens: "reliability", Severity: "WARNING"},
-		{ID: "D3", File: "billing/other.py", Lines: [2]int{1, 3}, Lens: "risk", Severity: "WARNING"},
+		{ID: "D1", File: "billing/fees.py", Lines: [2]int{16, 18}, Facet: "behavior", Severity: "CRITICAL"},
+		{ID: "D2", File: "billing/fees.py", Lines: [2]int{24, 24}, Facet: "behavior", Severity: "WARNING"},
+		{ID: "D3", File: "billing/other.py", Lines: [2]int{1, 3}, Facet: "safety", Severity: "WARNING"},
 	}}
 }
 
@@ -179,10 +179,10 @@ func lateFees() ReviewFixture {
 // positive; a clean fixture makes every standing finding one.
 func TestMatchFindings(t *testing.T) {
 	m := matchFindings(lateFees(), parseReviewRecord(recordSample).Findings)
-	if !slices.Equal(m.Hits, []string{"D1", "D2"}) || !slices.Equal(m.Misses, []string{"D3"}) || !slices.Equal(m.FalsePositives, []string{"risk-1"}) {
+	if !slices.Equal(m.Hits, []string{"D1", "D2"}) || !slices.Equal(m.Misses, []string{"D3"}) || !slices.Equal(m.FalsePositives, []string{"safety-1"}) {
 		t.Errorf("match %+v", m)
 	}
-	if !slices.Equal(m.HitsBy["D2"], []string{"reliability-2"}) {
+	if !slices.Equal(m.HitsBy["D2"], []string{"behavior-2"}) {
 		t.Errorf("hits by %v", m.HitsBy)
 	}
 	edge := []RecordFinding{
@@ -265,11 +265,11 @@ func TestCollectReviewRun(t *testing.T) {
 		`{"type":"message","message":{"role":"toolResult","toolName":"bash","details":{"status":"x","reviewers":{"calls":9}}}}`, `not json`)
 	subs := filepath.Join(dir, "2026_sess", "subagents")
 	writeLines(t, filepath.Join(subs, "2026-11-14T00_toolu_1.jsonl"), asstLine(5), asstLine(5))
-	writeLines(t, filepath.Join(subs, "toolu_1.meta.json"), `{"agentType":"review-risk","toolUseId":"toolu_1"}`)
+	writeLines(t, filepath.Join(subs, "toolu_1.meta.json"), `{"agentType":"prism-safety","toolUseId":"toolu_1"}`)
 	writeLines(t, filepath.Join(subs, "2026-11-14T01_toolu_2.jsonl"), asstLine(7))
 	writeLines(t, filepath.Join(subs, "toolu_2.meta.json"), `{"agentType":"verify"}`)
 	repo := t.TempDir()
-	writeLines(t, filepath.Join(repo, "ldd", "changes", "late-fees", "review-4r.md"), recordSample)
+	writeLines(t, filepath.Join(repo, "ldd", "changes", "late-fees", "review-prism.md"), recordSample)
 	var m ReviewRunMetrics
 	collectReviewRun(&m, lateFees(), main, repo)
 	if m.Parent != (TokenUsage{Calls: 2, Input: 300, Output: 20, CacheRead: 2000, CacheWrite: 100, Cost: 0.02}) {
@@ -281,7 +281,7 @@ func TestCollectReviewRun(t *testing.T) {
 	if m.Others != (TokenUsage{Calls: 1, Input: 7, Output: 10, CacheRead: 1000, CacheWrite: 50, Cost: 0.01}) {
 		t.Errorf("others %+v", m.Others)
 	}
-	if m.ReviewCalls != 1 || !slices.Equal(m.ReviewStatus, []string{"recorded"}) || m.ReviewAgents["review-risk"] != 1 || m.OtherAgents["verify"] != 1 {
+	if m.ReviewCalls != 1 || !slices.Equal(m.ReviewStatus, []string{"recorded"}) || m.ReviewAgents["prism-safety"] != 1 || m.OtherAgents["verify"] != 1 {
 		t.Errorf("calls %+v", m)
 	}
 	if m.Record == nil || m.Record.Verdict != "fail" || !slices.Equal(m.Match.Hits, []string{"D1", "D2"}) || len(m.Problems) != 0 {
@@ -293,7 +293,7 @@ func TestCollectReviewRun(t *testing.T) {
 	// No transcript and no record: problems, every defect a miss.
 	var empty ReviewRunMetrics
 	collectReviewRun(&empty, lateFees(), "", t.TempDir())
-	if !slices.Equal(empty.Problems, []string{"no session transcript", "no review-4r.md for late-fees"}) || len(empty.Match.Misses) != 3 {
+	if !slices.Equal(empty.Problems, []string{"no session transcript", "no review-prism.md for late-fees"}) || len(empty.Match.Misses) != 3 {
 		t.Errorf("empty %+v", empty)
 	}
 }
@@ -306,7 +306,7 @@ func TestRenderReviewCompare(t *testing.T) {
 		{Fixture: fx.ID, Arm: "native", Repeat: 1, WallMs: 90000, Parent: TokenUsage{Calls: 4, Input: 1000, Cost: 0.1}, Reviewers: TokenUsage{Calls: 4, Input: 40000, Cost: 0.2},
 			Record: &rec, Match: matchFindings(fx, rec.Findings)},
 		{Fixture: fx.ID, Arm: "agents", Repeat: 1, WallMs: 300000, Parent: TokenUsage{Calls: 9, Input: 3000, Cost: 0.5}, Reviewers: TokenUsage{Calls: 60, Input: 900000, Cost: 1.5},
-			Match: matchFindings(fx, nil), Problems: []string{"no review-4r.md for late-fees"}},
+			Match: matchFindings(fx, nil), Problems: []string{"no review-prism.md for late-fees"}},
 	}
 	var out bytes.Buffer
 	dir := t.TempDir()
@@ -316,9 +316,9 @@ func TestRenderReviewCompare(t *testing.T) {
 	md, _ := os.ReadFile(filepath.Join(dir, "report.md"))
 	for _, want := range []string{
 		"## late-fees — late fees (3 known defects)",
-		"- D1 billing/fees.py:16-18 reliability CRITICAL",
-		"| native | 1 | fail | reliability, risk | 4 | 1.0k / 0 / 0 / 0 | 4 | 40.0k / 0 / 0 / 0 | 0 | 0.3000 | 41.0k | 90 | D1 D2 | D3 | risk-1 | reliability-1 | reliability-2 |  |",
-		"| agents | 1 | none |  | 9 | 3.0k / 0 / 0 / 0 | 60 | 900.0k / 0 / 0 / 0 | 0 | 2.0000 | 903.0k | 300 | — | D1 D2 D3 | — | — | — | no review-4r.md for late-fees |",
+		"- D1 billing/fees.py:16-18 behavior CRITICAL",
+		"| native | 1 | fail | behavior, safety | 4 | 1.0k / 0 / 0 / 0 | 4 | 40.0k / 0 / 0 / 0 | 0 | 0.3000 | 41.0k | 90 | D1 D2 | D3 | safety-1 | behavior-1 | behavior-2 |  |",
+		"| agents | 1 | none |  | 9 | 3.0k / 0 / 0 / 0 | 60 | 900.0k / 0 / 0 / 0 | 0 | 2.0000 | 903.0k | 300 | — | D1 D2 D3 | — | — | — | no review-prism.md for late-fees |",
 		"| native | 1 | 1 | 1.0k / 0 / 0 / 0 | 40.0k / 0 / 0 / 0 | 0 | 41.0k | 0.3000 | 41.0k | 90 | 2 / 3 | 1 (0) |",
 		"## Gate (L727): PASS",
 		"- native costs $0.3000 < agents' $2.0000 and finds 2 ≥ 0 of 3 known defects",
@@ -367,14 +367,14 @@ func TestBuildReviewRepo(t *testing.T) {
 	if !fileExists(filepath.Join(repo, "ldd", "config.yaml")) || git("status", "--porcelain") != "" {
 		t.Error("no ldd/config.yaml or a dirty tree")
 	}
-	// The change owes the 4R (review_required), so the route guard lets the
-	// agents arm launch its pertinent lenses, the refuter and the validator
+	// The change owes the Prism review (review_required), so the route guard lets the
+	// agents arm launch its pertinent facets, the challenger and the arbiter
 	// headless, as the native arm runs (L739).
 	cfg, err := os.ReadFile(filepath.Join(repo, "ldd", "config.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "\nreview_required:\n  - change: late-fees\n    review: 4r\n"; !strings.HasSuffix(string(cfg), want) {
+	if want := "\nreview_required:\n  - change: late-fees\n    review: prism\n"; !strings.HasSuffix(string(cfg), want) {
 		t.Errorf("ldd/config.yaml does not end with %q:\n%s", want, cfg)
 	}
 	if !strings.HasPrefix(string(cfg), "# The ldd variant's") {
@@ -434,7 +434,7 @@ func TestReviewCompareFake(t *testing.T) {
 		`{"type":"message","message":{"role":"toolResult","toolName":"jhon_review","details":{"status":"recorded","reviewers":{"calls":3,"input":30000,"output":2000,"cost":0.1}}}}`)
 	t.Setenv("FAKE_TRANSCRIPT", session)
 	solution := t.TempDir()
-	writeLines(t, filepath.Join(solution, "ldd", "changes", "late-fees", "review-4r.md"), recordSample)
+	writeLines(t, filepath.Join(solution, "ldd", "changes", "late-fees", "review-prism.md"), recordSample)
 	t.Setenv("FAKE_SOLUTION", solution)
 	fxs, err := LoadReviewFixtures(filepath.Join(source(), "review"), []string{"late-fees"})
 	if err != nil {
