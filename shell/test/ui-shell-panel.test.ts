@@ -84,6 +84,6 @@ test("workRowLead and renderWorkRow: ` ▸ <lead> … <count>`, the highest prio
 // T169 (L1437, L1438): the panel sheet is gone, and with it the rail's STATS
 // card; the rail's parts, in order, are LDD first (L174), then G's todo, jobs,
 // agents and the rest of Status.
-test("the rail's order is ldd → todo → jobs → agents → footer, with no stats (T169)", () => {
-	assert.deepEqual([...RAIL_ORDER], ["ldd", "todo", "jobs", "agents", "footer"]);
+test("the pane's order is ldd → todo → jobs → agents, with no stats (T169) and no footer slot (T174-S4)", () => {
+	assert.deepEqual([...RAIL_ORDER], ["ldd", "todo", "jobs", "agents"]);
 });

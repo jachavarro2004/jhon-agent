@@ -67,9 +67,8 @@ function sanitizeStatus(text: string): string {
 
 // The rail's sections as the Gentle Shell draws them (its lib/shell-bar.ts
 // and shell-panel.ts, T15.12d): each a panel section, a `▾ NAME … count`
-// header and rows indented under it; the rail (shell-sidebar-layout.ts)
-// draws each one as its own card in the card style on a transparent surface,
-// or on one painted panel when tinted (shell.appearance.surface).
+// header and rows indented under it; the right pane (pane.ts) stacks them as
+// they are, on one painted panel when tinted (shell.appearance.surface).
 
 /** A rendered chrome row in its ASCII forms when shell.appearance.ascii is on (one cell each: the width holds). */
 function chromeAscii(rows: string[], ascii = shellSettings().ascii()): string[] {

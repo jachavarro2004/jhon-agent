@@ -86,6 +86,33 @@ export async function readSandboxStatus(config: { jhon: string }, cwd: string, t
 	return { mode: s.mode, canRun: s.can_run, reason: line(s.reason), fix: line(s.fix), project: typeof s.project === "string" ? s.project : undefined, ...(s.timed_out === true ? { timedOut: true as const } : {}) };
 }
 
+/** What the status bar says of the sandbox (L1489): on, off, or not running and why, in a few words. */
+export type SandboxShown = { state: "on" | "off" } | { state: "not running"; why: string };
+
+/** The longest why the status bar gets. */
+const WHY_CELLS = 36;
+
+/** The engine's reason in a few words: its asides and what follows a `;` dropped, `the sandbox` said by the bar already. */
+function fewWords(reason: string): string {
+	const words = reason.replace(/\s*\([^)]*\)/g, "").split(/[;,]/)[0]!.replace(/\s+/g, " ").trim().replace(/^the sandbox /i, "");
+	return [...words].length > WHY_CELLS ? `${[...words].slice(0, WHY_CELLS - 1).join("").trimEnd()}…` : words;
+}
+
+/**
+ * The state a pin means for the commands, as sandboxVerdict decides it: `on`
+ * when they run in the sandbox (a probe that timed out included: they are
+ * wrapped as usual), `off` when they run plain, and `not running` when they
+ * are refused, with why.
+ */
+export function sandboxShown(pin: SandboxPin): SandboxShown {
+	if ("unread" in pin) return { state: "not running", why: "no status answer" };
+	if (pin.mode === "off") return { state: "off" };
+	if (!pin.canRun && !pin.timedOut) return { state: "not running", why: fewWords(pin.reason) || "cannot run here" };
+	if (pin.project === undefined) return { state: "not running", why: "no project" };
+	if (pin.project === "") return { state: "not running", why: "not in a repository" };
+	return { state: "on" };
+}
+
 export function sandboxVerdict(pin: SandboxPin): SandboxVerdict {
 	if ("unread" in pin) {
 		return { refuse: `jhon: \`jhon sandbox status --json\` gave no answer (${pin.unread}), so whether this command runs in the sandbox is unknown; the command is refused, never run unsandboxed in silence; run \`jhon doctor\`` };
@@ -245,8 +272,8 @@ export function wireSandbox(pi: any, o: { jhon: string | undefined; timeoutMs?: 
 				const verdict = sandboxVerdict(pin);
 				if ("run" in verdict && verdict.run === "sandbox") env[SANDBOX_PROJECT_ENV] = verdict.project;
 				else delete env[SANDBOX_PROJECT_ENV];
-				// The status bar shows the pin (extensions/ui.ts).
-				pi.events?.emit?.(SANDBOX_EVENT, { mode: "unread" in pin ? undefined : pin.mode });
+				// The status bar shows the pin's real state (extensions/ui.ts, L1489).
+				pi.events?.emit?.(SANDBOX_EVENT, { mode: "unread" in pin ? undefined : pin.mode, ...sandboxShown(pin) });
 			}
 			return pin;
 		});

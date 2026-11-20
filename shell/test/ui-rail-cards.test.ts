@@ -1,23 +1,21 @@
 /**
- * The rail's sections as the Gentle Shell draws them (T15.12d, L153 answers
- * 1-2): each section renders panel lines, a `▾ NAME … count` header and rows
- * indented under it; on a transparent surface (the default) the rail draws
- * each one as its own card in the card style (float: the `▎` bar on a tint,
- * a blank row above the header; neon: the rounded outline, the header in its
- * top rule), and on a tinted surface it paints them all on one panel. ASCII
- * draws + - | and v / >.
+ * The rail's sections in the right pane (T15.12d; T174-S4): each section
+ * renders panel lines, a `▾ NAME … count` header and rows indented under it,
+ * and the pane (lib/ui/pane.ts) stacks them as they are: no card chrome on a
+ * transparent surface (design 01 draws none), one painted panel on a tinted
+ * one. ASCII draws v / >.
  *
  *   cd shell && node --experimental-strip-types --test test/ui-rail-cards.test.ts
  */
 import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
-import { ScrollView, visibleWidth, type TUI } from "@earendil-works/pi-tui";
+import { VStack, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
 import { renderShellAgentsSection, renderShellJobsSection, renderShellStatusLayout, renderShellStatusSections, type ShellBarModel } from "../lib/ui/shell-bar.ts";
 import { CARD_STYLE, cardStyle, setCardStyle } from "../lib/ui/primitives/index.ts";
 import { chromeSurface, setChromeSurface } from "../lib/ui/shell-panel.ts";
-import { installSidebar } from "../lib/ui/shell-sidebar-layout.ts";
-import { sidebarPart } from "../lib/ui/shell-sidebar.ts";
+import { installPane, paneSlot, PANE_TEXT } from "../lib/ui/pane.ts";
+import { PI_LAYOUT_NODE } from "../lib/ui/pi-layout-hook.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { useMemorySettings } from "./fake-jhon-settings.ts";
 
@@ -45,22 +43,17 @@ function look(t: TestContext, style: "float" | "neon", surface: "transparent" | 
 	t.after(() => { setCardStyle(before[0]); setChromeSurface(before[1]); });
 }
 
-/** The rail, as installSidebar lays it out, with LDD and JOBS as panel parts (LDD first, L174). */
+/** The pane's panel rows as the pane host draws them (lib/ui/pane.ts, T174-S4), with LDD and JOBS as its parts (LDD first, L174). */
 function rail(t: TestContext, theme: typeof plain, density?: "comfortable" | "compact" | "minimal"): string[] {
-	const NODE = Symbol.for("@earendil-works/pi-tui/layout-node");
-	const root = { render: () => ["transcript"], invalidate() {}, [NODE]: () => ({ type: "vstack", entries: [] }) };
+	const root = new VStack([]);
 	const tui = { mode: "fullscreen", terminal: { columns: 160, rows: 40 }, layoutRoot: root, requestRender() {} } as unknown as TUI;
-	const groups = new Map<number, Array<{ start: number; end: number }>>();
-	sidebarPart(tui, "jobs", { render: () => [], invalidate() {} }, { surface: "panel", render: (w: number) => renderShellJobsSection(jobs, theme, w, NOW), invalidate() {} });
-	sidebarPart(tui, "ldd", { render: () => [], invalidate() {} }, {
-		surface: "panel",
-		render: (w: number) => { const layout = renderShellStatusLayout(status(), theme, w, undefined, undefined, density); groups.set(w, layout.groups); return layout.lines; },
-		cardGroups: (w: number) => ({ groups: groups.get(w) ?? [] }),
-		invalidate() {},
-	});
-	t.after(density ? installSidebar(tui, theme, () => "auto", () => density) : installSidebar(tui, theme));
-	const node = (root as unknown as Record<symbol, () => { entries: Array<{ component: ScrollView }> }>)[NODE]!();
-	return node.entries[1]!.component.render(50);
+	paneSlot(tui, "jobs", { render: (w: number) => renderShellJobsSection(jobs, theme, w, NOW), invalidate() {} });
+	paneSlot(tui, "ldd", { render: (w: number) => renderShellStatusLayout(status(), theme, w, undefined, undefined, density).lines, invalidate() {} });
+	t.after(installPane(tui, theme, { placement: () => "auto", density: () => density ?? "comfortable", note: () => {} }));
+	type Node = { entries: Array<{ component: Component & { child?: Component; [PI_LAYOUT_NODE]?(): Node } }> };
+	const tree = (root as unknown as Record<symbol, () => Node>)[PI_LAYOUT_NODE]!();
+	const split = tree.entries[2]!.component[PI_LAYOUT_NODE]!();
+	return split.entries[2]!.component.child!.render(PANE_TEXT + 2);
 }
 
 test("each section is panel lines: `▾ NAME … count`, the name upper-case text bold, the count muted, rows indented under it", (t) => {
@@ -80,74 +73,57 @@ test("each section is panel lines: `▾ NAME … count`, the name upper-case tex
 	assert.match(plainRows(renderShellJobsSection(jobs, plain, 48, NOW, true))[0]!, /^▸ JOBS/);
 });
 
-test("transparent + float: each section its own float card, a blank tinted row above `▎ ▾ NAME … count`, the ▎ bar on every row, a blank row between cards", (t) => {
-	look(t, "float", "transparent");
-	const lines = rail(t, painted);
-	const text = plainRows(lines);
-	const jobsAt = text.findIndex((line) => / ▎ ▾ JOBS +1 running$/.test(line));
-	assert.ok(jobsAt > 0, text.join("\n"));
-	assert.equal(text[jobsAt - 1], " ▎", "the float card's padding row above the header");
-	assert.match(text[jobsAt + 1]!, /^ ▎ ⧗ bg-1 npm test +1m 5s$/, "rows lose their panel indent inside the card");
-	assert.equal(text[jobsAt + 2], " ▎", "the closing padding row");
-	assert.equal(text[jobsAt - 2], "", "a blank row between two cards");
-	const lddAt = text.findIndex((line) => /^ ▎ ▾ LDD/.test(line));
-	assert.ok(lddAt > 0 && lddAt < jobsAt, "LDD leads the rail, its own card");
-	assert.ok(!text.some((line) => /CHANGES|INTEGRATIONS/.test(line)), "T174: no CHANGES or INTEGRATIONS card");
-	assert.ok(lines.filter((line) => line.includes("▎")).every((line) => line.startsWith(` ${BG}`)), "each card's rows are tinted inside a one-column margin");
-	assert.ok(lines.filter((line) => line.trim() === "").every((line) => !line.includes(BG)), "nothing paints between cards: the surface is transparent");
+test("transparent: the pane stacks the sections' panel lines as they are, LDD first, a blank row apart; no card chrome in any card style (T174-S4, design 01)", (t) => {
+	for (const style of ["float", "neon"] as const) {
+		look(t, style, "transparent");
+		const lines = rail(t, painted);
+		const text = plainRows(lines);
+		const jobsAt = text.findIndex((line) => /^▾ JOBS +1 running$/.test(line));
+		assert.ok(jobsAt > 0, text.join("\n"));
+		assert.match(text[jobsAt + 1]!, /^ {2}⧗ bg-1 npm test +1m 5s$/, "rows keep their panel indent");
+		assert.equal(text[jobsAt - 1], "", "a blank row between two sections");
+		const lddAt = text.findIndex((line) => /^▾ LDD/.test(line));
+		assert.equal(lddAt, 1, "LDD leads the pane, under one blank row");
+		assert.equal(text[0], "");
+		assert.doesNotMatch(text.join("\n"), /[╭╰▎]|CHANGES|INTEGRATIONS/, `${style}: no card chrome, no CHANGES or INTEGRATIONS`);
+		assert.ok(lines.every((line) => !line.includes(BG)), "nothing paints: the surface is transparent");
+		assert.ok(lines.every((line) => visibleWidth(line) === PANE_TEXT + 2), "every row the pane's width");
+	}
 });
 
-test("transparent + neon: each section its own rounded card, `╭─ ▾ NAME ── count ╮`, the rows between │, `╰──╯`", (t) => {
-	look(t, "neon", "transparent");
-	const text = plainRows(rail(t, painted));
-	const jobsAt = text.findIndex((line) => /^╭─ ▾ JOBS ─+ 1 running ╮$/.test(line));
-	assert.ok(jobsAt >= 0, text.join("\n"));
-	assert.match(text[jobsAt + 1]!, /^│ ⧗ bg-1 npm test +1m 5s │$/);
-	assert.match(text[jobsAt + 2]!, /^╰─+╯$/);
-	assert.ok(text.some((line) => /^╭─ ▾ LDD ─+╮$/.test(line)), text.join("\n"));
-	for (const line of text.filter((line) => line.startsWith("╭") || line.startsWith("│") || line.startsWith("╰"))) assert.equal(visibleWidth(line), text.find((l) => l.startsWith("╭"))!.length, line);
-});
-
-test("tinted: one painted panel, `▾ NAME … count` headers and their rows on it, the blank rows between sections painted too, down to the bottom", (t) => {
+test("tinted: one painted panel, `▾ NAME … count` headers and their rows on it, the blank rows between sections painted too", (t) => {
 	look(t, "float", "tinted");
 	const lines = rail(t, painted);
 	const text = plainRows(lines);
-	assert.ok(text.some((line) => /^ ▾ JOBS +1 running$/.test(line)), text.join("\n"));
-	assert.ok(text.some((line) => /^ {3}⧗ bg-1 npm test +1m 5s$/.test(line)));
-	assert.ok(text.some((line) => /^ ▾ LDD *$/.test(line)), text.join("\n"));
+	assert.ok(text.some((line) => /^▾ JOBS +1 running$/.test(line)), text.join("\n"));
+	assert.ok(text.some((line) => /^ {2}⧗ bg-1 npm test +1m 5s$/.test(line)));
+	assert.ok(text.some((line) => /^▾ LDD *$/.test(line)), text.join("\n"));
 	assert.doesNotMatch(text.join("\n"), /[╭│╰▎]/, "no card chrome on a tinted panel");
 	const first = text.findIndex((line) => line.includes("▾"));
 	assert.ok(lines.slice(first).every((line) => line.startsWith(BG)), "every row from the first section on is on the panel surface, the gaps included");
 });
 
-// G's Density (L195): comfortable keeps a blank row between rail sections;
-// compact and minimal close them up, except float cards, which would fuse.
-test("density: comfortable keeps a blank row between sections, compact and minimal none (tinted panel, neon cards); float cards keep theirs", (t) => {
-	look(t, "float", "tinted");
-	const blankBetween = (text: string[]) => { const first = text.findIndex((line) => line.includes("▾")); return text.slice(first).some((line) => line.trim() === ""); };
-	assert.equal(blankBetween(plainRows(rail(t, painted, "comfortable"))), true, "comfortable: a gap");
-	for (const density of ["compact", "minimal"] as const) {
-		const text = plainRows(rail(t, painted, density));
-		assert.equal(blankBetween(text), false, `${density}: ${text.join("\n")}`);
-		const jobsAt = text.findIndex((line) => /^ ▾ JOBS/.test(line));
-		assert.ok(jobsAt > 0 && text[jobsAt - 1]!.trim() !== "", `${density}: JOBS right under LDD`);
+// G's Density (L195): comfortable keeps a blank row between the pane's
+// sections; compact and minimal close them up.
+test("density: comfortable keeps a blank row between sections, compact and minimal none, on either surface", (t) => {
+	for (const surface of ["tinted", "transparent"] as const) {
+		look(t, "float", surface);
+		const blankBetween = (text: string[]) => { const first = text.findIndex((line) => line.includes("▾")); return text.slice(first).some((line) => line.trim() === ""); };
+		assert.equal(blankBetween(plainRows(rail(t, painted, "comfortable"))), true, `${surface} comfortable: a gap`);
+		for (const density of ["compact", "minimal"] as const) {
+			const text = plainRows(rail(t, painted, density));
+			assert.equal(blankBetween(text), false, `${surface} ${density}: ${text.join("\n")}`);
+			const jobsAt = text.findIndex((line) => /^▾ JOBS/.test(line));
+			assert.ok(jobsAt > 0 && text[jobsAt - 1]!.trim() !== "", `${density}: JOBS right under LDD`);
+		}
 	}
-	look(t, "neon", "transparent");
-	const neon = plainRows(rail(t, painted, "compact"));
-	const closing = neon.findIndex((line) => /^╰/.test(line));
-	assert.match(neon[closing + 1]!, /^╭─ ▾ /, "neon: the next card right under");
-	look(t, "float", "transparent");
-	const float = plainRows(rail(t, painted, "compact"));
-	const jobsAt = float.findIndex((line) => / ▎ ▾ JOBS/.test(line));
-	assert.equal(float[jobsAt - 2], "", "float: the blank row stays, as G's");
 });
 
-test("ASCII: the fold is v or >, neon cards draw + - |", (t) => {
+test("ASCII: the fold is v or >", (t) => {
 	look(t, "neon", "transparent", true);
 	const text = plainRows(rail(t, plain));
-	assert.ok(text.some((line) => /^\+- v JOBS -+ 1 running \+$/.test(line)), text.join("\n"));
-	assert.ok(text.some((line) => /^\| ~ bg-1 npm test +1m 5s \|$/.test(line) || /^\| ⧗ bg-1 npm test/.test(line)));
-	assert.ok(text.some((line) => /^\+-+\+$/.test(line)));
+	assert.ok(text.some((line) => /^v JOBS +1 running$/.test(line)), text.join("\n"));
+	assert.ok(text.some((line) => /^v LDD/.test(line)), text.join("\n"));
 });
 
 test("under a multiplexer that shows the path the Status sections are the same (L112)", (t) => {

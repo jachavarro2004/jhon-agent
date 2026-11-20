@@ -1,7 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text, type TUI } from "@earendil-works/pi-tui";
-import { sidebarSlot } from "../lib/ui/shell-sidebar.ts";
-import { invalidateSidebar } from "../lib/ui/shell-sidebar-layout.ts";
+import { invalidatePane, paneSlot } from "../lib/ui/pane.ts";
 import { renderPanelHeader, renderPanelRow, type PanelTheme } from "../lib/ui/shell-panel.ts";
 import { asciiText } from "../lib/ui/primitives/glyphs.ts";
 import { STATES } from "../lib/ui/primitives/states.ts";
@@ -192,15 +191,14 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 	// The right pane's TODOS section, while the LDD section shows no change; a
 	// regular terminal and the narrow form show no list (T174, L1469).
 	const show = (current: TodoSession) => {
-		if (current.tui) invalidateSidebar(current.tui);
+		if (current.tui) invalidatePane(current.tui);
 		// A child's list is its own: no section (T134).
 		if (!current.ui || child) return;
 		const snapshot = current;
 		current.ui.setWidget(WIDGET_KEY, (tui, theme) => {
 			snapshot.tui = tui;
 			const hidden = () => selectedChange(snapshot.id) !== undefined;
-			const dispose = sidebarSlot(tui, "todo", {
-				surface: "panel",
+			const dispose = paneSlot(tui, "todo", {
 				digest: () => JSON.stringify([snapshot.state.tasks, hidden(), shellSettings().ascii()]),
 				render: (width) => hidden() ? [] : renderTodoRail(snapshot.state, theme, width, shellSettings().ascii()),
 				invalidate() {},
@@ -244,7 +242,7 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 					current.wroteThisTurn = true;
 					if (result.state.tasks.length === 0) current.clearedByOwnerTurn = true;
 				}
-				if (current.tui) invalidateSidebar(current.tui);
+				if (current.tui) invalidatePane(current.tui);
 			}
 			return {
 				content: [{ type: "text", text: result.text }],
@@ -279,7 +277,7 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 	pi.on("before_agent_start", (_event, ctx) => {
 		const current = session(ctx);
 		current.turn += 1;
-		if (current.tui) invalidateSidebar(current.tui);
+		if (current.tui) invalidatePane(current.tui);
 		if (current.clearOnNextTurn) {
 			current.state = { ...current.state, tasks: [] };
 			current.clearOnNextTurn = false;

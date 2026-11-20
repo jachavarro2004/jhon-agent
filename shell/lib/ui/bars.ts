@@ -10,7 +10,8 @@
  * Under NARROW_BELOW columns the status bar takes the narrow form (04): no
  * meter, the branch capped at NARROW_BRANCH_CELLS. When a row still does not
  * fit, the branch shortens first (to BRANCH_MIN_CELLS), then the pieces in
- * DROP_ORDER give way one at a time; the cost is the last thing left.
+ * DROP_ORDER give way one at a time, why the sandbox is not running first;
+ * the cost is the last thing left.
  *
  * Both renders are pure: data, a theme and a width in, one row of exactly
  * that width out.
@@ -31,8 +32,10 @@ export interface BarModel {
 	/** A multiplexer host shows the path itself (lib/host.ts): the top row names the project alone (L112). */
 	hostShowsPath?: boolean;
 	branch: string | null;
-	/** sandbox.mode as the session pinned it (lib/sandbox.ts); unknown until the pin is read. */
-	sandbox?: "on" | "off";
+	/** What the session's pin means for the commands (lib/sandbox.ts sandboxShown); unknown until the pin is read. */
+	sandbox?: "on" | "off" | "not running";
+	/** Why the sandbox is not running, in a few words. */
+	sandboxWhy?: string;
 	/** The owner's permission mode (`jhon status --json`, S31): a badge unless normal. */
 	mode?: string;
 	modelId: string;
@@ -180,7 +183,7 @@ export function renderTopRow(model: Pick<BarModel, "cwd" | "hostShowsPath">, the
 // ---------------------------------------------------------------- the status bar
 
 /** What gives way when the bar does not fit, first to last; the cost is never in it. */
-export const DROP_ORDER = ["meter", "profile", "note", "exec", "sandbox", "branch", "ctx", "mode"] as const;
+export const DROP_ORDER = ["why", "meter", "profile", "note", "exec", "sandbox", "branch", "ctx", "mode"] as const;
 type Droppable = (typeof DROP_ORDER)[number];
 
 const METER_ROLE: Record<MeterTone, Role> = { success: "ok", warning: "warn", error: "bad", dim: "dim" };
@@ -209,7 +212,11 @@ export function renderStatusBar(model: BarModel, theme: ThemeLike, cells: number
 		const shown = (piece: Droppable) => !dropped.has(piece);
 		const left: Run[][] = [];
 		if (branch && shown("branch")) left.push([{ role: "accent", text: glyph("branch", ascii) }, { role: "ink", text: " " }, { role: "ink", text: clip(branch, branchCells, { ascii }) }]);
-		if (model.sandbox && shown("sandbox")) left.push([{ role: "dim", text: "sandbox" }, { role: "ink", text: " " }, model.sandbox === "on" ? { role: "ok", text: "on" } : { role: "warn", text: "off" }]);
+		if (model.sandbox && shown("sandbox")) {
+			const state: Run = model.sandbox === "on" ? { role: "ok", text: "on" } : model.sandbox === "off" ? { role: "warn", text: "off" } : { role: "bad", text: "not running" };
+			const why = model.sandbox === "not running" && model.sandboxWhy && shown("why") ? [{ role: "dim" as const, text: `${dot().text}${clean(model.sandboxWhy)}` }] : [];
+			left.push([{ role: "dim", text: "sandbox" }, { role: "ink", text: " " }, state, ...why]);
+		}
 		if (badge && shown("mode")) left.push([{ role: badge.role, text: badge.text, bold: true }]);
 		const right: Run[][] = [];
 		if (shown("exec")) {

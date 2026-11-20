@@ -20,7 +20,8 @@ const BIN = process.env.JHON_TEST_BIN || join(SHELL, "..", "build", "jhon");
 const ISOLATION = 'import "./isolated-env.ts";';
 
 test("every test file imports isolated-env.ts before any other module", () => {
-	const files = readdirSync(TEST_DIR).filter((f) => f.endsWith(".test.ts"));
+	// A file emptied for deletion (a slice that replaces it, before its git rm) runs nothing.
+	const files = readdirSync(TEST_DIR).filter((f) => f.endsWith(".test.ts") && readFileSync(join(TEST_DIR, f), "utf8").trim() !== "");
 	assert.ok(files.length > 1, "no test files found");
 	const missing = files.filter((f) => {
 		const first = readFileSync(join(TEST_DIR, f), "utf8").split("\n").find((line) => /^import\b/.test(line));

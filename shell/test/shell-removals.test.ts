@@ -17,7 +17,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { Component } from "@earendil-works/pi-tui";
 import jhonShellUi from "../extensions/ui.ts";
 import jhonTodo from "../extensions/todo.ts";
-import { sidebarState } from "../lib/ui/shell-sidebar.ts";
+import { paneState } from "../lib/ui/pane.ts";
 import { lddFromStatus, selectChange, shareSelection } from "../lib/ui/ldd-status.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { KEYS } from "../lib/ui/customize/keys.ts";
@@ -103,7 +103,7 @@ test("the todo list shows in the right pane while no LDD change is active, and h
 	assert.ok(factory, "the todo extension mounts its right-pane section");
 	const below = factory!(tui, plainTheme);
 	assert.deepEqual(below.render(100), [], "nothing above or below the prompt: the list lives in the right pane only");
-	const rail = () => sidebarState(tui as never).parts.get("todo")!.render(48).map(stripAnsi);
+	const rail = () => paneState(tui as never).parts.get("todo")!.render(48).map(stripAnsi);
 	const shown = rail();
 	assert.match(shown[0]!, /^▾ TODOS +0\/2$/);
 	assert.deepEqual(shown.slice(1).map((row) => row.trim()), ["◐ write the test", "· fix tsc"]);

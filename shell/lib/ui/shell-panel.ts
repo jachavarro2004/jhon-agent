@@ -14,7 +14,7 @@ import type { ChromeSurface } from "./visual-customization-policy.ts";
 // process-wide slot, as the card style does.
 const SURFACE_SLOT = Symbol.for("jhon-shell.chrome-surface");
 const surfaceState = globalThis as typeof globalThis & { [SURFACE_SLOT]?: unknown };
-/** The live chrome surface (shell.appearance.surface): transparent draws each rail section as its own card, tinted one painted panel. */
+/** The live chrome surface (shell.appearance.surface): transparent leaves the right pane on the terminal's background, tinted paints one panel. */
 export function chromeSurface(): ChromeSurface { return surfaceState[SURFACE_SLOT] === "tinted" ? "tinted" : "transparent"; }
 export function setChromeSurface(value: ChromeSurface): void { surfaceState[SURFACE_SLOT] = value; }
 
@@ -125,5 +125,5 @@ export function renderWorkRow(summaries: readonly PanelSummary[], theme: PanelTh
 	return paintPanelSurface(theme, [` ${ascii ? asciiText(row) : row} `], target)[0];
 }
 
-/** The rail's parts in order: LDD first (L174), then the agent's todo list (while no change shows), jobs, agents and the footer's slot (T174: empty, CHANGES and INTEGRATIONS are gone). */
-export const RAIL_ORDER = ["ldd", "todo", "jobs", "agents", "footer"] as const;
+/** The right pane's parts in order (lib/ui/pane.ts): LDD first (L174), then the agent's todo list (while no change shows), jobs and agents. */
+export const RAIL_ORDER = ["ldd", "todo", "jobs", "agents"] as const;
