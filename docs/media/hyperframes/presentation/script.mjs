@@ -14,7 +14,8 @@
 // is also shown as an English caption, because the screen does not say it.
 //
 // Used by narrate.mjs (speaks the lines), compose.mjs (writes index.html and
-// captions.es.json) and docs/media/test/presentation.test.ts.
+// captions.es.json) and docs/media/test/presentation.test.ts; the teaser
+// (../teaser/script.mjs) takes its `spoken`, `panel`, `cells` and `lines` from here.
 
 /** How a line is said: the mono marks dropped, names spelled as heard. */
 const SAY = [
@@ -187,8 +188,8 @@ export const SHOTS = [
 ];
 
 /** The distinct spoken lines, by the first shot that says each (the close says the intro's line again). */
-export function lines() {
+export function lines(shots = SHOTS) {
   const seen = new Map();
-  for (const s of SHOTS) if (!seen.has(spoken(s.en))) seen.set(spoken(s.en), s.id);
+  for (const s of shots) if (!seen.has(spoken(s.en))) seen.set(spoken(s.en), s.id);
   return [...seen].map(([text, id]) => ({ id, text }));
 }

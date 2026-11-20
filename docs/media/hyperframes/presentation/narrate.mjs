@@ -1,25 +1,30 @@
 // docs/media/hyperframes/presentation/narrate.mjs — speak the presentation's narration with local Kokoro.
 //
-//   node docs/media/hyperframes/presentation/narrate.mjs <scratch-dir>
+//   node docs/media/hyperframes/presentation/narrate.mjs <scratch-dir> [composition-dir]
 //
-// Each distinct line of script.mjs is spoken on its own by docs/media/kokoro.py (Kokoro-82M,
+// The composition is this folder (the presentation) or another one with its own script.mjs
+// and narration/ (docs/media/hyperframes/teaser). Each distinct line of its script.mjs is spoken on its own by docs/media/kokoro.py (Kokoro-82M,
 // the voice docs/media/identity.ts names: af_heart, en-us, speed 1) with the venv under
 // ~/.cache/jhon-media/kokoro (or $JHON_MEDIA_KOKORO), then cached here as
 // narration/<key>.opus (mono Opus 32 kb/s, bit-exact flags) and narration/<key>.json (its
 // text and seconds). The key hashes everything that shapes the sound, so a changed line is
-// spoken again and a cached line never twice; files no line uses any more are removed.
+// spoken again and a cached line never twice (a line another composition's cache already
+// holds, such as the tagline, is copied from it); files no line uses any more are removed.
 // Prints each line's key and seconds; compose.mjs reads the cache to time the shots.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { lines } from "./script.mjs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MEDIA = join(HERE, "..", "..");
 export const DIR = join(HERE, "narration");
+/** The narration cache of a composition folder. */
+export const narrationDir = (comp) => join(comp, "narration");
+/** The compositions whose caches a line may be copied from. */
+const SHARED = [DIR, narrationDir(join(HERE, "..", "teaser"))];
 const KOKORO = process.env.JHON_MEDIA_KOKORO || join(homedir(), ".cache", "jhon-media", "kokoro");
 export const VOICE = { model: "kokoro-v1.0", voice: "af_heart", lang: "en-us", speed: 1 };
 
@@ -27,11 +32,20 @@ export const VOICE = { model: "kokoro-v1.0", voice: "af_heart", lang: "en-us", s
 export const key = (text) =>
   createHash("sha256").update(JSON.stringify({ ...VOICE, gap: 0, cues: [text] })).digest("hex").slice(0, 16);
 
-function main(scratch) {
-  if (!scratch) throw new Error("usage: narrate.mjs <scratch-dir>");
+const cached = (dir, k) => existsSync(join(dir, `${k}.opus`)) && existsSync(join(dir, `${k}.json`));
+
+async function main(scratch, comp = HERE) {
+  if (!scratch) throw new Error("usage: narrate.mjs <scratch-dir> [composition-dir]");
+  comp = resolve(comp);
+  const DIR = narrationDir(comp);
+  const { lines } = await import(pathToFileURL(join(comp, "script.mjs")).href);
   mkdirSync(DIR, { recursive: true });
   const plan = lines().map((l) => ({ ...l, key: key(l.text) }));
-  const missing = plan.filter((p) => !existsSync(join(DIR, `${p.key}.opus`)) || !existsSync(join(DIR, `${p.key}.json`)));
+  for (const p of plan) {
+    const from = !cached(DIR, p.key) && SHARED.find((d) => resolve(d) !== DIR && cached(d, p.key));
+    if (from) for (const ext of ["opus", "json"]) copyFileSync(join(from, `${p.key}.${ext}`), join(DIR, `${p.key}.${ext}`));
+  }
+  const missing = plan.filter((p) => !cached(DIR, p.key));
   if (missing.length) {
     const py = join(KOKORO, "venv", "bin", "python");
     const model = join(KOKORO, "model", "kokoro-v1.0.onnx"), voices = join(KOKORO, "model", "voices-v1.0.bin");
@@ -53,4 +67,4 @@ function main(scratch) {
   console.log(JSON.stringify(report, null, 2));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main(process.argv[2]);
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await main(process.argv[2], process.argv[3]);
