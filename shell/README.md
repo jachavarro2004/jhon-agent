@@ -169,10 +169,10 @@ the right pane's sections on the terminal's background; `tinted` paints them
 on one panel, and paints the top row, the strip and the status bar on it too.
 
 The density, `shell.appearance.density`, picks one of the pane's two forms
-(L1495): `comfortable` (the default) draws each of the pane's sections (LDD,
+(L1495): `comfortable` draws each of the pane's sections (LDD,
 TODOS, Agents, Jobs) in its own rounded box, in rose ink's border role, in
-the same pane; `compact` draws them flat with one blank row between them
-(design 01); `minimal` stacks them with none and keeps bash tool cards quiet (`↳ ✓ N lines` and a short
+the same pane; `compact` (the default, L1498) draws them flat with one blank
+row between them (design 01); `minimal` stacks them with none and keeps bash tool cards quiet (`↳ ✓ N lines` and a short
 preview, no output tail or duration); tool calls are otherwise full cards (a
 bash card shows its whole command, the last five output lines with the
 ctrl+o hint, and "Took Ns") (T91, L656).
@@ -271,8 +271,8 @@ own notice (`lib/child-budget.ts`): past `child_backstop_tokens` (80000) or
 cap: a child's tool calls are never refused for its context (T155).
 `shell.appearance.cards` (`float` or `neon`) and `shell.appearance.surface`
 (`transparent` or `tinted`) pick the card style and the chrome's surface;
-`shell.appearance.density` (`comfortable`, `compact` or `minimal`) its
-spacing. A key v0.1 removed (`card_style`, which reads as
+`shell.appearance.density` (`comfortable`, `compact`, the default, or
+`minimal`) its spacing. A key v0.1 removed (`card_style`, which reads as
 `shell.appearance.cards` when it was `float` or `neon`, `quiet_tools`,
 `key_hints`, the audio backend and timings, `[shell.extra]`, the sounds of
 events that never fire) is dropped at the first start with

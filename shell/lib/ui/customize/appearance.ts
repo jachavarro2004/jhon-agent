@@ -94,7 +94,7 @@ export const APPEARANCE: CustomizeCategory = {
 		},
 		{
 			key: "shell.appearance.density", label: "Density", kind: "choice", values: ["comfortable", "compact", "minimal"],
-			note: "The pane's two forms: comfortable draws each of its sections in its own box; compact draws them flat, a blank row apart; minimal draws none between them. The top row and the status bar are one row each at every density. Minimal also keeps tool cards quiet: bash collapses to ↳ ✓ N lines instead of its output tail and duration.",
+			note: "The pane's two forms: comfortable draws each of its sections in its own box; compact (the default) draws them flat, a blank row apart; minimal draws none between them. The top row and the status bar are one row each at every density. Minimal also keeps tool cards quiet: bash collapses to ↳ ✓ N lines instead of its output tail and duration.",
 			// The right pane's two forms (L1495, T174-S5b); the bars have no margin rows (T174-S3, design/shell-tui 01).
 			preview: (v, ascii) => ({
 				caption: "the right pane",
