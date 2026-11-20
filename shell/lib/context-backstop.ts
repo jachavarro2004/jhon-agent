@@ -1,7 +1,7 @@
 /**
  * T115e (L705, L715): the context backstop, a delegation signal for the main
  * session only. Once its context passes min(half of shell.behaviour.compact_tokens
- * (BACKSTOP_TOKENS by default; compact_tokens 0 turns it off), BACKSTOP_SHARE of
+ * (compact_tokens 0 turns it off), BACKSTOP_SHARE of
  * the model's window), the orchestrator hears once to delegate its next unit
  * that needs several steps, with a short handoff, and keep single small edits
  * and state checks inline. The ladder, all from compact_at and compact_tokens
@@ -18,9 +18,6 @@ import { shellSettings } from "./settings.ts";
 
 /** The custom message that hands the agent the backstop after a reply. */
 export const BACKSTOP_ENTRY = "jhon-context-backstop";
-
-/** The default backstop, in tokens: half of compact_tokens' default. */
-export const BACKSTOP_TOKENS = 100000;
 
 /** The share of the model's window, in percent, past which the backstop comes if it is smaller. */
 export const BACKSTOP_SHARE = 15;

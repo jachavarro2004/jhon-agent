@@ -4,14 +4,14 @@
  * compaction) never reaches a child. A child (JHON_PI_CHILD=1) gets:
  *
  * - a context budget: once per crossing of min(shell.behaviour.child_backstop_tokens
- *   (CHILD_BACKSTOP_TOKENS; 0 off), CHILD_BACKSTOP_SHARE of the window), the
- *   notice to wrap up and return path:line evidence, not raw output;
+ *   (0 off), CHILD_BACKSTOP_SHARE of the window), the notice to wrap up and
+ *   return path:line evidence, not raw output;
  * - for an explore or worker-type child that may call CodeGraph, one
  *   read-budget reminder past CHILD_READ_LOOKUPS lookups or CHILD_READ_BYTES
- *   bytes since its last CodeGraph call (lookups as lib/exploration-budget.ts
- *   counts them: read, grep, find, ls, and a bash command that only reads,
- *   e.g. cat, sed -n, grep through bash). T125 (L783 F5): four workers read
- *   362 KB through bash and never called CodeGraph; a worker's reminder
+ *   bytes since its last CodeGraph call (lookups as isLookup counts them:
+ *   read, grep, find, ls, inspect, codegraph, and a bash command that only
+ *   reads, e.g. cat, sed -n, grep through bash). T125 (L783 F5): four
+ *   workers read 362 KB through bash and never called CodeGraph; a worker's reminder
  *   (workerReadBudgetNotice) is about editing, not exploring.
  *
  * T155 (L1377, L1394): no cap. A child's tool calls are never refused for its
@@ -20,20 +20,52 @@
  *
  * Every notice is appended to a tool result, the T115e channel, so the
  * child's system prompt stays byte-identical (L708).
+ *
+ * T166 (L1438): the lookup classifier (isLookup, readOnlyBash), once
+ * lib/exploration-budget.ts, lives here, its only user. The main session's
+ * exploration-budget notice (T117e) is gone since T155 (L1377, L1394).
  */
 
 import { ContextBackstop } from "./context-backstop.ts";
-import { isLookup } from "./exploration-budget.ts";
 import { shellSettings } from "./settings.ts";
 
-/** The default child budget, in tokens; 0 turns it off. */
-export const CHILD_BACKSTOP_TOKENS = 80000;
 /** The share of the window, in percent, past which the child budget comes if it is smaller. */
 export const CHILD_BACKSTOP_SHARE = 40;
 /** Lookups an explore child may make since its last CodeGraph call before the reminder. */
 export const CHILD_READ_LOOKUPS = 12;
 /** UTF-8 bytes those lookups may return before the reminder. */
 export const CHILD_READ_BYTES = 100_000;
+
+const READ_TOOLS = new Set(["read", "grep", "find", "ls", "inspect", "codegraph", "codegraph_query", "codegraph_explore", "mcp__codegraph__codegraph_query", "mcp__codegraph__codegraph_explore"]);
+
+// Commands that only read; git only with a reading subcommand, sed only with -n, find never with an action.
+const READ_COMMANDS = new Set(["cat", "head", "tail", "less", "ls", "tree", "wc", "grep", "rg", "ag", "find", "fd", "stat", "file", "du", "jq", "nl", "sort", "uniq", "cut", "awk", "sed", "git", "pwd", "realpath", "dirname", "basename", "echo"]);
+const GIT_READS = new Set(["log", "show", "diff", "status", "grep", "blame", "ls-files", "rev-parse", "branch"]);
+
+// T134 (L1021 H3): one leading `cd <dir> &&`, how most of the children's reads open.
+const LEADING_CD = /^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s;&|'"]+)\s*&&/;
+
+/** Whether a bash command only reads: every segment of its pipes and chains is a reading command, with no redirection into a file; one leading `cd <dir> &&` is allowed. */
+export function readOnlyBash(command: unknown): boolean {
+  if (typeof command !== "string" || !command.trim()) return false;
+  if (/[`]|\$\(|>(?!&)|<\(/.test(command.replace(/2>&1|2>\/dev\/null|>\/dev\/null/g, ""))) return false;
+  const segments = command.replace(LEADING_CD, "").split(/\|\||&&|[|;\n]/).map((s) => s.trim()).filter(Boolean);
+  return segments.length > 0 && segments.every((segment) => {
+    const words = segment.split(/\s+/).filter((w) => !/^\w+=/.test(w));
+    const [cmd, ...args] = words;
+    if (!cmd || !READ_COMMANDS.has(cmd)) return false;
+    if (cmd === "git") return GIT_READS.has(args.find((a) => !a.startsWith("-")) ?? "");
+    if (cmd === "sed") return args.includes("-n") && !args.some((a) => /^-i/.test(a));
+    if (cmd === "find") return !args.some((a) => /^-(delete|exec|execdir|ok|fprint)/.test(a));
+    return true;
+  });
+}
+
+/** Whether a tool call is a lookup. */
+export function isLookup(toolName: string, input: Record<string, unknown> | undefined): boolean {
+  if (READ_TOOLS.has(toolName)) return true;
+  return toolName === "bash" && readOnlyBash(input?.command);
+}
 
 const k = (tokens: number) => Math.round(tokens / 1000);
 

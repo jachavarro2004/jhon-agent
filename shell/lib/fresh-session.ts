@@ -1,10 +1,9 @@
 /**
  * One session per change (S35): the main session suggests a fresh one, with
  * a handoff, once when its context passes ten points of its window before
- * shell.behaviour.compact_at (FRESH_SESSION_AT by default) or, whichever is
- * first, three quarters of shell.behaviour.compact_tokens (FRESH_SESSION_TOKENS
- * by default; 0 is no budget, T115a: a share of a very large window never
- * comes) after a reply, and once per change `jhon archive` archived. T155
+ * shell.behaviour.compact_at or, whichever is first, three quarters of
+ * shell.behaviour.compact_tokens (0 is no budget, T115a: a share of a very
+ * large window never comes) after a reply, and once per change `jhon archive` archived. T155
  * (L1394) derived both from the compaction keys. The ladder's middle rung
  * (T115e, L715): after the context backstop (lib/context-backstop.ts), before
  * compaction. A notice, never a block. The wording is engine/internal/hook
@@ -16,12 +15,6 @@ import { shellSettings } from "./settings.ts";
 
 /** The custom message that hands the agent the context notice. */
 export const FRESH_SESSION_ENTRY = "jhon-fresh-session";
-
-/** The default share of the context window, in percent, past which a fresh session is suggested. */
-export const FRESH_SESSION_AT = 50;
-
-/** The default context budget, in tokens, past which a fresh session is suggested; 0 is none. */
-export const FRESH_SESSION_TOKENS = 150000;
 
 export function freshSessionNotice(why: string, handoff: string): string {
   return `One session per change: ${why} Save a handoff (\`${handoff}\`, then mem_session_summary), then start a fresh session (/new in pi; /clear or a restart in Claude Code) and give it the handoff.`;
