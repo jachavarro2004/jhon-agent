@@ -31,7 +31,7 @@ import { BASH_BACKGROUND_TOOL, isStandaloneSleep, MONITOR_TOOL, type JobExecOper
 import { foregroundWaitNote } from "./foreground-wait.ts";
 import { createMonitorController, MONITOR_BATCH_MS, MONITOR_FLOOD_LINES, MONITOR_FLOOD_WINDOW_MS, MONITOR_LINES_PER_NOTICE, MONITOR_MAX_TIMEOUT_SECONDS, type MonitorBatch, type MonitorNotice, type MonitorStopReason } from "./ui/background-monitor.ts";
 import { withOverlayRepaint } from "./ui/overlay-repaint.ts";
-import { CARD_TONE, renderCard, type CardTheme } from "./ui/shell-card.ts";
+import { CARD_TONE, renderCard, type CardTheme } from "./ui/primitives/index.ts";
 import { JOBS_FINISHED_TTL_MS, shellEnabled } from "./ui/shell-bar.ts";
 import { sanitizeTerminalText } from "./ui/terminal-theme.ts";
 

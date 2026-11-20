@@ -16,7 +16,7 @@ import { backgroundTasksKey } from "../lib/background-tasks-tools.ts";
 import { changeMode, type ModeData } from "../lib/ui/jhon-panel-grants.ts";
 import { laneReads, lddLanes, lddOfSession, lddWatchTargets, permissionMode, readLddStatus, selectChange, shareSelection, type LddStatus } from "../lib/ui/ldd-status.ts";
 import { SessionWorktreeRegistry, resolveSessionWorktree, type WorktreeResolver } from "../lib/ui/session-worktree-registry.ts";
-import { cardStyle, renderCard, setCardStyle, type Card, type CardTheme } from "../lib/ui/shell-card.ts";
+import { cardStyle, renderCard, setCardStyle, type Card, type CardTheme } from "../lib/ui/primitives/index.ts";
 import { resolveVisualSettings } from "../lib/ui/visual-customization-policy.ts";
 import { DOUBLE_ESC_CANCEL_HINT, floatPromptRow, framePromptLines, panelPromptRow, resolvePromptLayout, IDLE_ESC_CLEAR_HINT, PROMPT_HINT, PROMPT_STATE, SHELL_PULSE_MS, withPromptHint, type PromptState } from "../lib/ui/shell-prompt.ts";
 import { createApiWait } from "../lib/ui/api-wait.ts";

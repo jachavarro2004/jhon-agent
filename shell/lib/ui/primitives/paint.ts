@@ -4,13 +4,14 @@
  * primitive draws with, so a primitive names a role and never a pi theme key.
  */
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { clip } from "./fit.ts";
 
-export type Role = "ink" | "soft" | "dim" | "accent" | "accentSoft" | "frameSoft" | "line" | "ok" | "warn" | "bad";
+export type Role = "ink" | "soft" | "dim" | "accent" | "accentSoft" | "frameSoft" | "line" | "faint" | "ok" | "warn" | "bad";
 
-/** Each role's pi theme name; `sel` is the cursor row's background. */
+/** Each role's pi theme name; `sel` is the cursor row's background. `faint` (outlineVariant) draws rules and pane dividers (design/shell-tui). */
 export const THEME_NAME: Record<Role | "sel", string> = {
 	ink: "text", soft: "muted", dim: "dim", accent: "accent", accentSoft: "customMessageLabel",
-	frameSoft: "border", line: "borderMuted", ok: "success", warn: "warning", bad: "error", sel: "selectedBg",
+	frameSoft: "border", line: "borderMuted", faint: "mdHr", ok: "success", warn: "warning", bad: "error", sel: "selectedBg",
 };
 
 export interface Painter {
@@ -46,23 +47,9 @@ export function themePainter(theme: ThemeLike): Painter {
 	};
 }
 
-const graphemes = new Intl.Segmenter();
-
-/** Plain text cut to width with the truncation glyph (`…`, ASCII `~`); never wider. */
+/** Text cut to width with the truncation glyph (`…`, ASCII `~`); never wider (fit.ts clip). */
 export function cut(text: string, width: number, ascii = false): string {
-	if (width <= 0) return "";
-	if (visibleWidth(text) <= width) return text;
-	// Painted text: pi-tui's cut keeps the escapes whole.
-	if (text.includes("\x1b")) return truncateToWidth(text, width, ascii ? "~" : "…");
-	let out = "";
-	let used = 0;
-	for (const { segment } of graphemes.segment(text)) {
-		const cells = visibleWidth(segment);
-		if (used + cells > width - 1) break;
-		out += segment;
-		used += cells;
-	}
-	return `${out}${ascii ? "~" : "…"}`;
+	return clip(text, width, { ascii });
 }
 
 /** Painted text already known to take `cells` cells, padded with spaces to width (painted text is never measured). */

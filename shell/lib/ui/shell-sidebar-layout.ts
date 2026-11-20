@@ -1,7 +1,7 @@
 import { ScrollView, VStack, visibleWidth, type Component, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { setSidebarHover, sidebarState, type SidebarRail } from "./shell-sidebar.ts";
 import type { ShellBarTheme } from "./shell-bar.ts";
-import { CARD_STYLE, CARD_TONE, cardBottom, cardLine, cardStyle, cardTop, floatRows, paintSurfaceRow, panelInnerWidth, type CardStyle } from "./shell-card.ts";
+import { CARD_STYLE, CARD_TONE, cardStyle, drawCard, paintSurface, panelInnerWidth, type CardStyle } from "./primitives/index.ts";
 import { chromeSurface, PANEL_ROW_INDENT, panelSurfaceOpener, RAIL_ORDER, sectionGap } from "./shell-panel.ts";
 import type { Density, StatusPlacement } from "./visual-customization-policy.ts";
 
@@ -36,10 +36,9 @@ type SectionCacheEntry = { component: Component; digest: string | undefined; rev
 // the title (with its count as the top rule's hint) and the body rows.
 type CardGeometry = { headerRow: number; headerX: number; bodyRow: number; bodyX: number };
 function sectionCardRows(header: { glyph?: string; title: string; count?: string }, body: readonly string[], theme: ShellBarTheme, width: number): string[] {
-	const tone = CARD_TONE.INFO;
-	return floatRows(tone, theme, width, (inner) => ({
-		head: [cardTop({ title: header.title, ...(header.glyph ? { glyph: header.glyph } : {}), body: [], tone }, theme, inner, header.count), ...body.map((row) => cardLine(row, tone, theme, inner))],
-		bottom: cardBottom(tone, theme, inner),
+	return drawCard(CARD_TONE.INFO, theme, width, (frame, inner) => ({
+		head: [frame.top({ title: header.title, ...(header.glyph ? { glyph: header.glyph } : {}) }, inner, header.count), ...body.map((row) => frame.line(row, inner))],
+		bottom: frame.close(inner),
 	}));
 }
 const CARD_PROBE = "\u2063probe";
@@ -369,7 +368,7 @@ export function installSidebar(tui: TUI, theme: ShellBarTheme, placement: () => 
 			railLines = [];
 			fillRow = "";
 			const open = panelSurfaceOpener(theme);
-			const paint = (row: string) => paintSurfaceRow(row + " ".repeat(Math.max(0, contentWidth - visibleWidth(row))), open);
+			const paint = (row: string) => paintSurface(row + " ".repeat(Math.max(0, contentWidth - visibleWidth(row))), open);
 			// Tinted spacing continues the rail's surface; transparent spacing
 			// leaves a clear row above the first card.
 			if (sections.length && headerActive) railLines.push(carded ? "" : paint(""));

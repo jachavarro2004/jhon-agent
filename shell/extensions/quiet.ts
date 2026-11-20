@@ -13,9 +13,9 @@ import { homedir } from "node:os";
 import { commandFailure, failureHeadline, runningLine } from "../lib/ui/command-failure.ts";
 import { loadDoubleEscCancelPolicy } from "../lib/ui/double-esc-cancel-policy.ts";
 import {
-	CARD_TONE, cardAwaitingResult, cardBottom, cardInnerWidth, cardLine, cardRunningLine, cardStyle, cardTopRows, floatRows, markCardResult,
+	CARD_TONE, cardAwaitingResult, cardInnerWidth, cardStyle, drawCard, markCardResult,
 	type CardRowContext, type CardTheme,
-} from "../lib/ui/shell-card.ts";
+} from "../lib/ui/primitives/index.ts";
 import { sanitizeTerminalText, stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { shellSettings } from "../lib/settings.ts";
 import { isMemoryTool, memoryToolRenderers, ownsIcon, toolIcon, withToolIcon } from "../lib/ui/tool-icons.ts";
@@ -456,10 +456,10 @@ class ToolCardTop implements Component {
 		const target = Math.max(0, Math.floor(width));
 		if (target === 0) return [];
 		const running = this.row !== undefined && cardAwaitingResult(this.row);
-		return this.rows.render(target, running, () => floatRows(this.tone, this.theme, target, (inner) => ({
-			head: cardTopRows({ title: this.header(), glyph: this.glyph, body: [], tone: this.tone }, this.theme, inner, this.hint),
-			body: running ? [cardRunningLine(this.tone, this.theme, inner)] : undefined,
-			bottom: running ? cardBottom(this.tone, this.theme, inner) : undefined,
+		return this.rows.render(target, running, () => drawCard(this.tone, this.theme, target, (frame, inner) => ({
+			head: frame.topRows({ title: this.header(), glyph: this.glyph }, inner, this.hint),
+			body: running ? [frame.running(inner)] : undefined,
+			bottom: running ? frame.close(inner) : undefined,
 		})));
 	}
 
@@ -485,9 +485,9 @@ class ToolCardBody implements Component {
 	render(width: number): string[] {
 		const target = Math.max(0, Math.floor(width));
 		if (target === 0) return [];
-		const build = () => floatRows(this.tone, this.theme, target, (inner) => ({
-			body: this.inner().render(cardInnerWidth(inner)).map((line) => cardLine(line.trimEnd(), this.tone, this.theme, inner)),
-			bottom: cardBottom(this.tone, this.theme, inner),
+		const build = () => drawCard(this.tone, this.theme, target, (frame, inner) => ({
+			body: this.inner().render(cardInnerWidth(inner)).map((line) => frame.line(line.trimEnd(), inner)),
+			bottom: frame.close(inner),
 			afterHeading: true,
 		}));
 		return this.cacheable ? this.rows.render(target, false, build) : build();

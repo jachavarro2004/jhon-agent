@@ -1,6 +1,5 @@
 import { matchesKey, truncateToWidth, wrapTextWithAnsi, type Component, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
-import { asciiText, glyph } from "./primitives/index.ts";
-import { paintHoverable } from "./shell-hover.ts";
+import { asciiText, glyph, paintHover } from "./primitives/index.ts";
 
 // ask_user drawn as the Gentle Shell's questionnaire (its ask_user_question,
 // lib/questionnaire/questionnaire-view.ts): in the dock, never an overlay,
@@ -68,7 +67,7 @@ export class AskView implements Component {
 		push(accent(text(this.o.question)));
 		items.forEach((item, index) => {
 			const cursor = index === this.focus ? accent(`${glyph("askCursor", ascii)} `) : "  ";
-			push(`${cursor}${paintHoverable(theme, text(item.label), this.hovered === index)}`, index);
+			push(`${cursor}${paintHover(theme, text(item.label), this.hovered === index)}`, index);
 			if (item.description && target > DESCRIPTION_INDENT.length) {
 				for (const row of wrapTextWithAnsi(text(item.description), target - DESCRIPTION_INDENT.length)) {
 					lines.push(`${DESCRIPTION_INDENT}${theme.fg("dim", row)}`);

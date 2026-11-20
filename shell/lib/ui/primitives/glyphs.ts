@@ -9,6 +9,8 @@ import { STATES } from "./states.ts";
 export const GLYPHS = {
 	topLeft: ["╭", "+"], topRight: ["╮", "+"], bottomLeft: ["╰", "+"], bottomRight: ["╯", "+"],
 	rule: ["─", "-"], side: ["│", "|"],
+	// The heavy run under a full-screen view's tab (design/shell-tui 06, 10).
+	heavyRule: ["━", "="],
 	cursor: ["▸", ">"], askCursor: ["❯", ">"],
 	open: ["▾", "v"], closed: ["▸", ">"],
 	result: ["↳", ">"], tree: ["└", "`"],

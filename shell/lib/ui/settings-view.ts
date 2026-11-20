@@ -14,9 +14,7 @@
  * over its rows: the shell wires what a change does (extensions/ui.ts).
  */
 import { matchesKey, sliceByColumn, truncateToWidth, visibleWidth, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
-import { CARD_PADDING, renderPaletteCard, renderPaletteSelection } from "./overlay-card.ts";
-import { asciiText, glyph } from "./primitives/index.ts";
-import { paintHoverable } from "./shell-hover.ts";
+import { BOX_PADDING, asciiText, glyph, paintHover, renderBox, renderPick } from "./primitives/index.ts";
 import { stripAnsi } from "./terminal-theme.ts";
 
 export interface SettingRow {
@@ -250,11 +248,11 @@ export class SettingsView {
 		const theme = this.o.theme;
 		const text = (value: string) => ascii ? asciiText(value) : value;
 		const height = Math.max(0, Math.min(MAX_HEIGHT, Math.floor(this.o.height())));
-		if (width < CARD_PADDING + 1 || height < 4) {
+		if (width < BOX_PADDING + 1 || height < 4) {
 			this.frame = undefined;
 			return Array.from({ length: Math.min(height, 2) }, (_, i) => truncateToWidth(i ? "Terminal too small" : TITLE, Math.max(0, width), ""));
 		}
-		const inner = width - CARD_PADDING;
+		const inner = width - BOX_PADDING;
 		const category = this.category();
 		const rows = this.rows();
 		const cursor = this.cursor();
@@ -295,12 +293,12 @@ export class SettingsView {
 		for (let i = 0; i < contentHeight; i++) {
 			const y = lines.length + 1; // the card adds its top border
 			const nav = this.categories[navStart + i];
-			const left = leftWidth && nav ? renderPaletteSelection(nav, leftWidth, navStart + i === this.categoryIndex, this.pane === "categories" ? theme : fgOnly, ascii) : "";
+			const left = leftWidth && nav ? renderPick(nav, leftWidth, navStart + i === this.categoryIndex, this.pane === "categories" ? theme : fgOnly, ascii) : "";
 			if (leftWidth && nav) hits.push({ id: `category:${navStart + i}`, x: 4, end: 4 + Math.min(visibleWidth(nav), leftWidth - 2), y, activate: () => openCategory(navStart + i) });
 			let right: string;
 			if (navOnly) {
 				const name = this.categories[start + i];
-				right = name ? renderPaletteSelection(name, rightWidth, start + i === position, theme, ascii) : "";
+				right = name ? renderPick(name, rightWidth, start + i === position, theme, ascii) : "";
 				if (name) hits.push({ id: `category:${start + i}`, x: rightX + 2, end: rightX + 2 + Math.min(visibleWidth(name), rightWidth - 2), y, activate: () => openCategory(start + i) });
 			} else {
 				const index = start + i;
@@ -336,7 +334,7 @@ export class SettingsView {
 		if (showHeading) lines.push(paint(`Click · ${this.footer(navOnly, previewLines, focusedSetting !== undefined)}`, inner, "muted"));
 		// The top-right close hint mirrors Commands without consuming another row.
 		lines[0] = paint(TITLE + " ".repeat(Math.max(1, inner - visibleWidth(TITLE) - 3)) + "esc", inner, "accent");
-		const card = renderPaletteCard(lines.slice(0, height - 2), width, theme, ascii);
+		const card = renderBox(lines.slice(0, height - 2), width, theme, ascii);
 		return this.installFrame(card, { width, height: card.length, hits: hits.filter((hit) => hit.y < card.length - 1) });
 	}
 
@@ -390,7 +388,7 @@ export class SettingsView {
 			const line = lines[hit.y]!;
 			const trailing = line.match(/(?:\x1b\[[0-9;:]*m)+$/)?.[0] ?? "";
 			const target = stripAnsi(sliceByColumn(line, hit.x, hit.end - hit.x, true));
-			lines[hit.y] = sliceByColumn(line, 0, hit.x, true) + paintHoverable(this.o.theme, target, true) + sliceByColumn(line, hit.end, next.width - hit.end, true) + trailing;
+			lines[hit.y] = sliceByColumn(line, 0, hit.x, true) + paintHover(this.o.theme, target, true) + sliceByColumn(line, hit.end, next.width - hit.end, true) + trailing;
 		}
 		this.frame = next;
 		return lines;
