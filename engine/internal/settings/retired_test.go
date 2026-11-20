@@ -57,11 +57,10 @@ func TestRetiredKeysAreNotesNotErrors(t *testing.T) {
 		t.Fatalf("an old file must still load: %v", err)
 	}
 	for key, want := range map[string]any{
-		"shell.appearance.animations":                        "off",
-		"shell.appearance.cards":                             "float",
-		"shell.appearance.status":                            "hidden",
-		"shell.behaviour.stall_seconds":                      45,
-		`shell.notifications.audio.events."agent.completed"`: "builtin:success",
+		"shell.appearance.animations":   "off",
+		"shell.appearance.cards":        "float",
+		"shell.appearance.status":       "hidden",
+		"shell.behaviour.stall_seconds": 45,
 	} {
 		if v := valueOf(t, vals, key); v.Value != want || v.Source != SourceFile {
 			t.Errorf("%s = %#v (%s), want %#v from the file", key, v.Value, v.Source, want)
@@ -85,6 +84,7 @@ func TestRetiredKeysAreNotesNotErrors(t *testing.T) {
 		`shell.extra.notification_event_subagent_paused`,
 		`shell.extra.visual_customization`,
 		`shell.notifications.audio.backend`,
+		`shell.notifications.audio.events."agent.completed"`,
 		`shell.notifications.audio.events."context.high"`,
 		`shell.notifications.audio.events."subagent.timed_out"`,
 		`shell.notifications.audio.minimum_interval_ms`,
@@ -132,13 +132,13 @@ func TestTheSchemaNoLongerKnowsTheRetiredKeys(t *testing.T) {
 		`shell.notifications.audio.events."subagent.queued"`, `shell.notifications.audio.events."subagent.running"`,
 		`shell.notifications.audio.events."subagent.waiting"`, `shell.notifications.audio.events."subagent.cancelled"`,
 		`shell.notifications.audio.events."subagent.timed_out"`, "shell.extra.visual_profiles",
+		`shell.notifications.audio.events."agent.attention"`, `shell.notifications.audio.events."subagent.failed"`,
 	} {
 		if slices.Contains(keys, gone) || Known(gone) {
 			t.Errorf("%s is retired, still in the schema", gone)
 		}
 	}
 	for _, kept := range []string{
-		`shell.notifications.audio.events."agent.attention"`, `shell.notifications.audio.events."subagent.failed"`,
 		"shell.appearance.icons", "shell.appearance.status", "shell.keys.rail", "shell.keys.commands",
 	} {
 		if !slices.Contains(keys, kept) {
@@ -258,7 +258,7 @@ func TestCleanupDropsRetiredKeysAndKeepsTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !rep.Done || len(rep.Notes) != 11 || rep.Backup == "" {
+	if !rep.Done || len(rep.Notes) != 12 || rep.Backup == "" {
 		t.Fatalf("report = %+v", rep)
 	}
 	if b, err := os.ReadFile(rep.Backup); err != nil || string(b) != oldOwnerFile {
@@ -266,12 +266,12 @@ func TestCleanupDropsRetiredKeysAndKeepsTheRest(t *testing.T) {
 	}
 	b, _ := os.ReadFile(path)
 	text := string(b)
-	for _, gone := range []string{"card_style", "quiet_tools", "key_hints", "backend", "minimum_interval_ms", "context.high", "subagent.timed_out", "[shell.extra]", "visual_customization", "card_content", "notification_event"} {
+	for _, gone := range []string{"card_style", "quiet_tools", "key_hints", "backend", "minimum_interval_ms", "context.high", "subagent.timed_out", "[shell.extra]", "visual_customization", "card_content", "notification_event", "[shell.notifications", "agent.completed"} {
 		if strings.Contains(text, gone) {
 			t.Errorf("%s is still in the file:\n%s", gone, text)
 		}
 	}
-	for _, kept := range []string{"# the owner's settings", "stall_seconds = 45 # mine", `"agent.completed" = "builtin:success"`, `animations = "off"`, `cards = "float"`, `status = "hidden"`} {
+	for _, kept := range []string{"# the owner's settings", "stall_seconds = 45 # mine", `animations = "off"`, `cards = "float"`, `status = "hidden"`} {
 		if !strings.Contains(text, kept) {
 			t.Errorf("%q is missing:\n%s", kept, text)
 		}
@@ -391,12 +391,6 @@ stall_seconds = 30
 
 [shell.keys]
 panel = "alt+p"
-
-[shell.notifications]
-enabled = true
-
-[shell.notifications.audio.events]
-"agent.failed" = "none" # quiet
 `
 
 func TestCleanupKeepsCommentsAndKeptValues(t *testing.T) {
@@ -626,6 +620,71 @@ func TestTheContextLadderIsTwoKeys(t *testing.T) {
 		t.Fatalf("%+v %v", rep, err)
 	}
 	if b, _ := os.ReadFile(path); string(b) != "# mine\nschema = 1\n\n[shell.behaviour]\ncompact_at = 55 # mine\nchild_backstop_tokens = 60000\n" {
+		t.Errorf("cleaned file:\n%s", b)
+	}
+}
+
+// T169 (L1438): the notification sounds are gone, and every
+// shell.notifications key goes with them. A file that still sets one, even
+// to a value the old schema refused, loads; the key is a note that says
+// why, `set` refuses it, and Cleanup drops it with its sections.
+func TestTheNotificationKeysAreRetired(t *testing.T) {
+	for _, key := range Keys() {
+		if strings.HasPrefix(key, "shell.notifications.") {
+			t.Errorf("%s is retired, still in the schema", key)
+		}
+	}
+	const why = "the notification sounds were removed from the shell"
+	for key, in := range map[string]string{
+		"shell.notifications.enabled":                           "v0.4",
+		`shell.notifications.audio.events."agent.failed"`:       "v0.4",
+		`shell.notifications.audio.events."subagent.completed"`: "v0.4",
+		"shell.notifications.audio.minimum_interval_ms":         "v0.1",
+	} {
+		if Known(key) {
+			t.Errorf("%s is still known", key)
+		}
+		if got := RetiredWhy(key); got != why {
+			t.Errorf("RetiredWhy(%s) = %q, want %q", key, got, why)
+		}
+		if got := RetiredIn(key); got != in {
+			t.Errorf("RetiredIn(%s) = %q, want %s", key, got, in)
+		}
+	}
+	old := "# mine\nschema = 1\n\n[shell.behaviour]\nstall_seconds = 45 # mine\n\n[shell.notifications]\nenabled = \"yes\"\n\n[shell.notifications.audio.events]\n\"agent.failed\" = \"none\"\n\"agent.completed\" = \"builtin:success\"\n"
+	path := write(t, old)
+	vals, err := Load(path, noEnv)
+	if err != nil {
+		t.Fatalf("a file with the notification keys must still load: %v", err)
+	}
+	if v := valueOf(t, vals, "shell.behaviour.stall_seconds"); v.Value != 45 || v.Source != SourceFile {
+		t.Errorf("stall_seconds = %+v, want 45 from the file", v)
+	}
+	notes, err := Retired(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := noteKeys(notes), []string{`shell.notifications.audio.events."agent.completed"`, `shell.notifications.audio.events."agent.failed"`, "shell.notifications.enabled"}; !slices.Equal(got, want) {
+		t.Errorf("notes = %v, want %v", got, want)
+	}
+	for _, n := range notes {
+		if n.Silent || n.Why != why || n.Now != "" {
+			t.Errorf("%s: %+v", n.Key, n)
+		}
+	}
+	_, err = Set(path, "shell.notifications.enabled", "true")
+	var inv *InvalidError
+	if want := "shell.notifications.enabled: removed in v0.4: " + why; err == nil || err.Error() != want || !errors.As(err, &inv) {
+		t.Errorf("Set = %v, want %q", err, want)
+	}
+	if b, _ := os.ReadFile(path); string(b) != old {
+		t.Errorf("a refused set wrote the file:\n%s", b)
+	}
+	rep, err := Cleanup(path, time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC))
+	if err != nil || !rep.Done || len(rep.Notes) != 3 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "# mine\nschema = 1\n\n[shell.behaviour]\nstall_seconds = 45 # mine\n" {
 		t.Errorf("cleaned file:\n%s", b)
 	}
 }

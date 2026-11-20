@@ -29,7 +29,6 @@ import { OPEN_TASKS_EVENT, TASKS_EVENT } from "./events.ts";
 import { BASH_BACKGROUND_TOOL, isStandaloneSleep, MONITOR_TOOL, type JobExecOperations } from "./ui/background-jobs.ts";
 import { foregroundWaitNote } from "./foreground-wait.ts";
 import { createMonitorController, MONITOR_BATCH_MS, MONITOR_FLOOD_LINES, MONITOR_FLOOD_WINDOW_MS, MONITOR_LINES_PER_NOTICE, MONITOR_MAX_TIMEOUT_SECONDS, type MonitorBatch, type MonitorNotice, type MonitorStopReason } from "./ui/background-monitor.ts";
-import { NOTIFICATION_SOURCE_EVENT, subagentNotificationEvent } from "./ui/notification-events.ts";
 import { withOverlayRepaint } from "./ui/overlay-repaint.ts";
 import { CARD_TONE, renderCard, type CardTheme } from "./ui/shell-card.ts";
 import { JOBS_FINISHED_TTL_MS, shellEnabled } from "./ui/shell-bar.ts";
@@ -309,10 +308,6 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		onSettled: (task) => {
 			// A monitor's pending lines are delivered before its end.
 			if (task.kind === "monitor") monitors.finish(task);
-			if (task.kind === "agent") {
-				pi.events?.emit?.(NOTIFICATION_SOURCE_EVENT, subagentNotificationEvent({ producerId: "jhon-subagent", sessionId: task.ownerSessionId, parentSessionId: task.ownerSessionId,
-					taskId: task.id, runId: task.id, status: task.status === "completed" ? "completed" : "failed", sequence: ++sequence }, now()));
-			}
 			deliver({ task, kind: "end" });
 			refresh();
 		},

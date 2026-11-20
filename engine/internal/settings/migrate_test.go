@@ -62,7 +62,7 @@ func TestMigrateMapsTheProfileAndTelemetry(t *testing.T) {
 	}
 	// The old shell's files are not read: their keys keep their defaults,
 	// and the palette is never written.
-	for _, key := range []string{"shell.appearance.animations", "shell.appearance.cards", "shell.notifications.enabled", "integrations.theme.palette"} {
+	for _, key := range []string{"shell.appearance.animations", "shell.appearance.cards", "integrations.theme.palette"} {
 		if v := valueOf(t, vals, key); v.Source != SourceDefault {
 			t.Errorf("%s = %#v (%s), want the default", key, v.Value, v.Source)
 		}

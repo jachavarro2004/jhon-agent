@@ -14,8 +14,7 @@
       "./extensions/ui.ts",
       "./extensions/pretty.ts",
       "./extensions/todo.ts",
-      "./extensions/quiet.ts",
-      "./extensions/notifications.ts"
+      "./extensions/quiet.ts"
     ],
     "themes": [
       "./themes/*.json"

@@ -26,11 +26,19 @@ const withMode = { ...hooks, mode: { value: () => "normal", set: async () => und
 
 test("the registry's categories, in order, are the /jhon:customize words, its help and its notice", () => {
 	assert.deepEqual(CUSTOMIZE_CATEGORIES.map((c) => [c.id, c.title]), [
-		["appearance", "Appearance"], ["behaviour", "Behaviour"], ["keys", "Keys"], ["notifications", "Notifications"], ["permissions", "Permissions"],
+		["appearance", "Appearance"], ["behaviour", "Behaviour"], ["keys", "Keys"], ["permissions", "Permissions"],
 	]);
-	assert.deepEqual(CUSTOMIZE_WORDS, ["appearance", "behaviour", "keys", "notifications", "permissions"]);
-	assert.equal(customizeDescription(), "Customize the shell: appearance, behaviour, keys, notifications, permissions");
-	assert.equal(unknownCategoryNotice("colours"), `No Customize group "colours": appearance, behaviour, keys, notifications, permissions.`);
+	assert.deepEqual(CUSTOMIZE_WORDS, ["appearance", "behaviour", "keys", "permissions"]);
+	assert.equal(customizeDescription(), "Customize the shell: appearance, behaviour, keys, permissions");
+	assert.equal(unknownCategoryNotice("colours"), `No Customize group "colours": appearance, behaviour, keys, permissions.`);
+});
+
+// T169 (L1438): the notification sounds are gone, and Customize's Notifications with them.
+test("Customize has no Notifications: no category, no row and no default under shell.notifications", () => {
+	assert.equal(CUSTOMIZE_CATEGORIES.some((c) => c.id === "notifications" || c.title === "Notifications"), false);
+	assert.deepEqual(customizeRows(withMode).filter((row) => row.group === "Notifications" || row.key.startsWith("shell.notifications.")).map((row) => row.key), []);
+	assert.deepEqual(Object.keys(SETTINGS_DEFAULTS).filter((key) => key.startsWith("shell.notifications.")), []);
+	assert.equal(unknownCategoryNotice("notifications"), `No Customize group "notifications": appearance, behaviour, keys, permissions.`);
 });
 
 test("the rows come category by category in the registry's order; a hidden row hides its empty category", () => {
@@ -92,7 +100,6 @@ test("every setting row agrees with `jhon settings list --json`: the key exists,
 		}
 		if (entry.kind === "enum") assert.deepEqual(row.values, entry.values, `${row.key}: the engine's values`);
 		else if (entry.kind === "bool") assert.deepEqual(row.values, ["on", "off"], `${row.key}: a bool is on/off`);
-		else if (entry.kind === "sound") assert.ok(row.values?.every((v) => v === "none" || v.startsWith("builtin:")), row.key);
 		else assert.equal(row.kind, "text", `${row.key}: a ${entry.kind} is typed`);
 	}
 });

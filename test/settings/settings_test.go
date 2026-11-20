@@ -85,16 +85,16 @@ func find(l listing, key string) (row, bool) {
 
 func TestListJSONShapeAndSources(t *testing.T) {
 	h := newHome(t, "JHON_SHELL_COMPACT_AT=70")
-	support.Write(t, filepath.Join(h.config, "jhon"), map[string]string{"settings.toml": "schema = 1\n[shell.notifications]\nenabled = true\n"})
+	support.Write(t, filepath.Join(h.config, "jhon"), map[string]string{"settings.toml": "schema = 1\n[shell.appearance]\nascii = true\n"})
 	l := list(t, h, h.dir)
 	if l.Schema != 1 || l.Path != h.file() {
 		t.Errorf("schema %d, path %s", l.Schema, l.Path)
 	}
 	for key, want := range map[string]row{
-		"shell.notifications.enabled": {Value: true, Source: "file"},
-		"shell.behaviour.compact_at":  {Value: float64(70), Source: "env", Env: "JHON_SHELL_COMPACT_AT"},
-		"integrations.engram":         {Value: true, Source: "default"},
-		"shell.appearance.icons":      {Value: "geometric", Source: "default"},
+		"shell.appearance.ascii":     {Value: true, Source: "file"},
+		"shell.behaviour.compact_at": {Value: float64(70), Source: "env", Env: "JHON_SHELL_COMPACT_AT"},
+		"integrations.engram":        {Value: true, Source: "default"},
+		"shell.appearance.icons":     {Value: "geometric", Source: "default"},
 	} {
 		got, ok := find(l, key)
 		if !ok || got.Value != want.Value || got.Source != want.Source || got.Env != want.Env {
@@ -106,7 +106,7 @@ func TestListJSONShapeAndSources(t *testing.T) {
 	}
 	// The plain listing names every key with its value and source.
 	r := h.jhon(t)
-	if r.Code != 0 || !strings.Contains(r.Stdout, "shell.notifications.enabled") || !strings.Contains(r.Stdout, "file") || !strings.Contains(r.Stdout, "JHON_SHELL_COMPACT_AT") {
+	if r.Code != 0 || !strings.Contains(r.Stdout, "shell.appearance.ascii") || !strings.Contains(r.Stdout, "file") || !strings.Contains(r.Stdout, "JHON_SHELL_COMPACT_AT") {
 		t.Errorf("jhon settings: %d\n%s", r.Code, r.Out())
 	}
 }
@@ -136,15 +136,14 @@ func TestListJSONDescribesEachKey(t *testing.T) {
 		by[e["key"].(string)] = e
 	}
 	for key, want := range map[string]map[string]any{
-		"shell.appearance.icons":                          {"value": "emoji", "source": "file", "kind": "enum", "values": []any{"geometric", "emoji"}, "default": "geometric"},
-		"shell.notifications.enabled":                     {"value": false, "source": "default", "kind": "bool", "default": false},
-		"shell.behaviour.compact_at":                      {"kind": "int", "default": float64(60), "min": float64(1), "max": float64(100)},
-		"shell.behaviour.stall_seconds":                   {"kind": "int", "default": float64(75), "min": float64(0)},
-		"shell.behaviour.thinking_stall_seconds":          {"kind": "int", "default": float64(300), "min": float64(0), "source": "default", "value": float64(300)},
-		"shell.keys.panel":                                {"kind": "key", "default": "alt+j"},
-		`shell.notifications.audio.events."agent.failed"`: {"kind": "sound", "default": "builtin:error"},
-		"pi.profile":                                      {"kind": "name", "default": "default"},
-		"claude_code.connectors":                          {"value": false, "source": "default", "kind": "bool", "default": false},
+		"shell.appearance.icons":                 {"value": "emoji", "source": "file", "kind": "enum", "values": []any{"geometric", "emoji"}, "default": "geometric"},
+		"shell.appearance.ascii":                 {"value": false, "source": "default", "kind": "bool", "default": false},
+		"shell.behaviour.compact_at":             {"kind": "int", "default": float64(60), "min": float64(1), "max": float64(100)},
+		"shell.behaviour.stall_seconds":          {"kind": "int", "default": float64(75), "min": float64(0)},
+		"shell.behaviour.thinking_stall_seconds": {"kind": "int", "default": float64(300), "min": float64(0), "source": "default", "value": float64(300)},
+		"shell.keys.panel":                       {"kind": "key", "default": "alt+j"},
+		"pi.profile":                             {"kind": "name", "default": "default"},
+		"claude_code.connectors":                 {"value": false, "source": "default", "kind": "bool", "default": false},
 	} {
 		got := by[key]
 		for field, v := range want {
@@ -156,7 +155,7 @@ func TestListJSONDescribesEachKey(t *testing.T) {
 	if _, ok := by["shell.behaviour.stall_seconds"]["max"]; ok {
 		t.Error("an unbounded int has no max")
 	}
-	if _, ok := by["shell.notifications.enabled"]["values"]; ok {
+	if _, ok := by["shell.appearance.ascii"]["values"]; ok {
 		t.Error("a bool lists no values")
 	}
 }
@@ -267,10 +266,10 @@ func TestJHONSettingsNamesTheFile(t *testing.T) {
 	h := newHome(t)
 	path := filepath.Join(h.dir, "elsewhere.toml")
 	h.env = append(h.env, "JHON_SETTINGS="+path)
-	if r := h.jhon(t, "set", "shell.notifications.enabled", "true"); r.Code != 0 {
+	if r := h.jhon(t, "set", "shell.appearance.ascii", "true"); r.Code != 0 {
 		t.Fatalf("set: %d %q", r.Code, r.Out())
 	}
-	if !strings.Contains(support.Read(t, path), "enabled = true") {
+	if !strings.Contains(support.Read(t, path), "ascii = true") {
 		t.Error("JHON_SETTINGS was not written")
 	}
 	if _, err := os.Stat(h.file()); !os.IsNotExist(err) {

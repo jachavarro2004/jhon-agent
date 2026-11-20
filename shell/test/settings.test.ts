@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { installShellSettings, jhonSettingsBackend, notificationEventKey, retiredNotice, SETTINGS_DEFAULTS, shellSettings, ShellSettings } from "../lib/settings.ts";
+import { installShellSettings, jhonSettingsBackend, retiredNotice, SETTINGS_DEFAULTS, shellSettings, ShellSettings } from "../lib/settings.ts";
 import { FreshSessionLatch } from "../lib/fresh-session.ts";
 import { fakeJhon, memorySettings } from "./fake-jhon-settings.ts";
 
@@ -58,7 +58,7 @@ test("after a failed load the settings are tried again at most once every 30 s",
 	const backend = {
 		list() {
 			calls++;
-			return fail ? { error: "jhon settings: busy" } : { path: "/nonexistent/settings.toml", values: new Map([["shell.notifications.enabled", { value: true, source: "file" as const }]]) };
+			return fail ? { error: "jhon settings: busy" } : { path: "/nonexistent/settings.toml", values: new Map([["shell.appearance.ascii", { value: true, source: "file" as const }]]) };
 		},
 		set() { return null; },
 	};
@@ -73,7 +73,7 @@ test("after a failed load the settings are tried again at most once every 30 s",
 	s.refreshIfChanged();
 	assert.equal(calls, 2);
 	assert.equal(s.loaded, true);
-	assert.equal(s.bool("shell.notifications.enabled"), true);
+	assert.equal(s.bool("shell.appearance.ascii"), true);
 });
 
 test("a missing binary gives S38's defaults and set refuses", () => {
@@ -81,12 +81,12 @@ test("a missing binary gives S38's defaults and set refuses", () => {
 	assert.equal(s.loaded, false);
 	assert.match(s.error ?? "", /\/nonexistent\/jhon settings list/);
 	assert.deepEqual(snapshot(s), S38);
-	const r = s.set("shell.notifications.enabled", true);
+	const r = s.set("shell.appearance.ascii", true);
 	assert.equal(r.ok, false);
 });
 
 test("a failing binary gives S38's defaults", (t) => {
-	const fake = fakeJhon(t, { fail: "settings.toml: shell.notifications.enabled: \"yes\" is not accepted" });
+	const fake = fakeJhon(t, { fail: "settings.toml: shell.appearance.ascii: \"yes\" is not accepted" });
 	const s = new ShellSettings(jhonSettingsBackend(fake.bin));
 	assert.equal(s.loaded, false);
 	assert.match(s.error ?? "", /is not accepted/);
@@ -108,8 +108,8 @@ test("with no binary at all every key is its default", () => {
 	const s = new ShellSettings();
 	assert.deepEqual(snapshot(s), S38);
 	for (const [key, value] of Object.entries(SETTINGS_DEFAULTS)) assert.equal(s.get(key), value, key);
-	assert.equal(s.get(notificationEventKey("agent.failed")), "builtin:error");
-	assert.equal(s.get(notificationEventKey("session.started")), "none");
+	// T169 (L1438): the notification sounds are gone, their keys with them.
+	assert.deepEqual(Object.keys(SETTINGS_DEFAULTS).filter((key) => key.startsWith("shell.notifications.")), []);
 });
 
 test("set runs `jhon settings set` and loads the settings again", (t) => {
@@ -135,8 +135,8 @@ test("a value jhon refuses is reported and nothing changes", (t) => {
 test("setMany writes in order and loads once", (t) => {
 	const fake = fakeJhon(t);
 	const s = new ShellSettings(jhonSettingsBackend(fake.bin));
-	assert.deepEqual(s.setMany([["shell.notifications.enabled", true], [notificationEventKey("agent.failed"), "none"]]), { ok: true });
-	assert.equal(s.get(notificationEventKey("agent.failed")), "none");
+	assert.deepEqual(s.setMany([["shell.appearance.ascii", true], ["shell.appearance.icons", "emoji"]]), { ok: true });
+	assert.equal(s.get("shell.appearance.icons"), "emoji");
 	assert.equal(fake.calls().filter((c) => c[1] === "list").length, 2);
 });
 

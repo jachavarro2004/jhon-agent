@@ -3,10 +3,10 @@
  * (T24b). Jhon knows no multiplexer: a bridge extension announces one on pi's
  * event bus as `jhon:host` `{ name, alerts?, showsPath? }`, at its own start
  * and in answer to the shell's `jhon:host?` query at session start, so the
- * load order does not matter. `alerts: true` mutes the shell's own
- * owner-wait sound (the host plays its alert); `showsPath: true` drops the
- * path from the title row (the host shows it). shell/CONTRACT.md, "Events
- * for other extensions".
+ * load order does not matter. `alerts: true` says the host plays its own
+ * alert while the owner is waited for (the shell plays no sound);
+ * `showsPath: true` drops the path from the title row (the host shows it).
+ * shell/CONTRACT.md, "Events for other extensions".
  */
 
 export const HOST_EVENT = "jhon:host";

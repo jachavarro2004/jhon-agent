@@ -225,7 +225,7 @@ test("a short overlay keeps the cursor row in view", () => {
 });
 
 // The real rows at the owner's sizes: 186x40, 120x36, 80x24 and a 60-column sheet.
-test("the real Settings at 186, 120, 80 and 60 columns: previews for animations, icons, ascii, status, keys, numbers and sounds", () => {
+test("the real Settings at 186, 120, 80 and 60 columns: previews for animations, icons, ascii, status, keys and numbers", () => {
 	const noop = () => {};
 	const real = settingsRows({ settings: memorySettings(), animations: noop, doubleEsc: noop, status: noop, redraw: noop });
 	for (const [cols, termRows] of [[186, 40], [120, 36], [80, 24], [60, 24]] as const) {
@@ -274,10 +274,8 @@ test("the real Settings at 186, 120, 80 and 60 columns: previews for animations,
 		assert.match(text, /Keys · 1\/6/, at);
 		assert.match(text, /Preview · alt\+j · what the key opens/, at);
 		assert.match(text, /alt\+j opens the LDD status\./, at);
-		text = open("notifications", 1);
-		assert.match(text, /Notifications · 2\/9/, at);
-		assert.match(text, /Preview · .* · the sound/, at);
-		assert.match(text, /Click · ↑\/↓ settings/, at);
+		text = open("appearance", 1);
+		assert.match(text, /Click · ↑\/↓ settings/, at, "a choice row's footer");
 	}
 });
 
@@ -302,7 +300,7 @@ test("the Settings rows are exactly the shell.* keys `jhon settings list --json`
 	const engine = new Set((JSON.parse(run.stdout).settings as Record<string, string>[]).map((entry) => entry["key"]!).filter((k) => k.startsWith("shell.")));
 	const noop = () => {};
 	const rowsShown = settingsRows({ settings: memorySettings(), animations: noop, doubleEsc: noop, status: noop, redraw: noop });
-	assert.deepEqual([...new Set(rowsShown.map((row) => row.group))], ["Appearance", "Behaviour", "Keys", "Notifications"]);
+	assert.deepEqual([...new Set(rowsShown.map((row) => row.group))], ["Appearance", "Behaviour", "Keys"]);
 	// Action rows (Reset appearance) save no key of their own.
 	const settingRows = rowsShown.filter((row) => !row.action);
 	assert.equal(settingRows.length, engine.size, "one row per engine shell.* key");

@@ -89,40 +89,35 @@ func TestDefaultsWithNoFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{
-		"runtimes.claude_code":                               true,
-		"runtimes.pi":                                        true,
-		"integrations.engram":                                true,
-		"integrations.codegraph":                             true,
-		"integrations.context7":                              true,
-		"agents.act_on_announce":                             true,
-		"integrations.telemetry":                             false,
-		"integrations.theme.palette":                         "rose-ink",
-		"claude_code.connectors":                             false,
-		"pi.profile":                                         "default",
-		"shell.appearance.animations":                        "full",
-		"shell.appearance.ascii":                             false,
-		"shell.appearance.icons":                             "geometric",
-		"shell.appearance.status":                            "auto",
-		"shell.appearance.cards":                             "float",
-		"shell.appearance.surface":                           "transparent",
-		"shell.appearance.density":                           "comfortable",
-		"shell.behaviour.compact_at":                         60,
-		"shell.behaviour.compact_tokens":                     200000,
-		"shell.behaviour.child_backstop_tokens":              80000,
-		"shell.behaviour.stall_seconds":                      75,
-		"shell.behaviour.thinking_stall_seconds":             300,
-		"shell.behaviour.double_esc_cancel":                  false, // today's shell default (L199)
-		"shell.keys.panel":                                   "alt+j",
-		"shell.keys.tasks":                                   "alt+s",
-		"shell.keys.todos":                                   "alt+t",
-		"shell.keys.changes":                                 "alt+g",
-		"shell.keys.rail":                                    "alt+r",
-		"shell.keys.commands":                                "alt+k",
-		"shell.notifications.enabled":                        false,
-		`shell.notifications.audio.events."agent.failed"`:    "builtin:error",
-		`shell.notifications.audio.events."agent.attention"`: "builtin:attention",
-		`shell.notifications.audio.events."agent.completed"`: "builtin:success",
-		`shell.notifications.audio.events."session.started"`: "none",
+		"runtimes.claude_code":                   true,
+		"runtimes.pi":                            true,
+		"integrations.engram":                    true,
+		"integrations.codegraph":                 true,
+		"integrations.context7":                  true,
+		"agents.act_on_announce":                 true,
+		"integrations.telemetry":                 false,
+		"integrations.theme.palette":             "rose-ink",
+		"claude_code.connectors":                 false,
+		"pi.profile":                             "default",
+		"shell.appearance.animations":            "full",
+		"shell.appearance.ascii":                 false,
+		"shell.appearance.icons":                 "geometric",
+		"shell.appearance.status":                "auto",
+		"shell.appearance.cards":                 "float",
+		"shell.appearance.surface":               "transparent",
+		"shell.appearance.density":               "comfortable",
+		"shell.behaviour.compact_at":             60,
+		"shell.behaviour.compact_tokens":         200000,
+		"shell.behaviour.child_backstop_tokens":  80000,
+		"shell.behaviour.stall_seconds":          75,
+		"shell.behaviour.thinking_stall_seconds": 300,
+		"shell.behaviour.double_esc_cancel":      false, // today's shell default (L199)
+		"shell.keys.panel":                       "alt+j",
+		"shell.keys.tasks":                       "alt+s",
+		"shell.keys.todos":                       "alt+t",
+		"shell.keys.changes":                     "alt+g",
+		"shell.keys.rail":                        "alt+r",
+		"shell.keys.commands":                    "alt+k",
 	}
 	for key, w := range want {
 		v := valueOf(t, vals, key)
@@ -216,7 +211,7 @@ func TestValidationErrors(t *testing.T) {
 		{"cards", "[shell.appearance]\ncards = \"sections\"\n", `shell.appearance.cards: "sections" is not accepted (accepted: float, neon)`},
 		{"surface", "[shell.appearance]\nsurface = \"band\"\n", `shell.appearance.surface: "band" is not accepted (accepted: transparent, tinted)`},
 		{"density", "[shell.appearance]\ndensity = \"tight\"\n", `shell.appearance.density: "tight" is not accepted (accepted: comfortable, compact, minimal)`},
-		{"bool", "[shell.notifications]\nenabled = \"on\"\n", `shell.notifications.enabled: "on" is not accepted (accepted: true, false)`},
+		{"bool", "[shell.appearance]\nascii = \"on\"\n", `shell.appearance.ascii: "on" is not accepted (accepted: true, false)`},
 		{"unknown", "[shell.editor]\nemacs = true\n", `shell.editor.emacs: unknown key`},
 		{"schema", "schema = 2\n", `schema: 2 is not accepted (accepted: 1)`},
 		{"engram", "[integrations]\nengram = false\n", `integrations.engram: required for now: Jhon's own memory/indexer will make it optional`},
@@ -288,10 +283,10 @@ func TestSetAddsAMissingKeyAndSection(t *testing.T) {
 	if got := read(t, path); got != want {
 		t.Fatalf("file:\n%s\nwant:\n%s", got, want)
 	}
-	if _, err := Set(path, "shell.notifications.enabled", "true"); err != nil {
+	if _, err := Set(path, "shell.appearance.ascii", "true"); err != nil {
 		t.Fatal(err)
 	}
-	want += "\n[shell.notifications]\nenabled = true\n"
+	want += "\n[shell.appearance]\nascii = true\n"
 	if got := read(t, path); got != want {
 		t.Fatalf("file:\n%s\nwant:\n%s", got, want)
 	}
@@ -299,18 +294,18 @@ func TestSetAddsAMissingKeyAndSection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := valueOf(t, vals, "shell.notifications.enabled"); v.Value != true {
-		t.Errorf("notifications = %#v", v.Value)
+	if v := valueOf(t, vals, "shell.appearance.ascii"); v.Value != true {
+		t.Errorf("ascii = %#v", v.Value)
 	}
 }
 
 func TestSetCreatesTheFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "jhon", "settings.toml")
-	if _, err := Set(path, `shell.notifications.audio.events."agent.failed"`, "none"); err != nil {
+	if _, err := Set(path, "shell.appearance.ascii", "true"); err != nil {
 		t.Fatal(err)
 	}
 	got := read(t, path)
-	if !strings.Contains(got, "schema = 1\n") || !strings.Contains(got, "[shell.notifications.audio.events]\n\"agent.failed\" = \"none\"\n") {
+	if !strings.Contains(got, "schema = 1\n") || !strings.Contains(got, "[shell.appearance]\nascii = true\n") {
 		t.Fatalf("file:\n%s", got)
 	}
 }

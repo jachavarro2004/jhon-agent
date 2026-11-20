@@ -30,28 +30,6 @@ export type SettingValue = boolean | number | string;
 /** Where a value comes from: its default, settings.toml, or its environment variable. */
 export type SettingSource = "default" | "file" | "env";
 
-/** A notification event that fires (T15.6: the ones that never did are gone). */
-export type NotificationEvent = "session.started"
-	| `agent.${"started" | "completed" | "failed" | "cancelled" | "attention"}` | `subagent.${"completed" | "failed"}`;
-/**
- * The notification events, the shell's one list (L93), in the engine's order
- * (engine/internal/settings notificationEvents); each is a quoted key
- * segment. notification-policy.ts reads it from here; a test holds it
- * equal to `jhon settings list --json`.
- */
-export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = Object.freeze([
-	"session.started", "agent.started", "agent.completed", "agent.failed", "agent.cancelled", "agent.attention",
-	"subagent.completed", "subagent.failed",
-]);
-
-/** The key of an event's sound: `shell.notifications.audio.events."<event>"`, as the engine names it. */
-export const notificationEventKey = (event: string): string => `shell.notifications.audio.events.${JSON.stringify(event)}`;
-
-const defaultSound = (event: string): string =>
-	event.endsWith(".failed") ? "builtin:error"
-		: event === "agent.attention" ? "builtin:attention"
-			: event.endsWith(".completed") ? "builtin:success" : "none";
-
 /**
  * Every key's default, the engine's schema (engine/internal/settings), in its
  * order: the shell's copy for when jhon cannot answer (and SettingsKey's
@@ -87,8 +65,6 @@ export const SETTINGS_DEFAULTS: Readonly<Record<string, SettingValue>> = Object.
 	"shell.keys.changes": "alt+g",
 	"shell.keys.rail": "alt+r",
 	"shell.keys.commands": "alt+k",
-	"shell.notifications.enabled": false,
-	...Object.fromEntries(NOTIFICATION_EVENTS.map((event) => [notificationEventKey(event), defaultSound(event)])),
 });
 
 /**
