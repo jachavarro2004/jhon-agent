@@ -1,6 +1,6 @@
 # The changed guard verdicts the owner accepted against the last release (tools/guarddiff/README.md).
 # One per line, tab-separated: id (file:line, @place/caller for a 6-column line), guard, old verdict, new verdict,
-# why (the class and the task that changed it); `*` in the first four columns matches any value. v0.3.7 to a963427
+# why (the class and the task that changed it); `*` in the first four columns matches any value. v0.3.7 to 37be387
 # changed no verdict (baseline.txt); T128f slice 4 deleted framework-guard's Bash write checks (class S framework-bash),
 # slice 5 safety-guard's outside-write asks and its credentials refusals outside the project (S outside-write, outside-credential).
 # Slice 6 (L1366, L1368) deleted the Bash credentials read rule (read) and the unresolved-target write ask
