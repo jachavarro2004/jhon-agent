@@ -266,7 +266,7 @@ test("task_list, task_result, and task_stop take jobs and sub-agents alike, by i
 	await assert.rejects(h.run("task_result", { id: "agent-404" }), /No background task agent-404 in this session/);
 });
 
-test("a background sub-agent's answer arrives as a task notice, with its notification", async () => {
+test("a background sub-agent's answer arrives as a task notice, and no notification event (T169)", async () => {
 	const h = harness();
 	await h.fire("session_start");
 	const agent = h.background!.startAgent(worker, "who calls parse?", h.ctx.cwd, "main");
@@ -277,7 +277,7 @@ test("a background sub-agent's answer arrives as a task notice, with its notific
 	assert.equal(notice.message.customType, TASK_NOTICE_TYPE);
 	assert.match(notice.message.content, /sub-agent agent-1 \(worker\) completed after 0s\.\n\nfound 3 callers/);
 	assert.equal(notice.message.details.jhonTasks.succeeded, true);
-	assert.equal(h.emitted.find((e) => e.name === "jhon-shell:notification:source")?.value.event, "subagent.completed");
+	assert.equal(h.emitted.some((e) => e.name === "jhon-shell:notification:source"), false, "the notification sounds are gone (T169)");
 	assert.deepEqual(h.emitted.filter((e) => e.name === TASKS_EVENT).at(-1)?.value.tasks, []);
 });
 

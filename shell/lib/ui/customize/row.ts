@@ -9,7 +9,6 @@
 import type { SettingsKey, SettingValue, ShellSettings } from "../../settings.ts";
 import type { AnimationPolicy } from "../animation-policy.ts";
 import type { DoubleEscCancelPolicy } from "../double-esc-cancel-policy.ts";
-import type { NotificationSettings } from "../notification-policy.ts";
 import type { SettingRow } from "../settings-view.ts";
 
 /** What the shell gives the rows: the settings and the hooks that apply a change live. */
@@ -22,8 +21,6 @@ export interface CustomizeHooks {
 	/** The card style or the surface changed: apply both and redraw. */
 	appearance?(): void;
 	redraw(): void;
-	/** The notification service's settings and its own writer, when audio runs in this session. */
-	notifications?: { get(): NotificationSettings; set(next: NotificationSettings): boolean };
 	/** The project's permission mode, read and changed through changeMode, when the shell can run `jhon mode`. */
 	mode?: { value(): string; set(mode: string): Promise<string | undefined> };
 	/** pi's reload (extensions, keys, themes), when the shell can ask for it. */

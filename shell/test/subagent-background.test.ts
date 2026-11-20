@@ -1,8 +1,8 @@
 /**
  * `subagent` (extensions/jhon.ts over lib/background-tasks-tools.ts): in the
  * main session every sub-agent runs in the background (L649): it returns a
- * task id at once; the answer reaches the agent as a follow-up message, the
- * sub-agent notification fires, and the shell UI hears the running ones.
+ * task id at once; the answer reaches the agent as a follow-up message, and
+ * the shell UI hears the running ones.
  * task_result reads a run, task_stop cancels one; a sub-agent, which has no
  * background tasks, runs the ones it starts in the foreground.
  */
@@ -16,7 +16,6 @@ import jhon from "../extensions/jhon.ts";
 import { TASK_NOTICE_TYPE } from "../lib/background-tasks-tools.ts";
 import { TASKS_EVENT } from "../lib/events.ts";
 import { renderShellAgentsSection } from "../lib/ui/shell-bar.ts";
-import { NOTIFICATION_SOURCE_EVENT, isNotificationSourceEvent } from "../lib/ui/notification-events.ts";
 
 const temps: string[] = [];
 after(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
@@ -89,7 +88,7 @@ async function within<T>(vars: Record<string, string | undefined>, f: () => Prom
 	try { return await f(); } finally { for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v; }
 }
 
-test("a sub-agent launched without asking for it runs in the background: it returns its id at once; its answer arrives as a follow-up, with the notification and the UI's running list", async () => {
+test("a sub-agent launched without asking for it runs in the background: it returns its id at once; its answer arrives as a follow-up, with the UI's running list", async () => {
 	const s = setup();
 	await s.fire("session_start");
 	await within({ ...s.vars, FAKE_PI_DELAY: "100" }, async () => {
@@ -103,9 +102,6 @@ test("a sub-agent launched without asking for it runs in the background: it retu
 		assert.equal(notice.message.customType, TASK_NOTICE_TYPE);
 		assert.match(notice.message.content, new RegExp(`${id}.*explore.*completed[\\s\\S]*found 3 callers`));
 		assert.deepEqual(notice.options, { triggerTurn: true, deliverAs: "followUp" });
-		const notification = s.emitted.find((e) => e.name === NOTIFICATION_SOURCE_EVENT)?.value;
-		assert.ok(isNotificationSourceEvent(notification), JSON.stringify(notification));
-		assert.equal(notification.event, "subagent.completed");
 		assert.deepEqual(s.emitted.filter((e) => e.name === TASKS_EVENT).at(-1)?.value.tasks, []);
 		const read = await s.run("task_result", { id });
 		assert.match(read.content[0].text, /completed[\s\S]*found 3 callers/);

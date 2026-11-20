@@ -1131,7 +1131,7 @@ test("visual customization registers once and remains discoverable", async (t) =
 	assert.equal(registrations.filter((registered) => registered === "jhon:customize").length, 1, "jhon:customize must register once");
 	for (const merged of ["jhon:vim", "jhon:animations", "jhon:double-esc-cancel"]) assert.equal(commands.has(merged), false, `${merged} merged into /jhon:customize`);
 	// T15.13: Customize is G's Customization view; typing does not filter it. L174: Settings is Customize.
-	assert.equal(commands.get("jhon:customize")!.description, "Customize the shell: appearance, behaviour, keys, notifications, permissions");
+	assert.equal(commands.get("jhon:customize")!.description, "Customize the shell: appearance, behaviour, keys, permissions");
 	const groups = buildCommandPaletteGroups([...commands].map(([name, value]) => ({ name, description: value.description })), {});
 	const configuration = groups.find((group) => group.title === "Configuration")!;
 	assert.deepEqual(configuration.items.filter((item) => /customize|settings/.test(item.command)).map((item) => [item.command, item.label]), [["jhon:customize", "Customize"]]);
@@ -3928,10 +3928,10 @@ test("/jhon:settings is not registered; /jhon:customize completes its categories
 		{ value: "appearance", label: "appearance", description: "Theme, animations, glyphs, tool icons, cards, surface, density, status line, reset" },
 		{ value: "behaviour", label: "behaviour", description: "Compaction, the fresh-session notice, stall recovery, double Esc" },
 		{ value: "keys", label: "keys", description: "The shell's keys: LDD status, panel sheet, todos, tasks, changes, palette; reload" },
-		{ value: "notifications", label: "notifications", description: "Sounds on or off, and the sound of each event" },
 		{ value: "permissions", label: "permissions", description: "The project's permission mode" },
 	]);
-	assert.deepEqual((await customize.getArgumentCompletions!("no"))!.map((item) => item.value), ["notifications"]);
+	assert.deepEqual((await customize.getArgumentCompletions!("pe"))!.map((item) => item.value), ["permissions"]);
+	assert.equal(await customize.getArgumentCompletions!("no"), null, "no notifications group (T169)");
 	assert.equal(await customize.getArgumentCompletions!("zz"), null, "no match: nothing to offer");
 	const palette = buildCommandPaletteGroups([...commands].map(([name, value]) => ({ name, description: value.description })), {});
 	assert.ok(!palette.some((group) => group.items.some((item) => item.command === "jhon:settings")), "no palette row for it");
@@ -3944,7 +3944,7 @@ test("/jhon:customize with a group that moved points where it lives, and an unkn
 	shellUi(pi, {});
 	for (const [word, says] of [
 		["runtimes", /runtimes.*jhon setup/i], ["integrations", /integrations.*jhon setup/i], ["palette", /palette.*jhon setup/i],
-		["profile", /^The model profile is chosen in \/jhon:profile\.$/], ["colours", /No Customize group "colours".*appearance, behaviour, keys, notifications/],
+		["profile", /^The model profile is chosen in \/jhon:profile\.$/], ["colours", /No Customize group "colours".*appearance, behaviour, keys, permissions/],
 	] as const) {
 		const { ctx, ui } = fakeContext();
 		await commands.get("jhon:customize")!.handler(word, ctx);

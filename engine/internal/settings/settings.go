@@ -56,7 +56,7 @@ type Value struct {
 	Env    string `json:"env,omitempty"` // the variable, when Source is env
 	// The schema's description of the key (T15.15, L179): the engine is the
 	// one source of each key's kind, accepted values and default.
-	Kind    string   `json:"kind,omitempty"`   // bool, int, enum, name, key, sound, path, paths
+	Kind    string   `json:"kind,omitempty"`   // bool, int, enum, name, key, path, paths
 	Values  []string `json:"values,omitempty"` // an enum's values, in order
 	Default any      `json:"default,omitempty"`
 	Min     *int     `json:"min,omitempty"` // an int's bounds; no max is unbounded
@@ -91,13 +91,12 @@ const (
 	kEnum
 	kName  // a profile name
 	kKey   // a key binding, or off
-	kSound // none, builtin:<id>, or file:<path>
 	kPath  // an absolute path, or one under ~/
 	kPaths // a list of folders, each absolute or under ~/
 )
 
 // kindNames are the kinds as `settings list --json` names them.
-var kindNames = map[kind]string{kBool: "bool", kInt: "int", kEnum: "enum", kName: "name", kKey: "key", kSound: "sound", kPath: "path", kPaths: "paths"}
+var kindNames = map[kind]string{kBool: "bool", kInt: "int", kEnum: "enum", kName: "name", kKey: "key", kPath: "path", kPaths: "paths"}
 
 // spec is one key of the schema.
 type spec struct {
@@ -116,26 +115,6 @@ var (
 	nameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 	keyRe  = regexp.MustCompile(`^[A-Za-z0-9+\-]+$`)
 )
-
-// notificationEvents are the shell's notification events that fire
-// (notification-policy.ts), in its order.
-var notificationEvents = []string{
-	"session.started", "agent.started", "agent.completed", "agent.failed", "agent.cancelled", "agent.attention",
-	"subagent.completed", "subagent.failed",
-}
-
-// defaultSound is an event's sound by its priority, as the shell's defaults give it.
-func defaultSound(event string) string {
-	switch {
-	case strings.HasSuffix(event, ".failed"):
-		return "builtin:error"
-	case event == "agent.attention":
-		return "builtin:attention"
-	case strings.HasSuffix(event, ".completed"):
-		return "builtin:success"
-	}
-	return "none"
-}
 
 // Environment readers, each as the shell reads its variable today.
 func envBoolIs1(v string) (any, bool) { return v == "1", v != "" }
@@ -245,11 +224,7 @@ func schema() []spec {
 		{key: "shell.keys.changes", kind: kKey, def: "alt+g", env: "JHON_SHELL_CHANGES_KEY", fromEnv: envKey},
 		{key: "shell.keys.rail", kind: kKey, def: "alt+r", env: "JHON_SHELL_RAIL_KEY", fromEnv: envKey},
 		{key: "shell.keys.commands", kind: kKey, def: "alt+k", env: "JHON_SHELL_COMMANDS_KEY", fromEnv: envKey},
-		{key: "shell.notifications.enabled", kind: kBool, def: false},
 	}...)
-	for _, e := range notificationEvents {
-		s = append(s, spec{key: "shell.notifications.audio.events." + quoteSegment(e), kind: kSound, def: defaultSound(e)})
-	}
 	return s
 }
 
@@ -327,8 +302,6 @@ func (s spec) accepted() string {
 		return "a profile name (letters, digits, '.', '_', '-')"
 	case kKey:
 		return "a key such as alt+j, or off"
-	case kSound:
-		return "none, builtin:success, builtin:error, builtin:attention, or file:<path>"
 	case kPath:
 		return "an absolute path, or one under ~/"
 	case kPaths:
@@ -449,9 +422,6 @@ func (s spec) check(v any) (any, error) {
 		ok = nameRe.MatchString(str)
 	case kKey:
 		ok = str == "off" || keyRe.MatchString(str)
-	case kSound:
-		ok = str == "none" || str == "builtin:success" || str == "builtin:error" || str == "builtin:attention" ||
-			strings.HasPrefix(str, "file:") && len(str) > len("file:")
 	case kPath:
 		ok = filepath.IsAbs(str) || strings.HasPrefix(str, "~/") && len(str) > len("~/")
 	}

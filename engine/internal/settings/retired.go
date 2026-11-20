@@ -35,14 +35,12 @@ type Note struct {
 
 // retiredWhy are the removed keys with no successor, and why each goes.
 var retiredWhy = map[string]string{
-	"shell.behaviour.quiet_tools":                   "the shell always draws its own tool cards",
-	"shell.behaviour.key_hints":                     "the keys are listed in the command palette and the README",
-	"shell.notifications.audio.minimum_interval_ms": "the interval between sounds is fixed at 1000 ms",
-	"shell.notifications.audio.coalesce_window_ms":  "the coalescing window is fixed at 300 ms",
-	"shell.extra.card_content":                      "tool cards always show their result previews",
-	"shell.extra.visual_profiles":                   "visual profiles are gone",
-	"shell.keys.usage":                              "/jhon:usage is gone: the status line shows the 5h and week windows",
-	"integrations.dashboard":                        "/jhon:dashboard opens the dashboard at this session whenever you ask; nothing else read the switch",
+	"shell.behaviour.quiet_tools": "the shell always draws its own tool cards",
+	"shell.behaviour.key_hints":   "the keys are listed in the command palette and the README",
+	"shell.extra.card_content":    "tool cards always show their result previews",
+	"shell.extra.visual_profiles": "visual profiles are gone",
+	"shell.keys.usage":            "/jhon:usage is gone: the status line shows the 5h and week windows",
+	"integrations.dashboard":      "/jhon:dashboard opens the dashboard at this session whenever you ask; nothing else read the switch",
 	// T24b (L291): Jhon keeps no multiplexer integration.
 	"integrations.herdr":            herdrGone,
 	"integrations.herdr_bin":        herdrGone,
@@ -74,7 +72,8 @@ var retiredIn = map[string]string{
 	"shell.behaviour.child_cap_tokens":     "v0.4",
 }
 
-// RetiredIn is the release that removed key: v0.1 unless retiredIn says.
+// RetiredIn is the release that removed key: v0.1 unless retiredIn says,
+// or it is a notification key v0.1 still had (T169: v0.4).
 func RetiredIn(key string) string {
 	if segs, err := splitKey(key); err == nil {
 		key = joinKey(segs)
@@ -82,11 +81,32 @@ func RetiredIn(key string) string {
 	if v := retiredIn[key]; v != "" {
 		return v
 	}
+	if strings.HasPrefix(key, notificationsPrefix) && !goneInV01(key) {
+		return "v0.4"
+	}
 	return "v0.1"
 }
 
-// retiredEvents are the notification events that never fire, and the one a
-// single context notice replaced.
+// T169 (L1438): the notification sounds are gone, and with them every key
+// under shell.notifications. v0.1 had already removed the audio backend,
+// the interval keys and the events that never fired.
+const (
+	notificationsPrefix = "shell.notifications."
+	soundsGone          = "the notification sounds were removed from the shell"
+)
+
+// goneInV01 is whether a shell.notifications key went in v0.1.
+func goneInV01(key string) bool {
+	switch key {
+	case "shell.notifications.audio.backend", "shell.notifications.audio.minimum_interval_ms", "shell.notifications.audio.coalesce_window_ms":
+		return true
+	}
+	path, err := splitKey(key)
+	return err == nil && strings.HasPrefix(key, eventsPrefix) && len(path) == 5 && retiredEvents[path[4]] != ""
+}
+
+// retiredEvents are the notification events that never fired, and the one a
+// single context notice replaced (v0.1).
 var retiredEvents = map[string]string{
 	"session.shutdown":   "the event never fires",
 	"subagent.queued":    "the event never fires",
@@ -125,12 +145,11 @@ func retire(key string, v any) (Note, bool) {
 		if status := statusFromVisual(v); status != "" {
 			n.Now, n.values = fmt.Sprintf("shell.appearance.status = %q", status), map[string]any{"shell.appearance.status": status}
 		}
-	case strings.HasPrefix(key, eventsPrefix):
-		path, err := splitKey(key)
-		if err != nil || len(path) != 5 || retiredEvents[path[4]] == "" {
-			return Note{}, false
-		}
+	case strings.HasPrefix(key, eventsPrefix) && goneInV01(key):
+		path, _ := splitKey(key)
 		n.Why = retiredEvents[path[4]]
+	case strings.HasPrefix(key, notificationsPrefix):
+		n.Why = soundsGone
 	case retiredWhy[key] != "":
 		n.Why = retiredWhy[key]
 	case strings.HasPrefix(key, extraPrefix):

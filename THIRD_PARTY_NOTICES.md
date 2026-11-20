@@ -15,7 +15,6 @@ from the file named (gentle-pi's paths, at the version given).
 
 Sources:
 
-- `shell/extensions/notifications.ts`: `extensions/gentle-notifications.ts` (gentle-pi 4.1.0)
 - `shell/extensions/pretty.ts`: `extensions/pi-pretty.ts` (gentle-pi 4.1.0)
 - `shell/extensions/quiet.ts`: `extensions/quiet-tools.ts` (gentle-pi 4.1.0)
 - `shell/extensions/todo.ts`: `extensions/gentle-todo.ts` (gentle-pi 4.1.0)
@@ -34,17 +33,6 @@ Sources:
 - `shell/lib/ui/double-esc-cancel-policy.ts`: `lib/double-esc-cancel-policy.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/native-fullscreen-interaction.ts`: `lib/native-fullscreen-interaction.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/native-pointer-region.ts`: `lib/native-pointer-region.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-audio-native.ts`: `lib/notification-audio-native.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-audio-windows.ts`: `lib/notification-audio-windows.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-audio.ts`: `lib/notification-audio.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-events.ts`: `lib/notification-events.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-policy.ts`: `lib/notification-policy.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-pulse-client.ts`: `lib/notification-pulse-client.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-pulse-protocol.ts`: `lib/notification-pulse-protocol.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-pulse-stream.ts`: `lib/notification-pulse-stream.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-pulse-worker.ts`: `lib/notification-pulse-worker.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-scheduler.ts`: `lib/notification-scheduler.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/notification-service.ts`: `lib/notification-service.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/overlay-repaint.ts`: `lib/overlay-repaint.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/pi-tui-keys.ts`: `lib/pi-tui-keys.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/selection-engine.ts`: `lib/selection-engine.ts` (gentle-pi 4.1.0)
@@ -63,7 +51,6 @@ Sources:
 - `shell/lib/ui/shell-sidebar.ts`: `lib/shell-sidebar.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/shell-todo.ts`: `lib/shell-todo.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/shell-usage.ts`: `lib/shell-usage.ts` (gentle-pi 4.1.0); `parseModelRef` from `lib/agents-config.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/tasks.ts`: `lib/agents-protocol.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/terminal-theme.ts`: `lib/terminal-theme.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/user-directories.ts`: `lib/bounded-writer-admission.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/visual-customization-policy.ts`: `lib/visual-customization-policy.ts` (gentle-pi 4.1.0)
@@ -80,16 +67,6 @@ Tests:
 - `shell/test/ui-double-esc-cancel-policy.test.ts`: `tests/double-esc-cancel-policy.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-native-fullscreen-interaction.test.ts`: `tests/native-fullscreen-interaction.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-native-pointer-region.test.ts`: `tests/native-pointer-region.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-notification-audio-native.test.ts`: `tests/notification-audio-native.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-notification-audio-windows.test.ts`: `tests/notification-audio-windows.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-notification-audio.test.ts`: `tests/notification-audio.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-notification-events.test.ts`: `tests/notification-events.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-notification-policy.test.ts`: `tests/notification-policy.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-notification-pulse-client.test.ts`: `tests/notification-pulse-client.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-notification-pulse-protocol.test.ts`: `tests/notification-pulse-protocol.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-notification-pulse-stream.test.ts`: `tests/notification-pulse-stream.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-notification-scheduler.test.ts`: `tests/notification-scheduler.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-notifications.test.ts`: `tests/gentle-notifications.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-overlay-repaint.test.ts`: `tests/overlay-repaint.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-pretty.test.ts`: `tests/pi-pretty.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-quiet-bash-runtime.test.ts`: `tests/quiet-bash-runtime.test.ts` (gentle-pi 4.1.0)
@@ -113,9 +90,6 @@ Tests:
 - `shell/test/ui-terminal-theme.test.ts`: `tests/terminal-theme.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-todo.test.ts`: `tests/gentle-todo.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-visual-customization-policy.test.ts`: `tests/visual-customization-policy.test.ts` (gentle-pi 4.1.0)
-
-The tones in `shell/assets/sounds/` are gentle-pi's, MIT, with their own
-`LICENSE.md` beside them.
 
 ```text
 MIT License

@@ -1734,7 +1734,9 @@ test("the shell's tools keep short descriptions that carry what the agent needs"
 
 test("the package loads Jhon's extension, its shell UI, and its Kanagawa theme, and nothing else", () => {
   const manifest = JSON.parse(readFileSync(join(REPO, "shell", "package.json"), "utf8")).pi;
-  assert.deepEqual(manifest, { extensions: ["./extensions/jhon.ts", "./extensions/ui.ts", "./extensions/pretty.ts", "./extensions/todo.ts", "./extensions/quiet.ts", "./extensions/notifications.ts"], themes: ["./themes/*.json"] });
+  assert.deepEqual(manifest, { extensions: ["./extensions/jhon.ts", "./extensions/ui.ts", "./extensions/pretty.ts", "./extensions/todo.ts", "./extensions/quiet.ts"], themes: ["./themes/*.json"] });
+  // T169 (L1438): the notification sounds are gone, their extension with them.
+  assert.equal(manifest.extensions.some((path: string) => /notification/.test(path)), false);
 });
 
 test("the safety guard refuses an irreversible command run in the background or as a monitor", async () => {

@@ -11,7 +11,6 @@ import type { SettingRow } from "../settings-view.ts";
 import { APPEARANCE } from "./appearance.ts";
 import { BEHAVIOUR } from "./behaviour.ts";
 import { KEYS } from "./keys.ts";
-import { NOTIFICATIONS } from "./notifications.ts";
 import { PERMISSIONS } from "./permissions.ts";
 import { toSettingRow, type CustomizeCategory, type CustomizeHooks } from "./row.ts";
 import type { Completion } from "../jhon-commands.ts";
@@ -19,7 +18,7 @@ import type { Completion } from "../jhon-commands.ts";
 export type { CustomizeCategory, CustomizeHooks, CustomizeRow } from "./row.ts";
 
 /** The categories, in the order the overlay lists them. G keeps its permissions among its Customization rows (L175). */
-export const CUSTOMIZE_CATEGORIES: readonly CustomizeCategory[] = Object.freeze([APPEARANCE, BEHAVIOUR, KEYS, NOTIFICATIONS, PERMISSIONS]);
+export const CUSTOMIZE_CATEGORIES: readonly CustomizeCategory[] = Object.freeze([APPEARANCE, BEHAVIOUR, KEYS, PERMISSIONS]);
 
 /** The words /jhon:customize <category> takes. */
 export const CUSTOMIZE_WORDS: readonly string[] = Object.freeze(CUSTOMIZE_CATEGORIES.map((c) => c.id));

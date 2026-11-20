@@ -52,7 +52,6 @@ import { recentSessionRoots, sessionChangeRoots, sessionRootBases, sessionSubage
 import { installSessionChangeCapture } from "../lib/ui/session-change-capture.ts";
 import { SelectionEngine } from "../lib/ui/selection-engine.ts";
 import { withOverlayRepaint } from "../lib/ui/overlay-repaint.ts";
-import { getNotificationService } from "../lib/ui/notification-service.ts";
 import { HOST_EVENT, hostShowsPath } from "../lib/host.ts";
 import { counted } from "../lib/ui-use.ts";
 
@@ -1874,7 +1873,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				if (closeSettings === close) closeSettings = undefined;
 			};
 			closeSettings = close;
-			const service = getNotificationService();
 			// The permission mode, read and set with `jhon mode` (L175), only here (L214): changeMode
 			// keeps its rule, super-yolo only after the owner's Yes; the grants are in /jhon:grants.
 			const bin = env.JHON_BIN || "jhon";
@@ -1905,7 +1903,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				status: () => { refreshVisual(); pi.events.emit(VISUAL_SETTINGS_CHANGED, { settings: settings.path }); },
 				appearance: () => { refreshVisual(); pi.events.emit(VISUAL_SETTINGS_CHANGED, { settings: settings.path }); },
 				redraw: () => { renderHost?.invalidateSidebar?.(); renderHost?.requestRender(); },
-				...(service ? { notifications: { get: () => service.getState().settings, set: (next) => service.setConfig(ctx, next) } } : {}),
 				// G's "Reload now" (L198): Customize closes, then pi reloads, so changed keys apply.
 				reload: () => {
 					close();
