@@ -44,8 +44,8 @@ their write-ups.
 ```
 presentation/
 ├── script.mjs        # THE SOURCE: every shot in order, its kind, what it shows, its line `en` and Spanish subtitle `es`
-├── narrate.mjs       # speaks each distinct line with local Kokoro (docs/media/kokoro.py), caches narration/<key>.{opus,json}
-├── compose.mjs       # writes index.html and captions.es.json from script.mjs and the cache's seconds
+├── narrate.mjs       # speaks each distinct line with local Kokoro (docs/media/kokoro.py), caches narration/<key>.{opus,json}; [composition-dir]
+├── compose.mjs       # writes index.html and captions.es.json from script.mjs and the cache's seconds; [composition-dir]
 ├── style.css         # the styles      ┐
 ├── timeline.js       # the timeline    │ inlined into index.html by compose.mjs,
 ├── stage.js          # the 3D seal     ┘ with ../motion/motion.js
@@ -57,6 +57,7 @@ presentation/
     ├── fonts/*.woff  # subsets (Latin, Latin-1, 力) of the OFL fonts identity.ts names
     ├── narration -> ../narration
     └── screens/{features,diagrams} -> docs/assets/{features,diagrams}
+teaser/                # the teaser: its own script.mjs, narration/ and generated files (below)
 motion/motion.js       # Jhon's motion engine (Apache-2.0, no dependencies)
 vendor/                # a pinned copy, no npm install: three-0.187.0 (MIT)
 .gitignore             # the CLI's .hyperframes/ state, renders/
@@ -182,6 +183,63 @@ shot, the hard lines' "no grant covers").
 Every feature capture appears once (nine) and every diagram at least once
 (`guards-tool-call` twice). `jhon doctor` is a list row, not a screen (it
 cannot pass truthfully in a sandbox: see Known limits).
+
+## The teaser (T141, a preview)
+
+`docs/assets/video/jhon-teaser.mp4` (English captions burned in) and
+`jhon-teaser.es.mp4` (Spanish subtitles): 73.3 s, the nine narration lines
+the owner accepted (`odd/proposals/t141-plan.md`, "Teaser narration", L1459)
+verbatim, one shot each, in the presentation's style. It is a preview: only
+screens that exist in `docs/assets` (no shot of the new shell, which does not
+exist yet).
+
+`teaser/` holds only its `script.mjs` (the shots, the lines and `FRAME`: the
+intro's two lines, the close's install line, longer holds and one CSS rule), its
+`narration/` cache and the generated `index.html` and `captions.es.json`;
+`assets/` and `vendor` are links to the presentation's. `compose.mjs` and
+`narrate.mjs` take the composition folder as an argument and always use the
+presentation's `style.css`, `timeline.js`, `stage.js` and `../motion/motion.js`;
+`narrate.mjs` copies a line another composition's cache already holds (the
+tagline) instead of speaking it again.
+
+```sh
+T=docs/media/hyperframes/teaser
+node docs/media/hyperframes/presentation/narrate.mjs "$(mktemp -d)" $T   # only when a line changed
+node docs/media/hyperframes/presentation/compose.mjs $T
+node --experimental-strip-types --test docs/media/test/teaser.test.ts
+```
+
+The test checks that the lines are the accepted table's, in order; that the
+English caption of every shot (the default of its variable) and its Spanish
+subtitle (`captions.es.json`) are the script's; the narration cache; that it
+runs on the motion engine alone; that every screen exists in `docs/assets`;
+and that it lasts 60 to 90 s.
+
+| time | kind | on screen | line |
+| --- | --- | --- | --- |
+| 0.0–8.0 s | intro | the 3D seal, «Jh*on*», «Coding agents write fast. / What can you *trust?*» | Coding agents write fast. The question is what you can trust. |
+| 8.0–15.4 s | card (band) | Jhon lets the agent run: One thing of every change: *evidence.* | Jhon lets the agent run, and asks one thing of every change: evidence. |
+| 15.4–23.3 s | proof | `executions-red-green.png`: the failing run → (pan) the passing run → its record | A test that failed first, then passed. Recorded, not claimed. |
+| 23.3–31.1 s | proof | `ldd-flow.svg` (its two rows): the slice commit, «Tested tree» → delivery | Only the tree that was tested is delivered. |
+| 31.1–40.2 s | proof (band) | `guard-refusal.png`: the tool card's refusal → the engine's whole reason | Guards stop only what can't be undone: a destructive command, a write outside the project. |
+| 40.2–45.5 s | card | Everything else: Runs free, *inside a sandbox.* | Everything else runs free, inside a sandbox. |
+| 45.5–53.4 s | proof | `agents-launch-context.svg`, close on its Prism review: the box → the four facets → challenger → arbiter | Risky changes get the Prism review: four facets, a challenger, an arbiter. |
+| 53.4–61.2 s | proof | `audit.png`: `(claude-code 2.1.304)` → `jhon audit <session>` → the session | Claude Code or pi. Your model. And an audit of every session. |
+| 61.2–73.3 s | close (band) | the seal; the tagline; the install line; github.com/jachavarro2004/jhon-agent | Jhon. Let the agent run. Deliver only what is proven. |
+
+Rendered with the presentation's flags (below), from `teaser/`, without
+`HYPERFRAMES_RENDER_DETACHED` (each render takes about 4m 10s): the English
+one as is, the Spanish one with `--variables-file "$T/captions.es.json"
+--strict-variables`. Measured: 2,198 frames, 73.27 s, H.264 High 1920×1080
+30 fps, AAC LC 48 kHz stereo; English 5,297,223 bytes, Spanish 5,307,302
+bytes, the same decoded audio (MD5 `abfb6a1a…`). **Two renders of the English
+teaser are byte-identical** (sha256 `84a84f7f…b0110f7f`).
+
+Limits: the guards' proof shows a write outside a writer's edit surfaces
+(the one refusal captured), not a destructive command nor a write outside the
+project; the audit's proof shows a Claude Code session only (no pi session is
+captured, and nothing on screen names the model); the sandbox has no capture,
+so it is a card.
 
 ## Render
 
