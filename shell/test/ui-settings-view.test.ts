@@ -78,7 +78,7 @@ test("Settings is G's Customization card: `Settings … esc`, CATEGORIES │ `<C
 		assert.doesNotMatch(text, /Double Esc|Jhon panel/, "only the selected category's settings");
 		assert.match(text, /│ Preview · full · static animation sample +│/);
 		assert.match(text, /│ ◆ ◈ ◇ ◈ Working… +│/);
-		assert.match(footer(settings, width), /^│ Click · ←\/→ or Tab panes · ↑\/↓ move · Enter apply · Esc close +│$/);
+		assert.match(footer(settings, width), /^│ Click · ←\/→ or Tab panes · ↑\/↓ moves · Enter applies · Esc closes +│$/);
 		assert.match(lines.at(-3)!, /^│ +│$/);
 		assert.match(lines.at(-1)!, /^╰─+╯$/);
 		for (const line of settings.render(width)) assert.equal(visibleWidth(line), width, `${width}: ${stripAnsi(line)}`);
@@ -119,7 +119,7 @@ test("G's keys: ↑/↓ (j/k) wrap through the categories; →, Tab, Enter or Sp
 	assert.match(plainLines(settings).join("\n"), /▸ Appearance/);
 	for (const into of [RIGHT, TAB, ENTER, " "]) {
 		settings.handleInput(into);
-		assert.match(footer(settings), /^│ Click · ↑\/↓ settings · ←\/→ change · Tab categories · Esc close +│$/, "a setting focused");
+		assert.match(footer(settings), /^│ Click · ↑\/↓ setting · ←\/→ changes it · Tab categories · Esc closes +│$/, "a setting focused");
 		settings.handleInput(TAB);
 		assert.match(footer(settings), /Tab panes/);
 	}
@@ -156,7 +156,7 @@ test("Enter on a free value edits it in place, in the Preview's rows: typing, ba
 	const { settings, applied, closed } = view({ group: "behaviour" });
 	settings.handleInput(DOWN);
 	settings.handleInput(ENTER);
-	assert.match(plainLines(settings).join("\n"), /│ Compact at \(%\): 60▏ +│\n│ Enter confirm · Esc cancel +│/);
+	assert.match(plainLines(settings).join("\n"), /│ Compact at \(%\): 60▏ +│\n│ Enter applies · Esc cancels +│/);
 	settings.handleInput(BACKSPACE);
 	type(settings, "5");
 	settings.handleInput(ENTER);
@@ -179,9 +179,9 @@ test("the Preview's headline is a focused setting's `<label> — <note>`, else `
 test(`under ${SETTINGS_TWO_PANES} columns the categories take the card until one is opened, as G's`, () => {
 	const { settings } = view();
 	const lines = plainLines(settings, 50);
-	assert.match(lines[2]!, /^│ Categories · choose a category → +│$/);
+	assert.match(lines[2]!, /^│ Categories · pick one → +│$/);
 	assert.match(lines[4]!, /^│ ▸ Appearance +│$/);
-	assert.match(footer(settings, 50), /^│ Click · ↑\/↓ categories · → open · Esc close +│$/);
+	assert.match(footer(settings, 50), /^│ Click · ↑\/↓ category · → opens it · Esc closes +│$/);
 	settings.handleInput(RIGHT);
 	const open = plainLines(settings, 50);
 	assert.match(open[2]!, /^│ Appearance · 1\/2 +│$/);
@@ -275,7 +275,7 @@ test("the real Settings at 186, 120, 80 and 60 columns: previews for animations,
 		assert.match(text, /Preview · alt\+j · what the key opens/, at);
 		assert.match(text, /alt\+j opens the LDD status\./, at);
 		text = open("appearance", 1);
-		assert.match(text, /Click · ↑\/↓ settings/, at, "a choice row's footer");
+		assert.match(text, /Click · ↑\/↓ setting /, at, "a choice row's footer");
 	}
 });
 

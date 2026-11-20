@@ -53,7 +53,7 @@ test("the rule-line prompt: native cursor, selection, replacement and mouse shar
 		editor.setText("abcd");
 		editor.handleInput("\x1b[D");
 		let rows = editor.render(80);
-		assert.match(rows[0], /^\x1b\[35m─ \x1b\[39m力 waiting for input/);
+		assert.match(rows[0], /^\x1b\[35m─ \x1b\[39m力 ready for you/);
 		assert.match(rows[1], /^› abc/, "the › mark in the theme's accent, not the border colour (T15.12c)");
 		assert.equal(visibleWidth(rows[1].split(CURSOR_MARKER)[0]), 5);
 		// pi-tui 1.4.0 marks the fake cursor with APC markers (no SGR reset).

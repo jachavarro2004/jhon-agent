@@ -148,8 +148,8 @@ test("ask_user's view is wrapped in G's native fullscreen interaction: keys and 
 	assert.deepEqual(outcome, { ok: true, text: "The owner answered:\n- Which route? → B" }, "the click picked B");
 });
 
-test("the typed-answer row reads as G's: «Type something.»", () => {
-	assert.equal(OTHER, "Type something.");
+test("the typed-answer row reads «Write my own answer.»", () => {
+	assert.equal(OTHER, "Write my own answer.");
 });
 
 test("a UI without ui.custom asks through pi's select dialog", async () => {

@@ -9,7 +9,7 @@ import { SessionChanges, readChangeSnapshot, sameSnapshot, textSnapshot,
 
 interface Pending { sessionId: string; inputPath: string; path: string; root: string; relativePath: string; before: ChangeSnapshot; toolName: string; evidence?: SessionChangeEvidence }
 const normalized = (text: string) => text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
-const unknown = (): ChangeSnapshot => ({ kind: "unavailable", reason: "Tool snapshots could not be verified; diff unavailable." });
+const unknown = (): ChangeSnapshot => ({ kind: "unavailable", reason: "No diff: the file's state before and after the tool could not be checked." });
 
 /**
  * Observe the session's own write/edit outcomes, never infer ownership from Git status or shell text.

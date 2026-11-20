@@ -523,7 +523,7 @@ export class SelectionEngine {
 	decorateBottomRule(baseRow: string, width: number, corner: string): string {
 		const n = this.selectionLength();
 		if (n <= 0) return baseRow;
-		const label = ` ${n} char${n === 1 ? "" : "s"} selected - Del deletes - Alt+a select all `;
+		const label = ` ${n} char${n === 1 ? "" : "s"} selected, Del deletes them, alt+a selects all `;
 		const labelWidth = visibleWidth(label);
 		if (labelWidth + visibleWidth(corner) + 1 >= width) return baseRow;
 		return `${truncateToWidth(baseRow, width - labelWidth - visibleWidth(corner), "")}${label}${corner}`;

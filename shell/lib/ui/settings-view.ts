@@ -252,7 +252,7 @@ export class SettingsView {
 		const height = Math.max(0, Math.min(MAX_HEIGHT, Math.floor(this.o.height())));
 		if (width < CARD_PADDING + 1 || height < 4) {
 			this.frame = undefined;
-			return Array.from({ length: Math.min(height, 2) }, (_, i) => truncateToWidth(i ? "Enlarge terminal" : TITLE, Math.max(0, width), ""));
+			return Array.from({ length: Math.min(height, 2) }, (_, i) => truncateToWidth(i ? "Terminal too small" : TITLE, Math.max(0, width), ""));
 		}
 		const inner = width - CARD_PADDING;
 		const category = this.category();
@@ -281,7 +281,7 @@ export class SettingsView {
 		};
 		const divider = glyph("side", ascii);
 		const join = (left: string, right: string) => leftWidth ? `${left}${" ".repeat(Math.max(0, leftWidth - visibleWidth(stripAnsi(left))))} ${paint(divider, 1, "border")} ${right}` : right;
-		const heading = navOnly ? "Categories · choose a category →" : `${category} · ${rows.length ? `${cursor + 1}/${rows.length}` : "empty"}`;
+		const heading = navOnly ? "Categories · pick one →" : `${category} · ${rows.length ? `${cursor + 1}/${rows.length}` : "empty"}`;
 		const lines: string[] = [""];
 		const hits: Hit[] = [];
 		const fgOnly = { fg: theme.fg.bind(theme) };
@@ -305,7 +305,7 @@ export class SettingsView {
 			} else {
 				const index = start + i;
 				const row = rows[index];
-				right = row ? this.settingLine(row, index, rightWidth, nameWidth, this.pane === "controls" && index === cursor, ascii, rightX, y, hits) : rows.length || i ? "" : paint("No settings available", rightWidth, "muted");
+				right = row ? this.settingLine(row, index, rightWidth, nameWidth, this.pane === "controls" && index === cursor, ascii, rightX, y, hits) : rows.length || i ? "" : paint("Nothing to set here", rightWidth, "muted");
 			}
 			lines.push(join(left, right));
 		}
@@ -313,7 +313,7 @@ export class SettingsView {
 			const field = `${focusedRow.label}: ${this.editing}${EDIT_CURSOR}`;
 			if (previewLines > 0) {
 				lines.push(paint(field, inner, "accent"));
-				if (previewLines > 1) lines.push(paint("Enter confirm · Esc cancel", inner, "muted"));
+				if (previewLines > 1) lines.push(paint("Enter applies · Esc cancels", inner, "muted"));
 			}
 		} else if (previewLines >= 3) {
 			const row = navOnly ? undefined : rows[cursor];
@@ -321,17 +321,17 @@ export class SettingsView {
 			let sample: { caption?: string; lines: string[] } | undefined;
 			try { sample = row?.preview?.(value, ascii); } catch { /* An unreadable sample is not shown. */ }
 			const held = row && this.pending?.row === row ? row.display?.(value) ?? value : undefined;
-			const headline = navOnly ? "→ controls · Esc close"
+			const headline = navOnly ? "→ the settings · Esc closes"
 				: held !== undefined ? `${row!.label} — ${held}: enter applies, esc drops it`
 				: focusedSetting?.note ? `${focusedSetting.label} — ${focusedSetting.note}`
 				: sample ? `Preview · ${[value, sample.caption].filter(Boolean).join(" · ")}`
-				: row?.note ? `Preview · ${value}` : "Preview unavailable";
+				: row?.note ? `Preview · ${value}` : "No preview";
 			lines.push("");
 			lines.push(paint(headline, inner, "accent"));
 			const body = navOnly ? [""] : [...(sample?.lines ?? []), ...(row?.note && !focusedSetting?.note ? [row.note] : [])];
-			if (!navOnly && !body.length) body.push("No read-only sample for this choice");
+			if (!navOnly && !body.length) body.push("This choice has no sample");
 			for (let i = 0; i < previewLines - 2; i++) lines.push(paint(body[i] ?? "", inner, "muted"));
-		} else if (previewLines === 1) lines.push(paint(navOnly ? "→ controls · Esc close" : "Preview omitted · enlarge terminal", inner, "muted"));
+		} else if (previewLines === 1) lines.push(paint(navOnly ? "→ the settings · Esc closes" : "No room for the preview", inner, "muted"));
 		if (showBottomGap) lines.push("");
 		if (showHeading) lines.push(paint(`Click · ${this.footer(navOnly, previewLines, focusedSetting !== undefined)}`, inner, "muted"));
 		// The top-right close hint mirrors Commands without consuming another row.
@@ -341,9 +341,9 @@ export class SettingsView {
 	}
 
 	private footer(navOnly: boolean, previewLines: number, setting: boolean): string {
-		if (navOnly) return "↑/↓ categories · → open · Esc close";
-		if (setting) return "↑/↓ settings · ←/→ change · Tab categories · Esc close";
-		return previewLines ? "←/→ or Tab panes · ↑/↓ move · Enter apply · Esc close" : "Preview omitted · ←/→ panes · ↑/↓ move · Enter apply · Esc close";
+		if (navOnly) return "↑/↓ category · → opens it · Esc closes";
+		if (setting) return "↑/↓ setting · ←/→ changes it · Tab categories · Esc closes";
+		return previewLines ? "←/→ or Tab panes · ↑/↓ moves · Enter applies · Esc closes" : "No preview room · ←/→ panes · ↑/↓ moves · Enter applies · Esc closes";
 	}
 
 	/** One setting with its values inline (● current, ○ other); too wide, the current value alone between arrows; a free value as text. */

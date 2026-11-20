@@ -1258,14 +1258,14 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	pi.registerTool({
 		name: "session_worktree_register",
 		renderShell: "self",
-		label: "Register session worktree",
+		label: "Add a session worktree",
 		description: "Add a worktree of this Git clone to the session: /jhon:changes then lists what changes there from now on, committed or not.",
 		parameters: { type: "object", required: ["path"], additionalProperties: false, properties: { path: { type: "string", description: "Worktree path to include in this session." } } } as never,
 		async execute(_id, params, _signal, _onUpdate, ctx) {
-			if (!registry || registry.sessionId !== ctx.sessionManager.getSessionId()) throw new Error("No active session worktree registry.");
+			if (!registry || registry.sessionId !== ctx.sessionManager.getSessionId()) throw new Error("This session has no worktree list yet.");
 			const root = registry.register((params as { path: string }).path, "explicit");
 			trackChangeRefresh(refreshChanges(ctx));
-			return { content: [{ type: "text", text: `Registered session worktree: ${root}` }], details: { root, sessionId: registry.sessionId } };
+			return { content: [{ type: "text", text: `${root} is now one of this session's worktrees.` }], details: { root, sessionId: registry.sessionId } };
 		},
 	});
 	// The Status card's LDD change: read at the start and after each turn,

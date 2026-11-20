@@ -70,7 +70,7 @@ test("profiles are tabs: name, mode icon, ★ on the default, + New last; the se
 	const lines = text().split("\n");
 	assert.match(lines[0]!, /^ current ⊙★ {2,}default ⊙ {2,}fast ⇄ {2,}\+ New $/);
 	assert.match(lines[1]!, /^━{12}─+$/, "the selected tab underlined, a rule under the rest");
-	assert.match(lines[2]!, /^current {2,}Used in this session\. Default for new sessions\. {2,}⊙ inline · ⇄ writer · w switches$/);
+	assert.match(lines[2]!, /^current {2,}This session runs on it\. New sessions start on it\. {2,}⊙ inline · ⇄ writer · w switches$/);
 	assert.ok(c.lines(plain, 96).every((l) => visibleWidth(l) <= 96));
 });
 
@@ -81,9 +81,9 @@ test("T120: the profile this session uses as its own carries ● on its tab whil
 	await flush();
 	const lines = text(120).split("\n");
 	assert.match(lines[0]!, /^ current ⊙★ {2,}default ⊙ {2,}fast ⇄● {2,}\+ New $/);
-	assert.match(lines[2]!, /^current {2,}Default for new sessions\. {2,}⊙ inline · ⇄ writer · w switches · ● this session only$/);
+	assert.match(lines[2]!, /^current {2,}New sessions start on it\. {2,}⊙ inline · ⇄ writer · w switches · ● this session only$/);
 	await keys(RIGHT, RIGHT);
-	assert.match(text(120).split("\n")[2]!, /^fast {2,}Used in this session\. /);
+	assert.match(text(120).split("\n")[2]!, /^fast {2,}This session runs on it\. /);
 	assert.match(text(120, true).split("\n")[0]!, /fast =@/, "ASCII");
 	assert.match(c.keys().map((k) => k.join(" ")).join("  "), /^←→ profile {2}↑↓ agent {2}enter model {2}e effort {2}w mode {2}s save {2}u use$/);
 	// The session's profile is the default (after a d): no mark, and both sentences.
@@ -164,7 +164,7 @@ test("u uses the profile in this session, d makes it the default", async () => {
 	await flush();
 	await keys(c, RIGHT, RIGHT, "u");
 	assert.deepEqual(calls, ["useNow fast"]);
-	assert.match(text(), /\nfast {2,}Used in this session\./);
+	assert.match(text(), /\nfast {2,}This session runs on it\./);
 	await keys(c, "d");
 	assert.deepEqual(calls, ["useNow fast", "makeDefault fast"]);
 	assert.match(text().split("\n")[0]!, /current ⊙ {2}default ⊙ {2}fast ⇄★/);

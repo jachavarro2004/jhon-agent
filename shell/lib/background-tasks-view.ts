@@ -49,8 +49,8 @@ const ROLE = { FRAME: "border", TITLE: "customMessageLabel", SELECTED: "accent",
 const REFRESH_MS = 1000;
 /** G's agents view titles with its brand ❀; Jhon's brand is 力 (jhon in ASCII). */
 const TITLE_GLYPH = (ascii: boolean) => (ascii ? "jhon" : "力");
-const EMPTY_LIST = "no tasks yet";
-const EMPTY_THREAD = "Select a task to inspect its thread";
+const EMPTY_LIST = "nothing started yet";
+const EMPTY_THREAD = "Pick a row to read its thread";
 /** A job with no output, or a sub-agent with no activity, yet (L345). */
 const NO_OUTPUT = "no output yet";
 const FOLLOW_BUTTON = "[ Follow ]";
@@ -370,7 +370,7 @@ export class TasksView {
 			if (control.enabled) buttons.push({ x, width: control.label.length, press: control.press });
 			text += control.enabled ? theme.fg(this.hoveredButton === `${y}:${x}` ? HOVER_ROLE : ROLE.KEY, control.label) : theme.fg(ROLE.META, control.label);
 		}
-		const keys: Array<[string, string]> = [["j/k", "task"], ...(layout.mode !== "panes" && task ? [["tab", this.details ? "back" : "details"] as [string, string]] : []), ["ctrl+j/k", "scroll"], ["f", "follow"], ...(task?.status === "running" ? [["s", "Stop selected"] as [string, string]] : []),
+		const keys: Array<[string, string]> = [["j/k", "task"], ...(layout.mode !== "panes" && task ? [["tab", this.details ? "back" : "details"] as [string, string]] : []), ["ctrl+j/k", "scroll"], ["f", "follow"], ...(task?.status === "running" ? [["s", "stop it"] as [string, string]] : []),
 			...(this.agents() ? [["a", this.scope === "session" ? SCOPE_LABEL.all : SCOPE_LABEL.session] as [string, string]] : []), ...(canOpen(task) ? [["o", "open session"] as [string, string]] : []), ["esc", "back"], ["q", "close"]];
 		const keyText = keys.map(([key, label]) => `${theme.fg(ROLE.KEY, key)} ${theme.fg(ROLE.KEY_TEXT, label)}`).join("   ");
 		if (visibleWidth(text) + 1 < width) text += " " + truncateToWidth(keyText, width - visibleWidth(text) - 1, "…");

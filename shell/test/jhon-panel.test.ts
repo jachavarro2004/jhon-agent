@@ -55,7 +55,7 @@ test("Profiles shows the profiles as tabs with the default starred, the chosen o
   panel.open();
   await flush();
   let text = panel.render(80).join("\n");
-  assert.match(text, /^╭─+╮\n│ {2}default ⊙★ {2}jhon ⊙ {2}\+ New +│\n│ ━+─+ │\n│ default {3}Used in this session\. Default for new sessions\./, "near full screen, the profiles as tabs (L695)");
+  assert.match(text, /^╭─+╮\n│ {2}default ⊙★ {2}jhon ⊙ {2}\+ New +│\n│ ━+─+ │\n│ default {3}This session runs on it\. New sessions start on it\./, "near full screen, the profiles as tabs (L695)");
   assert.match(text, /│ {3}worker +claude-bridge\/claude-opus-5-5 +medium +│/, "the chosen profile's models in pi");
   assert.doesNotMatch(text, /claude-code|claude-opus-5-5@/);
   panel.handleInput("\x1b[C");
@@ -452,11 +452,11 @@ test("the detail's keys act on its change: t runs its tests here, d opens the ch
   panel = make();
   panel.open();
   await flush();
-  editor = "No editor configured. Set $VISUAL or $EDITOR.";
+  editor = "No editor: set $VISUAL or $EDITOR.";
   panel.handleInput("o");
   assert.deepEqual(files, ["/p/acme/openspec/changes/abc-process-exercises/tasks.md"]);
   for (let i = 0; i < 40; i++) panel.handleInput("j");
-  assert.match(panel.render(120).join("\n"), /tasks\.md is \/p\/acme\/openspec\/changes\/abc-process-exercises\/tasks\.md: No editor configured\. Set \$VISUAL or \$EDITOR\./, "with no editor, its path");
+  assert.match(panel.render(120).join("\n"), /tasks\.md is \/p\/acme\/openspec\/changes\/abc-process-exercises\/tasks\.md: No editor: set \$VISUAL or \$EDITOR\./, "with no editor, its path");
   assert.equal(closed, 1, "with no editor the panel stays open");
 
   const none = new JhonPanel({ theme: plain, runtime: "pi", view: "change", load: async () => data("default"), use: async () => undefined, loadChange: async () => ({ change: null }), height: () => 66, ...noGrants,

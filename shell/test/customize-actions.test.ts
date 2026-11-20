@@ -85,5 +85,5 @@ test("an action row without confirm applies on enter at once, never opening an e
 	v.view.handleInput(DOWN);
 	v.view.handleInput(ENTER);
 	assert.deepEqual(v.applied, ["Reload now to defaults"]);
-	assert.doesNotMatch(v.text(), /Enter confirm · Esc cancel/);
+	assert.doesNotMatch(v.text(), /Enter applies · Esc cancels/);
 });

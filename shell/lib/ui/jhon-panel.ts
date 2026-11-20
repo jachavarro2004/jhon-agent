@@ -110,7 +110,7 @@ const MAX_HEIGHT = 24;
 /** Each view's title; the change view is LDD's (L174), never a "change" that could be git's. */
 const TITLES: Record<View, string> = { change: "LDD", grants: "Grants", profiles: "Profiles" };
 /** The full-screen views' title rows under their tab (G's profiles view): the change's name, or what the view holds. */
-const HEADINGS: Partial<Record<View, string>> = { profiles: "Models and profiles" };
+const HEADINGS: Partial<Record<View, string>> = { profiles: "Profiles and their models" };
 
 export class JhonPanel {
 	private readonly deps: JhonPanelDeps;

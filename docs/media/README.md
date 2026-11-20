@@ -19,7 +19,7 @@ rebuilds the images into `docs/assets/`:
 | asset | what |
 | --- | --- |
 | `brand/jhon-banner.gif` | the animated banner: the wordmark, one line saying what Jhon is, the LDD status typing itself |
-| `features/*.png` | the shell's views and the engine's real output: `shell-bar`, `ldd-status`, `agents-jobs`, `command-palette`, `changes`, `ldd-question`, `guard-refusal`, `route-refusal`, `executions-red-green`, `mode-grant`, `audit` |
+| `features/*.png` | the shell's views and the engine's real output: `shell-bar`, `ldd-status`, `agents-jobs`, `changes`, `ldd-question`, `guard-refusal`, `route-refusal`, `executions-red-green`, `mode-grant`, `audit` |
 
 Options: `--out <dir>` writes the same tree elsewhere; `--only features,banner`
 builds some parts. Two runs give byte-identical files (fixed clock and data,

@@ -64,7 +64,7 @@ test("the prompt in sections: a rule-line header with the petal and state, then 
 	assert.equal(layout.nativeWidth, 38);
 	const lines = framePromptLines(["─".repeat(38), "hello", "─".repeat(38)], 40, { state: PROMPT_STATE.IDLE, tick: 0, borderColor: (t) => t, fg: (_c, t) => t }, layout);
 	assert.deepEqual(lines.map((l) => visibleWidth(l)), [40, 40, 40]);
-	assert.equal(lines[0], `─ 力 waiting for input ${"─".repeat(17)}`, "力 is two cells");
+	assert.equal(lines[0], `─ 力 ready for you ${"─".repeat(21)}`, "力 is two cells");
 	assert.equal(lines[1], `› hello${" ".repeat(33)}`);
 	assert.equal(lines[2].trim(), "");
 	const working = framePromptLines(["─".repeat(38), "a", "b", "─".repeat(38)], 40, { state: PROMPT_STATE.QUEUED, tick: 1, borderColor: (t) => t, fg: (_c, t) => t }, layout);
@@ -86,11 +86,11 @@ test("a panel card (the todo card above the prompt) is G's: neon the outline wit
 	assert.equal(panelInnerWidth(withBackground({ fg: (_c: string, t: string) => t }), 50), 44, "float: two columns narrower than the outline's 46");
 });
 
-test("the rail sections name their state: LDD the route, AGENTS the count; an idle AGENTS is its header and `none running`, as G's (L165)", () => {
+test("the rail sections name their state: LDD the route, AGENTS the count; an idle AGENTS is its header and `no agent running` (L165)", () => {
 	const status = renderShellStatusSections(model({ ldd: { change: "my-change", route: "verified", slices: ["done", "current"], next: "apply" } as ShellBarModel["ldd"] }), plain, 50);
 	assert.match(status[0]!, /^▾ LDD +verified route$/);
 	assert.match(status[1]!, /^ {2}◆ my-change *$/, "the route is said once, in the header");
-	assert.deepEqual(renderShellAgentsSection([], plain, 50), ["▾ AGENTS" + " ".repeat(50 - 12) + "idle", "  none running · /jhon:agents".padEnd(50)], "G's idle AGENTS");
+	assert.deepEqual(renderShellAgentsSection([], plain, 50), ["▾ AGENTS" + " ".repeat(50 - 12) + "idle", "  no agent running · /jhon:agents".padEnd(50)], "the idle AGENTS");
 	const busy = renderShellAgentsSection([{ id: "a", kind: "agent", label: "x", startedAt: NOW }, { id: "b", kind: "agent", label: "y", startedAt: NOW }], plain, 50);
 	assert.match(busy[0]!, /^▾ AGENTS +2 running$/);
 });
@@ -129,7 +129,7 @@ test("STATUS in sections: one block per change, the header counting them, and no
 });
 
 test("JOBS hides while idle; AGENTS stays as G's idle row", () => {
-	assert.deepEqual(renderShellAgentsSection([], plain, 50), ["▾ AGENTS" + " ".repeat(50 - 12) + "idle", "  none running · /jhon:agents".padEnd(50)]);
+	assert.deepEqual(renderShellAgentsSection([], plain, 50), ["▾ AGENTS" + " ".repeat(50 - 12) + "idle", "  no agent running · /jhon:agents".padEnd(50)]);
 	assert.deepEqual(renderShellJobsSection([], plain, 50), []);
 });
 

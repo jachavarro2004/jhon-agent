@@ -450,12 +450,12 @@ test("the installed prompt says the Esc hints at its rule's right end and queued
 		assert.doesNotMatch(editor.render(80).join("\n"), /\x1b\[4\dm/, "the prompt paints no background");
 		editor.setText("draft");
 		editor.handleInput("\x1b");
-		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 waiting for input ─+ esc again to clear ─$/);
+		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 ready for you ─+ esc again clears it ─$/);
 		assert.equal(editor.render(80).at(-1), " ".repeat(80), "no hint row: G's blank last row");
 		for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
 		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 queued ─+$/);
 		editor.handleInput("\x1b");
-		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 queued ─+ esc again to cancel ─$/);
+		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 queued ─+ esc again stops it ─$/);
 	} finally { editor.dispose(); }
 });
 
@@ -487,11 +487,11 @@ test("shellUi takes over the prompt: pi's Working row hidden, the petal in its r
 	assert.equal(ui.workingVisible, false, "pi's own Working row must be hidden");
 	editor.focused = true;
 	const lines = editor.render(60).map(stripAnsi);
-	assert.match(lines[0], /^─ 力 waiting for input ─+$/);
+	assert.match(lines[0], /^─ 力 ready for you ─+$/);
 	assert.doesNotMatch(editor.render(60).join("\n"), /\x1b\[44m/, "prompt must not paint passive backgrounds");
-	assert.match(lines[1], /^› .*type, or \/ for commands/);
+	assert.match(lines[1], /^› .*write, or \/ for a command/);
 	editor.setText("hola");
-	assert.doesNotMatch(editor.render(60).map(stripAnsi)[1], /type, or/);
+	assert.doesNotMatch(editor.render(60).map(stripAnsi)[1], /write, or/);
 	editor.dispose();
 });
 
@@ -506,8 +506,8 @@ test("sections, the default: the prompt under a rule line, one status line at th
 	try {
 		editor.focused = true;
 		const lines = editor.render(60).map(stripAnsi);
-		assert.match(lines[0], /^─ 力 waiting for input ─+$/);
-		assert.match(lines[1], /^› .*type, or \/ for commands/);
+		assert.match(lines[0], /^─ 力 ready for you ─+$/);
+		assert.match(lines[1], /^› .*write, or \/ for a command/);
 		assert.ok(lines.every((line) => visibleWidth(line) === 60), lines.join("\n"));
 		editor.setText("hola");
 		assert.match(editor.render(60).map(stripAnsi)[1], /^› hola +$/);
@@ -630,7 +630,7 @@ test("without the rail the editor rule carries no [ Panel ], and a click at its 
 	const { ctx, ui, footer, editor, handlers } = narrowShell();
 	try {
 		const lines = editor.render(100).map(stripAnsi);
-		assert.match(lines[0]!, /^─ 力 waiting for input ─+$/);
+		assert.match(lines[0]!, /^─ 力 ready for you ─+$/);
 		editor.handleMouse({ type: "click", button: "left", x: 93, y: 0, width: 100, height: lines.length } as never);
 		assert.equal(ui.overlayView, undefined, "no sheet");
 	} finally { editor.dispose(); footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
@@ -646,7 +646,7 @@ test("without the rail running sub-agents and the todo list fold into the work r
 		state.parts.set("todo", { render: () => [], invalidate() {}, summary: () => ({ left: "◐ write the sheet", right: "1/3", rightLabel: "todos" }) } as never);
 		const lines = editor.render(100).map(stripAnsi);
 		assert.match(lines[0]!, /^ ▸ ◐ 1 agent +1\/3 todos $/, "agents lead, the todo count at the right");
-		assert.match(lines[1]!, /^─ 力 waiting for input ─+$/, "the rule under it, no [ Panel ] (T169)");
+		assert.match(lines[1]!, /^─ 力 ready for you ─+$/, "the rule under it, no [ Panel ] (T169)");
 		assert.equal(visibleWidth(lines[0]!), 100);
 		assert.equal(state.compactWork?.(), true, "the TODOS and AGENTS cards step aside");
 		assert.deepEqual(editor.handleMouse({ type: "click", button: "left", x: 3, y: 0, width: 100, height: lines.length } as never), { handled: true, render: true });
@@ -674,7 +674,7 @@ test("a regular (not fullscreen) terminal draws G's card prompt, neon without a 
 	try {
 		const rows = editor.render(100).map(stripAnsi);
 		assert.match(rows[0]!, /^╭─ 力 ─+╮$/);
-		assert.match(rows[1]!, /^│.*type, or \/ for commands.*│$/);
+		assert.match(rows[1]!, /^│.*write, or \/ for a command.*│$/);
 		assert.match(rows.at(-1)!, /^╰─+╯$/);
 		assert.doesNotMatch(rows.join("\n"), /Panel/);
 	} finally { editor.dispose(); }
@@ -755,7 +755,7 @@ test("an esc again hint leaves the screen when its window closes, with no key pr
 		editor.focused = true;
 		editor.setText("draft");
 		editor.handleInput("\x1b");
-		assert.match(stripAnsi(editor.render(80).join("\n")), /esc again to clear/);
+		assert.match(stripAnsi(editor.render(80).join("\n")), /esc again clears it/);
 		assert.equal(timers.length, 1);
 		now = timers[0]!.ms;
 		const before = renders;
@@ -816,7 +816,7 @@ test("shellUi shows working while the agent runs and queued when messages wait",
 	assert.match(stripAnsi(editor.render(60)[0]), /queued/, "low-level run end is not settled");
 	pending.value = false;
 	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 waiting for input ─+$/);
+	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 ready for you ─+$/);
 	editor.dispose();
 });
 
@@ -858,7 +858,7 @@ test("after 60 s with no stream event and no tool running, the working line says
 		assert.doesNotMatch(top(), /waiting/);
 		on("agent_settled");
 		now += 600_000;
-		assert.match(top(), /^─ 力 waiting for input ─+$/);
+		assert.match(top(), /^─ 力 ready for you ─+$/);
 		// The next turn starts its own count.
 		on("agent_start");
 		assert.match(top(), /^─ 力 working… ─+$/);
@@ -1307,7 +1307,7 @@ test("double-esc-cancel default off: a single Esc while working still aborts imm
 	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
 	editor.handleInput("\x1b");
 	assert.equal(aborted, 1);
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to cancel/);
+	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again stops it/);
 	editor.dispose();
 });
 
@@ -1397,7 +1397,7 @@ test("double-esc-cancel enabled: the first Esc while working is swallowed and sh
 	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
 	editor.handleInput("\x1b");
 	assert.equal(aborted, 0, "the first Esc must be swallowed, not aborted");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again to cancel/);
+	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again stops it/);
 	editor.dispose();
 });
 
@@ -1416,7 +1416,7 @@ test("double-esc-cancel enabled: a second Esc within the window falls through an
 	now += 500;
 	editor.handleInput("\x1b");
 	assert.equal(aborted, 1, "the second Esc within the window must fall through to abort");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to cancel/);
+	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again stops it/);
 	editor.dispose();
 });
 
@@ -1435,7 +1435,7 @@ test("double-esc-cancel enabled: an Esc after the window expires is a fresh firs
 	now += 1001;
 	editor.handleInput("\x1b");
 	assert.equal(aborted, 0, "the window expired, so this must be treated as a new first press");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again to cancel/);
+	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again stops it/);
 	editor.dispose();
 });
 
@@ -1462,7 +1462,7 @@ test("double-esc-cancel enabled: Esc while autocomplete is visible bypasses this
 	(editor as unknown as { isShowingAutocomplete(): boolean }).isShowingAutocomplete = () => true;
 	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
 	editor.handleInput("\x1b");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to cancel/, "autocomplete must bypass the gate, matching CustomEditor's own guard");
+	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again stops it/, "autocomplete must bypass the gate, matching CustomEditor's own guard");
 	editor.dispose();
 });
 
@@ -1640,7 +1640,7 @@ test("working cancel: a failing sendUserMessage on settle is reported, not throw
 	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
 	assert.ok(ui.notices.some((notice) => /session is switching/.test(notice)), "the failure surfaces as a notice");
 	assert.equal(editor.getText(), "follow up\n\ndraft reply", "the queued text is put back in front of the draft, exactly as Pi's own restore would have left it");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to cancel/, "the prompt is idle again");
+	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again stops it/, "the prompt is idle again");
 	editor.dispose();
 });
 
@@ -1677,7 +1677,7 @@ test("working cancel: agent_settled never sends while another turn is still in f
 	editor.onEscape = () => { aborted++; };
 	editor.handleInput("\x1b");
 	assert.equal(aborted, 1, "a run is still in flight, so the prompt stays working and Esc takes the cancel path");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to clear/, "not the idle clear");
+	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "not the idle clear");
 	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
 	assert.deepEqual(sentMessages.map((m) => m.content), ["follow up"]);
 	editor.dispose();
@@ -1752,7 +1752,7 @@ test("idle draft: the first Esc shows the clear hint and keeps the text", (t) =>
 	editor.handleInput("\x1b");
 	assert.equal(aborted, 0, "the first Esc must be swallowed, not passed to Pi's own idle handler");
 	assert.equal(editor.getText(), "draft reply");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again to clear/);
+	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again clears it/);
 	editor.dispose();
 });
 
@@ -1770,7 +1770,7 @@ test("idle draft: a second Esc within the window adds the draft to history and c
 	editor.handleInput("\x1b");
 	assert.deepEqual(history, ["draft reply"]);
 	assert.equal(editor.getText(), "");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to clear/);
+	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/);
 	editor.dispose();
 });
 
@@ -1785,7 +1785,7 @@ test("idle draft: an Esc after the window expires is a fresh first press, not a 
 	now += 501;
 	editor.handleInput("\x1b");
 	assert.equal(editor.getText(), "draft reply", "the window expired, so this is a new first press, not a clear");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again to clear/);
+	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again clears it/);
 	editor.dispose();
 });
 
@@ -1810,7 +1810,7 @@ test("idle draft: Esc while autocomplete is visible bypasses the idle-clear gate
 	(editor as unknown as { isShowingAutocomplete(): boolean }).isShowingAutocomplete = () => true;
 	editor.handleInput("\x1b");
 	assert.equal(editor.getText(), "draft reply", "autocomplete cancel must never clear the draft");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to clear/, "autocomplete must bypass the idle-clear gate, matching CustomEditor's own guard");
+	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "autocomplete must bypass the idle-clear gate, matching CustomEditor's own guard");
 	editor.dispose();
 });
 
@@ -1823,7 +1823,7 @@ test("working state: a non-empty draft's Esc is decided by the working-cancel ga
 	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
 	editor.onEscape = () => { editor.setText(editor.getText()); };
 	editor.handleInput("\x1b");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to clear/, "working must never show the idle-clear hint");
+	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "working must never show the idle-clear hint");
 	editor.dispose();
 });
 
@@ -1836,11 +1836,11 @@ test("idle draft: editing the text between two Esc presses starts a fresh clear 
 	editor.setText("draft reply");
 	editor.handleInput("\x1b");
 	editor.setText("draft reply, edited");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to clear/, "the edit invalidates the pending clear, so the hint goes away with it");
+	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "the edit invalidates the pending clear, so the hint goes away with it");
 	now += 400;
 	editor.handleInput("\x1b");
 	assert.equal(editor.getText(), "draft reply, edited", "an edit invalidates the earlier snapshot, so this must not clear");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again to clear/, "the edit starts a fresh first press, with its own hint");
+	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "the edit starts a fresh first press, with its own hint");
 	now += 400;
 	editor.handleInput("\x1b");
 	assert.equal(editor.getText(), "", "the fresh window's own second Esc, on the unchanged edited text, does clear");
@@ -1879,11 +1879,11 @@ test("idle draft: selection-only input and same-character replacement cancel pen
 			editor.handleInput("\x1b");
 			for (const input of inputs) editor.handleInput(input);
 			assert.equal(editor.getText(), "x", "selection or same-character replacement leaves the draft unchanged");
-			assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to clear/);
+			assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/);
 			now += 400;
 			editor.handleInput("\x1b");
 			assert.equal(editor.getText(), "x", "intervening input must make this a fresh first Esc");
-			assert.match(stripAnsi(editor.render(60).join("\n")), /esc again to clear/);
+			assert.match(stripAnsi(editor.render(60).join("\n")), /esc again clears it/);
 			now += 501;
 		}
 	} finally { editor.dispose(); }
@@ -1900,7 +1900,7 @@ test("idle draft: a bash-mode draft's Esc bypasses the idle-clear gate entirely"
 	editor.handleInput("\x1b");
 	assert.equal(aborted, 1, "a bash-mode draft's first Esc must reach Pi's own bash-mode onEscape, which clears bash mode");
 	assert.equal(editor.getText(), "!ls", "this gate never touches bash-mode text; Pi's own onEscape owns it");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again to clear/, "bash mode must bypass the idle-clear gate, matching Pi's own bash-mode Esc");
+	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "bash mode must bypass the idle-clear gate, matching Pi's own bash-mode Esc");
 	editor.dispose();
 });
 
@@ -1952,7 +1952,7 @@ test("the Double Esc setting updates the in-memory policy so an already-installe
 	await setViaSettings(commands, ctx, ui, "Double Esc", "on");
 	editor.handleInput("\x1b");
 	assert.equal(aborted, 1, "now on: the same prompt instance must swallow the first Esc instead of aborting");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again to cancel/);
+	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again stops it/);
 	editor.dispose();
 });
 
@@ -2352,7 +2352,7 @@ test("session_worktree_register still registers a worktree of the session's clon
  await fire(s.handlers,"session_start",ctx);
  const register=s.tools.get("session_worktree_register")!;
  const result=await register.execute("r",{path:linked},undefined,undefined,ctx) as { content: Array<{ text: string }>; details: unknown };
- assert.deepEqual(result,{content:[{type:"text",text:`Registered session worktree: ${linked}`}],details:{root:linked,sessionId:"shell-session"}});
+ assert.deepEqual(result,{content:[{type:"text",text:`${linked} is now one of this session's worktrees.`}],details:{root:linked,sessionId:"shell-session"}});
  await register.execute("again",{path:linked},undefined,undefined,ctx);
  const head=s.git(s.repo,"rev-parse","HEAD");
  assert.deepEqual(s.registrations(ctx),[{sessionId:"shell-session",root:s.repo,evidence:"session:cwd",base:head},{sessionId:"shell-session",root:linked,evidence:"explicit",base:head}]);
@@ -2369,7 +2369,7 @@ test("a worktree of another clone is still refused, and registers nothing", asyn
  s.git(s.dir,"init","-q",other);
  const {ctx}=s.session();
  await fire(s.handlers,"session_start",ctx);
- await assert.rejects(s.tools.get("session_worktree_register")!.execute("r",{path:other},undefined,undefined,ctx),/Select an existing worktree in the same Git clone as this session\./);
+ await assert.rejects(s.tools.get("session_worktree_register")!.execute("r",{path:other},undefined,undefined,ctx),/Name a worktree that exists in this session's own Git clone;/);
  assert.deepEqual(s.registrations(ctx).map((entry) => entry.root),[s.repo]);
  await fire(s.handlers,"session_shutdown",ctx);
 });
@@ -2417,12 +2417,12 @@ test("explicit registration validates the clone, and a clean registered root sho
 	const manager = ctx.sessionManager;
 	await fire(handlers, "session_start", ctx);
 	const register = tools.get("session_worktree_register")!;
-	await assert.rejects(register.execute("before", { path: "/repo" }, undefined, undefined, ctx), /same Git clone/);
+	await assert.rejects(register.execute("before", { path: "/repo" }, undefined, undefined, ctx), /own Git clone/);
 	bootstrapped = true;
 	await register.execute("after", { path: "/repo" }, undefined, undefined, ctx);
 	await register.execute("dedup", { path: "/repo" }, undefined, undefined, ctx);
-	await assert.rejects(register.execute("foreign", { path: "/foreign" }, undefined, undefined, ctx), /same Git clone/);
-	await assert.rejects(register.execute("foreign", { path: "/foreign" }, undefined, undefined, ctx), /subagent_run with repository_root/);
+	await assert.rejects(register.execute("foreign", { path: "/foreign" }, undefined, undefined, ctx), /own Git clone/);
+	await assert.rejects(register.execute("foreign", { path: "/foreign" }, undefined, undefined, ctx), /another repository cannot be one of its worktrees/);
 	assert.equal(ctx.sessionManager, manager);
 	assert.equal(ctx.sessionManager.getEntries().length, 1);
 	await commands.get("jhon:changes")!.handler("", ctx);
@@ -2520,7 +2520,7 @@ test("openInExternalEditor stops the TUI around the editor and honors $VISUAL ov
 	}) as typeof import("node:child_process").spawnSync;
 	assert.equal(openInExternalEditor(host, "lib/a.ts", { VISUAL: "nvim -u none", EDITOR: "vi" }, spawn), undefined);
 	assert.deepEqual(events, ["stop", 'spawn:sh -c nvim -u none "$@" nvim -u none lib/a.ts', "start", "render:true"]);
-	assert.equal(openInExternalEditor(host, "lib/a.ts", {}, spawn), "No editor configured. Set $VISUAL or $EDITOR.");
+	assert.equal(openInExternalEditor(host, "lib/a.ts", {}, spawn), "No editor: set $VISUAL or $EDITOR.");
 });
 
 test("the editor command is read by the shell, so quotes and spaces work, and its failure is reported", { skip: process.platform === "win32" }, () => {
@@ -3454,7 +3454,7 @@ test("/jhon:customize keys opens Customize on Keys", async (t) => {
 	assert.match(text, /│ ▸ Keys +│/);
 	assert.match(text, /▸ LDD status +alt\+j/);
 	assert.doesNotMatch(text, /Animations|Runtimes|Integrations|Profile/);
-	assert.match(lines.at(-2)!, /Click · ←\/→ or Tab panes · ↑\/↓ move · Enter apply · Esc close/, "G's footer");
+	assert.match(lines.at(-2)!, /Click · ←\/→ or Tab panes · ↑\/↓ moves · Enter applies · Esc closes/, "the footer");
 });
 
 // T15.8 (L98), T15.12d: a click on a rail section's header folds it to that

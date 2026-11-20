@@ -85,7 +85,7 @@ test("framePromptLines draws the rule-line header, the › rows and G's blank la
 	const lines = framePromptLines(editorLines(width), width, options({ fg: (_c, t) => t }));
 	assert.equal(lines.length, 3);
 	for (const line of lines) assert.equal(visibleWidth(line), width, `line "${stripAnsi(line)}" is not ${width} wide`);
-	assert.match(stripAnsi(lines[0]), /^─ 力 waiting for input ─+$/);
+	assert.match(stripAnsi(lines[0]), /^─ 力 ready for you ─+$/);
 	assert.match(stripAnsi(lines[1]), /^› /);
 	assert.equal(lines[2], " ".repeat(width), "the last row is blank, as the Gentle Shell's");
 	const narrow = framePromptLines(["─", " ", "─"], 3, options({ fg: (_c, t) => t })).map(stripAnsi);
@@ -94,20 +94,20 @@ test("framePromptLines draws the rule-line header, the › rows and G's blank la
 
 test("framePromptLines paints the rule with the editor border color, the petal with the state tone and the › mark in the accent, bold, as the Gentle Shell's (T15.12c)", () => {
 	const lines = framePromptLines(editorLines(40), 40, options({ borderColor: (text) => `[b]${text}[/b]`, bold: (text) => `*${text}*` }));
-	assert.match(lines[0], /^\[b\]─ \[\/b\]<borderAccent>\*力\*<\/borderAccent> <muted>waiting for input<\/muted> \[b\]─+\[\/b\]\[b\]─\[\/b\]$/);
+	assert.match(lines[0], /^\[b\]─ \[\/b\]<borderAccent>\*力\*<\/borderAccent> <muted>ready for you<\/muted> \[b\]─+\[\/b\]\[b\]─\[\/b\]$/);
 	assert.match(lines[1], /^<accent>\*›\*<\/accent> /);
 });
 
 // T169 (L1438): the panel sheet is gone, and the rule's [ Panel ] button with it.
 test("framePromptLines draws the panel editor's rule with no [ Panel ], idle, working and with a hint, every line at width (T169)", () => {
 	const plain = framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t })).map(stripAnsi);
-	assert.match(plain[0]!, /^─ 力 waiting for input ─+$/);
+	assert.match(plain[0]!, /^─ 力 ready for you ─+$/);
 	for (const width of [10, 14, 20, 40, 60, 100]) {
 		for (const line of framePromptLines(editorLines(Math.max(10, width)), width, options({ fg: (_c, t) => t }))) assert.equal(visibleWidth(line), width, `${width}: ${stripAnsi(line)}`);
 	}
 	assert.match(framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t, state: PROMPT_STATE.WORKING })).map(stripAnsi)[0]!, /^─ \S working… ─+$/);
-	const hinted = framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t, escHint: "esc again to clear" })).map(stripAnsi);
-	assert.match(hinted[0]!, /^─ 力 waiting for input ─+ esc again to clear ─$/);
+	const hinted = framePromptLines(editorLines(60), 60, options({ fg: (_c, t) => t, escHint: "esc again clears it" })).map(stripAnsi);
+	assert.match(hinted[0]!, /^─ 力 ready for you ─+ esc again clears it ─$/);
 	assert.equal(hinted[2], " ".repeat(60));
 	assert.equal("PANEL_BUTTON" in prompt, false, "no [ Panel ] button to draw");
 });
@@ -160,10 +160,10 @@ test("framePromptLines shows an explicit escHint (esc again) at the rule's right
 	const lines = framePromptLines(
 		["─".repeat(inner), ` x${" ".repeat(inner - 2)}`, bottom],
 		width,
-		options({ fg: (_c, t) => t, escHint: "esc again to cancel" }),
+		options({ fg: (_c, t) => t, escHint: "esc again stops it" }),
 	);
 	assert.equal(stripAnsi(lines[0]), "─".repeat(width), "as G's panelPromptRule: when label and hint do not fit, the rule blanks (no clipping)");
-	assert.match(stripAnsi(framePromptLines(["─".repeat(78), ` x${" ".repeat(76)}`, "─".repeat(78)], 80, options({ fg: (_c, t) => t, escHint: "esc again to cancel" }))[0]!), /^─ 力 waiting for input ─+ esc again to cancel ─$/);
+	assert.match(stripAnsi(framePromptLines(["─".repeat(78), ` x${" ".repeat(76)}`, "─".repeat(78)], 80, options({ fg: (_c, t) => t, escHint: "esc again stops it" }))[0]!), /^─ 力 ready for you ─+ esc again stops it ─$/);
 	assert.equal(lines[2], " ".repeat(width), "no hint row of its own");
 	for (const line of lines) assert.equal(visibleWidth(line), width);
 });
@@ -181,7 +181,7 @@ test("outside the fullscreen chrome the prompt is G's card: neon a rounded frame
 	const float = frame(editorLines(40), 40, options({ fg: plain, bg, escHint: "esc again" }), layout);
 	assert.equal(float.length, 3);
 	for (const line of float) assert.equal(visibleWidth(line), 40);
-	assert.match(stripAnsi(float[0]!), /^ ▎ 力 waiting for input · esc again +$/);
+	assert.match(stripAnsi(float[0]!), /^ ▎ 力 ready for you · esc again +$/);
 	assert.match(stripAnsi(float[1]!), /^ ▎ /);
 	assert.match(float[1]!, /\x1b\[48;5;236m/, "the float rows are tinted");
 	assert.equal(resolvePromptLayout(40, "float").background, "", "no theme background: the neon frame");
@@ -190,9 +190,9 @@ test("outside the fullscreen chrome the prompt is G's card: neon a rounded frame
 test("withPromptHint places a dim hint after the cursor on an empty editor line", () => {
 	const inner = 38;
 	const line = ` ${CURSOR}${" ".repeat(inner - 2)}`;
-	const hinted = withPromptHint(line, "type, or / for commands", (color, text) => `<${color}>${text}</${color}>`);
-	assert.match(hinted, /\x1b\[7m \x1b\[0m <dim>type, or \/ for commands<\/dim> +$/);
-	const hintedPlain = withPromptHint(line, "type, or / for commands", (_c, t) => t);
+	const hinted = withPromptHint(line, "write, or / for a command", (color, text) => `<${color}>${text}</${color}>`);
+	assert.match(hinted, /\x1b\[7m \x1b\[0m <dim>write, or \/ for a command<\/dim> +$/);
+	const hintedPlain = withPromptHint(line, "write, or / for a command", (_c, t) => t);
 	assert.equal(visibleWidth(hintedPlain), inner);
 });
 
@@ -200,14 +200,14 @@ test("withPromptHint finds pi-tui 1.4.0's fake cursor, marked with APC sequences
 	const inner = 40;
 	const cursor = "\x1b_pi:c\x07\x1b_pi:fc\x07 \x1b_pi:/fc\x07";
 	const line = ` ${cursor}${" ".repeat(inner - 2)}`;
-	const hinted = withPromptHint(line, "type, or / for commands", (_c, t) => t);
-	assert.ok(hinted.endsWith(`\x1b_pi:/fc\x07 type, or / for commands${" ".repeat(inner - 2 - 24)}`), JSON.stringify(hinted));
+	const hinted = withPromptHint(line, "write, or / for a command", (_c, t) => t);
+	assert.ok(hinted.endsWith(`\x1b_pi:/fc\x07 write, or / for a command${" ".repeat(inner - 2 - 26)}`), JSON.stringify(hinted));
 	assert.equal(visibleWidth(hinted), inner);
 });
 
 test("withPromptHint leaves the line alone when the hint does not fit", () => {
 	const line = ` ${CURSOR}${" ".repeat(6)}`;
-	const hinted = withPromptHint(line, "type, or / for commands", (_c, t) => t);
+	const hinted = withPromptHint(line, "write, or / for a command", (_c, t) => t);
 	assert.equal(hinted, line);
 });
 

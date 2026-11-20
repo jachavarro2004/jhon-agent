@@ -15,8 +15,6 @@ import { SHELL } from "./paths.ts";
 import { ShellSettings, installShellSettings } from "../../shell/lib/settings.ts";
 import { renderShellStatusBar, renderShellTitleRows, renderShellStatusSections, renderShellAgentsSection, renderShellJobsSection, type ShellBarModel, type ShellBarTheme } from "../../shell/lib/ui/shell-bar.ts";
 import { lddFromStatus } from "../../shell/lib/ui/ldd-status.ts";
-import { CommandPalette } from "../../shell/lib/ui/command-palette.ts";
-import { buildCommandPaletteGroups } from "../../shell/lib/ui/command-palette-catalog.ts";
 import { ChangesView } from "../../shell/lib/ui/shell-changes-view.ts";
 import { CHANGE_STATUS, changesModel, type ChangedFile } from "../../shell/lib/ui/shell-changes.ts";
 import { AskView } from "../../shell/lib/ui/ask-view.ts";
@@ -79,19 +77,6 @@ const JOBS: NonNullable<ShellBarModel["jobs"]> = [
   { id: "agent-3", kind: "agent", label: "reviewer: slice 1", startedAt: NOW - 900_000, endedAt: NOW - 30_000, status: "completed", exitCode: 0 },
   { id: "job-1", kind: "command", label: "go test ./... -run Export", startedAt: NOW - 41_000 },
   { id: "job-2", kind: "monitor", label: "watch: tail -f logs/export.log", startedAt: NOW - 600_000 },
-];
-
-const COMMANDS = [
-  { name: "jhon:customize", description: "Customize: the shell's settings" },
-  { name: "jhon:profile", description: "Model profiles: opens them, or list, show [<name>], use <name>" },
-  { name: "jhon:grants", description: "The grants for this project: give, revoke, duration" },
-  { name: "jhon:changes", description: "Browse the files this session changed and their diffs" },
-  { name: "jhon:agents", description: "Agents: sub-agents and their live threads; a shows every session's" },
-  { name: "jhon:jobs", description: "Jobs: this session's background commands and monitors, running first" },
-  { name: "jhon:usage", description: "Every configured provider's subscription usage windows and resets; r refreshes" },
-  { name: "jhon:panel", description: "The Jhon panel: change, tests, grants, profiles" },
-  { name: "jhon:status", description: "The LDD status of the session's change, or the one named" },
-  { name: "jhon:dashboard", description: "Opens this session's audit in the dashboard, starting it if needed" },
 ];
 
 const file = (path: string, added: number, deleted: number, status: ChangedFile["status"] = CHANGE_STATUS.MODIFIED): ChangedFile => ({ path, added, deleted, status });
@@ -217,13 +202,7 @@ export async function captures(theme: MediaTheme): Promise<Capture[]> {
     lines: [...renderShellAgentsSection(JOBS, theme, rail, NOW), "", ...renderShellJobsSection(JOBS, theme, rail, NOW)],
   });
 
-  const palette = new CommandPalette(buildCommandPaletteGroups(COMMANDS, { "jhon:changes": "alt+c", "jhon:agents": "alt+s", "jhon:panel": "alt+j" }), () => {}, theme, () => 30);
-  palette.handleInput("\x1b[B");
-  palette.handleInput("\x1b[B");
-  palette.handleInput("\x1b[B");
   const pw = 84;
-  out.push({ name: "command-palette", title: "command palette", cols: pw, lines: palette.render(pw) });
-
   const changes = new ChangesView(changesModel(FILES), {
     theme, rows: 20, loadDiff: async (f) => (f.path === "api/invoices.go" ? DIFF : ""), onOpen() {}, onClose() {}, requestRender() {},
   });

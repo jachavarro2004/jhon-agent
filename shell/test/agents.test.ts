@@ -400,22 +400,22 @@ function scripted(script: Array<string | undefined>) {
 }
 
 test("ask_user puts each question in turn: a described choice, a typed Other, and a free answer", async () => {
-  const { ctx, shown } = scripted(["Postgres (Recommended) — keeps the joins", "Type something.", "Valkey", "every night"]);
+  const { ctx, shown } = scripted(["Postgres (Recommended) — keeps the joins", "Write my own answer.", "Valkey", "every night"]);
   const r = await askUser({ questions: [
     { question: "Which database?", header: "Database", options: [{ label: "Postgres (Recommended)", description: "keeps the joins" }, { label: "SQLite" }] },
     { question: "Which cache?", options: [{ label: "Redis" }, { label: "None" }] },
     { question: "When should it back up?" },
   ] }, ctx, false);
   assert.deepEqual(r, { ok: true, text: "The owner answered:\n- Which database? → Postgres (Recommended)\n- Which cache? → Valkey (typed)\n- When should it back up? → every night" });
-  assert.deepEqual(shown[0], ["select", "(1/3) Database: Which database?", ["Postgres (Recommended) — keeps the joins", "SQLite", "Type something."]]);
+  assert.deepEqual(shown[0], ["select", "(1/3) Database: Which database?", ["Postgres (Recommended) — keeps the joins", "SQLite", "Write my own answer."]]);
   assert.deepEqual(shown.slice(1).map((s) => s.slice(0, 2)), [["select", "(2/3) Which cache?"], ["input", "(2/3) Which cache?"], ["input", "(3/3) When should it back up?"]]);
 });
 
 test("ask_user's multiple choice toggles options until Done, and keeps typed ones", async () => {
-  const { ctx, shown } = scripted(["[ ] lint", "[ ] unit — fast", "[x] lint", "Type something.", "e2e", "Done"]);
+  const { ctx, shown } = scripted(["[ ] lint", "[ ] unit — fast", "[x] lint", "Write my own answer.", "e2e", "Done"]);
   const r = await askUser({ questions: [{ question: "Which checks?", multiSelect: true, options: [{ label: "lint" }, { label: "unit", description: "fast" }, { label: "types" }] }] }, ctx, false);
   assert.deepEqual(r, { ok: true, text: "The owner answered:\n- Which checks? → unit; e2e (typed)" });
-  assert.deepEqual(shown[2], ["select", "Which checks?\n(pick any; Done when finished)", ["[x] lint", "[x] unit — fast", "[ ] types", "Type something.", "Done"]]);
+  assert.deepEqual(shown[2], ["select", "Which checks?\n(pick any; Done when finished)", ["[x] lint", "[x] unit — fast", "[ ] types", "Write my own answer.", "Done"]]);
 });
 
 test("ask_user stops at a dismissed question and returns what was answered before it", async () => {

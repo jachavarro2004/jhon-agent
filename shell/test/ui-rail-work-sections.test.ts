@@ -91,8 +91,8 @@ const AGENTS_MANY = [
 		"  \u001b[35m✓\u001b[39m \u001b[33m1 done · /jhon:agents\u001b[39m                     ",
 	];
 
-test("AGENTS idle as G: the header and `none running · /jhon:agents` (L165)", () => {
-	assert.deepEqual(renderShellAgentsSection([], theme, 46, NOW).map((line) => line.replace(/\x1b\[[0-9;]*m/g, "")), ["▾ AGENTS" + " ".repeat(46 - 12) + "idle", "  none running · /jhon:agents".padEnd(46)]);
+test("AGENTS idle: the header and `no agent running · /jhon:agents` (L165)", () => {
+	assert.deepEqual(renderShellAgentsSection([], theme, 46, NOW).map((line) => line.replace(/\x1b\[[0-9;]*m/g, "")), ["▾ AGENTS" + " ".repeat(46 - 12) + "idle", "  no agent running · /jhon:agents".padEnd(46)]);
 });
 
 // G's agentsSummary: `◐ N agents`, `✗ N` for the recent failures; nothing while none is live or failed (L165).

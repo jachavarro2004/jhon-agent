@@ -26,7 +26,6 @@ export const FEATURE_CAPTIONS: Record<string, string> = {
   "shell-bar": "The title row and the status bar: project, branch and changes, model and effort, context, cost, running jobs.",
   "ldd-status": "The rail's LDD status: the change, its slices done of all, the route, the next step and the last test run.",
   "agents-jobs": "Sub-agents and background jobs, live in the rail: what each runs, its tokens and how long.",
-  "command-palette": "alt+k opens the command palette: the shell's commands in groups, with their shortcuts.",
   changes: "Changes: every file the session touched and its diff, without leaving the terminal.",
   "ldd-question": "A repo with no LDD yet: at the first code change, the session asks once how to deliver and test.",
   "guard-refusal": "A writer's edit outside its edit surfaces, refused by scope-guard: the shell's tool card, then the engine's whole reason.",

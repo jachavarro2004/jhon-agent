@@ -20,7 +20,7 @@ export interface ExternalEditorHost {
  */
 export function openInExternalEditor(host: ExternalEditorHost, path: string, env: NodeJS.ProcessEnv = process.env, spawn: typeof spawnSync = spawnSync, cwd?: string): string | undefined {
 	const command = env.VISUAL || env.EDITOR;
-	if (!command?.trim()) return "No editor configured. Set $VISUAL or $EDITOR.";
+	if (!command?.trim()) return "No editor: set $VISUAL or $EDITOR.";
 	host.stop();
 	let r: ReturnType<typeof spawnSync>;
 	try {

@@ -267,7 +267,7 @@ export function renderShellStatusLayout(model: ShellBarModel, theme: ShellBarThe
 	const all: Array<{ title: StatusSection; header: string; rows: string[]; openChangesRow?: number }> = [
 		{ title: "LDD", header: header("LDD", model.ldd ? (count >= 2 ? `${count} changes` : routeText(model.ldd) || undefined) : undefined), rows: ldd },
 		{ title: "CHANGES", header: header("CHANGES", changes?.files ? `${changes.files} ${changes.files === 1 ? "file" : "files"}` : unread ? "unknown" : "none"), rows: [row(changed, command), ...headRows], openChangesRow: 0 },
-		{ title: "INTEGRATIONS", header: header("INTEGRATIONS", reported ? String(reported) : "none"), rows: [...permission, ...model.statuses.flatMap((status) => integrationRows(theme.fg(ROLE.STATUS, sanitizeStatus(status))))].concat(reported ? [] : [row(label("no status reported"))]) },
+		{ title: "INTEGRATIONS", header: header("INTEGRATIONS", reported ? String(reported) : "none"), rows: [...permission, ...model.statuses.flatMap((status) => integrationRows(theme.fg(ROLE.STATUS, sanitizeStatus(status))))].concat(reported ? [] : [row(label("nothing reported"))]) },
 	];
 	const sections = all.filter((section) => only.includes(section.title));
 	const lines: string[] = [];
@@ -414,7 +414,7 @@ function clipCells(text: string, cells: number): string {
 export function renderShellAgentsSection(jobs: readonly RunningJobDisplay[] | undefined, theme: ShellBarTheme, width: number, now = Date.now(), folded = false, hovered = false): string[] {
 	const all = (jobs ?? []).filter((job) => job.kind === "agent");
 	const shown = [...all.filter((job) => job.endedAt === undefined), ...recentlyFinished(all, now)].sort((a, b) => a.startedAt - b.startedAt);
-	if (!shown.length) return chromeAscii([railHeader("AGENTS", "idle", theme, width, folded, hovered), renderPanelRow(width, theme.fg(META_ROLE, `none running · ${AGENTS_VIEW}`))]);
+	if (!shown.length) return chromeAscii([railHeader("AGENTS", "idle", theme, width, folded, hovered), renderPanelRow(width, theme.fg(META_ROLE, `no agent running · ${AGENTS_VIEW}`))]);
 	const count = (state: AgentState) => shown.filter((job) => agentState(job) === state).length;
 	const running = count("running");
 	const header = railHeader("AGENTS", running ? `${running} running` : [count("failed") ? `${count("failed")} failed` : "", count("done") ? `${count("done")} done` : ""].filter(Boolean).join(" · ") || "idle", theme, width, folded, hovered);

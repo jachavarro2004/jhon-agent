@@ -700,7 +700,7 @@ export default function jhon(pi: any): void {
       openDiff: (root) => pi.sendUserMessage?.(`/jhon:changes ${root}`, { expandPromptTemplates: true }),
       // o: tasks.md in the owner's editor, the panel closed around it; with no editor, the panel says its path.
       openFile: (path) => {
-        if (!(process.env.VISUAL || process.env.EDITOR)?.trim()) return "No editor configured. Set $VISUAL or $EDITOR.";
+        if (!(process.env.VISUAL || process.env.EDITOR)?.trim()) return "No editor: set $VISUAL or $EDITOR.";
         close(null);
         setImmediate(() => {
           const failed = openInExternalEditor(tui, path, process.env, spawnSync, cwd);
@@ -1224,7 +1224,7 @@ export default function jhon(pi: any): void {
   pi.registerTool({
     name: "subagent_continue",
     label: "Continue a sub-agent",
-    ...delegationRenderers("Resuming agent", "id", profile),
+    ...delegationRenderers("Continuing agent", "id", profile),
     description: `Continue a sub-agent that stopped short (a resolved refusal, an answered question) in its own session, keeping what it read and did: give the id subagent returned (task id or sub-agent id) and the message it needs. ${relaunch} Its scope carries over; one stopped at its context cap gets a fresh one with a handoff instead.`,
     parameters: {
       type: "object", required: ["id", "message"],
