@@ -327,11 +327,10 @@ build's renders).
   terminal" chapter) and `build.ts` no longer renders `command-palette.png`
   or `changes.png`, so the next render is about 16 s shorter and shows
   neither; until then the published files keep them.
-- The bench shot's line now names the Prism review and its facet agents
-  (T177). Until that line is spoken again (`narrate.mjs`), `compose.mjs`
-  stops at it and `index.html` and `captions.es.json` still carry the 4R
-  line; once spoken, the times from that shot on (the shot list above)
-  move by the new line's length.
+- The bench shot's line names the Prism review and its facet agents
+  (T177); it was spoken again (8c507b1), and `index.html` and
+  `captions.es.json` carry it. The published films still say the 4R line
+  until they are rendered again.
 
 - The marks' timing follows each phrase's share of its line's characters,
   not measured word times; a mark can land a few tenths of a second before

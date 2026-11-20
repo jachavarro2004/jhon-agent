@@ -65,7 +65,7 @@ var cases = []defectCase{
 
 	// agent-template — the manifest's vars and the template's placeholders agree
 	defect("agent-template", "agents.yaml", "agents/templates/prism-facet.md", "## Scope", "## Scope for {{audience}}"),
-	defect("agent-template", "agents.yaml", "agents.yaml", "      code: R1\n", "      code: R1\n      colour: red\n"),
+	defect("agent-template", "agents.yaml", "agents.yaml", "      facet: safety\n", "      facet: safety\n      colour: red\n"),
 
 	// top-level-tools — session memory is the top-level agent's alone, judged on the
 	// projected tool sets, whichever capability grants a tool

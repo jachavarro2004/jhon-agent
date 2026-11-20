@@ -922,6 +922,7 @@ fuzz.tsv:1690@folder/subagent	safety-guard	refuse	allow	read (T128f slice 6, L13
 fuzz.tsv:1694@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
 fuzz.tsv:1747@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
 fuzz.tsv:1768@corpus/subagent	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
+fuzz.tsv:1789@repo/top-default	safety-guard	allow	refuse	credential-write (L1368): v0.3.7 missed a dd of=<credentials file> behind env and cd; the verdict predates T113 (L1485)
 fuzz.tsv:1867@ldd/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
 fuzz.tsv:2056@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
 fuzz.tsv:2074@repo/top-bypass	safety-guard	refuse	allow	non-destructive-write-ask (T128f slice 6, L1366): a write whose target the guard cannot resolve; it destroys nothing the owner cannot restore
