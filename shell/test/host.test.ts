@@ -1,7 +1,8 @@
 import "./isolated-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HOST_EVENT, HOST_QUERY_EVENT, askHosts, forgetHosts, hostAlerts, hostShowsPath, listenForHosts } from "../lib/host.ts";
+import * as host from "../lib/host.ts";
+import { HOST_EVENT, HOST_QUERY_EVENT, askHosts, forgetHosts, hostShowsPath, isHostAnnouncement, listenForHosts } from "../lib/host.ts";
 
 function bus() {
   const listeners = new Map<string, Set<(data: unknown) => void>>();
@@ -22,34 +23,38 @@ test("the neutral names are the contract's", () => {
   assert.equal(HOST_QUERY_EVENT, "jhon:host?");
 });
 
-test("without a host the shell keeps its own sound and its path", () => {
+test("without a host the shell keeps its path", () => {
   forgetHosts();
   listenForHosts(bus());
-  assert.equal(hostAlerts(), false);
   assert.equal(hostShowsPath(), false);
 });
 
-test("a host announced at any time is heard: alerts and showsPath as it says", () => {
+// T169 (L1438): the shell plays no sound, so nothing asks whether a host
+// alerts; CONTRACT.md still names the field, so an announcement with it is
+// well formed.
+test("alerts is part of a well-formed announcement, and nothing reads it (T169)", () => {
+  assert.equal("hostAlerts" in host, false);
+  assert.equal(isHostAnnouncement({ name: "mux", alerts: true }), true);
+  assert.equal(isHostAnnouncement({ name: "mux", alerts: "yes" }), false);
+});
+
+test("a host announced at any time is heard: showsPath as it says", () => {
   forgetHosts();
   const events = bus();
   listenForHosts(events);
   events.emit(HOST_EVENT, { name: "plain" });
-  assert.equal(hostAlerts(), false, "a host that says nothing changes nothing");
-  assert.equal(hostShowsPath(), false);
+  assert.equal(hostShowsPath(), false, "a host that says nothing changes nothing");
   events.emit(HOST_EVENT, { name: "mux", alerts: true, showsPath: true });
-  assert.equal(hostAlerts(), true);
   assert.equal(hostShowsPath(), true);
   events.emit(HOST_EVENT, { name: "mux", alerts: false });
-  assert.equal(hostAlerts(), false, "the same host announcing again replaces what it said");
-  assert.equal(hostShowsPath(), false);
+  assert.equal(hostShowsPath(), false, "the same host announcing again replaces what it said");
 });
 
 test("a malformed announcement is ignored", () => {
   forgetHosts();
   const events = bus();
   listenForHosts(events);
-  for (const bad of [undefined, null, "mux", { alerts: true }, { name: "", alerts: true }, { name: 3, showsPath: true }, { name: "m", alerts: "yes" }]) events.emit(HOST_EVENT, bad);
-  assert.equal(hostAlerts(), false);
+  for (const bad of [undefined, null, "mux", { alerts: true }, { name: "", alerts: true }, { name: 3, showsPath: true }, { name: "m", alerts: "yes", showsPath: true }]) events.emit(HOST_EVENT, bad);
   assert.equal(hostShowsPath(), false);
 });
 

@@ -6,9 +6,9 @@ import type { ChromeSurface } from "./visual-customization-policy.ts";
 
 // The rail's sections drawn as Gentle Shell's panel (its lib/shell-panel.ts,
 // T15.12b): a one-row header `▾ NAME … count`, dense rows indented under it,
-// the narrow work row and the full-width sheet ` 力 Panel … esc back`. A
-// tinted surface paints them on rose ink's band, a transparent one leaves
-// the terminal's own background (shell.appearance.surface, as G's Layout →
+// and the narrow work row (T169 removed the full-width sheet). A tinted
+// surface paints them on rose ink's band, a transparent one leaves the
+// terminal's own background (shell.appearance.surface, as G's Layout →
 // Surface); ascii (shell.appearance.ascii) draws every glyph in its ASCII form.
 
 // Each extension loads its own copy of this module: the surface lives in a
@@ -126,51 +126,5 @@ export function renderWorkRow(summaries: readonly PanelSummary[], theme: PanelTh
 	return paintPanelSurface(theme, [` ${ascii ? asciiText(row) : row} `], target)[0];
 }
 
-export interface PanelSheet {
-	lines: string[];
-	/** The largest useful scrollTop for this content and height. */
-	maxScroll: number;
-}
-
-/** The rail's parts in order, the sheet's too: LDD first (L174), then G's todo, jobs, agents and the rest of Status. */
-export const RAIL_ORDER = ["ldd", "todo", "jobs", "agents", "stats", "footer"] as const;
-const SHEET_BACK = "esc back";
-
-/** True when a click at (x, y) of a sheet `width` wide lands on its ` esc back ` control. */
-export function panelSheetBackHit(width: number, x: number, y: number): boolean {
-	const end = Math.max(0, Math.floor(width)) - 1;
-	return y === 0 && x >= end - SHEET_BACK.length - 1 && x < end + 1;
-}
-
-/**
- * The rail's sections as a full-width sheet (narrow): a fixed
- * ` 力 Panel … esc back` row, then every section the rail would show, in rail
- * order, scrolled within `rows`. Rows hidden below say how many remain.
- */
-export function renderPanelSheet(parts: ReadonlyMap<string, { render(width: number): string[] }>, theme: PanelTheme, width: number, view: { rows: number; scrollTop: number; backHovered?: boolean; ascii?: boolean }): PanelSheet {
-	const ascii = view.ascii ?? false;
-	const target = Math.max(0, Math.floor(width));
-	const inner = Math.max(0, target - 2);
-	const brand = ascii ? "jhon" : "力";
-	const title = ` ${fitPanelLine(`${theme.fg("accent", brand)} ${theme.fg("text", theme.bold ? theme.bold("Panel") : "Panel")}`, paintHoverable(theme, SHEET_BACK, view.backHovered ?? false, "muted"), inner, ascii)} `;
-	const content: string[] = [];
-	for (const key of RAIL_ORDER) {
-		const lines = [...(parts.get(key)?.render(inner) ?? [])];
-		while (lines.length && lines[lines.length - 1]!.trim() === "") lines.pop();
-		if (lines.length === 0) continue;
-		content.push(" ".repeat(target), ...lines.map((line) => ` ${ascii ? asciiText(line) : line}${" ".repeat(Math.max(0, inner - visibleWidth(line)))} `));
-	}
-	const viewport = Math.max(1, Math.floor(view.rows) - 1);
-	const maxScroll = Math.max(0, content.length - viewport);
-	const top = Math.min(Math.max(0, Math.floor(view.scrollTop)), maxScroll);
-	let shown: string[];
-	if (content.length <= viewport || top >= maxScroll) shown = content.slice(top, top + viewport);
-	else {
-		shown = content.slice(top, top + viewport - 1);
-		const remaining = content.length - top - shown.length;
-		const more = `${theme.fg("accent", ascii ? "v" : "↓")} ${theme.fg("muted", `${remaining} more ${ascii ? "-" : "·"} scroll`)}`;
-		shown.push(` ${fitPanelLine(more, "", inner, ascii)} `);
-	}
-	while (shown.length < viewport) shown.push(" ".repeat(target));
-	return { lines: paintPanelSurface(theme, [title, ...shown], target), maxScroll };
-}
+/** The rail's parts in order: LDD first (L174), then G's todo, jobs, agents and the rest of Status (T169: no STATS). */
+export const RAIL_ORDER = ["ldd", "todo", "jobs", "agents", "footer"] as const;

@@ -4,20 +4,28 @@
  * extension registers through counted(pi), so every run of one of its
  * commands or shortcuts appends a `jhon-ui-use` session entry naming it
  * (`pi.appendEntry`: kept out of the model's context), which
- * `jhon audit --all` counts. Counting never breaks the feature.
+ * `jhon audit --all` counts. A click the shell handles itself is recorded
+ * the same way with recordUse (T171): `click agents` or `click jobs` for
+ * each OPEN_TASKS_EVENT request (the narrow work row's tap), `click changes`
+ * for the rail's CHANGES row. Counting never breaks the feature. shell/CONTRACT.md,
+ * "Session entries".
  */
 
 export const UI_USE_ENTRY = "jhon-ui-use";
 
 type Handler = (...args: any[]) => unknown;
 type Registrar = (name: any, def: any) => unknown;
-type Countable = { appendEntry?: (type: string, data: unknown) => void; registerCommand?: Registrar; registerShortcut?: Registrar };
+type Recorder = { appendEntry?: (type: string, data: unknown) => void };
+type Countable = Recorder & { registerCommand?: Registrar; registerShortcut?: Registrar };
+
+/** Append one `jhon-ui-use` entry naming feature; never throws. */
+export function recordUse(pi: Recorder, feature: string): void {
+  try { pi.appendEntry?.(UI_USE_ENTRY, { feature }); } catch { /* no session to record in: the feature still runs */ }
+}
 
 /** pi with its commands and shortcuts counted; everything else is pi's own. */
 export function counted<T extends Countable>(pi: T): T {
-  const mark = (feature: string) => {
-    try { pi.appendEntry?.(UI_USE_ENTRY, { feature }); } catch { /* no session to record in: the feature still runs */ }
-  };
+  const mark = (feature: string) => recordUse(pi, feature);
   const wrap = (feature: string, def: any) => {
     if (!def || typeof def.handler !== "function") return def;
     const handler: Handler = def.handler;

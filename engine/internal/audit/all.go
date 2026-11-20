@@ -84,7 +84,8 @@ type GuardStats struct {
 }
 
 // uiUseEntry is the session entry jhon-shell appends each time a command or
-// shortcut of its UI runs (shell/lib/ui-use.ts).
+// shortcut of its UI runs, or a click it handles opens a view (T171)
+// (shell/lib/ui-use.ts, shell/CONTRACT.md).
 const uiUseEntry = "jhon-ui-use"
 
 // UIUses counts the jhon-shell UI features a pi session's file records

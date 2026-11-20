@@ -14,6 +14,7 @@ import { join } from "node:path";
 import test, { after } from "node:test";
 import { backgroundTasksKey, registerBackgroundTasks, TASK_NOTICE_TYPE, type BackgroundTasksDeps } from "../lib/background-tasks-tools.ts";
 import { OPEN_TASKS_EVENT, TASKS_EVENT } from "../lib/events.ts";
+import { UI_USE_ENTRY } from "../lib/ui-use.ts";
 import type { JobExecOperations } from "../lib/ui/background-jobs.ts";
 import type { AgentDef, ChildResult } from "../lib/agents.ts";
 import { envOverrides, memorySettings } from "./fake-jhon-settings.ts";
@@ -44,7 +45,9 @@ function harness(env: NodeJS.ProcessEnv = {}, extra: Partial<BackgroundTasksDeps
 	const sent: Array<{ message: any; options: any }> = [];
 	const emitted: Array<{ name: string; value: any }> = [];
 	const listeners = new Map<string, (value: any) => void>();
+	const entries: Array<[string, unknown]> = [];
 	const pi = {
+		appendEntry: (type: string, data: unknown) => { entries.push([type, data]); },
 		registerTool: (tool: any) => tools.set(tool.name, tool),
 		registerCommand: (name: string, command: any) => commands.set(name, command),
 		registerMessageRenderer: () => {},
@@ -68,7 +71,7 @@ function harness(env: NodeJS.ProcessEnv = {}, extra: Partial<BackgroundTasksDeps
 		return result;
 	};
 	const run = (name: string, params: any) => tools.get(name).execute("call-1", params, undefined, undefined, ctx);
-	return { tools, commands, sent, emitted, listeners, shell, answers, background, ctx, fire, run };
+	return { tools, commands, sent, emitted, listeners, entries, shell, answers, background, ctx, fire, run };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
@@ -298,10 +301,14 @@ test("the open-tasks event opens /jhon:agents, or /jhon:jobs when it names the j
 	h.listeners.get(OPEN_TASKS_EVENT)?.({ ctx });
 	h.listeners.get(OPEN_TASKS_EVENT)?.({ ctx, view: "jobs" });
 	await settle();
+	// T171 (L1438): each click is counted, as commands and shortcuts are (lib/ui-use.ts).
+	assert.deepEqual(h.entries, [[UI_USE_ENTRY, { feature: "click agents" }], [UI_USE_ENTRY, { feature: "click jobs" }]]);
 	assert.deepEqual(noted, ["The Agents view needs TUI mode.", "The Jobs view needs TUI mode."]);
 });
 
-test("the BACKGROUND key defaults to alt+s; JHON_SHELL_TASKS_KEY sets another or turns it off", () => {
+// T167: the key is shell.keys.agents (it opens /jhon:agents); JHON_SHELL_TASKS_KEY keeps its name.
+test("the agents key (shell.keys.agents) defaults to alt+s; JHON_SHELL_TASKS_KEY sets another or turns it off", () => {
+	assert.equal(backgroundTasksKey(memorySettings({ "shell.keys.agents": "alt+y" })), "alt+y");
 	assert.equal(backgroundTasksKey(envSettings({})), "alt+s");
 	assert.equal(backgroundTasksKey(envSettings({ JHON_SHELL_TASKS_KEY: "ctrl+shift+b" })), "ctrl+shift+b");
 	assert.equal(backgroundTasksKey(envSettings({ JHON_SHELL_TASKS_KEY: "off" })), undefined);
@@ -361,8 +368,9 @@ test("the UI hears a finished job beside the running ones, for JOBS' finished co
 	assert.equal(agent.tokens, 0);
 });
 
-// T92 (L658): the rail's STATS counts what this session's sub-agents spent, finished ones too.
-test("the running-tasks event carries this session's sub-agent spend: runs, tokens and cost", async () => {
+// T92 (L658) sent the sub-agents' spend for the rail's STATS card; T169 (L1438)
+// removed the card, and the dashboard keeps the session's usage.
+test("the running-tasks event carries no sub-agent spend; each running agent still carries its tokens (T169)", async () => {
 	const emitted: any[] = [];
 	const handlers = new Map<string, Handler>();
 	const pi = { registerTool: () => {}, registerCommand: () => {}, registerShortcut: () => {}, registerMessageRenderer: () => {}, on: (name: string, fn: Handler) => handlers.set(name, fn), sendMessage: () => {}, events: { emit: (name: string, value: any) => { if (name === TASKS_EVENT) emitted.push(value); }, on: () => () => {} } };
@@ -374,7 +382,8 @@ test("the running-tasks event carries this session's sub-agent spend: runs, toke
 	background!.startAgent(worker, "b", tmpdir(), "main");
 	background!.startAgent(worker, "c", tmpdir(), "other");
 	await settle();
-	assert.deepEqual(emitted.at(-1)?.spend, { runs: 2, tokens: 2000, cost: 0.5 });
+	assert.equal("spend" in emitted.at(-1), false, "no spend field");
+	assert.deepEqual(Object.keys(emitted.at(-1)).sort(), ["finished", "sessionId", "tasks"]);
 });
 
 // T115b (L691, L692): a completion notice enters the agent's context and is re-read on every later
@@ -570,4 +579,21 @@ test("a command that runs no jhon executions is started unchanged and judged by 
 	h.shell.runs[0]!.finish(0);
 	await until(() => h.sent.length > 0);
 	assert.equal(h.sent.at(-1)!.message.details.jhonTasks.succeeded, true);
+});
+
+// T171 (L1437, L1438): a click is counted even when nothing can open (no
+// context, or no session to record in), and counting never stops the view.
+test("an open-tasks click with no context is not counted; a failing appendEntry still opens the view (T171)", async () => {
+	const h = harness();
+	h.listeners.get(OPEN_TASKS_EVENT)?.(undefined);
+	h.listeners.get(OPEN_TASKS_EVENT)?.({});
+	assert.deepEqual(h.entries, [], "nothing opened, nothing counted");
+	const broken = harness();
+	const noted: string[] = [];
+	const pi = { registerTool: () => {}, registerCommand: () => {}, registerShortcut: () => {}, registerMessageRenderer: () => {}, on: () => {}, sendMessage: () => {}, appendEntry: () => { throw new Error("no session"); },
+		events: { emit: () => {}, on: (name: string, fn: (v: any) => void) => { if (name === OPEN_TASKS_EVENT) broken.listeners.set(name, fn); return () => {}; } } };
+	registerBackgroundTasks(pi as any, { env: {}, outputDir: () => tmpdir() });
+	broken.listeners.get(OPEN_TASKS_EVENT)?.({ ctx: { ...broken.ctx, hasUI: true, mode: "rpc", ui: { notify: (m: string) => { noted.push(m); } } } });
+	await settle();
+	assert.deepEqual(noted, ["The Agents view needs TUI mode."]);
 });

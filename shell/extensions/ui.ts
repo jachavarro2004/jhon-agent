@@ -1,6 +1,6 @@
 import { CustomEditor, type ExtensionAPI, type ExtensionContext, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { isHomeOrBroadUserDirectory } from "../lib/ui/user-directories.ts";
-import { matchesKey, truncateToWidth, visibleWidth, type EditorTheme, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import { execFile, spawnSync } from "node:child_process";
 import { existsSync, realpathSync, statSync, watch } from "node:fs";
 import { lstat, readFile } from "node:fs/promises";
@@ -14,7 +14,6 @@ import { switchToRoseInk } from "../lib/rose-ink.ts";
 import { CUSTOMIZE_WORDS, customizeCompletions, customizeDescription, customizeRows, unknownCategoryNotice } from "../lib/ui/customize/registry.ts";
 import { completeWord } from "../lib/ui/jhon-commands.ts";
 import { backgroundTasksKey } from "../lib/background-tasks-tools.ts";
-import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { changeMode, type ModeData } from "../lib/ui/jhon-panel-grants.ts";
 import { laneReads, lddLanes, lddOfSession, lddWatchTargets, permissionMode, readLddStatus, selectChange, shareSelection, type LddStatus } from "../lib/ui/ldd-status.ts";
 import { CHANGE_STATUS, DIFF_MAX_BYTES, DIFF_MAX_LINES, DIFF_TOO_LARGE, WorktreeChangesTracker, fallbackReason, noChangesText, renderChangesWidget, type ChangedFile, type ChangesModel, type TurnSummary, type FileRevision, type GitRunner, type LineCounter, type WorktreeChanges } from "../lib/ui/shell-changes.ts";
@@ -24,10 +23,8 @@ import { SessionWorktreeRegistry, resolveSessionWorktree, worktreeGitEnvironment
 import { gitReadEnv } from "../lib/git-read.ts";
 import { createNativeFullscreenInteraction } from "../lib/ui/native-fullscreen-interaction.ts";
 import { cardStyle, renderCard, setCardStyle, type Card, type CardTheme } from "../lib/ui/shell-card.ts";
-import { CommandPalette, commandsKey, type CommandPaletteResult } from "../lib/ui/command-palette.ts";
-import { buildCommandPaletteGroups } from "../lib/ui/command-palette-catalog.ts";
 import { resolveVisualSettings } from "../lib/ui/visual-customization-policy.ts";
-import { DOUBLE_ESC_CANCEL_HINT, PANEL_BUTTON, floatPromptRow, framePromptLines, panelPromptRow, resolvePromptLayout, IDLE_ESC_CLEAR_HINT, PROMPT_HINT, PROMPT_STATE, SHELL_PULSE_MS, withPromptHint, type PromptState } from "../lib/ui/shell-prompt.ts";
+import { DOUBLE_ESC_CANCEL_HINT, floatPromptRow, framePromptLines, panelPromptRow, resolvePromptLayout, IDLE_ESC_CLEAR_HINT, PROMPT_HINT, PROMPT_STATE, SHELL_PULSE_MS, withPromptHint, type PromptState } from "../lib/ui/shell-prompt.ts";
 import { createApiWait } from "../lib/ui/api-wait.ts";
 import { createStallRecovery, stallContinueText, stallNotice, stallSeconds, stallThreshold, type Schedule } from "../lib/ui/stall-recovery.ts";
 import { activeProfileName } from "../lib/profiles.ts";
@@ -44,20 +41,19 @@ import {
 import { NAN_PROVIDER, NAN_QUOTA_URL, parseCodexRateLimitEvent, parseNanQuota, parseProviderUsage, parseUsageHeaders, parseUsageSource, usageScopeProviders, UsageSourceRegistry, UsageStore, USAGE_SOURCE_EVENT, type ProviderUsage, type UsageSource } from "../lib/ui/shell-usage.ts";
 import { UsageView } from "../lib/ui/shell-usage-view.ts";
 import { setSidebarHover, sidebarHeader, sidebarPart, sidebarSlot, sidebarState, VISUAL_SETTINGS_CHANGED, type SidebarRail } from "../lib/ui/shell-sidebar.ts";
-import { installSidebar, invalidateSidebar, railSheetKey, SIDEBAR_BREAKPOINT } from "../lib/ui/shell-sidebar-layout.ts";
-import { collectSessionStats, renderShellStatsSection, type SessionStats } from "../lib/ui/shell-stats.ts";
+import { installSidebar, invalidateSidebar, SIDEBAR_BREAKPOINT } from "../lib/ui/shell-sidebar-layout.ts";
 import type { PanelSummary } from "../lib/ui/shell-panel.ts";
-import { panelSheetBackHit, renderPanelSheet, renderWorkRow, setChromeSurface, workRowLead } from "../lib/ui/shell-panel.ts";
+import { renderWorkRow, setChromeSurface, workRowLead } from "../lib/ui/shell-panel.ts";
 import { recentSessionRoots, sessionChangeRoots, sessionRootBases, sessionSubagentRoots } from "../lib/ui/session-changes.ts";
 import { installSessionChangeCapture } from "../lib/ui/session-change-capture.ts";
 import { SelectionEngine } from "../lib/ui/selection-engine.ts";
 import { withOverlayRepaint } from "../lib/ui/overlay-repaint.ts";
 import { HOST_EVENT, hostShowsPath } from "../lib/host.ts";
-import { counted } from "../lib/ui-use.ts";
+import { counted, recordUse } from "../lib/ui-use.ts";
 
 // jhon-shell's UI: the visual layer Jhon puts on top of pi. It installs the
 // status bar, the prompt, the working-tree changes widget and overlay, the
-// subscription usage view, the command palette, and customization.
+// subscription usage view, and customization.
 
 export interface ShellFooterData {
 	getGitBranch(): string | null;
@@ -239,14 +235,10 @@ interface PromptEditorDeps {
 	workingLabel?: () => string | undefined;
 	/** The fullscreen chrome: the editor is G's panel editor (a titled rule over `›` rows); elsewhere the float or neon card. */
 	panelChrome?: () => boolean;
-	/** The rule carries `[ Panel ]`: no rail is shown (T15.12c). */
-	panelButton?: () => boolean;
 	/** Rows the shell draws above the rule (the work row), with the hovered one's index. */
 	topRows?: (width: number, hovered?: number) => string[];
 	/** A left click on one of the top rows (index into topRows). */
 	onTopRowClick?: (index: number) => void;
-	/** A left click on `[ Panel ]`. */
-	onPanelClick?: () => void;
 }
 
 const PROMPT_FRAME_ROLE = "border";
@@ -287,12 +279,10 @@ export class JhonPromptEditor extends CustomEditor {
 	private readonly deps: PromptEditorDeps;
 	private frameMouseLayout?: ReturnType<typeof resolvePromptLayout>;
 	// The Gentle Shell's narrow editor (T15.12c): rows above the rule (the work
-	// row) and the rule's [ Panel ], each a control with its hover.
+	// row), each a control with its hover.
 	private readonly pointerTui: TUI;
 	private topRowCount = 0;
 	private hoveredTopRow: number | undefined;
-	private panelStart: number | undefined;
-	private hoveredPanel = false;
 	// Native selection engine (shift+home/end, alt+a, replace-on-key): ported
 	// from pi-select-del so the petal prompt owns the feature without factory
 	// composition. Constructed with `this`; the internals probe degrades to
@@ -464,32 +454,15 @@ export class JhonPromptEditor extends CustomEditor {
 	}
 
 	private clearEditorHover(): void {
-		const changed = this.hoveredPanel || this.hoveredTopRow !== undefined;
-		this.hoveredPanel = false;
+		const changed = this.hoveredTopRow !== undefined;
 		this.hoveredTopRow = undefined;
 		if (changed) this.deps.requestRender();
 	}
 
 	handleMouse(event: Parameters<CustomEditor["handleMouse"]>[0]): ReturnType<CustomEditor["handleMouse"]> {
-		const onPanel = this.panelStart !== undefined && event.y === this.topRowCount && event.x >= this.panelStart && event.x < this.panelStart + visibleWidth(PANEL_BUTTON);
 		if (event.type === "move" && event.button === "none") {
-			if (onPanel || (event.y >= 0 && event.y < this.topRowCount)) setSidebarHover(this.pointerTui, this, () => this.clearEditorHover());
+			if (event.y >= 0 && event.y < this.topRowCount) setSidebarHover(this.pointerTui, this, () => this.clearEditorHover());
 			else setSidebarHover(this.pointerTui);
-			if (onPanel) {
-				const changed = this.hoveredTopRow !== undefined || !this.hoveredPanel;
-				this.hoveredTopRow = undefined;
-				this.hoveredPanel = true;
-				if (changed) this.deps.requestRender();
-				return changed ? { handled: true, render: true } : { handled: true };
-			}
-			if (this.hoveredPanel) { this.hoveredPanel = false; this.deps.requestRender(); }
-		}
-		if (onPanel && (event.type === "press" || event.type === "click")) {
-			if (event.type === "click" && event.button === "left") {
-				this.clearEditorHover();
-				this.deps.onPanelClick?.();
-			}
-			return { handled: true, render: event.type === "click" };
 		}
 		// Rows drawn above the rule belong to the shell, not to pi's editor.
 		if (this.topRowCount > 0) {
@@ -538,8 +511,6 @@ export class JhonPromptEditor extends CustomEditor {
 			borderColor: (text) => layout.background || layout.panel ? this.borderColor(text) : this.deps.fg(PROMPT_FRAME_ROLE, text),
 			fg: this.deps.fg,
 			bold: this.deps.bold,
-			panelButton: Boolean(layout.panel && this.deps.onPanelClick && this.deps.panelButton?.()),
-			panelHovered: this.hoveredPanel,
 			escHint: this.promptState === PROMPT_STATE.WORKING && this.isPendingEscapeCancel()
 				? DOUBLE_ESC_CANCEL_HINT
 				: this.promptState === PROMPT_STATE.IDLE && this.isPendingIdleClear()
@@ -569,14 +540,10 @@ export class JhonPromptEditor extends CustomEditor {
 			framed.push(this.deps.fg(PROMPT_FRAME_ROLE, border) + clipped +
 				" ".repeat(Math.max(0, inner - visibleWidth(clipped))) + this.deps.fg(PROMPT_FRAME_ROLE, border));
 		}
-		// What the shell draws above the rule (the work row), and where the rule's [ Panel ] sits.
+		// What the shell draws above the rule (the work row).
 		const topRows = this.deps.topRows?.(width, this.hoveredTopRow) ?? [];
 		if (this.hoveredTopRow !== undefined && this.hoveredTopRow >= topRows.length) this.hoveredTopRow = undefined;
 		this.topRowCount = topRows.length;
-		const plainRule = stripAnsi(framed[0] ?? "");
-		const panelAt = layout.panel && this.deps.onPanelClick && this.deps.panelButton?.() ? plainRule.lastIndexOf(PANEL_BUTTON) : -1;
-		this.panelStart = panelAt < 0 ? undefined : visibleWidth(plainRule.slice(0, panelAt));
-		if (this.panelStart === undefined) this.hoveredPanel = false;
 		framed.unshift(...topRows);
 		return framed;
 	}
@@ -623,8 +590,8 @@ type PromptFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorCom
 
 /**
  * The Gentle Shell's narrow chrome (T15.12c): a fullscreen terminal whose
- * rail is not shown (under 140 columns, or Status hidden). The editor rule
- * carries [ Panel ] and live work folds into the work row above it.
+ * rail is not shown (under 140 columns, or Status hidden): live work folds
+ * into the work row above the editor rule.
  */
 function narrowChrome(tui: TUI): boolean {
 	if ((tui as TUI & { mode?: string }).mode !== "fullscreen" || !tui.terminal) return false;
@@ -645,7 +612,7 @@ function workParts(tui: TUI): Array<{ part: SidebarRail; summary: NonNullable<Re
 function installPrompt(
 	ctx: ExtensionContext,
 	onCreated: (prompt: JhonPromptEditor) => void,
-	promptDeps: { now: () => number; doubleEscCancelEnabled: () => boolean; dispatchQueuedText: (text: string) => void; workingLabel?: () => string | undefined; panelChrome?: (tui: TUI) => boolean; panelButton?: (tui: TUI) => boolean; topRows?: (tui: TUI, width: number, hovered?: number) => string[]; onTopRowClick?: (tui: TUI, index: number) => void; onPanelClick?: () => void },
+	promptDeps: { now: () => number; doubleEscCancelEnabled: () => boolean; dispatchQueuedText: (text: string) => void; workingLabel?: () => string | undefined; panelChrome?: (tui: TUI) => boolean; topRows?: (tui: TUI, width: number, hovered?: number) => string[]; onTopRowClick?: (tui: TUI, index: number) => void },
 ): boolean {
 	const previous = ctx.ui.getEditorComponent() as PromptFactory | undefined;
 	if (previous && !previous[PROMPT_OWNER]) return false;
@@ -661,10 +628,8 @@ function installPrompt(
 			dispatchQueuedText: promptDeps.dispatchQueuedText,
 			workingLabel: promptDeps.workingLabel,
 			panelChrome: promptDeps.panelChrome ? () => promptDeps.panelChrome!(tui) : undefined,
-			panelButton: promptDeps.panelButton ? () => promptDeps.panelButton!(tui) : undefined,
 			topRows: promptDeps.topRows ? (width, hovered) => promptDeps.topRows!(tui, width, hovered) : undefined,
 			onTopRowClick: promptDeps.onTopRowClick ? (index) => promptDeps.onTopRowClick!(tui, index) : undefined,
-			onPanelClick: promptDeps.onPanelClick,
 		});
 		onCreated(prompt);
 		return prompt;
@@ -685,13 +650,9 @@ const SETTINGS_MOVED: Record<string, string> = {
 };
 
 const CHANGES_WIDGET_KEY = "jhon-shell-changes";
-const PANEL_COMMAND_NAME = "jhon:panel";
-/** Rows the panel sheet leaves at the bottom for the work row, the editor and the status line (the Gentle Shell's). */
-const SHEET_RESERVED_ROWS = 6;
 const CHANGES_COMMAND_NAME = "jhon:changes";
 const CHANGES_POLL_DEFAULT_MS = 2000;
 const GIT_TIMEOUT_MS = 5000;
-const COMMANDS_COMMAND_NAME = "jhon:commands";
 
 export function shellGitRunner(cwd: string, env: NodeJS.ProcessEnv = process.env, run: typeof execFile = execFile, maxBuffer = Infinity): GitRunner {
 	// Pi exec cannot replace the inherited environment. Use argv directly and
@@ -747,14 +708,11 @@ export function changesShortcut(settings: ShellSettings = shellSettings()): stri
 }
 
 /**
- * The key that opens /jhon:usage (T93, L659): alt+u, as the Gentle Shell's;
- * JHON_SHELL_USAGE_KEY sets another, or `off`. shell.keys.usage stays retired
- * in jhon settings, so the variable is its only setting.
+ * The key that opens /jhon:usage (T93, L659), shell.keys.usage (T167): alt+u,
+ * another (JHON_SHELL_USAGE_KEY overrides it), or off.
  */
-export function usageShortcut(env: NodeJS.ProcessEnv = process.env): string | undefined {
-	const value = env.JHON_SHELL_USAGE_KEY?.trim();
-	if (value === undefined) return "alt+u";
-	return value === "" || value.toLowerCase() === "off" ? undefined : value;
+export function usageShortcut(settings: ShellSettings = shellSettings()): string | undefined {
+	return settings.key("usage");
 }
 
 function positiveMs(value: string | undefined, fallback: number): number {
@@ -831,32 +789,6 @@ async function showChangesOverlay(ctx: ExtensionContext, deps: OverlayDeps): Pro
 		view?.dispose();
 		view = undefined;
 	}
-}
-
-/** The palette's commands that also have a key, each with the key as configured in the settings. */
-export function paletteShortcuts(env: NodeJS.ProcessEnv = process.env, settings: ShellSettings = shellSettings(env)): Record<string, string | undefined> {
-	return { "jhon:status": settings.key("panel"), "jhon:changes": changesShortcut(settings), "jhon:agents": backgroundTasksKey(settings), "jhon:panel": railSheetKey(settings), "jhon:usage": usageShortcut(env) };
-}
-
-// The command palette is a curated, grouped menu (Configuration, Session,
-// Jhon), not a raw listing of every registered
-// extension command: buildCommandPaletteGroups keeps only the catalog
-// entries that are actually registered, so a missing extension never shows
-// a dead row. Selecting an entry runs it exactly as if the user had typed
-// the underlying slash command.
-async function showCommandPalette(pi: ExtensionAPI, ctx: ExtensionContext, env: NodeJS.ProcessEnv): Promise<void> {
-	if (!ctx.hasUI) return;
-	const groups = buildCommandPaletteGroups(pi.getCommands(), paletteShortcuts(env));
-	if (groups.length === 0) {
-		ctx.ui.notify("No Jhon commands are registered.", "info");
-		return;
-	}
-	const result = await ctx.ui.custom<CommandPaletteResult>(
-		(tui, theme, _keybindings, done) => new CommandPalette(groups, withOverlayRepaint(tui, done), theme, () => Math.max(0, tui.terminal.rows), shellSettings().ascii()),
-		// G's Commands card: 70% wide, at least 60 columns, at most 85% tall, centred.
-		{ overlay: true, overlayOptions: { anchor: "center", width: "70%", minWidth: 60, maxHeight: "85%" } },
-	);
-	if (result?.type === "run") pi.sendUserMessage(`/${result.name}`, { expandPromptTemplates: true });
 }
 
 function showChanges(ctx: ExtensionContext, model: ChangesModel, visible = true, turn: () => TurnSummary | undefined = () => undefined): void {
@@ -1186,7 +1118,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		description: "Every configured provider's subscription usage windows and resets; r refreshes",
 		handler: async (_args, ctx) => { await openUsage(ctx); },
 	});
-	const usageKey = usageShortcut(env);
+	const usageKey = usageShortcut(shellSettings(env));
 	if (usageKey) {
 		pi.registerShortcut(usageKey as Parameters<ExtensionAPI["registerShortcut"]>[0], {
 			description: "Shows every configured provider's subscription usage",
@@ -1270,17 +1202,14 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	let runningJobs: RunningJobDisplay[] | undefined;
 	// The jobs that finished lately, which JOBS shows for a minute (L168).
 	let finishedJobs: RunningJobDisplay[] = [];
-	// What this session's sub-agents spent, for STATS (T92, L658).
-	let agentSpend: SessionStats["subagents"];
 	let jobClock: ReturnType<typeof setInterval> | undefined;
 	const lingering = () => finishedJobs.some((job) => deps.now() - (job.endedAt ?? 0) < JOBS_FINISHED_TTL_MS);
 	const displays = (items: unknown): RunningJobDisplay[] => Array.isArray(items)
 		? items.filter((item): item is RunningJobDisplay => typeof item?.id === "string" && typeof item.label === "string" && typeof item.startedAt === "number")
 		: [];
 	pi.events.on(TASKS_EVENT, (value) => {
-		const event = value as { sessionId?: unknown; tasks?: unknown; finished?: unknown; spend?: SessionStats["subagents"] } | undefined;
+		const event = value as { sessionId?: unknown; tasks?: unknown; finished?: unknown } | undefined;
 		if (!currentContext || event?.sessionId !== currentContext.sessionManager.getSessionId() || !Array.isArray(event.tasks)) return;
-		agentSpend = event.spend && typeof event.spend.runs === "number" ? event.spend : undefined;
 		runningJobs = displays(event.tasks);
 		finishedJobs = displays(event.finished).filter((job) => typeof job.endedAt === "number");
 		// The cards' times run live: one redraw a second while a task runs or a
@@ -1530,7 +1459,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			// status bar at the bottom. Wide (the rail shown) each sits between two
 			// margin rows; without the rail in fullscreen exactly one status row, G's,
 			// with `⧗ N jobs` in it, the model in the title row, the integrations in
-			// the rail and the panel sheet only. A regular terminal draws G's one
+			// the rail only. A regular terminal draws G's one
 			// compact bar instead.
 			const fullscreen = () => (tui as TUI & { mode?: string }).mode === "fullscreen";
 			const wide = () => fullscreen() && (tui.terminal?.columns ?? 0) >= SIDEBAR_BREAKPOINT && visualSettings.statusPlacement !== "hidden";
@@ -1583,7 +1512,12 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 							return hoverTo<StatusHover>(statusOwner, statusHover, !target ? undefined : target.kind === "toggle" ? target.section : "open-changes", (value) => { statusHover = value; });
 						}
 						if (event.type !== "click" || event.button !== "left" || !target) return undefined;
-						if (target.kind === "open-changes") { void openChanges(ctx); return { handled: true, render: true }; }
+						if (target.kind === "open-changes") {
+							// T171: the click is counted, as /jhon:changes is (lib/ui-use.ts).
+							recordUse(pi, "click changes");
+							void openChanges(ctx);
+							return { handled: true, render: true };
+						}
 						return fold(target.section);
 					},
 				};
@@ -1612,21 +1546,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			const jobsPart = workPart("jobs", "JOBS", renderShellJobsSection, undefined, () => { pi.events.emit(OPEN_TASKS_EVENT, { ctx, view: "jobs" }); });
 			// The work row's lead while sub-agents run, as the Gentle Shell's: `◐ N agents`.
 			const agentsPart = workPart("agents", "AGENTS", renderShellAgentsSection, () => agentsWorkSummary([...(runningJobs ?? []), ...finishedJobs], theme, deps.now()), () => { pi.events.emit(OPEN_TASKS_EVENT, { ctx }); });
-			// STATS, as the Gentle Shell's (T92, L658): the session's spend, per model, and its sub-agents'; its header folds it.
-			let statsHovered = false;
-			const statsOwner = {};
-			const sessionStatsNow = (): SessionStats => ({ ...collectSessionStats(ctx.sessionManager.getEntries()), subagents: agentSpend });
-			const statsPart = sidebarPart(tui, "stats", { render: (): string[] => [], invalidate() {}, dispose() {} }, {
-				surface: "panel",
-				digest: () => JSON.stringify([ctx.sessionManager.getEntries().length, agentSpend, deps.activeProfile(), railFolded.has("STATS"), statsHovered]),
-				render: (width) => renderShellStatsSection(sessionStatsNow(), theme, width, { profile: deps.activeProfile(), subscription: footerModel().subscription, folded: railFolded.has("STATS"), hovered: statsHovered }),
-				invalidate() {},
-				handleMouse(event) {
-					if (event.type === "move" && event.button === "none") return hoverTo<true>(statsOwner, statsHovered || undefined, event.y === 0 ? true : undefined, (value) => { statsHovered = value ?? false; });
-					if (event.type !== "click" || event.button !== "left" || event.y !== 0) return undefined;
-					return fold("STATS");
-				},
-			});
 			// The status line spans the width under the rail (L97); the rail has
 			// no key line, "/ commands" is the prompt's alone (L143). Narrow, it is
 			// G's one status row, `⧗ N jobs` in it and the model in the title row,
@@ -1655,7 +1574,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 					}
 					return part.render(width);
 				},
-				dispose() { disposeHeader(); disposeStatusbar(); disposeLdd(); uninstall(); jobsPart.dispose(); agentsPart.dispose(); statsPart.dispose(); part.dispose(); if (sidebarTui === tui) sidebarTui = undefined; } };
+				dispose() { disposeHeader(); disposeStatusbar(); disposeLdd(); uninstall(); jobsPart.dispose(); agentsPart.dispose(); part.dispose(); if (sidebarTui === tui) sidebarTui = undefined; } };
 		});
 		void refreshUsage(ctx, true);
 		const ownsPrompt = installPrompt(
@@ -1666,27 +1585,22 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				prompt.setAnimationPolicy(animationPolicy);
 			},
 			{ now: () => deps.now(), doubleEscCancelEnabled: () => doubleEscCancelPolicy === "on", dispatchQueuedText: queueAfterSettle, workingLabel: () => apiWait.label(),
-				// Without the rail, [ Panel ] opens the panel sheet, and the work row
-				// above the rule folds TODOS and AGENTS; a tap on it opens the sheet.
+				// Without the rail the work row above the rule folds TODOS and AGENTS.
 				// The editor joins the fullscreen chrome, rail or not; a regular terminal keeps the float or neon card, as G's.
 				panelChrome: (tui) => (tui as TUI & { mode?: string }).mode === "fullscreen" && Boolean(tui.terminal),
-				panelButton: (tui) => narrowChrome(tui),
 				topRows: (tui, width, hovered) => {
 					if (!narrowChrome(tui)) return [];
 					const row = renderWorkRow(workParts(tui).map((work) => work.summary), ctx.ui.theme, width, hovered === 0, shellSettings().ascii());
 					return row ? [row] : [];
 				},
 				// A tap on the work row opens the leading section's own view (sub-agents
-				// open /jhon:agents); a section without one, such as the todo list, the sheet.
+				// open /jhon:agents); a section without one, such as the todo list,
+				// opens nothing (T169: the panel sheet is gone).
 				onTopRowClick: (tui, index) => {
 					if (!narrowChrome(tui) || index !== 0) return;
 					const parts = workParts(tui);
-					const lead = parts[workRowLead(parts.map((work) => work.summary))];
-					if (!lead) return;
-					if (lead.part.open) lead.part.open();
-					else void openPanelSheet(ctx);
-				},
-				onPanelClick: () => { void openPanelSheet(ctx); } },
+					parts[workRowLead(parts.map((work) => work.summary))]?.part.open?.();
+				} },
 		);
 		// Hide native feedback only when our petal replaces it. Native transcript
 		// thinking blocks remain Pi-owned; this changes only the supported loader UI.
@@ -1756,90 +1670,6 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		pi.registerShortcut(shortcut as Parameters<ExtensionAPI["registerShortcut"]>[0], {
 			description: "Opens the session's Git changes, committed or not",
 			handler: async (ctx) => openChanges(ctx),
-		});
-	}
-	// The rail's sections as the Gentle Shell's full-width sheet (T15.12c):
-	// /jhon:panel, the editor rule's [ Panel ] and a tap on the work row. The
-	// sheet leaves the editor's [ Panel ] clickable, so an open sheet is
-	// reused instead of stacking another overlay per click.
-	// Never over a visible rail (L143, L153 answer 5): /jhon:panel, the palette's
-	// Panel row and alt+r all come here, so they share the one rule.
-	let openSheet: Promise<null | undefined> | undefined;
-	const openPanelSheet = async (ctx: ExtensionContext) => {
-		const visible = sidebarTui?.terminal ? sidebarState(sidebarTui) : undefined;
-		if (visible?.active && visible.ownsHost?.()) return undefined;
-		if (openSheet) return openSheet;
-		const opened = showPanelSheet(ctx).finally(() => { if (openSheet === opened) openSheet = undefined; });
-		openSheet = opened;
-		return opened;
-	};
-	const showPanelSheet = (ctx: ExtensionContext) =>
-		ctx.ui.custom<null>(
-			(tui, theme, _keybindings, done) => {
-				const close = withOverlayRepaint(tui, done);
-				let scrollTop = 0;
-				let maxScroll = 0;
-				let backHovered = false;
-				let sheetWidth = 0;
-				return {
-					render(width: number) {
-						sheetWidth = width;
-						// Hang from the top and leave the bottom rows to the work row, the
-						// editor and the status line, so the input stays visible. The
-						// sections live on the terminal the shell's footer drew on.
-						const host = (sidebarTui ?? tui) as TUI;
-						const rows = Math.max(4, (host.terminal?.rows ?? 24) - SHEET_RESERVED_ROWS);
-						const sheet = renderPanelSheet(sidebarState(host).parts, theme, width, { rows, scrollTop, backHovered, ascii: shellSettings().ascii() });
-						maxScroll = sheet.maxScroll;
-						scrollTop = Math.min(scrollTop, maxScroll);
-						return sheet.lines;
-					},
-					handleInput(data: string) {
-						if (matchesKey(data, "escape") || data === "q") { close(null); return; }
-						if (matchesKey(data, "down") || data === "j") scrollTop = Math.min(maxScroll, scrollTop + 1);
-						else if (matchesKey(data, "up") || data === "k") scrollTop = Math.max(0, scrollTop - 1);
-						else return;
-						tui.requestRender();
-					},
-					// `esc back` is a control too: hover paints it, a click closes the sheet; the wheel scrolls.
-					handleMouse(event: TuiMouseEvent) {
-						const onBack = panelSheetBackHit(sheetWidth || event.width, event.x, event.y);
-						if (event.type === "move" && onBack !== backHovered) { backHovered = onBack; return { handled: true, render: true }; }
-						if (event.type === "click" && event.button === "left" && onBack) { close(null); return { handled: true, render: true }; }
-						if (event.type === "wheel") {
-							scrollTop = Math.max(0, Math.min(maxScroll, scrollTop + Math.sign(event.wheelDelta ?? 0)));
-							return { handled: true, render: true };
-						}
-						return undefined;
-					},
-					invalidate() {},
-				};
-			},
-			{ overlay: true, overlayOptions: { width: "100%", anchor: "top-center" } },
-		);
-	pi.registerCommand(PANEL_COMMAND_NAME, {
-		description: "The rail's panel (LDD, todos, jobs, agents, changes) as a full-width sheet",
-		handler: async (_args, ctx) => { await openPanelSheet(ctx); },
-	});
-	// alt+r (shell.keys.rail) is Jhon's extra key for the sheet, under a multiplexer
-	// or not (L153 answer 5); like /jhon:panel it does nothing while a rail is
-	// visible: never the same rail twice (L143).
-	const railKey = railSheetKey(settings);
-	if (railKey) {
-		pi.registerShortcut(railKey as Parameters<ExtensionAPI["registerShortcut"]>[0], {
-			description: "Opens the panel sheet (/jhon:panel) when no rail is visible",
-			handler: async (ctx) => { await openPanelSheet(ctx); },
-		});
-	}
-	pi.registerCommand(COMMANDS_COMMAND_NAME, {
-		description: "The command palette: Jhon's commands, grouped",
-		handler: async (_args, ctx) => showCommandPalette(pi, ctx, env),
-	});
-	const commandsShortcut = commandsKey(settings);
-	if (commandsShortcut) {
-		pi.registerShortcut(commandsShortcut as Parameters<ExtensionAPI["registerShortcut"]>[0], {
-			description: "Opens the command palette",
-			handler: async (ctx) => showCommandPalette(pi, ctx, env),
 		});
 	}
 	// One Customize overlay (T15.3; Settings until L174), G's Customization view:

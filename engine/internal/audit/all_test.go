@@ -93,7 +93,8 @@ func TestAnUnreadableSubagentTranscriptIsAnAuditError(t *testing.T) {
 }
 
 // jhon-shell appends a jhon-ui-use entry each time a command or shortcut of
-// its UI runs (shell/lib/ui-use.ts); the fleet counts them by feature.
+// its UI runs, or a click it handles opens a view (T171: "click agents"),
+// (shell/lib/ui-use.ts); the fleet counts them by feature.
 func TestUIUsesCountJhonShellEntries(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "s.jsonl")
 	lines := `{"type":"session","id":"s"}
@@ -101,12 +102,13 @@ func TestUIUsesCountJhonShellEntries(t *testing.T) {
 {"type":"custom","customType":"web-search-results","data":{"feature":"/not-ours"}}
 {"type":"custom","customType":"jhon-ui-use","data":{"feature":"/jhon:stats"}}
 {"type":"custom","customType":"jhon-ui-use","data":{"feature":"key ctrl+t"}}
+{"type":"custom","customType":"jhon-ui-use","data":{"feature":"click agents"}}
 not json
 `
 	must(t, os.WriteFile(f, []byte(lines), 0o644))
-	eq(t, "uses", UIUses(f), map[string]int{"/jhon:stats": 2, "key ctrl+t": 1})
+	eq(t, "uses", UIUses(f), map[string]int{"/jhon:stats": 2, "key ctrl+t": 1, "click agents": 1})
 	fleet := Aggregate([]Audited{{Path: f, Jhon: true, Result: &Result{Status: "clean"}, UIUse: UIUses(f)}, {Path: f, Jhon: true, Result: &Result{Status: "clean"}, UIUse: map[string]int{"/plan": 1}}}, nil, time.Time{})
-	eq(t, "fleet uses", fleet.UIUse, map[string]int{"/jhon:stats": 2, "key ctrl+t": 1, "/plan": 1})
+	eq(t, "fleet uses", fleet.UIUse, map[string]int{"/jhon:stats": 2, "key ctrl+t": 1, "click agents": 1, "/plan": 1})
 }
 
 // From Claude Code 2.1.310 Jhon's hooks reach a session only through its

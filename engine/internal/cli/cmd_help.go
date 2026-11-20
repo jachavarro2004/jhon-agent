@@ -275,7 +275,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            the one-time move from profiles.json, then drops
                            the keys v0.1, v0.2 and v0.4 removed
                            (card_style, quiet_tools, key_hints, [shell.extra],
-                           keys.usage, ...), placing renamed values, after a
+                           keys.tasks, keys.rail, keys.commands, ...),
+                           placing renamed values (keys.tasks as
+                           keys.agents), after a
                            backup to settings-backup-<UTC>/settings.toml
   jhon profile [list] | show [<name>] | use <name>
                            the owner's model profiles (~/.config/jhon/profiles.json):

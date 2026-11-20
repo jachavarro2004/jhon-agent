@@ -1,4 +1,3 @@
-import { shellSettings, type ShellSettings } from "../settings.ts";
 import { ScrollView, VStack, visibleWidth, type Component, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { setSidebarHover, sidebarState, type SidebarRail } from "./shell-sidebar.ts";
 import type { ShellBarTheme } from "./shell-bar.ts";
@@ -8,15 +7,6 @@ import { renderSidebarBanner } from "./shell-sidebar-banner.ts";
 import type { Density, StatusPlacement } from "./visual-customization-policy.ts";
 
 export const SIDEBAR_BREAKPOINT = 140;
-/**
- * The key that opens the panel sheet (/jhon:panel) when no rail is visible,
- * under a multiplexer or not: shell.keys.rail, alt+r by default (free in pi's
- * keymap), Jhon's extra beside the Gentle Shell's [ Panel ] (L153 answer 5);
- * off turns the key off.
- */
-export function railSheetKey(store: ShellSettings = shellSettings()): string | undefined {
-	return store.key("rail");
-}
 /** The rail is 50 columns at every width, as Gentle Shell's (C9). */
 const RAIL_WIDTH = 50;
 const RAIL_PADDING = 1;

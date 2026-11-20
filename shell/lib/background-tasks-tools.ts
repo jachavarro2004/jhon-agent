@@ -26,6 +26,7 @@ import { createTaskRegistry, MAX_RUNNING_TASKS, type AgentRun, type AgentStartOp
 import { TasksView } from "./background-tasks-view.ts";
 import { openInExternalEditor } from "./ui/jhon-panel-editor.ts";
 import { OPEN_TASKS_EVENT, TASKS_EVENT } from "./events.ts";
+import { recordUse } from "./ui-use.ts";
 import { BASH_BACKGROUND_TOOL, isStandaloneSleep, MONITOR_TOOL, type JobExecOperations } from "./ui/background-jobs.ts";
 import { foregroundWaitNote } from "./foreground-wait.ts";
 import { createMonitorController, MONITOR_BATCH_MS, MONITOR_FLOOD_LINES, MONITOR_FLOOD_WINDOW_MS, MONITOR_LINES_PER_NOTICE, MONITOR_MAX_TIMEOUT_SECONDS, type MonitorBatch, type MonitorNotice, type MonitorStopReason } from "./ui/background-monitor.ts";
@@ -41,9 +42,9 @@ const TASKS_STATUS_KEY = "jhon-tasks";
 // (selection-engine.ts, advertised in its bottom rule), and pi binds
 // alt+b/d/f/p/q/v/y/z: alt+s is free.
 
-/** The key that opens /jhon:agents, shell.keys.tasks: alt+s, another (JHON_SHELL_TASKS_KEY overrides it), or off. */
+/** The key that opens /jhon:agents, shell.keys.agents: alt+s, another (JHON_SHELL_TASKS_KEY overrides it), or off. */
 export function backgroundTasksKey(settings: ShellSettings = shellSettings()): string | undefined {
-	return settings.key("tasks");
+	return settings.key("agents");
 }
 
 export function formatTaskDuration(ms: number): string {
@@ -263,7 +264,6 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 	let outputDir: string | undefined;
 	let current: ExtensionContext | undefined;
 	let repaint: (() => void) | undefined;
-	let sequence = 0;
 	const sessionId = () => current?.sessionManager?.getSessionId?.() ?? "";
 	const callerSession = (ctx: ExtensionContext | undefined) => ctx?.sessionManager?.getSessionId?.() ?? sessionId();
 
@@ -323,10 +323,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		// JOBS shows a finished command or monitor for a minute beside the running ones (L168).
 		const finished = tasks.list(sessionId()).filter((task): task is JobRecord => task.kind !== "agent" && task.status !== "running" && task.endedAt !== undefined && now() - task.endedAt < JOBS_FINISHED_TTL_MS)
 			.sort((a, b) => b.endedAt! - a.endedAt!).slice(0, 3);
-		// STATS counts every sub-agent of the session, finished ones too (T92, L658).
-		const agents = tasks.list(sessionId()).filter((task): task is AgentRun => task.kind === "agent");
-		const spend = { runs: agents.length, tokens: agents.reduce((n, a) => n + a.tokens, 0), cost: agents.reduce((n, a) => n + a.cost, 0) };
-		pi.events?.emit?.(TASKS_EVENT, { sessionId: sessionId(), spend, tasks: running.map((task) => {
+		pi.events?.emit?.(TASKS_EVENT, { sessionId: sessionId(), tasks: running.map((task) => {
 			const step = task.kind === "agent" ? task.activity.at(-1) : undefined;
 			return { id: task.id, kind: task.kind, label: task.label, startedAt: task.startedAt, ...(step ? { step } : {}), ...(task.kind === "agent" ? { tokens: task.tokens } : {}) };
 		}), finished: finished.map((task) => ({ id: task.id, kind: task.kind, label: task.label, startedAt: task.startedAt, endedAt: task.endedAt, status: task.status, exitCode: task.exitCode ?? null })) });
@@ -527,8 +524,14 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		description: "Jobs: this session's background commands and monitors, running first",
 		handler: async (_args: string, ctx: any) => openTasks(ctx, "jobs"),
 	});
-	// The narrow work row and the rail's AGENTS card ask for the Agents view (T15.12d), the JOBS card for the Jobs view.
-	pi.events?.on?.(OPEN_TASKS_EVENT, (payload: { ctx?: ExtensionContext; view?: unknown } | undefined) => { if (payload?.ctx) void openTasks(payload.ctx, payload.view === "jobs" ? "jobs" : "agents"); });
+	// The narrow work row asks for the Agents view (T15.12d), or the Jobs view;
+	// each click is counted as a command is (T171, lib/ui-use.ts).
+	pi.events?.on?.(OPEN_TASKS_EVENT, (payload: { ctx?: ExtensionContext; view?: unknown } | undefined) => {
+		if (!payload?.ctx) return;
+		const view = payload.view === "jobs" ? "jobs" : "agents";
+		recordUse(pi, `click ${view}`);
+		void openTasks(payload.ctx, view);
+	});
 	const tasksKey = backgroundTasksKey(deps.settings ?? shellSettings(env));
 	if (tasksKey) pi.registerShortcut?.(tasksKey, { description: "Opens the Agents view (the rail's AGENTS)", handler: async (ctx: any) => openTasks(ctx, "agents") });
 

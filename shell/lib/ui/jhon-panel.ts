@@ -27,7 +27,7 @@ import { changeCardLines } from "./jhon-panel-change.ts";
 import { GrantsCard, type GrantsData } from "./jhon-panel-grants.ts";
 import { TestsCard, type TestsData } from "./jhon-panel-tests.ts";
 import { asciiText, renderStateBlock, themePainter, type KeyHint } from "./primitives/index.ts";
-import { renderPaletteCard } from "./command-palette.ts";
+import { renderPaletteCard } from "./overlay-card.ts";
 import { fullscreenBodyRows, renderFullscreenView } from "./fullscreen-view.ts";
 
 /** A key hint as G's footers write it, `<Key> <action>`: `esc` → `Esc`, `or` kept. */

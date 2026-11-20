@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import {
-	PANEL_ROW_INDENT, clipPanelText, fitPanelLine, panelSheetBackHit, renderPanelHeader, renderPanelRow, renderPanelSheet, renderWorkRow, workRowLead,
+	PANEL_ROW_INDENT, RAIL_ORDER, clipPanelText, fitPanelLine, renderPanelHeader, renderPanelRow, renderWorkRow, workRowLead,
 	type PanelSummary,
 	setChromeSurface,
 } from "../lib/ui/shell-panel.ts";
@@ -81,37 +81,9 @@ test("workRowLead and renderWorkRow: ` ▸ <lead> … <count>`, the highest prio
 	} finally { setChromeSurface("transparent"); }
 });
 
-const part = (lines: string[]) => ({ render: (_width: number) => lines });
-
-test("renderPanelSheet: ` 力 Panel … esc back`, then every section in rail order ldd → todo → jobs → agents → footer with a blank row between, exactly width × rows (L174: LDD first)", () => {
-	const parts = new Map([["footer", part(["▾ CHANGES"])], ["agents", part(["▾ AGENTS"])], ["todo", part(["▾ TODOS", "  ◐ one", ""])], ["jobs", part([])], ["ldd", part(["▾ LDD", "  ◆ rail"])]]);
-	for (const width of WIDTHS) {
-		const sheet = renderPanelSheet(parts, plain, width, { rows: 12, scrollTop: 0 });
-		assert.equal(sheet.lines.length, 12);
-		for (const line of sheet.lines) assert.equal(visibleWidth(line), width);
-		const text = sheet.lines.map((line) => line.trimEnd());
-		assert.match(text[0]!, /^ 力 Panel +esc back$/);
-		assert.deepEqual(text.slice(1, 11), ["", " ▾ LDD", "   ◆ rail", "", " ▾ TODOS", "   ◐ one", "", " ▾ AGENTS", "", " ▾ CHANGES"]);
-		assert.equal(sheet.maxScroll, 0);
-	}
-	const ascii = renderPanelSheet(parts, plain, 60, { rows: 12, scrollTop: 0, ascii: true });
-	assert.match(ascii.lines[0]!, /^ jhon Panel +esc back $/);
-	assert.ok(ascii.lines.every((line) => ASCII_ONLY.test(line)), "ASCII prints only ASCII");
-});
-
-test("renderPanelSheet scrolls: `↓ N more · scroll` while rows hide below, the last page without it", () => {
-	const parts = new Map([["todo", part(Array.from({ length: 20 }, (_, i) => `task ${i}`))]]);
-	const top = renderPanelSheet(parts, plain, 40, { rows: 6, scrollTop: 0 });
-	assert.equal(top.maxScroll, 16);
-	assert.deepEqual(top.lines.map((line) => line.trimEnd()).slice(1), ["", " task 0", " task 1", " task 2", " ↓ 17 more · scroll"]);
-	const end = renderPanelSheet(parts, plain, 40, { rows: 6, scrollTop: 99 });
-	assert.equal(end.lines.at(-1)!.trimEnd(), " task 19");
-	assert.match(renderPanelSheet(parts, tagged, 40, { rows: 6, scrollTop: 0, backHovered: true }).lines[0]!, /<warning>esc back<\/warning>/);
-});
-
-test("panelSheetBackHit: only row 0, on ` esc back ` at the right end", () => {
-	assert.equal(panelSheetBackHit(60, 59, 0), true);
-	assert.equal(panelSheetBackHit(60, 50, 0), true);
-	assert.equal(panelSheetBackHit(60, 49, 0), false);
-	assert.equal(panelSheetBackHit(60, 55, 1), false);
+// T169 (L1437, L1438): the panel sheet is gone, and with it the rail's STATS
+// card; the rail's parts, in order, are LDD first (L174), then G's todo, jobs,
+// agents and the rest of Status.
+test("the rail's order is ldd → todo → jobs → agents → footer, with no stats (T169)", () => {
+	assert.deepEqual([...RAIL_ORDER], ["ldd", "todo", "jobs", "agents", "footer"]);
 });

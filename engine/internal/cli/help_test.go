@@ -114,12 +114,26 @@ func repoRoot(t *testing.T) string {
 	return root
 }
 
-// `jhon settings --help` names the usage key among the ones migrate drops
-// (T15.10, L117: /jhon:usage and alt+u went).
-func TestSettingsHelpNamesTheRetiredUsageKey(t *testing.T) {
+// `jhon settings --help` names the keys migrate drops or moves: T167 made
+// keys.usage a setting again and moved keys.tasks to keys.agents; T169
+// retired keys.rail and keys.commands (L1438).
+func TestSettingsHelpNamesTheRetiredKeys(t *testing.T) {
 	_, out := capture(t, []string{"settings", "--help"})
-	if !strings.Contains(out, "keys.usage") {
-		t.Errorf("jhon settings --help does not name keys.usage among the dropped keys:\n%s", out)
+	at := strings.Index(out, "jhon settings migrate")
+	if at < 0 {
+		t.Fatalf("no migrate entry:\n%s", out)
+	}
+	entry := out[at:]
+	if end := strings.Index(entry, "jhon profile"); end > 0 {
+		entry = entry[:end]
+	}
+	for _, key := range []string{"keys.tasks", "keys.rail", "keys.commands"} {
+		if !strings.Contains(entry, key) {
+			t.Errorf("jhon settings --help does not name %s among the dropped keys:\n%s", key, entry)
+		}
+	}
+	if strings.Contains(entry, "keys.usage") {
+		t.Errorf("keys.usage is a setting again, still named among the dropped keys:\n%s", entry)
 	}
 }
 

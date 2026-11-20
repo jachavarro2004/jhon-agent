@@ -8,7 +8,7 @@
 import "./isolated-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { counted, UI_USE_ENTRY } from "../lib/ui-use.ts";
+import { counted, recordUse, UI_USE_ENTRY } from "../lib/ui-use.ts";
 
 function fakePi() {
   const entries: Array<[string, unknown]> = [];
@@ -54,4 +54,14 @@ test("everything else is pi's own, run on pi itself", () => {
   const c = counted(api as any);
   c.registerTool({ name: "inspect" });
   assert.deepEqual(api.tools(), ["inspect"], "a method keeping private state works through counted");
+});
+
+// T171 (L1437, L1438): a click the shell handles itself (the work row, the
+// rail's CHANGES row) is counted the same way, naming what it opened.
+test("recordUse appends one entry naming the feature, and never throws", () => {
+  const { pi, entries } = fakePi();
+  recordUse(pi, "click agents");
+  assert.deepEqual(entries, [[UI_USE_ENTRY, { feature: "click agents" }]]);
+  assert.doesNotThrow(() => recordUse({ appendEntry: () => { throw new Error("no session"); } }, "click jobs"));
+  assert.doesNotThrow(() => recordUse({}, "click changes"));
 });

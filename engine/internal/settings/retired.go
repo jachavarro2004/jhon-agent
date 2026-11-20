@@ -36,10 +36,9 @@ type Note struct {
 // retiredWhy are the removed keys with no successor, and why each goes.
 var retiredWhy = map[string]string{
 	"shell.behaviour.quiet_tools": "the shell always draws its own tool cards",
-	"shell.behaviour.key_hints":   "the keys are listed in the command palette and the README",
+	"shell.behaviour.key_hints":   "the keys are listed in the README",
 	"shell.extra.card_content":    "tool cards always show their result previews",
 	"shell.extra.visual_profiles": "visual profiles are gone",
-	"shell.keys.usage":            "/jhon:usage is gone: the status line shows the 5h and week windows",
 	"integrations.dashboard":      "/jhon:dashboard opens the dashboard at this session whenever you ask; nothing else read the switch",
 	// T24b (L291): Jhon keeps no multiplexer integration.
 	"integrations.herdr":            herdrGone,
@@ -55,6 +54,9 @@ var retiredWhy = map[string]string{
 	"shell.behaviour.fresh_session_tokens": "the fresh-session notice comes at three quarters of shell.behaviour.compact_tokens",
 	"shell.behaviour.backstop_tokens":      "the delegation notice comes at half of shell.behaviour.compact_tokens, or 15% of the window if that comes first",
 	"shell.behaviour.child_cap_tokens":     "sub-agents are no longer capped; past shell.behaviour.child_backstop_tokens they hear once to wrap up",
+	// T169 (L1437, L1438): the panel sheet and the command palette are gone.
+	"shell.keys.rail":     "the panel sheet (/jhon:panel) was removed from the shell",
+	"shell.keys.commands": "the command palette (/jhon:commands) was removed from the shell",
 }
 
 const herdrGone = "herdr is no longer part of Jhon; use any multiplexer, or none"
@@ -70,6 +72,10 @@ var retiredIn = map[string]string{
 	"shell.behaviour.fresh_session_tokens": "v0.4",
 	"shell.behaviour.backstop_tokens":      "v0.4",
 	"shell.behaviour.child_cap_tokens":     "v0.4",
+	// T167, T169.
+	"shell.keys.tasks":    "v0.4",
+	"shell.keys.rail":     "v0.4",
+	"shell.keys.commands": "v0.4",
 }
 
 // RetiredIn is the release that removed key: v0.1 unless retiredIn says,
@@ -134,6 +140,12 @@ func retire(key string, v any) (Note, bool) {
 		}
 		n.Why = "one animation level now: full or off"
 		n.Now, n.values = fmt.Sprintf("shell.appearance.animations = %q", now), map[string]any{key: now}
+	case key == "shell.keys.tasks":
+		// T167 (L1438): the key opens /jhon:agents, and is named for it now.
+		n.Why = "the key opens /jhon:agents, so it is shell.keys.agents now"
+		if s, ok := v.(string); ok && (s == "off" || keyRe.MatchString(s)) {
+			n.Now, n.values = fmt.Sprintf("shell.keys.agents = %q", s), map[string]any{"shell.keys.agents": s}
+		}
 	case key == "shell.appearance.card_style":
 		// T15.12d (L153 answer 1): float and neon are back, under their own key.
 		n.Why = "the card style is shell.appearance.cards now (float or neon)"

@@ -1,7 +1,6 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { stripAnsi } from "./terminal-theme.ts";
 import { CARD_STYLE, type CardStyle } from "./shell-card.ts";
-import { paintHoverable } from "./shell-hover.ts";
 import { asciiText, glyph as tableGlyph } from "./primitives/glyphs.ts";
 import { shellSettings } from "../settings.ts";
 
@@ -64,10 +63,6 @@ export interface PromptFrameOptions {
 	escHint?: string;
 	/** Replaces "working…" while working (e.g. "waiting for Claude API · 72s"). */
 	workingLabel?: string;
-	/** The Gentle Shell's `[ Panel ]` at the rule's right end: no rail is shown, and it opens the panel sheet. */
-	panelButton?: boolean;
-	/** The pointer is over `[ Panel ]`. */
-	panelHovered?: boolean;
 	/** shell.appearance.ascii (read from the settings when absent): the chrome in its ASCII forms, the typed text untouched. */
 	ascii?: boolean;
 }
@@ -83,8 +78,6 @@ export const IDLE_LABEL = "waiting for input";
 const PANEL_PROMPT = "› ";
 /** The `›` mark's role, as the Gentle Shell's: the accent, bold. */
 const PROMPT_MARK_ROLE = "accent";
-/** The button the editor rule carries without the rail; a click opens the panel sheet (T15.12c). */
-export const PANEL_BUTTON = "[ Panel ]";
 export const DOUBLE_ESC_CANCEL_HINT = "esc again to cancel";
 export const IDLE_ESC_CLEAR_HINT = "esc again to clear";
 const LABEL_ROLE = "muted";
@@ -245,26 +238,13 @@ export function panelPromptRow(line: string, layout: PromptLayout, prefix = " ".
 // The Gentle Shell's panel editor (its panelPromptRule): `─ ◆ waiting for
 // input ──── <hint> ─` across the width, the same petal, glyphs and state
 // words as the other styles, a scroll indicator in the label's place, and at
-// the right end the esc hint; without the rail it ends
-// `─ [ Panel ] <hint> ─` as G's narrow editor, the label giving way first.
+// the right end the esc hint. (T169 removed G's narrow `[ Panel ]` button
+// with the panel sheet it opened.)
 function ruleHeader(width: number, options: PromptFrameOptions, top: string | undefined, right: string | undefined): string {
 	const label = top ?? stateLabel(options) ?? IDLE_LABEL;
 	const glyph = shownPetal(options);
 	const petal = options.fg(petalTone(options.state, options.tick), options.bold ? options.bold(glyph) : glyph);
 	const paint = (text: string) => options.state === PROMPT_STATE.WORKING && !top ? scanWorkingText(text, options.tick, options.fg) : options.fg(LABEL_ROLE, text);
-	if (options.panelButton && width >= visibleWidth(PANEL_BUTTON)) {
-		const button = paintHoverable({ fg: options.fg }, PANEL_BUTTON, options.panelHovered ?? false, "accent");
-		if (width < visibleWidth(PANEL_BUTTON) + 3) return button + options.borderColor(rule(width - visibleWidth(PANEL_BUTTON)));
-		const hintWidth = Math.max(0, width - visibleWidth(PANEL_BUTTON) - 4);
-		const hint = right && hintWidth > 0 ? truncateToWidth(right, hintWidth, "…") : "";
-		const end = ` ${button}${hint ? ` ${options.fg(LABEL_ROLE, hint)}` : ""} ${options.borderColor("─")}`;
-		const available = width - visibleWidth(end);
-		if (available < 4) return options.borderColor(rule(available)) + end;
-		const lead = 3 + visibleWidth(glyph);
-		const clipped = truncateToWidth(label, Math.max(0, available - lead - 1), "…");
-		const fill = available - lead - visibleWidth(clipped);
-		return `${options.borderColor("─ ")}${petal} ${paint(clipped)}${options.borderColor(rule(fill))}${end}`;
-	}
 	const end = right ? ` ${options.fg(LABEL_ROLE, right)} ` : "";
 	const endWidth = right ? visibleWidth(right) + 2 : 0;
 	// As G's panelPromptRule: when the label and the hint do not fit, the rule blanks.

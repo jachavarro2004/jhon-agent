@@ -38,7 +38,7 @@ export interface SidebarRail extends Component {
 	digest?(): string;
 	/** The section's one-row digest for the narrow work row (` ▸ <lead> … <count>`); undefined without live work. */
 	summary?(): PanelSummary | undefined;
-	/** The section's own view, which a tap on the work row opens when this section leads it; without one the tap opens the panel sheet. */
+	/** The section's own view, which a tap on the work row opens when this section leads it; without one the tap opens nothing (T169). */
 	open?(): void;
 	/** The section renders panel lines (`▾ NAME … count`, then rows): a transparent rail draws it as cards, a tinted one paints it. */
 	surface?: "panel";

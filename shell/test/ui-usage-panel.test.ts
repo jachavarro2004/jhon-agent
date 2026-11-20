@@ -10,6 +10,7 @@ import { formatReset, parseAnthropicHeaders, parseNanQuota, renderUsagePanel, Us
 import { UsageView } from "../lib/ui/shell-usage-view.ts";
 import { usageShortcut } from "../extensions/ui.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
+import { envOverrides, memorySettings } from "./fake-jhon-settings.ts";
 
 const plain = { fg: (_c: string, text: string) => text };
 const NOW = 1_788_600_000_000;
@@ -61,8 +62,14 @@ test("UsageView frames the panel under `◆ Subscriptions`, refreshes on open an
 	assert.equal(closed, 2);
 });
 
-test("the usage key is alt+u; JHON_SHELL_USAGE_KEY sets another or turns it off", () => {
-	assert.equal(usageShortcut({}), "alt+u");
-	assert.equal(usageShortcut({ JHON_SHELL_USAGE_KEY: "ctrl+shift+u" }), "ctrl+shift+u");
-	assert.equal(usageShortcut({ JHON_SHELL_USAGE_KEY: "off" }), undefined);
+// T167 (L1437, L1438): the key is the setting shell.keys.usage; JHON_SHELL_USAGE_KEY
+// still sets it, resolved by `jhon settings` as the other keys' variables are.
+test("the usage key is shell.keys.usage, alt+u by default; JHON_SHELL_USAGE_KEY sets another or turns it off", () => {
+	const envSettings = (env: NodeJS.ProcessEnv) => memorySettings({}, undefined, envOverrides(env));
+	assert.equal(usageShortcut(envSettings({})), "alt+u");
+	assert.equal(usageShortcut(envSettings({ JHON_SHELL_USAGE_KEY: "ctrl+shift+u" })), "ctrl+shift+u");
+	assert.equal(usageShortcut(envSettings({ JHON_SHELL_USAGE_KEY: "off" })), undefined);
+	assert.equal(usageShortcut(envSettings({ JHON_SHELL_USAGE_KEY: "" })), undefined);
+	assert.equal(usageShortcut(memorySettings({ "shell.keys.usage": "alt+y" })), "alt+y", "the file's value");
+	assert.equal(usageShortcut(memorySettings({ "shell.keys.usage": "off" })), undefined);
 });
