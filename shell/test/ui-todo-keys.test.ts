@@ -48,17 +48,18 @@ function harness(t: TestContext, file: Record<string, string> = {}, terminalRows
 	};
 	const press = (key: string) => shortcuts.get(key)!.handler(ctx);
 	/** A terminal: regular (no pane host), the narrow form (hosted, not wide) or wide (the pane beside the conversation). */
-	const terminal = (form: "regular" | "narrow" | "wide") => {
+	const terminal = (form: "regular" | "narrow" | "wide", theme: typeof plainTheme = plainTheme) => {
 		const tui = { requestRender() {}, terminal: { rows: terminalRows, columns: form === "wide" ? 180 : 100 } } as unknown as TUI;
 		if (form !== "regular") {
 			paneState(tui).hosted = () => true;
 			paneState(tui).wide = () => form === "wide";
 		}
-		const widget = [...widgets.values()].at(-1)!(tui, plainTheme);
+		const widget = [...widgets.values()].at(-1)!(tui, theme);
 		return {
 			above: (width: number) => widget.render(width).map(stripAnsi),
 			pane: () => (paneState(tui).parts.get("todo")?.render(PANE_TEXT) ?? []).map(stripAnsi),
 			click: (y: number) => paneState(tui).parts.get("todo")?.handleMouse?.({ type: "click", button: "left", x: 2, y, width: PANE_TEXT, height: 4 } as never),
+			mouse: (event: Record<string, unknown>) => paneState(tui).parts.get("todo")?.handleMouse?.({ button: "none", x: 2, width: PANE_TEXT, height: 10, ...event } as never),
 		};
 	};
 	return { fire, write, press, shortcuts, terminal };
@@ -157,4 +158,51 @@ test("nothing shows without tasks, nor while an LDD change is active; with shell
 	assert.deepEqual(h.terminal("regular").above(100), [], "above the prompt too");
 	selectChange("todo-keys-40", undefined);
 	assert.equal(h.terminal("regular").above(100).length, 4, "the change gone, the list is back");
+});
+
+const W = PANE_TEXT;
+
+test("the done and dropped tasks fold into one `✓ N done` row; the task at hand wraps instead of being cut", async (t) => {
+	const h = harness(t);
+	await h.fire("session_start");
+	await h.write([
+		{ title: "read the spec", status: "done" }, { title: "draft the plan", status: "done" }, { title: "an old idea", status: "dropped" },
+		{ title: "write the failing tests for the pane's wheel, hover and fold through pi", status: "in_progress", note: "ScrollView" },
+		{ title: "fix tsc" },
+	]);
+	assert.deepEqual(h.terminal("wide").pane(), [
+		spread("▾ TODOS", "alt+t  2/4", W),
+		padded("  ✓ 2 done · 1 dropped", W),
+		padded("  ◐ write the failing tests for the pane's", W),
+		padded("    wheel, hover and fold through pi ·", W),
+		padded("    ScrollView", W),
+		padded("  · fix tsc", W),
+	]);
+	assert.deepEqual(h.terminal("narrow").above(100).slice(1, 5), [
+		padded("  ✓ 2 done · 1 dropped", 100),
+		padded("  ◐ write the failing tests for the pane's wheel, hover and fold", 100),
+		padded("    through pi · ScrollView", 100),
+		padded("  · fix tsc", 100),
+	], "above the prompt it wraps at the block's 64 columns");
+});
+
+test("the pane's TODOS: the pointer over its title paints it; the wheel scrolls the list, and past its ends leaves the wheel to the pane", async (t) => {
+	const h = harness(t, {}, 30);
+	await h.fire("session_start");
+	await h.write(Array.from({ length: 12 }, (_, i) => ({ title: `task ${i + 1}` })));
+	const tagged = { ...plainTheme, fg: (role: string, text: string) => (role === "warning" ? `«${text}»` : text) };
+	const wide = h.terminal("wide", tagged);
+	assert.doesNotMatch(wide.pane()[0]!, /«/);
+	assert.deepEqual(wide.mouse({ type: "move", y: 0 }), { handled: true, render: true });
+	assert.match(wide.pane()[0]!, /^«▾» «TODOS» /, "the title and its fold glyph in the hover role");
+	assert.equal(wide.mouse({ type: "move", y: 2 }), undefined);
+	assert.doesNotMatch(wide.pane()[0]!, /«/, "off the title it lets go");
+	assert.deepEqual(wide.mouse({ type: "press", button: "left", y: 0 }), { handled: true }, "the title takes the press, so pi makes the click");
+	assert.equal(wide.mouse({ type: "wheel", y: 3, wheelDelta: -1 }), undefined, "at the top a wheel up is the pane's");
+	assert.deepEqual(wide.mouse({ type: "wheel", y: 3, wheelDelta: 3 }), { handled: true, render: true });
+	assert.equal(wide.pane()[1], padded("  · task 4", W));
+	assert.equal(wide.pane().at(-1), padded("  ↑↓ 4–11/12 · alt+PgUp/PgDn", W));
+	assert.deepEqual(wide.mouse({ type: "wheel", y: 3, wheelDelta: 30 }), { handled: true, render: true });
+	assert.equal(wide.pane().at(-1), padded("  ↑↓ 5–12/12 · alt+PgUp/PgDn", W), "it stops at the end");
+	assert.equal(wide.mouse({ type: "wheel", y: 3, wheelDelta: 1 }), undefined, "past the end the wheel is the pane's");
 });

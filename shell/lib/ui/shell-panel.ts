@@ -25,9 +25,14 @@ export function panelSurfaceOpener(theme: CardTheme): string {
 	return chromeSurface() === "transparent" ? "" : surfaceOpener(theme, PANEL_SURFACE_ROLE);
 }
 
-/** Rail sections keep a blank row between them in comfortable density, whatever the surface (G's). */
-export function sectionGap(density: string | undefined): boolean {
+/** The pane's two forms (L1495): comfortable draws each section in its own box (the default). */
+export function sectionBoxes(density: string | undefined): boolean {
 	return density === undefined || density === "comfortable";
+}
+
+/** Compact keeps a blank row between the pane's sections (01's); minimal none; comfortable's boxes need none. */
+export function sectionGap(density: string | undefined): boolean {
+	return density === "compact";
 }
 
 /** Columns a panel row is indented under its header. */

@@ -329,13 +329,15 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 	const refresh = () => {
 		wake?.();
 		const running = tasks.list(sessionId()).filter((task) => task.status === "running").sort((a, b) => b.startedAt - a.startedAt);
-		// JOBS shows a finished command or monitor for a minute beside the running ones (L168).
-		const finished = tasks.list(sessionId()).filter((task): task is JobRecord => task.kind !== "agent" && task.status !== "running" && task.endedAt !== undefined && now() - task.endedAt < JOBS_FINISHED_TTL_MS)
-			.sort((a, b) => b.endedAt! - a.endedAt!).slice(0, 3);
+		// JOBS shows a finished command or monitor for a minute beside the running
+		// ones (L168), AGENTS a finished sub-agent (T174-S5b): the newest three of each.
+		const ended = tasks.list(sessionId()).filter((task) => task.status !== "running" && task.endedAt !== undefined && now() - task.endedAt < JOBS_FINISHED_TTL_MS)
+			.sort((a, b) => b.endedAt! - a.endedAt!);
+		const finished = [...ended.filter((task) => task.kind !== "agent").slice(0, 3), ...ended.filter((task) => task.kind === "agent").slice(0, 3)];
 		pi.events?.emit?.(TASKS_EVENT, { sessionId: sessionId(), tasks: running.map((task) => {
 			const step = task.kind === "agent" ? task.activity.at(-1) : undefined;
 			return { id: task.id, kind: task.kind, label: task.label, startedAt: task.startedAt, ...(step ? { step } : {}), ...(task.kind === "agent" ? { tokens: task.tokens } : {}) };
-		}), finished: finished.map((task) => ({ id: task.id, kind: task.kind, label: task.label, startedAt: task.startedAt, endedAt: task.endedAt, status: task.status, exitCode: task.exitCode ?? null })) });
+		}), finished: finished.map((task) => ({ id: task.id, kind: task.kind, label: task.label, startedAt: task.startedAt, endedAt: task.endedAt, status: task.status, exitCode: task.kind === "agent" ? null : task.exitCode ?? null, ...(task.kind === "agent" ? { tokens: task.tokens } : {}) })) });
 		if (!shellEnabled(env)) {
 			try { current?.ui.setStatus(TASKS_STATUS_KEY, running.length === 0 ? undefined : `${TASK_GLYPH} ${running.length} running`); } catch { /* Cosmetic. */ }
 		}

@@ -142,14 +142,17 @@ test("a filling context says where the session compacts, ten points before it", 
 	assert.match(at(55), /ctx ▰▰▰▰▱▱▱▱ 55% · compacts at 60% │ \$1\.42 $/);
 });
 
-test("truncation: the branch shortens first; then the meter, the profile, the note, model · effort, sandbox, the branch, ctx and the badge go, in that order; the cost goes last", (t) => {
+test("truncation: the branch shortens first; then the profile (B's order, T174-S5b), the meter, the note, model · effort, sandbox, the branch, ctx and the badge go, in that order; the cost goes last", (t) => {
 	useMemorySettings(t, {});
 	const data = acme({ mode: "yolo", profile: "team", contextPercent: 55, contextWindow: 200_000 });
-	const facts: Array<[string, RegExp]> = [
-		["meter", /▰/], ["profile", /· team/], ["note", /compacts/], ["model", /opus-5-5/], ["sandbox", /sandbox/],
+	const all: Array<[string, RegExp]> = [
+		["profile", /· team/], ["meter", /▰/], ["note", /compacts/], ["model", /opus-5-5/], ["sandbox", /sandbox/],
 		["branch", /⎇/], ["ctx", /ctx/], ["badge", /YOLO/], ["cost", /\$1\.42/],
 	];
 	for (const narrow of [false, true]) {
+		// The narrow form has no meter to drop.
+		const facts = narrow ? all.filter(([name]) => name !== "meter") : all;
+		const branch = facts.findIndex(([name]) => name === "branch");
 		let gone = 0;
 		let shortened = false;
 		for (let width = 220; width >= 0; width--) {
@@ -159,9 +162,9 @@ test("truncation: the branch shortens first; then the meter, the profile, the no
 			while (gone < facts.length && !shown[gone]) gone++;
 			for (let i = 0; i < facts.length; i++) assert.equal(shown[i], i >= gone, `narrow ${narrow} ${width}: ${facts[i]![0]} ${i < gone ? "came back" : "went out of order"}: ${JSON.stringify(row)}`);
 			if (row.includes("feat/add-invoice-export")) assert.ok(!shortened, `${width}: the branch grew back`);
-			else if (shown[5]) shortened = true;
-			if (gone > 0) assert.ok(shortened || narrow, `${width}: the meter went before the branch shortened: ${row}`);
-			if (shown[5]) assert.ok(/⎇ \S{7}/.test(row), `${width}: the branch keeps ${BRANCH_MIN_CELLS} cells while it shows: ${row}`);
+			else if (shown[branch]) shortened = true;
+			if (gone > 0) assert.ok(shortened || narrow, `${width}: the profile went before the branch shortened: ${row}`);
+			if (shown[branch]) assert.ok(/⎇ \S{7}/.test(row), `${width}: the branch keeps ${BRANCH_MIN_CELLS} cells while it shows: ${row}`);
 			if (width >= 7) assert.match(row, /\$1\.42/, `${width}: the cost stays`);
 		}
 		assert.equal(gone, facts.length, "at the end even the cost went");

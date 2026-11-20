@@ -15,6 +15,7 @@ import { clip, glyph, renderRule, spread, stateGlyph, STATES, themePainter, type
 import { sanitizeTerminalText } from "./terminal-theme.ts";
 import type { LddStatus, Lane } from "./ldd-status.ts";
 import { ago as shortAgo } from "./pane.ts";
+import { formatTokens } from "./bars.ts";
 
 /** A running background task (a job or a sub-agent) as lib/background-tasks-tools.ts reports it. */
 export interface RunningJobDisplay {
@@ -130,8 +131,12 @@ function runTime(seconds: number): string {
 
 const LANES_SHOWN = 4;
 
-/** The LDD section (01, 02): no change is one dim line. */
-export function renderLddPanel(ldd: LddStatus | undefined, theme: ThemeLike, width: number, { now, ascii }: PanelOptions): string[] {
+/**
+ * The LDD section (01, 02): no change is one dim line. Its title is the
+ * change's row: under the pointer (hover 0) the name takes the hover role and
+ * the fold glyph shows at the right edge; folded, the change and its next step.
+ */
+export function renderLddPanel(ldd: LddStatus | undefined, theme: ThemeLike, width: number, { now, ascii, folded = false, hover }: PanelOptions & SectionView): string[] {
 	const paint = themePainter(theme);
 	if (!ldd) return [painted(paint, fitRuns([run("No active LDD change", "dim")], width))];
 	const rows: string[] = [];
@@ -140,13 +145,19 @@ export function renderLddPanel(ldd: LddStatus | undefined, theme: ThemeLike, wid
 	const state = (name: StateName) => stateRun(name, ascii);
 	const joined = (parts: Run[][]) => parts.flatMap((part, i) => (i ? [sep, ...part] : part));
 
-	line([run(`${glyph("change", ascii)} `, "accent", true), run(clean(ldd.change), "ink", true)], ldd.worktree ? [run(`${glyph("branch", ascii)} ${clean(ldd.worktree)}`, "dim")] : []);
+	const over = hover === 0;
+	const mark = folded || over ? [run(`${ldd.worktree ? " " : ""}${glyph(folded ? "closed" : "open", ascii)}`, over ? "warn" : "dim")] : [];
+	line([run(`${glyph("change", ascii)} `, "accent", true), run(clean(ldd.change), over ? "warn" : "ink", true)], [...(ldd.worktree ? [run(`${glyph("branch", ascii)} ${clean(ldd.worktree)}`, "dim")] : []), ...mark]);
+	const next = nextText(ldd, ascii);
+	if (folded) {
+		if (next) line([run("next ", "dim"), run(clean(next), "ink", true)]);
+		return rows;
+	}
 	const facts: Run[][] = [];
 	if (ldd.route) facts.push([run(clean(ldd.route), "dim")]);
 	if (ldd.strictTdd) facts.push([run("strict TDD", "dim")]);
 	if (ldd.risk) facts.push([run(`risk ${clean(ldd.risk)}`, ldd.risk === "high" ? "bad" : ldd.risk === "medium" ? "warn" : "dim")]);
 	if (facts.length) line(joined(facts));
-	const next = nextText(ldd, ascii);
 	if (next) line([run("next ", "dim"), run(clean(next), "ink", true)]);
 
 	const n = ldd.slices.length;
@@ -199,14 +210,44 @@ function laneRun(lane: Lane, ascii = false): Run[] {
 
 // ---------------------------------------------------------------- Agents and Jobs
 
-/** The running sub-agents, oldest first. */
-function runningAgents(jobs: readonly RunningJobDisplay[] | undefined): RunningJobDisplay[] {
-	return (jobs ?? []).filter((job) => job.kind === "agent" && job.endedAt === undefined).sort((a, b) => a.startedAt - b.startedAt);
+/** How many finished tasks of a kind stay after they end, the newest first. */
+const FINISHED_SHOWN = 3;
+/** The rows Agents keeps under its title, its `… N more` and summary rows included. */
+export const AGENTS_ROWS = 8;
+/** The view the agents' rows open and name. */
+const AGENTS_VIEW = "/jhon:agents";
+
+/** How a task ended, or that it runs. */
+type Outcome = "running" | "failed" | "done" | "cancelled";
+
+function outcome(job: RunningJobDisplay): Outcome {
+	if (job.endedAt === undefined) return "running";
+	if (job.status === "stopped") return "cancelled";
+	return job.status === "failed" || (job.exitCode ?? 0) !== 0 ? "failed" : "done";
 }
 
-/** The running commands and monitors, oldest first. */
-function runningJobs(jobs: readonly RunningJobDisplay[] | undefined): RunningJobDisplay[] {
-	return (jobs ?? []).filter((job) => job.kind !== "agent" && job.endedAt === undefined).sort((a, b) => a.startedAt - b.startedAt);
+/** Each outcome's glyph and role: a cancelled task is a dim dash. */
+function outcomeRun(state: Outcome, ascii = false): Run {
+	if (state === "cancelled") return run(ascii ? "- " : "– ", "dim");
+	return stateRun(state === "running" ? "working" : state, ascii);
+}
+
+/** The tasks that ended in the last JOBS_FINISHED_TTL_MS, newest first, FINISHED_SHOWN at most. */
+function lingering(jobs: readonly RunningJobDisplay[], now: number): RunningJobDisplay[] {
+	return jobs.filter((job) => job.endedAt !== undefined && now - job.endedAt < JOBS_FINISHED_TTL_MS)
+		.sort((a, b) => b.endedAt! - a.endedAt!).slice(0, FINISHED_SHOWN);
+}
+
+/** The sub-agents a section shows: those running and those that ended in the last minute, oldest first. */
+function shownAgents(jobs: readonly RunningJobDisplay[] | undefined, now: number): RunningJobDisplay[] {
+	const agents = (jobs ?? []).filter((job) => job.kind === "agent");
+	return [...agents.filter((job) => job.endedAt === undefined), ...lingering(agents, now)].sort((a, b) => a.startedAt - b.startedAt);
+}
+
+/** The commands and monitors a section shows: those running, oldest first, then the newest that ended in the last minute. */
+function shownJobs(jobs: readonly RunningJobDisplay[] | undefined, now: number): RunningJobDisplay[] {
+	const list = (jobs ?? []).filter((job) => job.kind !== "agent");
+	return [...list.filter((job) => job.endedAt === undefined).sort((a, b) => a.startedAt - b.startedAt), ...lingering(list, now)];
 }
 
 /** A sub-agent's name and task from its label, `<agent>: <task>`. */
@@ -216,40 +257,107 @@ function agentParts(job: RunningJobDisplay): { name: string; what: string } {
 	return split > 0 ? { name: label.slice(0, split), what: label.slice(split + 2) } : { name: label, what: "" };
 }
 
-/** One row per running sub-agent: `◐ <name padded to the longest>  <what>` and its time at the right edge. */
-function agentRows(paint: Painter, agents: readonly RunningJobDisplay[], width: number, now: number, ascii = false): string[] {
-	const parts = agents.map(agentParts);
-	// The longest name running sets the column (L1475), never more than half the row.
+/** `12k · 4m12s` while it runs, `failed 1m03s` once it failed. */
+function agentTime(job: RunningJobDisplay, now: number, ascii = false): string {
+	const time = elapsed((job.endedAt ?? now) - job.startedAt);
+	if (outcome(job) === "failed") return `failed ${time}`;
+	return job.tokens ? `${formatTokens(job.tokens)}${dot(ascii)}${time}` : time;
+}
+
+/** A hovered row: its text in the hover role, its glyph as it was. */
+function hovered(runs: Run[], on: boolean): Run[] {
+	return on ? runs.map((r, i) => (i === 0 ? r : { ...r, role: "warn" })) : runs;
+}
+
+/** What a section's owner did to it: folded it; the row the pointer is over, 0 its title. */
+export interface SectionView {
+	folded?: boolean;
+	hover?: number;
+}
+
+/**
+ * The Agents rows under the title: one per sub-agent running or failed in the
+ * last minute, `◐ <name padded to the longest>  <task>` with its tokens and
+ * time at the right edge; then one row each for those done and cancelled
+ * (`✓ 2 done · /jhon:agents`, `– 1 cancelled`). Past AGENTS_ROWS the first
+ * rows stay and `… N more · /jhon:agents` stands for the rest.
+ */
+function agentRows(paint: Painter, jobs: readonly RunningJobDisplay[] | undefined, width: number, now: number, ascii = false, hover?: number): string[] {
+	const shown = shownAgents(jobs, now);
+	const count = (state: Outcome) => shown.filter((job) => outcome(job) === state).length;
+	const listed = shown.filter((job) => outcome(job) === "running" || outcome(job) === "failed");
+	const summaries = (["done", "cancelled"] as const).filter((state) => count(state) > 0)
+		.map((state, i) => [outcomeRun(state, ascii), run(`${count(state)} ${state}${i === 0 ? `${dot(ascii)}${AGENTS_VIEW}` : ""}`, "dim")]);
+	const fits = listed.length + summaries.length <= AGENTS_ROWS;
+	const kept = fits ? listed : listed.slice(0, Math.max(0, AGENTS_ROWS - 1 - summaries.length));
+	const parts = kept.map(agentParts);
+	// The longest name shown sets the column (L1475), never more than half the row.
 	const column = Math.min(Math.max(0, ...parts.map((p) => visibleWidth(p.name))), Math.max(1, Math.floor((width - 2) / 2)));
-	return agents.map((job, i) => {
+	const rows: Run[][] = [];
+	const rights: Run[][] = [];
+	kept.forEach((job, i) => {
 		const { name, what } = parts[i]!;
-		const shown = clip(name, column);
-		const left = [stateRun("working", ascii), run(shown, "ink"), run(" ".repeat(column - visibleWidth(shown) + 2), "ink"), run(what, "dim")];
-		return row(paint, left, [run(elapsed(now - job.startedAt), "soft")], width, 2);
+		const state = outcome(job);
+		const shownName = clip(name, column);
+		rows.push([outcomeRun(state, ascii), run(shownName, state === "failed" ? "bad" : "ink"), run(" ".repeat(column - visibleWidth(shownName) + 2), "ink"), run(what, "dim")]);
+		rights.push([run(agentTime(job, now, ascii), state === "failed" ? "bad" : "soft")]);
+	});
+	if (!fits) { rows.push([run(`${glyph("ellipsis", ascii)} ${listed.length - kept.length} more${dot(ascii)}${AGENTS_VIEW}`, "dim")]); rights.push([]); }
+	for (const summary of summaries) { rows.push(summary); rights.push([]); }
+	return rows.map((left, i) => row(paint, hovered(left, hover === i), rights[i]!, width, 2));
+}
+
+/** The Jobs rows: `⧗ <id> <command>` and its time, running first, then those ended in the last minute (✓, ✗, –). */
+function jobRows(paint: Painter, jobs: readonly RunningJobDisplay[] | undefined, width: number, now: number, ascii = false, hover?: number): string[] {
+	return shownJobs(jobs, now).map((job, i) => {
+		const state = outcome(job);
+		const mark = state === "running" ? run(`${glyph("job", ascii)} `, "warn") : outcomeRun(state, ascii);
+		const left = [mark, run(`${clean(job.id)} `, "dim"), run(clean(job.label), "soft")];
+		return row(paint, hovered(left, hover === i), [run(elapsed((job.endedAt ?? now) - job.startedAt), "soft")], width, 2);
 	});
 }
 
-/** One row per running job: `⧗ <command>` and its time at the right edge. */
-function jobRows(paint: Painter, jobs: readonly RunningJobDisplay[], width: number, now: number, ascii = false): string[] {
-	return jobs.map((job) => row(paint, [run(`${glyph("job", ascii)} `, "warn"), run(clean(job.label), "soft")], [run(elapsed(now - job.startedAt), "soft")], width, 2));
+/**
+ * A section's title row: `Agents  2 running`; folded, `▸` at its right edge;
+ * under the pointer, the title in the hover role and the fold glyph it takes.
+ */
+function titleRow(paint: Painter, title: string, count: string, width: number, view: SectionView, ascii = false): string {
+	const over = view.hover === 0;
+	const mark = view.folded || over ? [run(glyph(view.folded ? "closed" : "open", ascii), over ? "warn" : "dim")] : [];
+	return row(paint, [run(title, over ? "warn" : "soft", true), run(`  ${count}`, "dim")], mark, width);
 }
 
-const header = (paint: Painter, title: string, count: number, width: number) => row(paint, [run(title, "soft", true), run(`  ${count} running`, "dim")], [], width);
-
-/** 01's Agents section: nothing while no sub-agent runs. */
-export function renderAgentsSection(jobs: readonly RunningJobDisplay[] | undefined, theme: ThemeLike, width: number, { now, ascii }: PanelOptions): string[] {
-	const agents = runningAgents(jobs);
-	if (!agents.length) return [];
-	const paint = themePainter(theme);
-	return [header(paint, "Agents", agents.length, width), ...agentRows(paint, agents, width, now, ascii)];
+/** A folded section: its title and its first row; Jobs adds `… N more`. */
+function folded(title: string, body: string[], view: SectionView, more?: (n: number) => string): string[] {
+	if (!view.folded) return [title, ...body];
+	return [title, ...body.slice(0, 1), ...(more && body.length > 1 ? [more(body.length - 1)] : [])];
 }
 
-/** 01's Jobs section: nothing while no command or monitor runs. */
-export function renderJobsSection(jobs: readonly RunningJobDisplay[] | undefined, theme: ThemeLike, width: number, { now, ascii }: PanelOptions): string[] {
-	const list = runningJobs(jobs);
-	if (!list.length) return [];
+/** The section view as the body sees it: the hovered row counted from the first body row. */
+const bodyHover = (view: SectionView) => (view.hover !== undefined && view.hover > 0 ? view.hover - 1 : undefined);
+
+/** 01's Agents section: shown while a sub-agent runs or one ended in the last minute. */
+export function renderAgentsSection(jobs: readonly RunningJobDisplay[] | undefined, theme: ThemeLike, width: number, { now, ascii, folded: isFolded, hover }: PanelOptions & SectionView): string[] {
+	const shown = shownAgents(jobs, now);
+	if (!shown.length) return [];
 	const paint = themePainter(theme);
-	return [header(paint, "Jobs", list.length, width), ...jobRows(paint, list, width, now, ascii)];
+	const view = { folded: isFolded, hover };
+	const count = (state: Outcome) => shown.filter((job) => outcome(job) === state).length;
+	const running = count("running");
+	const said = running ? `${running} running` : (["failed", "done", "cancelled"] as const).filter((s) => count(s)).map((s) => `${count(s)} ${s}`).join(dot(ascii));
+	return folded(titleRow(paint, "Agents", said, width, view, ascii), agentRows(paint, jobs, width, now, ascii, bodyHover(view)), view);
+}
+
+/** 01's Jobs section: shown while a command or monitor runs or one ended in the last minute. */
+export function renderJobsSection(jobs: readonly RunningJobDisplay[] | undefined, theme: ThemeLike, width: number, { now, ascii, folded: isFolded, hover }: PanelOptions & SectionView): string[] {
+	const shown = shownJobs(jobs, now);
+	if (!shown.length) return [];
+	const paint = themePainter(theme);
+	const view = { folded: isFolded, hover };
+	const running = shown.filter((job) => job.endedAt === undefined).length;
+	const said = [running ? `${running} running` : "", shown.length - running ? `${shown.length - running} finished` : ""].filter(Boolean).join(dot(ascii));
+	const more = (n: number) => row(paint, [run(`${glyph("ellipsis", ascii)} ${n} more`, "dim")], [], width);
+	return folded(titleRow(paint, "Jobs", said, width, view, ascii), jobRows(paint, jobs, width, now, ascii, bodyHover(view)), view, more);
 }
 
 /** What a click on a row opens: the agents view or the jobs view. */
@@ -260,23 +368,28 @@ const RUNNING_ROWS_MAX = 64;
 
 /**
  * 04's Running block, above the prompt: `── Running  2 agents · 1 job ───`,
- * one row per agent and job two columns in, then a blank row; each row's view
- * in opens (the rule opens the agents view while any runs). Nothing runs, no
- * block.
+ * the Agents rows and the Jobs rows two columns in (the finished ones of the
+ * last minute too), then a blank row; each row's view in opens (the rule
+ * opens the agents view while any shows); the row under the pointer (hover,
+ * an index into rows) in the hover role. Nothing to show, no block.
  */
-export function renderRunningBlock(jobs: readonly RunningJobDisplay[] | undefined, theme: ThemeLike, width: number, { now, ascii }: PanelOptions): { rows: string[]; opens: Array<RunningView | undefined> } {
-	const agents = runningAgents(jobs);
-	const list = runningJobs(jobs);
-	if (!agents.length && !list.length) return { rows: [], opens: [] };
+export function renderRunningBlock(jobs: readonly RunningJobDisplay[] | undefined, theme: ThemeLike, width: number, { now, ascii, hover }: PanelOptions & { hover?: number }): { rows: string[]; opens: Array<RunningView | undefined> } {
 	const paint = themePainter(theme);
 	const total = Math.max(0, Math.floor(width));
 	const inner = Math.max(1, Math.min(RUNNING_ROWS_MAX, total - 4));
-	const counts = [agents.length ? `${agents.length} agent${agents.length === 1 ? "" : "s"}` : "", list.length ? `${list.length} job${list.length === 1 ? "" : "s"}` : ""].filter(Boolean).join(dot(ascii));
+	const at = (i: number) => (hover === undefined ? undefined : hover - 1 - i);
+	const agents = agentRows(paint, jobs, inner, now, ascii, at(0));
+	const list = jobRows(paint, jobs, inner, now, ascii, at(agents.length));
+	if (!agents.length && !list.length) return { rows: [], opens: [] };
+	const running = (jobs ?? []).filter((job) => job.endedAt === undefined);
+	const a = running.filter((job) => job.kind === "agent").length;
+	const j = running.length - a;
+	const counts = [a ? `${a} agent${a === 1 ? "" : "s"}` : "", j ? `${j} job${j === 1 ? "" : "s"}` : ""].filter(Boolean).join(dot(ascii)) || "finished";
 	const indent = (line: string) => `  ${line}${" ".repeat(Math.max(0, total - 2 - visibleWidth(line)))}`;
 	const rows = [
-		renderRule({ width: total, label: "Running", note: counts, paint, ascii }),
-		...agentRows(paint, agents, inner, now, ascii).map(indent),
-		...jobRows(paint, list, inner, now, ascii).map(indent),
+		renderRule({ width: total, label: "Running", note: counts, paint, ascii, ...(hover === 0 ? { role: "warn" as const } : {}) }),
+		...agents.map(indent),
+		...list.map(indent),
 		" ".repeat(total),
 	];
 	const opens: Array<RunningView | undefined> = [agents.length ? "agents" : "jobs", ...agents.map(() => "agents" as const), ...list.map(() => "jobs" as const), undefined];

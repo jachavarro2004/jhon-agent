@@ -384,6 +384,8 @@ test("the running-tasks event carries no sub-agent spend; each running agent sti
 	await settle();
 	assert.equal("spend" in emitted.at(-1), false, "no spend field");
 	assert.deepEqual(Object.keys(emitted.at(-1)).sort(), ["finished", "sessionId", "tasks"]);
+	// T174-S5b: a sub-agent that ended stays in AGENTS a minute too, with its outcome and tokens.
+	assert.deepEqual(emitted.at(-1).finished.map((task: any) => [task.kind, task.status, task.tokens, typeof task.endedAt]), [["agent", "completed", 1000, "number"], ["agent", "completed", 1000, "number"]]);
 });
 
 // T115b (L691, L692): a completion notice enters the agent's context and is re-read on every later

@@ -12,8 +12,11 @@
  *
  * The pane shows the parts registered in it (paneSlot), in PANE_ORDER: LDD,
  * the agent's todo list (while no LDD change shows), agents and jobs. Each
- * part renders its own rows; the pane stacks them, a blank row apart in the
- * comfortable density, and hands a click to the part under it.
+ * part renders its own rows; the pane stacks them as the density says (two
+ * forms, L1495): comfortable draws each one in its own box, compact keeps a
+ * blank row between them (01), minimal none. It hands a click, a pointer
+ * move and a wheel to the part under it; a wheel the part does not take
+ * scrolls the pane, never the conversation behind it.
  *
  * pi lays the full-screen terminal out itself; the pane gets beside the
  * conversation only through pi-tui's layout hook (lib/ui/pi-layout-hook.ts).
@@ -24,8 +27,9 @@
 import { HStack, ScrollView, VStack, visibleWidth, type Component, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { hookLayout } from "./pi-layout-hook.ts";
 import { NARROW_BELOW } from "./bars.ts";
-import { clip, fit, glyph, paintSurface, renderDivider, stateGlyph, STATES, themePainter, type Role, type ThemeLike } from "./primitives/index.ts";
-import { chromeSurface, paintPanelSurface, panelSurfaceOpener, RAIL_ORDER, sectionGap } from "./shell-panel.ts";
+import { BOX_PADDING, clip, fit, glyph, paintSurface, renderBox, renderDivider, stateGlyph, STATES, themePainter, type Role, type ThemeLike } from "./primitives/index.ts";
+import { chromeSurface, paintPanelSurface, panelSurfaceOpener, RAIL_ORDER, sectionBoxes, sectionGap } from "./shell-panel.ts";
+import type { SectionView } from "./panel.ts";
 import type { Density, StatusPlacement } from "./visual-customization-policy.ts";
 import type { LddStatus } from "./ldd-status.ts";
 
@@ -101,7 +105,8 @@ export function setPaneHover(tui: TUI, owner?: object, clear?: () => void): void
 
 // ---------------------------------------------------------------- the pane's rows
 
-interface Section { key: string; part: PanePart; start: number; height: number }
+/** Where a part's rows sit in the pane: from row start, height rows, x cells in, width wide. */
+interface Section { key: string; part: PanePart; start: number; height: number; x: number; width: number }
 
 function rowsOf(part: PanePart | undefined, width: number): string[] {
 	if (!part) return [];
@@ -111,21 +116,93 @@ function rowsOf(part: PanePart | undefined, width: number): string[] {
 }
 
 /**
- * The pane's panel rows, PANE_TEXT wide: a blank row under the top row, then
- * each part's rows in PANE_ORDER, a blank row apart in the comfortable density.
+ * The pane's panel rows, width wide: a blank row under the top row, then each
+ * part's rows in PANE_ORDER. Comfortable draws each part in its own box (the
+ * overlay box's rounded frame in rose ink's border role), its rows
+ * BOX_PADDING narrower; compact keeps a blank row between parts; minimal
+ * stacks them.
  */
-export function paneRows(parts: ReadonlyMap<string, PanePart>, density?: Density, width = PANE_TEXT): { rows: string[]; sections: Section[] } {
+export function paneRows(parts: ReadonlyMap<string, PanePart>, density?: Density, width = PANE_TEXT, { theme, ascii = false }: { theme?: ThemeLike; ascii?: boolean } = {}): { rows: string[]; sections: Section[] } {
 	const rows: string[] = [""];
 	const sections: Section[] = [];
+	const boxed = sectionBoxes(density);
+	const inner = boxed ? Math.max(1, width - BOX_PADDING) : width;
 	for (const key of PANE_ORDER) {
 		const part = parts.get(key);
-		const lines = rowsOf(part, width);
+		const lines = rowsOf(part, inner);
 		if (!part || !lines.length) continue;
 		if (sections.length && sectionGap(density)) rows.push("");
-		sections.push({ key, part, start: rows.length, height: lines.length });
-		rows.push(...lines);
+		if (boxed) {
+			sections.push({ key, part, start: rows.length + 1, height: lines.length, x: BOX_PADDING / 2, width: inner });
+			rows.push(...renderBox(lines, width, theme, ascii));
+		} else {
+			sections.push({ key, part, start: rows.length, height: lines.length, x: 0, width });
+			rows.push(...lines);
+		}
 	}
 	return { rows, sections };
+}
+
+// ---------------------------------------------------------------- a section's fold and hover
+
+/** What a foldable section draws and does. */
+export interface FoldableSpec {
+	/** The section's rows for the owner's view of it: folded, and the row the pointer is over. */
+	render(width: number, view: SectionView): string[];
+	/** A click on a row under the title (0 the first); true when it did something. */
+	open?(row: number): boolean;
+	/** Every row takes the hover, not the title alone. */
+	rows?: boolean;
+	/** Whether the first row is a title to fold now (LDD without a change has none); yes by default. */
+	foldable?(): boolean;
+	digest?(): string;
+	strip?(width: number): string | undefined;
+}
+
+/**
+ * A pane part the owner folds with a click on its title row and points at:
+ * the title, and with rows every row, takes the hover (one control at a time
+ * across the pane, setPaneHover). A wheel is left to the pane.
+ */
+export function foldablePart(tui: TUI, spec: FoldableSpec): PanePart & { view: SectionView } {
+	const view: SectionView = {};
+	let drawn = 0;
+	const redraw = () => { invalidatePane(tui); tui.requestRender(); };
+	const part: PanePart & { view: SectionView } = {
+		view,
+		digest: () => JSON.stringify([spec.digest ? spec.digest() : paneState(tui).revision, view.folded ?? false, view.hover ?? -1]),
+		render: (width) => {
+			const rows = spec.render(width, { ...view });
+			drawn = rows.length;
+			return rows;
+		},
+		...(spec.strip ? { strip: (width: number) => spec.strip!(width) } : {}),
+		invalidate() {},
+		handleMouse(event) {
+			const title = spec.foldable?.() ?? true;
+			if (event.type === "move" && event.button === "none") {
+				const over = (event.y === 0 && title) || (spec.rows && event.y > 0 && event.y < drawn) ? event.y : undefined;
+				if (over === undefined) { setPaneHover(tui); return undefined; }
+				if (view.hover === over) return undefined;
+				view.hover = over;
+				setPaneHover(tui, part, () => { view.hover = undefined; redraw(); });
+				redraw();
+				return { handled: true, render: true };
+			}
+			// pi makes a click only for the component that took its press.
+			const control = (event.y === 0 && title) || (spec.open !== undefined && event.y > 0 && event.y < drawn);
+			if (event.type === "press" && event.button === "left") return control ? { handled: true } : undefined;
+			if (event.type !== "click" || event.button !== "left") return undefined;
+			if (event.y === 0) {
+				if (!title) return undefined;
+				view.folded = !view.folded;
+				redraw();
+				return { handled: true, render: true };
+			}
+			return event.y > 0 && spec.open?.(event.y - 1) ? { handled: true } : undefined;
+		},
+	};
+	return part;
 }
 
 // ---------------------------------------------------------------- the strip
@@ -228,6 +305,8 @@ export interface PaneOptions {
 	/** shell.appearance.status: hidden takes the status bar, the pane and the strip away. */
 	placement(): StatusPlacement;
 	density(): Density;
+	/** shell.appearance.ascii: the boxes' frame in ASCII. */
+	ascii?(): boolean;
 	/** Said once when pi-tui has no layout hook. */
 	note(text: string): void;
 }
@@ -265,27 +344,35 @@ export function installPane(tui: TUI, theme: ThemeLike, options: PaneOptions): (
 	const content: Component = {
 		render: (width) => {
 			const density = options.density();
+			const ascii = options.ascii?.() ?? false;
 			const digests = PANE_ORDER.map((key) => {
 				const part = state.parts.get(key);
 				if (!part) return "-";
 				try { return part.digest ? `d${part.digest()}` : `r${state.revision}`; } catch { return `r${state.revision}`; }
 			});
-			const key = JSON.stringify([width, density, chromeSurface(), digests, PANE_ORDER.map((name) => state.parts.get(name) !== undefined)]);
+			const key = JSON.stringify([width, density, ascii, chromeSurface(), digests, PANE_ORDER.map((name) => state.parts.get(name) !== undefined)]);
 			if (memo?.key === key && memo.sections.every((section) => state.parts.get(section.key) === section.part)) return memo.lines;
-			const laid = paneRows(state.parts, density, PANE_TEXT);
+			const laid = paneRows(state.parts, density, PANE_TEXT, { theme, ascii });
 			const lines = paintPanelSurface(theme, laid.rows.map((line) => fit(line, width)), width);
 			memo = { key, lines, sections: laid.sections };
 			return lines;
 		},
 		invalidate() { memo = undefined; },
+		// pi hands the event in the content's own rows, the scroll already counted.
 		handleMouse: (event) => {
-			const hit = memo?.sections.find((section) => event.y >= section.start && event.y < section.start + section.height);
-			if (!hit || state.parts.get(hit.key) !== hit.part || event.x >= PANE_TEXT) {
-				if (event.type === "move" && event.button === "none") setPaneHover(tui);
-				return undefined;
-			}
-			const result = hit.part.handleMouse?.({ ...event, y: event.y - hit.start, width: PANE_TEXT, height: hit.height });
+			const hit = memo?.sections.find((section) => event.y >= section.start && event.y < section.start + section.height && event.x >= section.x && event.x < section.x + section.width);
+			const live = hit && state.parts.get(hit.key) === hit.part ? hit : undefined;
+			const result = live?.part.handleMouse?.({ ...event, x: event.x - live.x, y: event.y - live.start, width: live.width, height: live.height });
 			if (result?.render) memo = undefined;
+			if (event.type === "wheel") {
+				// The part under the pointer first (the todo list scrolls its own rows);
+				// what it leaves scrolls the pane, and stops there: pi would hand the
+				// rest to the conversation, which is not under the pointer.
+				if (result?.handled) return result;
+				scroll.scrollBy(event.wheelDelta ?? 0);
+				return { handled: true, render: true };
+			}
+			if (!result && event.type === "move" && event.button === "none") setPaneHover(tui);
 			return result;
 		},
 	};

@@ -166,7 +166,7 @@ test("01: Agents and Jobs, each its own section while something runs: glyph, nam
 	]);
 	assert.deepEqual(jobs(WORK), [
 		"Jobs  1 running",
-		spread("⧗ pytest tests/billing -k range", "18s", W),
+		spread("⧗ job-1 pytest tests/billing -k range", "18s", W),
 	]);
 });
 
@@ -183,14 +183,14 @@ test("the name column fits the longest agent name running, never jhon-buil… (L
 	assert.deepEqual(agents([{ id: "agent-9", kind: "agent", label: "jhon-checker: x", startedAt: NOW - 1_000 }], 30), ["Agents  1 running", spread("◐ jhon-checker  x", "1s", 30)]);
 });
 
-test("finished work leaves the sections: they show only while something runs", () => {
+test("finished work leaves the sections a minute after it ended (T174-S5b: it stays that minute); a monitor is a job", () => {
 	const finished: RunningJobDisplay[] = [
-		{ id: "job-2", kind: "command", label: "npm test", startedAt: NOW - 30_000, endedAt: NOW - 5_000, status: "completed", exitCode: 0 },
-		{ id: "agent-4", kind: "agent", label: "jhon-checker: slice 2", startedAt: NOW - 30_000, endedAt: NOW - 5_000, status: "failed" },
+		{ id: "job-2", kind: "command", label: "npm test", startedAt: NOW - 30_000, endedAt: NOW - 60_000, status: "completed", exitCode: 0 },
+		{ id: "agent-4", kind: "agent", label: "jhon-checker: slice 2", startedAt: NOW - 30_000, endedAt: NOW - 60_000, status: "failed" },
 	];
 	assert.deepEqual(agents(finished), []);
 	assert.deepEqual(jobs(finished), []);
-	assert.deepEqual(jobs([...finished, { id: "job-3", kind: "monitor", label: "tail -f log/app.log", startedAt: NOW - 61_000 }]), ["Jobs  1 running", spread("⧗ tail -f log/app.log", "1m01s", W)], "a monitor is a job");
+	assert.deepEqual(jobs([...finished, { id: "job-3", kind: "monitor", label: "tail -f log/app.log", startedAt: NOW - 61_000 }]), ["Jobs  1 running", spread("⧗ job-3 tail -f log/app.log", "1m01s", W)], "a monitor is a job");
 });
 
 test("04 at 100 columns: the Running block above the prompt, a labelled rule, then one row per agent and job", () => {
@@ -199,13 +199,13 @@ test("04 at 100 columns: the Running block above the prompt, a labelled rule, th
 		`── Running  2 agents · 1 job ${"─".repeat(71)}`,
 		padded(spread("  ◐ jhon-builder  slice 3", "4m12s", 66), 100),
 		padded(spread("  ◐ jhon-checker  slice 2 tests", "1m03s", 66), 100),
-		padded(spread("  ⧗ pytest tests/billing -k range", "18s", 66), 100),
+		padded(spread("  ⧗ job-1 pytest tests/billing -k range", "18s", 66), 100),
 		padded("", 100),
 	]);
 	assert.deepEqual(block.opens, ["agents", "agents", "agents", "jobs", undefined], "a click opens the agents view or the jobs view");
 	assert.deepEqual(renderRunningBlock([], plainTheme, 100, { now: NOW }), { rows: [], opens: [] }, "nothing runs: no block");
 	const one = renderRunningBlock([WORK[2]!], plainTheme, 60, { now: NOW });
-	assert.deepEqual(rowsAt(() => one.rows, 60), [`── Running  1 job ${"─".repeat(42)}`, padded(spread("  ⧗ pytest tests/billing -k range", "18s", 58), 60), padded("", 60)]);
+	assert.deepEqual(rowsAt(() => one.rows, 60), [`── Running  1 job ${"─".repeat(42)}`, padded(spread("  ⧗ job-1 pytest tests/billing -k range", "18s", 58), 60), padded("", 60)]);
 	assert.deepEqual(one.opens, ["jobs", "jobs", undefined]);
 });
 
@@ -216,7 +216,7 @@ test("ASCII: every glyph in its one-cell form, the widths unchanged", () => {
 	assert.equal(rows[7], spread("~ 3 Date-range filter", "2/4", W));
 	assert.equal(rows[11], "  . filter the invoice query");
 	assert.equal(rows[15], "+ passed - affected - 6m ago");
-	assert.deepEqual(rowsAt((w, theme) => renderJobsSection(WORK, theme, w, { now: NOW, ascii: true }), W)[1], spread("~ pytest tests/billing -k range", "18s", W));
+	assert.deepEqual(rowsAt((w, theme) => renderJobsSection(WORK, theme, w, { now: NOW, ascii: true }), W)[1], spread("~ job-1 pytest tests/billing -k range", "18s", W));
 	assert.equal(rowsAt(() => renderRunningBlock(WORK, plainTheme, 100, { now: NOW, ascii: true }).rows, 100)[0], `-- Running  2 agents - 1 job ${"-".repeat(71)}`);
 });
 

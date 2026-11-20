@@ -263,7 +263,7 @@ test("the real Settings at 186, 120, 80 and 60 columns: previews for animations,
 
 		text = open("appearance", 5);
 		assert.match(text, /▸ Density +(● comfortable  ○ compact  ○ minimal|‹ comfortable › 1\/3)/, at);
-		assert.match(text, /the rail/, at);
+		assert.match(text, /The pane's two forms/, at);
 		text = open("appearance", 6);
 		assert.match(text, /▸ Status line +● auto  ○ hidden/, at);
 		text = open("behaviour");

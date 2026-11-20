@@ -5,10 +5,13 @@
  * each with when it resets. Claude (anthropic, and claude-bridge, which
  * re-sends Claude Code's headers) and ChatGPT (openai-codex) report theirs
  * with every reply, as response headers or, on the Codex WebSocket, as a
- * `codex.rate_limits` stream event; nothing is fetched for them. Another
- * extension may register a source for its own provider on pi.events
- * (USAGE_SOURCE_EVENT): the tracker fetches it at most every REFRESH_MS, and
- * forced by `r`, each fetch bounded by a timeout.
+ * `codex.rate_limits` stream event; nothing is fetched for them. NaN Cloud
+ * (nan) reports one allowance per model, fetched from its quota endpoint with
+ * the key pi holds (fetchNanUsage); its family and account totals are shares
+ * of the summed allowances, never averages of percents. Another extension may
+ * register a source for its own provider on pi.events (USAGE_SOURCE_EVENT):
+ * the tracker fetches every source, NaN's included, at most every
+ * REFRESH_MS, and forced by `r`, each fetch bounded by a timeout.
  *
  * What the status bar shows (barWindows) and what the overlay lists
  * (usageRows) are pure: data in, rows out. Nothing here keeps an account's
@@ -24,6 +27,9 @@ export interface UsageWindow {
 	usedPercent: number;
 	windowSeconds: number;
 	resetAt: number | null;
+	/** The tokens used and allowed, for a provider that says them (NaN): totals sum these. */
+	used?: number;
+	budget?: number;
 }
 
 /** A limit a provider applies: its windows, and whether it was hit. */
@@ -148,6 +154,131 @@ export function usageFromCodexEvent(data: unknown, now: number, provider?: strin
 	return codexUsage(windows, event.plan_type, now, provider ?? OPENAI_CODEX);
 }
 
+// ---------------------------------------------------------------- NaN
+
+export const NAN = "nan";
+/** NaN Cloud's dashboard backend: outside its published API, so the fetch is fixed-origin, refuses redirects and checks every field. */
+export const NAN_QUOTA_URL = "https://cloud-api.nan.builders/api/usage/quota";
+/** The dashboard's own defaults for a model that reports a rolling window without its budget. */
+const NAN_WINDOW_TOKENS = 400_000_000;
+const NAN_WINDOW_HOURS = 4;
+
+/** A Unix-seconds number or an ISO date as epoch ms; null for anything else. */
+function when(value: unknown): number | null {
+	if (typeof value === "number" && Number.isFinite(value) && value > 0) return value * 1000;
+	if (typeof value !== "string") return null;
+	const parsed = Date.parse(value);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** A JSON number, positive (or at least zero without positive). */
+function amount(value: unknown, positive: boolean): number | undefined {
+	if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+	return (positive ? value > 0 : value >= 0) ? value : undefined;
+}
+
+/**
+ * NaN's quota: per model its allowance for the billing period (fullCap, else
+ * cap: a first period's cap comes prorated) with the tokens used, and the
+ * rolling window it applies on top. A model with no allowance is left out;
+ * one whose use cannot be read refuses the whole answer, since a partial one
+ * would understate every total. The period window has no label: the model
+ * names it.
+ */
+export function parseNanQuota(payload: unknown, now: number): ProviderUsage | undefined {
+	const raw = (payload && typeof payload === "object" ? payload : {}) as { models?: unknown; periodEnd?: unknown };
+	const fallback = when(raw.periodEnd);
+	const limits: UsageLimit[] = [];
+	for (const entry of Array.isArray(raw.models) ? raw.models : []) {
+		if (!entry || typeof entry !== "object") continue;
+		const model = entry as Record<string, unknown>;
+		if (typeof model.model !== "string" || !model.model) continue;
+		const budget = amount(model.fullCap, true) ?? amount(model.cap, true);
+		if (budget === undefined) continue;
+		const used = amount(model.tokensUsed, false);
+		if (used === undefined) return undefined;
+		const resetAt = when(model.periodEnd) ?? fallback;
+		const windows: UsageWindow[] = [{ label: "", usedPercent: (used / budget) * 100, windowSeconds: resetAt === null ? 0 : Math.max(0, Math.round((resetAt - now) / 1000)), resetAt, used, budget }];
+		const windowUsed = amount(model.windowTokensUsed, false);
+		if (windowUsed !== undefined) {
+			const windowBudget = amount(model.fullWindowTokens, true) ?? amount(model.windowTokens, true) ?? NAN_WINDOW_TOKENS;
+			const hours = amount(model.windowHours, true) ?? NAN_WINDOW_HOURS;
+			windows.push({ label: windowLabel(hours * HOUR), usedPercent: (windowUsed / windowBudget) * 100, windowSeconds: hours * HOUR, resetAt: when(model.windowResetsAt) });
+		}
+		limits.push({ name: model.model, windows, limitReached: used >= budget });
+	}
+	return limits.length ? { provider: NAN, limits, fetchedAt: now } : undefined;
+}
+
+/**
+ * NaN's quota with the key pi holds for nan: the key in the header only, no
+ * redirect (it never reaches another origin), no stored copy; nothing here
+ * logs or keeps it. Undefined without a key or an answer.
+ */
+export async function fetchNanUsage(apiKey: string | undefined, fetchFn: typeof fetch, now: number): Promise<ProviderUsage | undefined> {
+	if (!apiKey) return undefined;
+	const response = await fetchFn(NAN_QUOTA_URL, { redirect: "error", cache: "no-store", headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json", "User-Agent": "jhon-shell" } });
+	if (!response.ok) return undefined;
+	return parseNanQuota(await response.json(), now);
+}
+
+/** A model id's family: its leading letters (`glm5.3-flash` and `glm5.2` are both `glm`), from the id alone. */
+export function modelFamily(modelId: string): string {
+	return (/^[a-z]+/i.exec(modelId)?.[0] ?? modelId).toLowerCase();
+}
+
+/** The allowance window of a limit that says its tokens (NaN's first), else undefined. */
+function allowance(limit: UsageLimit): UsageWindow | undefined {
+	const first = limit.windows[0];
+	return first && first.used !== undefined && first.budget !== undefined && first.budget > 0 ? first : undefined;
+}
+
+/** Every limit says its tokens: the provider reports allowances (NaN), so totals can be made. */
+function allowances(limits: readonly UsageLimit[]): boolean {
+	return limits.length > 0 && limits.every((limit) => allowance(limit) !== undefined);
+}
+
+/**
+ * The limits' total as one limit named `<name> total`: Σused / Σbudget, never
+ * an average of percents, and no reset (each model closes its own period).
+ */
+function allowanceTotal(name: string, limits: readonly UsageLimit[]): UsageLimit | undefined {
+	if (!allowances(limits)) return undefined;
+	const windows = limits.map((limit) => allowance(limit)!);
+	const used = windows.reduce((sum, w) => sum + w.used!, 0);
+	const budget = windows.reduce((sum, w) => sum + w.budget!, 0);
+	return { name: `${name} total`, windows: [{ label: "", usedPercent: (used / budget) * 100, windowSeconds: 0, resetAt: null }], limitReached: limits.some((limit) => limit.limitReached) };
+}
+
+/**
+ * The limit the bar follows for the session's model: its own; for a provider
+ * that reports allowances, else its family's total, else the account's;
+ * else the first limit.
+ */
+export function selectLimit(usage: ProviderUsage, modelId?: string): UsageLimit | undefined {
+	if (!modelId) return usage.limits[0];
+	const own = usage.limits.find((limit) => limit.name === modelId);
+	if (own) return own;
+	if (allowances(usage.limits)) {
+		const family = modelFamily(modelId);
+		const members = usage.limits.filter((limit) => modelFamily(limit.name) === family);
+		return (members.length ? allowanceTotal(family, members) : undefined) ?? allowanceTotal(usage.provider, usage.limits) ?? usage.limits[0];
+	}
+	return usage.limits[0];
+}
+
+/** The overlay's order for allowances: a family together, families and their members most used first; any other provider's as it said them. */
+export function orderedLimits(limits: readonly UsageLimit[]): UsageLimit[] {
+	if (!allowances(limits)) return [...limits];
+	const families = new Map<string, UsageLimit[]>();
+	for (const limit of limits) families.set(modelFamily(limit.name), [...(families.get(modelFamily(limit.name)) ?? []), limit]);
+	const percent = (limit: UsageLimit) => limit.windows[0]?.usedPercent ?? 0;
+	return [...families.entries()]
+		.map(([family, members]) => ({ members: [...members].sort((a, b) => percent(b) - percent(a)), share: percent(allowanceTotal(family, members)!) }))
+		.sort((a, b) => b.share - a.share)
+		.flatMap((family) => family.members);
+}
+
 // ---------------------------------------------------------------- the bar
 
 /** A window as the status bar shows it; `reset` marks the one whose reset it shows. */
@@ -169,7 +300,7 @@ const TONE_RANK = { dim: 0, success: 0, warning: 1, error: 2 } as const;
  * on the meter ladder, the 5h on a tie: it is the one about to bite.
  */
 export function barWindows(usage: ProviderUsage | undefined, modelId?: string): BarWindow[] {
-	const limit = usage ? (usage.limits.find((l) => l.name === modelId) ?? usage.limits[0]) : undefined;
+	const limit = usage ? selectLimit(usage, modelId) : undefined;
 	if (!limit?.windows.length) return [];
 	const five = limit.windows.find((w) => w.windowSeconds === FIVE_HOUR_SECONDS);
 	const week = limit.windows.find((w) => w.windowSeconds === WEEK_SECONDS) ?? (five ? undefined : limit.windows[0]);
@@ -254,7 +385,8 @@ export function parseProviderUsage(value: unknown, provider: string): ProviderUs
 		for (const w of limit.windows as unknown[]) {
 			const win = w as Record<string, unknown> | null;
 			if (!win || typeof win.label !== "string" || !finite(win.usedPercent) || !finite(win.windowSeconds) || (win.resetAt !== null && !finite(win.resetAt))) return undefined;
-			windows.push({ label: win.label, usedPercent: win.usedPercent, windowSeconds: win.windowSeconds, resetAt: win.resetAt as number | null });
+			if ((win.used !== undefined && !finite(win.used)) || (win.budget !== undefined && !finite(win.budget))) return undefined;
+			windows.push({ label: win.label, usedPercent: win.usedPercent, windowSeconds: win.windowSeconds, resetAt: win.resetAt as number | null, ...(finite(win.used) && finite(win.budget) ? { used: win.used, budget: win.budget } : {}) });
 		}
 		limits.push({ name: limit.name, windows, limitReached: limit.limitReached });
 	}
@@ -298,6 +430,8 @@ export class UsageTracker {
 
 	constructor(deps: TrackerDeps) {
 		this.#deps = deps;
+		// NaN's quota is the shell's own source; an extension that registers one for nan replaces it.
+		this.#sources.set(NAN, { provider: NAN, fetch: fetchNanUsage });
 	}
 
 	/** A reply's snapshot: it replaces the provider's last one and clears its failure. */
@@ -444,7 +578,7 @@ export function usageRows(input: UsageRowsInput, theme: ThemeLike, width: number
 			continue;
 		}
 		rows.push(`${mark}${name}${usage.plan ? `${dot}${paint.fg("soft", clean(usage.plan))}` : ""}${dot}${paint.fg("dim", updated(usage.fetchedAt, input.now))}`);
-		const lines = usage.limits.flatMap((limit) => limit.windows.map((window) => ({ name: [clean(limit.name), clean(window.label)].filter(Boolean).join(" "), window })));
+		const lines = orderedLimits(usage.limits).flatMap((limit) => limit.windows.map((window) => ({ name: [clean(limit.name), clean(window.label)].filter(Boolean).join(" "), window })));
 		const nameCells = Math.max(0, ...lines.map((line) => visibleWidth(line.name)));
 		for (const line of lines) {
 			const percent = `${Math.round(line.window.usedPercent)}%`.padStart(4);
