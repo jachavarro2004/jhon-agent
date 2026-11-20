@@ -152,7 +152,6 @@
       .cap-text { display: block; max-width: 1560px; text-align: center; font-family: "Space Grotesk"; font-weight: 500; font-size: 36px; line-height: 1.3; color: var(--ink); text-shadow: 0 2px 14px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.95); }
 
     </style>
-    <script src="vendor/gsap-3.15.1/gsap.min.js"></script>
     <script type="importmap">
       { "imports": { "three": "./vendor/three-0.187.0/module/three.module.js", "three/addons/": "./vendor/three-0.187.0/examples/jsm/" } }
     </script>
@@ -303,15 +302,219 @@
       window.__plan = {"shots":[{"id":"intro","kind":"intro","seam":"none","start":0,"end":8,"vo":1.4,"sec":3.349},{"id":"problem","kind":"head","seam":"band","start":8,"end":14.413,"vo":8.7,"sec":5.163,"l1":10.836,"l2":12.261},{"id":"limits","kind":"card","seam":"cut","start":14.413,"end":20.604,"vo":14.763,"sec":5.291,"title":14.763,"body":[["#limits-b0",17.101],["#limits-b1",18.516]]},{"id":"refusal","kind":"proof","seam":"cut","start":20.604,"end":27.075,"vo":20.954,"sec":4.821,"marks":[["#refusal-m0",22.257],["#refusal-m1",23.886],["#refusal-m2",25.058]],"origin":"575.363px 156.196px"},{"id":"evidence","kind":"card","seam":"cut","start":27.075,"end":32.327,"vo":27.425,"sec":4.352,"title":27.425,"body":[["#evidence-b0",28.992],["#evidence-b1",30.791]]},{"id":"redgreen","kind":"proof","seam":"cut","start":32.327,"end":38.628,"vo":32.677,"sec":4.651,"marks":[["#redgreen-m0",33.934],["#redgreen-m1",35.251],["#redgreen-m2",36.699]],"origin":"311.712px 475.281px","pan":[-490.901,34.751]},{"id":"memory","kind":"card","seam":"cut","start":38.628,"end":42.024,"vo":38.978,"sec":2.496,"title":38.978,"body":[["#memory-b0",40.117]]},{"id":"status","kind":"proof","seam":"cut","start":42.024,"end":48.794,"vo":42.374,"sec":5.12,"marks":[["#status-m0",43.029],["#status-m1",44.577],["#status-m2",45.291],["#status-m3",46.422]],"origin":"599.207px 259.65px"},{"id":"ways","kind":"list","seam":"band","start":48.794,"end":56.359,"vo":49.494,"sec":6.315,"rows":[["#ways-r0",50.961],["#ways-r1",53.13]]},{"id":"engine","kind":"proof","seam":"cut","start":56.359,"end":64.238,"vo":56.709,"sec":6.229,"marks":[["#engine-m0",56.709],["#engine-m1",57.942],["#engine-m2",59.823]],"origin":"704.417px 352.208px"},{"id":"bars","kind":"proof","seam":"cut","start":64.238,"end":71.307,"vo":64.588,"sec":5.419,"marks":[["#bars-m0",66.552],["#bars-m1",67.433],["#bars-m2",67.975],["#bars-m3",68.449],["#bars-m4",69.059],["#bars-m5",69.397]],"origin":"201.857px 156.196px"},{"id":"noldd","kind":"card","seam":"band","start":71.307,"end":76.482,"vo":72.007,"sec":3.925,"title":72.007,"body":[]},{"id":"ask","kind":"proof","seam":"cut","start":76.482,"end":82.377,"vo":76.832,"sec":4.245,"marks":[["#ask-m0",78.955],["#ask-m1",79.736]],"origin":"618.346px 281.341px"},{"id":"seven","kind":"card","seam":"band","start":82.377,"end":88.235,"vo":83.077,"sec":4.608,"title":83.077,"body":[["#seven-b0",85.381]]},{"id":"verdicts","kind":"proof","seam":"cut","start":88.235,"end":94.834,"vo":88.585,"sec":4.949,"marks":[["#verdicts-m0",88.585],["#verdicts-m1",88.839],["#verdicts-m2",90.869],["#verdicts-m3",92.519]],"origin":"848.153px 269.917px"},{"id":"ldd","kind":"card","seam":"band","start":94.834,"end":101.14,"vo":95.534,"sec":5.056,"title":95.534,"body":[]},{"id":"slice","kind":"proof","seam":"cut","start":101.14,"end":108.017,"vo":101.49,"sec":5.227,"marks":[["#slice-m0",101.49],["#slice-m1",102.255],["#slice-m2",105.315]],"origin":"477.292px 242.486px"},{"id":"pr","kind":"card","seam":"cut","start":108.017,"end":113.461,"vo":108.367,"sec":4.544,"title":108.367,"body":[["#pr-b0",110.479]]},{"id":"route","kind":"proof","seam":"cut","start":113.461,"end":120.338,"vo":113.811,"sec":5.227,"marks":[["#route-m0",115.253],["#route-m1",116.455],["#route-m2",117.476]],"origin":"564.378px 156.196px"},{"id":"agents","kind":"card","seam":"band","start":120.338,"end":125.812,"vo":121.038,"sec":4.224,"title":121.038,"body":[["#agents-b0",123.633]]},{"id":"launch","kind":"proof","seam":"cut","start":125.812,"end":130.962,"vo":126.162,"sec":3.285,"marks":[["#launch-m0",126.162],["#launch-m1",127.276],["#launch-m2",128.835]],"origin":"550.806px 331.361px"},{"id":"jobs","kind":"proof","seam":"cut","start":130.962,"end":136.836,"vo":131.312,"sec":4.224,"marks":[["#jobs-m0",131.312],["#jobs-m1",132.23],["#jobs-m2",134.557]],"origin":"740.433px 414.504px"},{"id":"palette","kind":"card","seam":"band","start":136.836,"end":140.71,"vo":137.536,"sec":2.624,"title":137.536,"body":[]},{"id":"commands","kind":"proof","seam":"cut","start":140.71,"end":145.86,"vo":141.06,"sec":2.731,"marks":[["#commands-m0",141.06],["#commands-m1",142.173],["#commands-m2",142.982]],"origin":"622.734px 340.418px"},{"id":"changes","kind":"proof","seam":"cut","start":145.86,"end":152.566,"vo":146.21,"sec":5.056,"marks":[["#changes-m0",147.005],["#changes-m1",149.05]],"origin":"736.483px 278.921px"},{"id":"yours","kind":"card","seam":"band","start":152.566,"end":158.317,"vo":153.266,"sec":4.501,"title":153.266,"body":[["#yours-b0",155.37]]},{"id":"grant","kind":"proof","seam":"cut","start":158.317,"end":164.212,"vo":158.667,"sec":4.245,"marks":[["#grant-m0",158.667],["#grant-m1",159.692],["#grant-m2",162.326]],"origin":"512.171px 205.859px"},{"id":"hard","kind":"card","seam":"cut","start":164.212,"end":170.104,"vo":164.562,"sec":4.992,"title":164.562,"body":[["#hard-b0",164.562],["#hard-b1",168.043]]},{"id":"hardrows","kind":"proof","seam":"cut","start":170.104,"end":175.254,"vo":170.454,"sec":3.264,"marks":[["#hardrows-m0",170.454],["#hardrows-m1",171.12]],"origin":"566.167px 298.444px"},{"id":"norepo","kind":"card","seam":"cut","start":175.254,"end":181.167,"vo":175.604,"sec":5.013,"title":175.604,"body":[["#norepo-b0",178.078]]},{"id":"audit","kind":"card","seam":"band","start":181.167,"end":191.014,"vo":181.867,"sec":8.597,"title":181.867,"body":[["#audit-b0",185.929],["#audit-b1",189.313]]},{"id":"finding","kind":"proof","seam":"cut","start":191.014,"end":196.164,"vo":191.364,"sec":2.88,"marks":[["#finding-m0",191.364],["#finding-m1",191.724],["#finding-m2",192.924]],"origin":"421.567px 254.376px"},{"id":"bench","kind":"numbers","seam":"cut","start":196.164,"end":206.408,"vo":196.514,"sec":9.344,"rows":[["#bench-f0",200.659],["#bench-f1",203.447]]},{"id":"start","kind":"list","seam":"band","start":206.408,"end":216.085,"vo":207.108,"sec":8.427,"rows":[["#start-r0",207.108],["#start-r1",209.346],["#start-r2",212.112],["#start-r3",213.099]]},{"id":"close","kind":"close","seam":"band","start":216.085,"end":222.534,"vo":216.785,"sec":3.349}],"seams":[{"kind":"band","at":8,"out":"intro","inn":"problem"},{"kind":"cut","at":14.413,"out":"problem","inn":"limits"},{"kind":"cut","at":20.604,"out":"limits","inn":"refusal"},{"kind":"cut","at":27.075,"out":"refusal","inn":"evidence"},{"kind":"cut","at":32.327,"out":"evidence","inn":"redgreen"},{"kind":"cut","at":38.628,"out":"redgreen","inn":"memory"},{"kind":"cut","at":42.024,"out":"memory","inn":"status"},{"kind":"band","at":48.794,"out":"status","inn":"ways"},{"kind":"cut","at":56.359,"out":"ways","inn":"engine"},{"kind":"cut","at":64.238,"out":"engine","inn":"bars"},{"kind":"band","at":71.307,"out":"bars","inn":"noldd"},{"kind":"cut","at":76.482,"out":"noldd","inn":"ask"},{"kind":"band","at":82.377,"out":"ask","inn":"seven"},{"kind":"cut","at":88.235,"out":"seven","inn":"verdicts"},{"kind":"band","at":94.834,"out":"verdicts","inn":"ldd"},{"kind":"cut","at":101.14,"out":"ldd","inn":"slice"},{"kind":"cut","at":108.017,"out":"slice","inn":"pr"},{"kind":"cut","at":113.461,"out":"pr","inn":"route"},{"kind":"band","at":120.338,"out":"route","inn":"agents"},{"kind":"cut","at":125.812,"out":"agents","inn":"launch"},{"kind":"cut","at":130.962,"out":"launch","inn":"jobs"},{"kind":"band","at":136.836,"out":"jobs","inn":"palette"},{"kind":"cut","at":140.71,"out":"palette","inn":"commands"},{"kind":"cut","at":145.86,"out":"commands","inn":"changes"},{"kind":"band","at":152.566,"out":"changes","inn":"yours"},{"kind":"cut","at":158.317,"out":"yours","inn":"grant"},{"kind":"cut","at":164.212,"out":"grant","inn":"hard"},{"kind":"cut","at":170.104,"out":"hard","inn":"hardrows"},{"kind":"cut","at":175.254,"out":"hardrows","inn":"norepo"},{"kind":"band","at":181.167,"out":"norepo","inn":"audit"},{"kind":"cut","at":191.014,"out":"audit","inn":"finding"},{"kind":"cut","at":196.164,"out":"finding","inn":"bench"},{"kind":"band","at":206.408,"out":"bench","inn":"start"},{"kind":"band","at":216.085,"out":"start","inn":"close"}],"caps":[["#cap-intro-text",1.4,5.099],["#cap-problem-text",8.7,14.213],["#cap-limits-text",14.763,20.404],["#cap-refusal-text",20.954,26.125],["#cap-evidence-text",27.425,32.127],["#cap-redgreen-text",32.677,37.678],["#cap-memory-text",38.978,41.824],["#cap-status-text",42.374,47.844],["#cap-ways-text",49.494,56.159],["#cap-engine-text",56.709,63.288],["#cap-bars-text",64.588,70.357],["#cap-noldd-text",72.007,76.282],["#cap-ask-text",76.832,81.427],["#cap-seven-text",83.077,88.035],["#cap-verdicts-text",88.585,93.884],["#cap-ldd-text",95.534,100.94],["#cap-slice-text",101.49,107.067],["#cap-pr-text",108.367,113.261],["#cap-route-text",113.811,119.388],["#cap-agents-text",121.038,125.612],["#cap-launch-text",126.162,129.797],["#cap-jobs-text",131.312,135.886],["#cap-palette-text",137.536,140.51],["#cap-commands-text",141.06,144.141],["#cap-changes-text",146.21,151.616],["#cap-yours-text",153.266,158.117],["#cap-grant-text",158.667,163.262],["#cap-hard-text",164.562,169.904],["#cap-hardrows-text",170.454,174.068],["#cap-norepo-text",175.604,180.967],["#cap-audit-text",181.867,190.814],["#cap-finding-text",191.364,194.594],["#cap-bench-text",196.514,206.208],["#cap-start-text",207.108,215.885],["#cap-close-text",216.785,220.484]],"bands":[{"band":"#band0-in","at":7.72,"out":"intro","inn":"problem"},{"band":"#band1-in","at":48.514,"out":"status","inn":"ways"},{"band":"#band2-in","at":71.027,"out":"bars","inn":"noldd"},{"band":"#band3-in","at":82.097,"out":"ask","inn":"seven"},{"band":"#band4-in","at":94.554,"out":"verdicts","inn":"ldd"},{"band":"#band5-in","at":120.058,"out":"route","inn":"agents"},{"band":"#band6-in","at":136.556,"out":"jobs","inn":"palette"},{"band":"#band7-in","at":152.286,"out":"changes","inn":"yours"},{"band":"#band8-in","at":180.887,"out":"norepo","inn":"audit"},{"band":"#band9-in","at":206.128,"out":"bench","inn":"start"},{"band":"#band10-in","at":215.805,"out":"start","inn":"close"}],"total":222.534,"introEnd":8};
     </script>
     <script>
-      // The presentation's one paused GSAP timeline, built from window.__plan (compose.mjs: every
-      // time in absolute seconds, from the lines' real lengths), and the film grain. Inlined into
-      // index.html by compose.mjs. Everything visible is a function of timeline time.
+// SPDX-License-Identifier: Apache-2.0
+// Jhon's motion engine (github.com/jachavarro2004/jhon-agent, docs/media/hyperframes/motion).
+//
+// A small deterministic animation layer for HyperFrames compositions: timelines of tweens on
+// absolute positions, seeked frame by frame. render(t) is a pure function of t: every start is
+// resolved while the timeline is built, and no clock, timer or state between frames is read, so
+// any seek order gives the same DOM. For each property of each element the latest-started
+// segment wins and holds its end value; before any has started the property keeps its base
+// (what motion.set or an immediate fromTo rendered while building, else its inline value).
+//
+//   const tl = motion.timeline();
+//   tl.fromTo("#a", { x: 230, opacity: 0.35 }, { x: 0, opacity: 1, duration: 0.36, ease: "power4.out" }, 2);
+//   tl.to("#a", { opacity: 0, duration: 0.2, ease: "none" }, 5);
+//   tl.set("#b", { opacity: 1 }, 3);
+//   motion.register(tl);       // window.__timelines["main"], the timeline HyperFrames seeks
+//
+// The eases keep the formulas the film was first made with (their record: test/ease-reference.json
+// and hyperframes/README.md, Known limits), so it moves as it was approved.
+(function (root) {
+  "use strict";
+
+  // ---- Eases
+  const powIn = (n) => (p) => Math.pow(p, n);
+  const powOut = (n) => (p) => 1 - Math.pow(1 - p, n);
+  const powInOut = (n) => (p) => (p < 0.5 ? Math.pow(2 * p, n) / 2 : 1 - Math.pow(2 * (1 - p), n) / 2);
+  // expo: 2^(10(p-1)) blended with p^6(1-p), so that it starts at exactly 0.
+  const expoIn = (p) => Math.pow(2, 10 * (p - 1)) * p + p * p * p * p * p * p * (1 - p);
+  const sineIn = (p) => (p === 1 ? 1 : 1 - Math.cos(p * (Math.PI / 2)));
+  const EASES = {
+    none: (p) => p,
+    "expo.out": (p) => 1 - expoIn(1 - p),
+    "power1.in": powIn(2),
+    "power2.in": powIn(3), "power2.out": powOut(3), "power2.inOut": powInOut(3),
+    "power3.out": powOut(4), "power3.inOut": powInOut(4),
+    "power4.in": powIn(5), "power4.out": powOut(5),
+    "sine.inOut": (p) => (p < 0.5 ? sineIn(2 * p) / 2 : 1 - sineIn(2 * (1 - p)) / 2),
+    "sine.out": (p) => 1 - sineIn(1 - p),
+  };
+  function ease(name) {
+    const f = EASES[name];
+    if (!f) throw new Error(`motion: unknown ease "${name}" (known: ${Object.keys(EASES).join(", ")})`);
+    return f;
+  }
+
+  // ---- Properties. Numbers are written rounded to 4 decimals, -0 as 0.
+  const NUM = { opacity: 1, x: 0, y: 0, yPercent: 0, scale: 1, rotationY: 0, transformPerspective: 0 };
+  const STR = { transformOrigin: "transformOrigin", clipPath: "clipPath", boxShadow: "boxShadow" };
+  const KEYS = new Set(["duration", "ease", "immediateRender"]);
+  const fmt = (v) => String(Math.round(v * 1e4) / 1e4 || 0);
+  const round7 = (v) => Math.round(v * 1e7) / 1e7 || 0;
+  // A string of numbers (clip-path inset(), box-shadow): numbers interpolate, the rest is kept; hex colours are not numbers.
+  const TOKEN = /#[0-9a-fA-F]+|-?\d*\.?\d+(?:e[-+]?\d+)?/g;
+  const nums = (s) => (s.match(TOKEN) || []).filter((m) => m[0] !== "#").map(Number);
+  function lerpString(a, b, r) {
+    const na = nums(a), nb = nums(b);
+    const shape = (s) => s.replace(TOKEN, (m) => (m[0] === "#" ? m : "N"));
+    if (na.length !== nb.length || shape(a) !== shape(b)) throw new Error(`motion: cannot tween "${a}" to "${b}"`);
+    let i = 0;
+    return b.replace(TOKEN, (m) => {
+      if (m[0] === "#") return m;
+      const k = i++;
+      return fmt(na[k] + (nb[k] - na[k]) * r);
+    });
+  }
+  function check(p) {
+    if (!(p in NUM) && !(p in STR)) throw new Error(`motion: unsupported property "${p}"`);
+  }
+
+  function toArray(sel) {
+    if (typeof sel === "string") return Array.from(root.document.querySelectorAll(sel));
+    if (sel && typeof sel.length === "number" && !sel.style) return Array.from(sel).flatMap(toArray);
+    return sel ? [sel] : [];
+  }
+
+  // ---- Element state: per property, its base and its segments; the inline values it had before.
+  const elements = new Map();
+  function stateOf(el) {
+    let s = elements.get(el);
+    if (!s) elements.set(el, (s = { el, props: new Map(), inline: {} }));
+    return s;
+  }
+  function track(s, p) {
+    check(p);
+    let tr = s.props.get(p);
+    if (!tr) {
+      const css = p in STR ? STR[p] : p === "opacity" ? "opacity" : "transform";
+      if (!(css in s.inline)) s.inline[css] = s.el.style[css] || "";
+      s.props.set(p, (tr = { base: undefined, segs: [] }));
+    }
+    return tr;
+  }
+  function segValue(g, t) {
+    if (g.dur === 0 || t >= g.start + g.dur) return g.to;
+    if (g.from === g.to) return g.from;
+    const r = g.ease((t - g.start) / g.dur);
+    return typeof g.to === "number" ? g.from + (g.to - g.from) * r : g.p in STR && g.p !== "transformOrigin" ? lerpString(g.from, g.to, r) : r > 0 ? g.to : g.from;
+  }
+  function valueAt(tr, t) {
+    let best;
+    for (const g of tr.segs) if (g.start <= t && (!best || g.start >= best.start)) best = g;
+    return best ? segValue(best, t) : tr.base;
+  }
+  // The value a `to` starts from: the track at that time, else the element's computed style, else the property's rest value.
+  function resolve(el, tr, p, t) {
+    const v = valueAt(tr, t);
+    if (v !== undefined) return v;
+    const cs = root.getComputedStyle ? root.getComputedStyle(el) : null;
+    if (p in STR) return (cs && cs[STR[p]]) || "";
+    if (p === "opacity" && cs && cs.opacity !== "") return Number(cs.opacity);
+    return NUM[p];
+  }
+
+  // ---- Writing one element's styles at time t (one composed transform string, fixed order).
+  function write(s, t) {
+    const v = {};
+    for (const [p, tr] of s.props) v[p] = valueAt(tr, t);
+    const st = s.el.style;
+    if ("opacity" in s.inline) st.opacity = v.opacity === undefined ? s.inline.opacity : fmt(v.opacity);
+    for (const p in STR) if (STR[p] in s.inline) st[STR[p]] = v[p] === undefined ? s.inline[STR[p]] : String(v[p]);
+    if ("transform" in s.inline) {
+      const parts = [];
+      if (v.transformPerspective !== undefined) parts.push(`perspective(${fmt(v.transformPerspective)}px)`);
+      if (v.yPercent !== undefined) parts.push(`translate(0%, ${fmt(v.yPercent)}%)`);
+      if (v.x !== undefined || v.y !== undefined) parts.push(`translate(${fmt(v.x || 0)}px, ${fmt(v.y || 0)}px)`);
+      if (v.rotationY !== undefined) parts.push(`rotateY(${fmt(v.rotationY)}deg)`);
+      if (v.scale !== undefined) parts.push(`scale(${fmt(v.scale)})`);
+      st.transform = parts.length ? parts.join(" ") : s.inline.transform;
+    }
+  }
+  // Sets the base of the properties given (motion.set, an immediate fromTo) and renders it at once.
+  function writeBase(s, vars) {
+    for (const p in vars) if (!KEYS.has(p)) s.props.get(p).base = vars[p];
+    write(s, -Infinity);
+  }
+
+  function set(sel, vars) {
+    for (const el of toArray(sel)) {
+      const s = stateOf(el);
+      for (const p in vars) if (!KEYS.has(p)) track(s, p);
+      writeBase(s, vars);
+    }
+  }
+
+  function timeline() {
+    const mine = new Set();
+    let end = 0;
+    function add(sel, from, to, at, immediate) {
+      const start = round7(at), dur = round7(to.duration || 0);
+      const ez = dur > 0 ? ease(to.ease) : null;
+      end = Math.max(end, start + dur);
+      for (const el of toArray(sel)) {
+        const s = stateOf(el);
+        mine.add(s);
+        const props = [...new Set([...Object.keys(from || {}), ...Object.keys(to)])].filter((p) => !KEYS.has(p));
+        const segs = props.map((p) => {
+          const tr = track(s, p);
+          const a = from && p in from ? from[p] : resolve(el, tr, p, start);
+          return [tr, { p, start, dur, ease: ez, from: a, to: p in to ? to[p] : a }];
+        });
+        for (const [tr, g] of segs) tr.segs.push(g);
+        if (immediate) writeBase(s, from);
+      }
+      return api;
+    }
+    const api = {
+      fromTo: (sel, from, to, at) => add(sel, from, to, at, to.immediateRender !== false),
+      to: (sel, to, at) => add(sel, null, to, at, false),
+      set: (sel, vars, at) => add(sel, null, { ...vars, duration: 0 }, at, false),
+      duration: () => end,
+      render(t) {
+        t = round7(t); // the playhead on the same 1e-7 grid as the starts, so a frame on a tween's boundary or a rounding tie lands the same way every time
+        for (const s of mine) write(s, t);
+        return api;
+      },
+    };
+    return api;
+  }
+
+  // HyperFrames 0.9.58 seeks a registered timeline: pause(), then totalTime(t, suppressEvents) or
+  // seek(t); it reads duration() and time(). Every call renders the shim's time.
+  function register(tl, id = "main") {
+    let time = 0, paused = true;
+    const go = (t) => (t === undefined ? time : ((time = Math.max(0, Number(t) || 0)), tl.render(time), h));
+    const h = {
+      pause: () => ((paused = true), tl.render(time), h),
+      play: () => ((paused = false), tl.render(time), h),
+      paused: (v) => (v === undefined ? paused : ((paused = !!v), tl.render(time), h)),
+      time: go,
+      totalTime: go,
+      seek: (t) => go(t),
+      duration: () => tl.duration(),
+    };
+    root.__timelines = root.__timelines || {};
+    root.__timelines[id] = h;
+    return h;
+  }
+
+  const motion = { timeline, set, ease, register, toArray };
+  root.motion = motion;
+})(typeof window !== "undefined" ? window : globalThis);
+
+    </script>
+    <script>
+      // The presentation's one timeline, on Jhon's motion engine (../motion/motion.js), built from
+      // window.__plan (compose.mjs: every time in absolute seconds, from the lines' real lengths),
+      // and the film grain. Inlined into index.html by compose.mjs. Everything visible is a
+      // function of timeline time.
       (function () {
         const P = window.__plan;
-        const tl = gsap.timeline({ paused: true });
+        const tl = motion.timeline();
         const E = "expo.out", P3 = "power3.out", P4o = "power4.out", P4i = "power4.in";
         const ink = (sel, at, dur) => tl.fromTo(sel, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: dur, ease: "power2.out", immediateRender: true }, at);
-        const q = (sel) => gsap.utils.toArray(sel);
+        const q = (sel) => motion.toArray(sel);
 
         // Waterfall entry (cut-the-curve §6): words whip up from below, binary opacity, gaps shrinking x0.84.
         function waterfall(sel, at, base) {
@@ -319,7 +522,7 @@
           let gap = 0.06, t = at;
           ws.forEach((w) => {
             const heavy = w.textContent.length > 5;
-            gsap.set(w, { opacity: 0 });
+            motion.set(w, { opacity: 0 });
             tl.set(w, { opacity: 1 }, t);
             tl.fromTo(w, { y: heavy ? base + 24 : base }, { y: 0, duration: heavy ? 0.2 : 0.15, ease: P4o, immediateRender: false }, t);
             t += gap; gap *= 0.84;
@@ -328,13 +531,13 @@
         }
         // A stamp (identity's "ink and stamp"): binary in, from 1.12x down to rest, its hard shadow landing.
         function stamp(sel, at) {
-          gsap.set(sel, { opacity: 0 });
+          motion.set(sel, { opacity: 0 });
           tl.set(sel, { opacity: 1 }, at);
           tl.fromTo(sel, { scale: 1.12, boxShadow: "0px 0px 0 #000" }, { scale: 1, boxShadow: "5px 5px 0 #000", duration: 0.3, ease: P3, immediateRender: false }, at);
         }
         // A row stamps in: binary, from a little below, landing.
         function rowIn(sel, at) {
-          gsap.set(sel, { opacity: 0 });
+          motion.set(sel, { opacity: 0 });
           tl.set(sel, { opacity: 1 }, at);
           tl.fromTo(sel, { y: 40 }, { y: 0, duration: 0.3, ease: P4o, immediateRender: false }, at);
         }
@@ -368,7 +571,7 @@
           const id = s.id, len = s.end - s.start;
           if (s.kind === "head") {
             tl.fromTo(`#${id}-cam`, { scale: 1 }, { scale: 1.04, duration: len, ease: "none" }, s.start);
-            gsap.set(`#${id}-kick`, { opacity: 0 });
+            motion.set(`#${id}-kick`, { opacity: 0 });
             tl.set(`#${id}-kick`, { opacity: 1 }, s.start + 0.3);
             ink(`#${id}-kick`, s.start + 0.3, 0.35);
             tl.fromTo(`#${id}-lead`, { yPercent: 110 }, { yPercent: 0, duration: 0.6, ease: E }, s.vo);
@@ -379,12 +582,12 @@
             tl.fromTo(c, { rotationY: -5, transformPerspective: 2200 }, { rotationY: -1.5, duration: len, ease: "sine.out" }, s.start);
             tl.fromTo(`#${id}-cam .card-face, #${id}-cam .card-shadow`, { scale: 1 }, { scale: 1.035, duration: len, ease: "none" }, s.start);
             const k0 = s.start + (s.seam === "band" ? 0.4 : 0.12);
-            gsap.set(`#${id}-kick`, { opacity: 0 });
+            motion.set(`#${id}-kick`, { opacity: 0 });
             tl.set(`#${id}-kick`, { opacity: 1 }, k0);
             ink(`#${id}-kick`, k0, 0.3);
             if (s.kind === "card") {
               waterfall(`#${id}-cam .card-title .w`, s.title, 60);
-              s.body.forEach(([sel, at]) => { gsap.set(sel, { clipPath: "inset(0% 100% 0% 0%)" }); ink(sel, at, 0.55); });
+              s.body.forEach(([sel, at]) => { motion.set(sel, { clipPath: "inset(0% 100% 0% 0%)" }); ink(sel, at, 0.55); });
             } else {
               s.rows.forEach(([sel, at]) => rowIn(sel, at));
             }
@@ -402,7 +605,7 @@
             tl.fromTo(`#${id}-seal-shadow`, { opacity: 0, x: -9, y: -9 }, { opacity: 1, x: 0, y: 0, duration: 0.3, ease: P3 }, s.vo - 0.06);
             tl.fromTo(`#${id}-l1`, { yPercent: 110 }, { yPercent: 0, duration: 0.7, ease: E }, s.vo + 0.56);
             tl.fromTo(`#${id}-l2`, { yPercent: 110 }, { yPercent: 0, duration: 0.7, ease: E }, s.vo + 1.84);
-            gsap.set(`#${id}-url`, { opacity: 0 });
+            motion.set(`#${id}-url`, { opacity: 0 });
             tl.set(`#${id}-url`, { opacity: 1 }, s.vo + s.sec + 0.2);
             ink(`#${id}-url`, s.vo + s.sec + 0.2, 0.5);
           }
@@ -422,8 +625,7 @@
           tl.fromTo(sel, { opacity: 1 }, { opacity: 0, duration: 0.25, ease: "power1.in", immediateRender: false }, end - 0.3);
         }
 
-        window.__timelines = window.__timelines || {};
-        window.__timelines["main"] = tl;
+        motion.register(tl); // window.__timelines["main"], the timeline HyperFrames seeks
       })();
 
       // Film grain: six fixed noise frames (a seeded PRNG), each held two video frames (15 a second,
@@ -577,7 +779,7 @@
 
       // ---- Time -> state, a pure function of t.
       const clamp01 = (x) => Math.min(1, Math.max(0, x));
-      const ez = (n) => gsap.parseEase(n);
+      const ez = (n) => motion.ease(n);
       const o3 = ez("power3.out"), i2 = ez("power2.in"), o2 = ez("power2.out"), sio = ez("sine.inOut");
       const ramp = (t, a, b, f) => f(clamp01((t - a) / (b - a)));
 

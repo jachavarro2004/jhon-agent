@@ -130,7 +130,7 @@
 
       // ---- Time -> state, a pure function of t.
       const clamp01 = (x) => Math.min(1, Math.max(0, x));
-      const ez = (n) => gsap.parseEase(n);
+      const ez = (n) => motion.ease(n);
       const o3 = ez("power3.out"), i2 = ez("power2.in"), o2 = ez("power2.out"), sio = ez("sine.inOut");
       const ramp = (t, a, b, f) => f(clamp01((t - a) / (b - a)));
 

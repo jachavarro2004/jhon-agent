@@ -4,9 +4,9 @@ Jhon's presentation video (`docs/assets/video/jhon-explainer.mp4`, and
 `jhon-explainer.es.mp4` with Spanish subtitles) is made by code with
 [HyperFrames](https://github.com/heygen-com/hyperframes): HTML rendered to
 video by a headless Chrome that seeks one paused timeline frame by frame.
-GSAP draws the motion; Three.js draws the one 3D shot, the 力 seal of the
-intro. It replaced the SVG-frame explainer (`odd/tasks/v0-1-release.md`,
-T63f, L1099–L1114) in the style the owner approved on pilot 3 (L1112).
+Jhon's own motion engine (`motion/motion.js`, below) draws the motion;
+Three.js draws the one 3D shot, the 力 seal of the intro. It replaced the
+SVG-frame explainer (`odd/tasks/v0-1-release.md`, T63f, L1099–L1114) in the style the owner approved on pilot 3 (L1112).
 
 The pilots (pilot 1, `intro/`; pilots 2 and 3, `pilot2/`) are in git history
 only, from commit 445e6dec on `feat/t63a-media`; this README's history has
@@ -47,8 +47,8 @@ presentation/
 ├── narrate.mjs       # speaks each distinct line with local Kokoro (docs/media/kokoro.py), caches narration/<key>.{opus,json}
 ├── compose.mjs       # writes index.html and captions.es.json from script.mjs and the cache's seconds
 ├── style.css         # the styles      ┐
-├── timeline.js       # the GSAP timeline│ inlined into index.html by compose.mjs
-├── stage.js          # the 3D seal     ┘
+├── timeline.js       # the timeline    │ inlined into index.html by compose.mjs,
+├── stage.js          # the 3D seal     ┘ with ../motion/motion.js
 ├── index.html        # GENERATED: the composition (every clip timed from the lines' real lengths)
 ├── captions.es.json  # GENERATED: the Spanish subtitles, one variable per line (c_<shot id>)
 ├── narration/        # the cache: 34 lines, mono Opus 32 kb/s, with their text and seconds
@@ -57,7 +57,8 @@ presentation/
     ├── fonts/*.woff  # subsets (Latin, Latin-1, 力) of the OFL fonts identity.ts names
     ├── narration -> ../narration
     └── screens/{features,diagrams} -> docs/assets/{features,diagrams}
-vendor/                # pinned copies, no npm install: gsap-3.15.1 (GreenSock "no charge" licence, header kept), three-0.187.0 (MIT)
+motion/motion.js       # Jhon's motion engine (Apache-2.0, no dependencies)
+vendor/                # a pinned copy, no npm install: three-0.187.0 (MIT)
 .gitignore             # the CLI's .hyperframes/ state, renders/
 ```
 
@@ -66,13 +67,71 @@ To change what is said or shown, edit `script.mjs`, then:
 ```sh
 node docs/media/hyperframes/presentation/narrate.mjs "$(mktemp -d)"   # only when a line changed (Kokoro, about a minute for all)
 node docs/media/hyperframes/presentation/compose.mjs                   # prints the shot list with its times
-node --experimental-strip-types --test docs/media/test/presentation.test.ts
+node --experimental-strip-types --test docs/media/test/presentation.test.ts docs/media/test/motion.test.ts
 ```
 
 The test checks that the narration cache holds every line (and nothing
 else) and the composition plays each, that each proof's marks land in order
-while its screen is held, and that every line has its Spanish subtitle
-(plain text, tú, at most two rows).
+while its screen is held, that every line has its Spanish subtitle
+(plain text, tú, at most two rows), and that the composition runs on the
+motion engine alone.
+
+`compose.mjs` reads each proof's screen size from `docs/assets/`; the
+`commands` proof's `command-palette.png` is no longer built (Known limits), so
+to compose again put that file back from git history first (it was last in
+`f5596a6^`).
+
+## The motion engine (`motion/motion.js`)
+
+About 200 lines of plain JavaScript, no dependencies, Apache-2.0: the slice
+of a tween library this film uses, made deterministic.
+
+```js
+const tl = motion.timeline();
+tl.fromTo("#a", { x: 230, opacity: 0.35 }, { x: 0, opacity: 1, duration: 0.36, ease: "power4.out" }, 12.4);
+tl.to("#m0", { opacity: 0, duration: 0.14, ease: "none" }, 30.1);
+tl.set("#w3", { opacity: 1 }, 9.2);   // a zero-length step
+motion.set("#w3", { opacity: 0 });    // now, while building
+motion.ease("sine.inOut");            // the ease as a function of p
+motion.register(tl);                  // window.__timelines["main"]
+```
+
+- **Targets**: a selector (several, comma separated), an element or a list.
+- **Properties**: `opacity`, `x`, `y`, `yPercent`, `scale`, `rotationY`,
+  `transformPerspective`, `transformOrigin`, and `clipPath` and `boxShadow`
+  as strings of numbers (the numbers tween; the rest, colours included, is
+  kept). An element gets one composed transform, always in the order
+  perspective, translate(%), translate(px), rotateY, scale; numbers are
+  written rounded to four decimals.
+- **Eases**: `none`, `expo.out`, `power1.in`, `power2.in/out/inOut`,
+  `power3.out/inOut`, `power4.in/out`, `sine.inOut/out`, with the formulas
+  the film was first made with (Known limits; its `expo` is
+  `2^(10(p-1))·p + p⁶(1-p)`, not the textbook `2^(10(p-1))`); any other
+  name throws.
+- **Semantics**: a `fromTo` renders its from-state while the timeline is
+  built unless `immediateRender: false`; a `to` starts from its property's
+  track at the tween's start, resolved while building; for each property
+  of each element the latest-started segment wins and holds its end value;
+  before any has started the property shows its base (what `motion.set` or
+  an immediate `fromTo` rendered), else the element's own inline value.
+- **Determinism**: `tl.render(t)` is a pure function of `t` (no
+  `requestAnimationFrame`, timer, `Date` or state between frames), so any
+  seek order gives the same DOM. Starts, durations and the playhead are
+  rounded to 1e-7 s, so a frame that falls on a tween's boundary, or on a
+  value that rounds half-way at four decimals (the intro's camera at frame
+  154), lands as it did when the film was approved.
+- **HyperFrames 0.9.58**: the runtime pauses the registered timeline, then
+  calls `totalTime(t, suppressEvents)` (or `seek(t)`), and reads
+  `duration()` and `time()`; `motion.register(tl)` gives it an object with
+  `pause`, `play`, `paused`, `time`, `duration`, `totalTime` and `seek`,
+  each rendering. The intro's `stage.js` takes its eases from
+  `motion.ease` and draws on the runtime's `hf-seek` event.
+
+`docs/media/test/motion.test.ts` checks every ease against the reference
+values at 1,001 points (`test/ease-reference.json`, recorded from the first
+build's eases before they were removed: a SHA-256 of the float64 values and
+every 100th value), seek-order independence, the playhead's grid, a `to`'s
+start, `immediateRender` and the HyperFrames shim.
 
 A shot lasts its lead-in (0.35 s after a cut, 0.7 s after a band), its line
 and a tail (0.55 s for a claim; a proof is held as above). A mark or a body
@@ -177,9 +236,35 @@ bytes, 14.2 MB; video 0.38 Mb/s), the Spanish one in **9m 33s** (15,350,636
 bytes, 14.6 MB). Both carry the same narration (the decoded audio's MD5 is
 the same). **Two renders of the English video are byte-identical**
 (sha256 `4faee44d…6b4074`; the Spanish one was rendered once). Both files: H.264 High,
-yuv420p, 1920×1080, 30 fps; AAC LC 48 kHz stereo.
+yuv420p, 1920×1080, 30 fps; AAC LC 48 kHz stereo. These numbers are the
+first build's, before the motion engine (Known limits has the motion
+build's renders).
 
 ## Known limits
+
+- The film was first made with GSAP 3.15.1. GSAP is free of charge since 2025-04-30 but under Webflow's
+  proprietary «Standard No Charge» licence (not open source, not modifiable
+  or sublicensable, a clause against competing with Webflow, revocable), so
+  Jhon could not ship it in `jhon media video`. The film now runs on Jhon's
+  own engine, compared with the GSAP build before GSAP was removed:
+  - **Values**: every element's inline transform, opacity, clip-path,
+    box-shadow and transform-origin, read at all 6,677 frames (30 fps)
+    through the HyperFrames runtime in chrome-headless-shell 152, are the
+    same numbers in both builds (338 elements, maximum deviation 0, after
+    normalising `translate3d`/`translate` and `scale(a, a)`/`scale(a)`). A
+    first engine without the 1e-7 playhead grid differed by 1e-4 on a few
+    rounding ties (the intro's camera at frame 154: 1.0338 against 1.0337).
+  - **Renders**: the English film rendered from each build with the flags
+    above (`--quality looks --crf 32 --no-browser-gpu`) is the same file:
+    sha256 `19122c0b…eff458cf`, 12,312,209 bytes, 222.567 s;
+    `hyperframes diff` gives SSIM 1 (mean, p05, min, worst cell), the same
+    eleven cuts and the same sound. Two renders of the motion build are
+    byte-identical. (The first engine's film had SSIM mean 0.9999, p05
+    0.9991, min 0.9934 at frame 154, and its two renders differed in four
+    frames of the first band seam, 242–243 and 246–247.)
+  - These renders lack `command-palette.png` (no longer built), so they are
+    not the published files; the published ones were rendered from the GSAP
+    build while it existed.
 
 - The `palette` card and the `commands` proof (136.8–145.9 s) show the
   command palette (`alt+k`), which the shell no longer has (T169, L1438).

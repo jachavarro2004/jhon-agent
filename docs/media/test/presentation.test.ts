@@ -29,6 +29,16 @@ test("the narration cache holds every line, spoken as written, and nothing else;
   assert.deepEqual(readdirSync(join(DIR, "narration")).filter((f) => !keep.has(f)), [], "cache files no line uses");
 });
 
+test("the composition runs on Jhon's motion engine alone: motion.js inlined before the timeline, no GSAP", () => {
+  const motion = readFileSync(join(MEDIA, "hyperframes", "motion", "motion.js"), "utf8");
+  const timeline = readFileSync(join(DIR, "timeline.js"), "utf8");
+  const at = html.indexOf(motion);
+  assert.ok(at > 0, "index.html does not inline motion.js as it is (run compose.mjs)");
+  assert.ok(html.indexOf(timeline) > at, "the timeline is inlined after the engine it uses");
+  assert.ok(!/gsap/i.test(html), "index.html still names GSAP");
+  assert.ok(!existsSync(join(MEDIA, "hyperframes", "vendor", "gsap-3.15.1")), "vendor/gsap-3.15.1 is still there");
+});
+
 test("each proof's marks land in order while its screen is held, and the film runs 2.5 to 4 minutes", () => {
   const plan = JSON.parse(html.match(/window\.__plan = (.*);/)![1]!);
   assert.ok(plan.total >= 150 && plan.total <= 240, `${plan.total} s`);
