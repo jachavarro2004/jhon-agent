@@ -1,7 +1,7 @@
 The guarddiff baseline (T128f slice 2, G3): the last release against the branch head, before any guard is changed.
 
-old: v0.3.7, c7f8efafbea624818feb8be5c2b5e4724dd1717a, built from `git archive v0.3.7` (JHON_ROOT: that tree)
-new: feat/t128f head, 83fca38 (slice 1 committed on a963427), built from `git archive 83fca38` (JHON_ROOT: that tree)
+old: v0.3.7, 76709b2f396f4eade8dcfad5a614da691a9a988d, built from `git archive v0.3.7` (JHON_ROOT: that tree)
+new: feat/t128f head, fe91a1b (slice 1 committed on 37be387), built from `git archive fe91a1b` (JHON_ROOT: that tree)
 set: test/guards/corpus as of this slice (audit-session 199, verifiers 147, matrix 25 rows x 7 places x 3 callers,
      rows 37, fuzz 3600 from seed 128)
 
@@ -10,16 +10,16 @@ guarddiff: 17970 guard verdicts per binary; the new binary's: 14631 allow, 474 a
 guarddiff: 4614 lines, 0 changed verdicts (0 allowed, 0 not on the allow list)
 exit 0, 2m27s wall on 16 CPUs (28 CPU-minutes)
 
-Differences: none (the same run against a963427, before slice 1, also gave 0). The commits between the two
-(git log v0.3.7..83fca38) change the sandbox, which guarddiff turns off for both binaries (sandbox.mode = "off"),
+Differences: none (the same run against 37be387, before slice 1, also gave 0). The commits between the two
+(git log v0.3.7..fe91a1b) change the sandbox, which guarddiff turns off for both binaries (sandbox.mode = "off"),
 and the docs; none changes a guard:
   29fad49 feat(sandbox): network git and gh run unsandboxed and neutralized; uvx gets its own folder (T128g)
   45ed793 fix(sandbox): config hooks off, merged output in order, gh -F= read as pflag does (T128g)
   47a411a docs(readme): name uv's tool folder without a home path (T128g)
   62d9584 docs(readme): name the sandbox.allow_write setting, not a command (T128g)
   a359502 feat(sandbox): docker lines run outside the sandbox (T128h)
-  a963427 fix(sandbox): quoted words are literal when judging a line's profile (T128h)
-  83fca38 feat(sandbox): on by default on Linux (T128f slice 1): the default guarddiff overrides
+  37be387 fix(sandbox): quoted words are literal when judging a line's profile (T128h)
+  fe91a1b feat(sandbox): on by default on Linux (T128f slice 1): the default guarddiff overrides
 Their only changes outside engine/internal/sandbox and the sandbox command are hook/sandboxwrap.go (the wrap that
 follows the guards' decision, off here), sh.DefinesFunction (one caller: sandbox/profile.go), and slice 1's
 sandbox.mode default (settings.go, sandbox/mode.go) and its setup hint (setupui/system.go).
