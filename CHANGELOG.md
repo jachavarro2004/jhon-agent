@@ -237,7 +237,7 @@ All notable changes to Jhon are recorded here. The format follows
 
 ### Changed
 
-- Jhon moves to one public repository, [jachavarro2004/jhon-agent](https://github.com/jachavarro2004/jhon-agent): source, tests, docs, the installers (`install.sh`, `install.ps1`) and the release workflow (`.github/workflows/release.yml`) together; the Go module is `github.com/jachavarro2004/jhon-agent`. 0.3.0 is the bridge: it is still built and signed by jachavarro2004/jhon's release workflow, so installed copies accept it, and from it on `jhon update` reads releases from jachavarro2004/jhon-agent and trusts exactly two signers, that repository's release workflow and, for the move, jachavarro2004/jhon's; 0.3.1 is the first release of the new repository (T18).
+- Jhon moves to one public repository, [jachavarro2004/jhon-agent](https://github.com/jachavarro2004/jhon-agent): source, tests, docs, the installers (`install.sh`, `install.ps1`) and the release workflow (`.github/workflows/release.yml`) together; the Go module is `github.com/jachavarro2004/jhon-agent`. 0.3.0 is the bridge: it is still built and signed by the earlier release workflow, so installed copies accept it, and from it on `jhon update` reads releases from jachavarro2004/jhon-agent and trusts exactly two signers, that repository's release workflow and, for the move, the earlier one; 0.3.1 is the first release of the new repository (T18).
 - Tests run through `jhon executions run`, said once (T133b): the worker's prose drops the by-hand alternative and names the unit's run, the verifier's names the wide run, and route-guard's note for a whole suite run by hand names the runnable unit command; still a note, never a refusal.
 - Questions to the owner go through the ask tool (T65, L989-L990): the persona no longer says to ask one question at a time. Every question that waits for the owner goes through the session's ask tool (AskUserQuestion in Claude Code, `ask_user` in pi), all of them in one round of up to four, each with options, the recommended one first and a typed answer allowed; a session with no ask tool asks in text. The rule against option menus now covers reply text only. Prose only: no guard and no audit finding.
 - The versions table pins Engram 3.7.2 (was 3.6.1): `jhon setup` installs it and `jhon doctor` compares against it (L978).
@@ -418,13 +418,13 @@ The first public release: Linux (amd64 and arm64), and Windows through WSL 2.
 
 ### Known issues
 
-- `install.ps1` (Windows through WSL 2) has not been run on a real Windows machine yet; only its Linux side, `install.sh`, is tested end to end. If it fails for you, please open an issue at https://github.com/jachavarro2004/jhon/issues with the window's output.
+- `install.ps1` (Windows through WSL 2) has not been run on a real Windows machine yet; only its Linux side, `install.sh`, is tested end to end. If it fails for you, please open an issue at https://github.com/jachavarro2004/jhon-agent/issues with the window's output.
 
 ### Added
 
-- Install in one line from GitHub raw: `install.sh` (`curl -fsSL https://raw.githubusercontent.com/jachavarro2004/jhon/main/install.sh | sh`) downloads the latest release (or `JHON_VERSION`), checks its sha256 and, when `cosign` is installed, its keyless signature, installs it and opens `jhon setup`; any failed check installs nothing.
+- Install in one line from GitHub raw: `install.sh` (`curl -fsSL https://raw.githubusercontent.com/jachavarro2004/jhon-agent/main/install.sh | sh`) downloads the latest release (or `JHON_VERSION`), checks its sha256 and, when `cosign` is installed, its keyless signature, installs it and opens `jhon setup`; any failed check installs nothing.
 - Windows through WSL 2: `install.ps1` checks WSL, the distro, WSL 2 and curl, then runs `install.sh` inside the distro. Native Windows comes in v0.2.
-- Signed releases on [jachavarro2004/jhon](https://github.com/jachavarro2004/jhon): per arch, `jhon-X.Y.Z-linux-<arch>.tar.gz`, its `.sha256` and a cosign keyless `.sigstore.json` bundle, built and signed by the public release workflow. Pre-releases are tagged `vX.Y.Z-rc.N` and never offered as the latest.
+- Signed releases: per arch, `jhon-X.Y.Z-linux-<arch>.tar.gz`, its `.sha256` and a cosign keyless `.sigstore.json` bundle, built and signed by the public release workflow. Pre-releases are tagged `vX.Y.Z-rc.N` and never offered as the latest.
 - Static binaries: `jhon` is built without cgo and `herdr-jhon` against musl, so neither needs a particular glibc (WSL's default Ubuntu 22.04 works).
 - The core LDD engine in one Go binary, `jhon`: validation and projection of the contracts, status, the launch context, compose, archive, judgment, and the transcript auditor.
 - The guards on every tool call (safety, write, framework, scope, and inspect, among others), with time-boxed `jhon grant` authorizations for what they ask about.

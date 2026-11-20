@@ -624,7 +624,7 @@ func checkRefusalBypass(s *Session, emit emitFunc, notes *[]string) {
 							// The same path through a write tool again, passed, was
 							// judged again by the guard that refused it: a write it
 							// refused outright for its content, now corrected
-							// (2026-10-30, a client project). One it asked about passes only on the
+							// (2026-10-30, a recorded session). One it asked about passes only on the
 							// owner's yes or grant, which the grant reading notes.
 							if writePath == f.path && !moved && p.ask {
 								h = &hit{"violation", p, f, u.Name}

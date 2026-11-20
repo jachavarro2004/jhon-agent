@@ -364,10 +364,10 @@ test("Change says the worktree its change is in, and with several active and non
   const text = changeCardLines({ change: "test-suite-review", worktree: "test-suite-review", tasks: { slices: [] } }, plain, 70).join("\n");
   assert.match(text, /◆ test-suite-review\nin worktree test-suite-review/);
   // The other worktrees' changes in progress show beside the selected one, so the card shows every lane, not only the last one touched.
-  const lanes = [{ change: "test-suite-review-authz", worktree: "tsr-authz", done: 1, slices: 1, next: "verify" }, { change: "fix-svc-a-schedule-creation", worktree: "fix-svc-a-schedules", done: 0, slices: 0, next: "tasks" }];
+  const lanes = [{ change: "test-suite-tidyup-authz", worktree: "tst-authz", done: 1, slices: 1, next: "verify" }, { change: "fix-widget-creation", worktree: "fix-widgets", done: 0, slices: 0, next: "tasks" }];
   const withLanes = changeCardLines({ change: "architecture-compliance-audit", worktree: "arch-audit", next: "propose", lanes, tasks: { slices: [] } }, plain, 90).join("\n");
-  assert.match(withLanes, /Also in progress\n◐ test-suite-review-authz  tsr-authz · 1\/1 slices · next verify\n◐ fix-svc-a-schedule-creation  fix-svc-a-schedules · next tasks/);
-  assert.match(changeCardLines({ change: null, activeChanges: ["a", "b"], lanes }, plain, 90).join("\n"), /Also in progress\n◐ test-suite-review-authz/, "with no change selected, the lanes still show");
+  assert.match(withLanes, /Also in progress\n◐ test-suite-tidyup-authz  tst-authz · 1\/1 slices · next verify\n◐ fix-widget-creation  fix-widgets · next tasks/);
+  assert.match(changeCardLines({ change: null, activeChanges: ["a", "b"], lanes }, plain, 90).join("\n"), /Also in progress\n◐ test-suite-tidyup-authz/, "with no change selected, the lanes still show");
   assert.match(changeCardLines({ change: null, activeChanges: ["a", "b"] }, plain, 90)[0]!, /No change selected: 2 active, and neither the branch nor a worktree names one\./);
 });
 

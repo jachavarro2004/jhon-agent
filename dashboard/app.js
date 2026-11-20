@@ -515,7 +515,7 @@ function bindAgents(view, select) {
   const csv = panel.querySelector("[data-csv]");
   if (csv) csv.addEventListener("click", () => {
     const blob = new Blob([agentsCsv(filterAgents(view.agents, agentsState))], { type: "text/csv" });
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jhon-agents.csv" });
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "agents.csv" });
     a.click();
     URL.revokeObjectURL(a.href);
   });

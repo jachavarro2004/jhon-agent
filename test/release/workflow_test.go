@@ -87,7 +87,7 @@ func TestReleaseWorkflow(t *testing.T) {
 		"actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1":        "v7.1.0",
 	}
 
-	// jhon-agents' own validate workflow pins its actions the same way (T30).
+	// The repository's own validate workflow pins its actions the same way (T30).
 	validate, err := os.ReadFile(filepath.Join(support.Root(), ".github", "workflows", "validate.yml"))
 	if err != nil {
 		t.Fatal(err)
@@ -281,9 +281,9 @@ func releaseWorkflow(t *testing.T, wf, issuer, identityPattern, prefix string) {
 
 }
 
-// validateChecks checks jhon-agents' validate workflow.
+// validateChecks checks the repository's validate workflow.
 func validateChecks(t *testing.T) {
-	t.Run("jhon-agents' validate workflow cannot run for hours if re-enabled (T11d, L62)", func(t *testing.T) {
+	t.Run("the repository's validate workflow cannot run for hours if re-enabled (T11d, L62)", func(t *testing.T) {
 		b, err := os.ReadFile(filepath.Join(support.Root(), ".github", "workflows", "validate.yml"))
 		if err != nil {
 			t.Fatal(err)
