@@ -51,7 +51,7 @@ presentation/
 ├── stage.js          # the 3D seal     ┘ with ../motion/motion.js
 ├── index.html        # GENERATED: the composition (every clip timed from the lines' real lengths)
 ├── captions.es.json  # GENERATED: the Spanish subtitles, one variable per line (c_<shot id>)
-├── narration/        # the cache: 34 lines, mono Opus 32 kb/s, with their text and seconds
+├── narration/        # the cache: 31 lines, mono Opus 32 kb/s, with their text and seconds
 ├── vendor -> ../vendor
 └── assets/
     ├── fonts/*.woff  # subsets (Latin, Latin-1, 力) of the OFL fonts identity.ts names
@@ -76,10 +76,9 @@ while its screen is held, that every line has its Spanish subtitle
 (plain text, tú, at most two rows), and that the composition runs on the
 motion engine alone.
 
-`compose.mjs` reads each proof's screen size from `docs/assets/`; the
-`commands` proof's `command-palette.png` is no longer built (Known limits), so
-to compose again put that file back from git history first (it was last in
-`f5596a6^`).
+`compose.mjs` reads each proof's screen size from `docs/assets/`, so every
+proof's screen must be built first (`docs/media/build.ts`, and `diagrams.py`
+for the diagrams).
 
 ## The motion engine (`motion/motion.js`)
 
@@ -143,7 +142,7 @@ Spanish subtitles (neutral Spanish, tú, no voseo). The English video shows a
 caption only where the screen does not already say the line (`capEn`: one
 shot, the hard lines' "no grant covers").
 
-## Shot list (222.5 s)
+## Shot list (206.8 s)
 
 | time | chapter | kind | on screen | line |
 | --- | --- | --- | --- | --- |
@@ -169,21 +168,18 @@ shot, the hard lines' "no grant covers").
 | 120.3–125.8 s | Agents | card | One orchestrator *plans.* | One orchestrator talks with you and plans. Focused agents do the work. |
 | 125.8–131.0 s | | proof | `agents-launch-context.svg`: the launch message → decisions on record → code map | Each launch carries the decisions on record and a code map. |
 | 131.0–136.8 s | | proof | `agents-jobs.png`: the agents → the jobs → tokens and time | Sub-agents and background jobs show live, with their tokens and time. |
-| 136.8–140.7 s | In the terminal | card | `alt+k` *opens the palette.* | In pi, alt+k opens the command palette. |
-| 140.7–145.9 s | | proof | `command-palette.png`: the groups → `Browse changes · alt+c` | The shell's commands, in groups, with their shortcuts. |
-| 145.9–152.6 s | | proof | `changes.png`: the file list → the diff | Changes shows every file the session touched, and its diff, without leaving the terminal. |
-| 152.6–158.3 s | You decide | card | A mode and a grant are *yours alone.* | A mode and a grant are yours alone. An agent may read the mode, never set it. |
-| 158.3–164.2 s | | proof | `mode-grant.png`: `jhon mode` → `jhon grant push --for 30m` → the live grant | A timed grant widens one class: jhon grant push --for 30m. |
-| 164.2–170.1 s | | card | The hard lines: These *stay refused.* | Credentials, .git/, the grants and modes, and Jhon's own files stay refused. |
-| 170.1–175.3 s | | proof | `guards-tool-call.svg`: the vcs, framework and secrets rows → the safety row (English caption) | So do the destructive operations no grant covers. |
-| 175.3–181.2 s | | card | A folder that is no repo: No repo, *no mode.* | A folder that is no repo has no mode: its calls are judged as in normal mode. |
-| 181.2–191.0 s | Measured | card | `jhon audit` *reads a session.* | jhon audit reads a session afterwards, for what went wrong. It flags bypassed refusals, untested delivery and edits before RED. |
-| 191.0–196.2 s | | proof | `audit.png`: the finding → `git push origin HEAD:main` → no test run | Here, a push to main with no test run on record. |
-| 196.2–206.4 s | | numbers | *9 of 9* and *3.4×* (README's bench) | On seeded defects, the native 4R review found the same 9 of 9 as the lens agents, for about 3.4 times fewer weighted tokens. |
-| 206.4–216.1 s | Get started | list | Install → the one-line script; Set up → `jhon setup`; Check → `jhon doctor`; Start → `jhon start` | Install with the one-line script, then run jhon setup. jhon doctor runs the health checks. Then jhon start, inside your project. |
-| 216.1–222.5 s | close | | the band; the seal stamps; «Let the agent run. / Deliver only what is *proven.*»; github.com/jachavarro2004/jhon-agent | Jhon. Let the agent run. Deliver only what is proven. (the intro's audio again) |
+| 136.8–142.6 s | You decide | card | A mode and a grant are *yours alone.* | A mode and a grant are yours alone. An agent may read the mode, never set it. |
+| 142.6–148.5 s | | proof | `mode-grant.png`: `jhon mode` → `jhon grant push --for 30m` → the live grant | A timed grant widens one class: jhon grant push --for 30m. |
+| 148.5–154.4 s | | card | The hard lines: These *stay refused.* | Credentials, .git/, the grants and modes, and Jhon's own files stay refused. |
+| 154.4–159.5 s | | proof | `guards-tool-call.svg`: the vcs, framework and secrets rows → the safety row (English caption) | So do the destructive operations no grant covers. |
+| 159.5–165.4 s | | card | A folder that is no repo: No repo, *no mode.* | A folder that is no repo has no mode: its calls are judged as in normal mode. |
+| 165.4–175.3 s | Measured | card | `jhon audit` *reads a session.* | jhon audit reads a session afterwards, for what went wrong. It flags bypassed refusals, untested delivery and edits before RED. |
+| 175.3–180.4 s | | proof | `audit.png`: the finding → `git push origin HEAD:main` → no test run | Here, a push to main with no test run on record. |
+| 180.4–190.7 s | | numbers | *9 of 9* and *3.4×* (README's bench) | On seeded defects, the native Prism review found the same 9 of 9 as the facet agents, for about 3.4 times fewer weighted tokens. |
+| 190.7–200.4 s | Get started | list | Install → the one-line script; Set up → `jhon setup`; Check → `jhon doctor`; Start → `jhon start` | Install with the one-line script, then run jhon setup. jhon doctor runs the health checks. Then jhon start, inside your project. |
+| 200.4–206.8 s | close | | the band; the seal stamps; «Let the agent run. / Deliver only what is *proven.*»; github.com/jachavarro2004/jhon-agent | Jhon. Let the agent run. Deliver only what is proven. (the intro's audio again) |
 
-Every feature capture appears once (eleven) and every diagram at least once
+Every feature capture appears once (nine) and every diagram at least once
 (`guards-tool-call` twice). `jhon doctor` is a list row, not a screen (it
 cannot pass truthfully in a sandbox: see Known limits).
 
@@ -208,7 +204,7 @@ HYPERFRAMES_PLUGIN_CWD="$P" HYPERFRAMES_RENDER_DETACHED=1 nice -n 19 npx --yes h
   --quality looks --crf 32 --no-browser-gpu --variables-file "$P/captions.es.json" --strict-variables -o "$O/jhon-explainer.es.mp4"
 # Stills
 mkdir -p "$O/stills"
-for s in intro:4.6 problem:13.8 refusal:26.0 status:47.5 verdicts:93.5 close:221.5; do
+for s in intro:4.6 problem:13.8 refusal:26.0 status:47.5 verdicts:93.5 close:205.7; do
   ffmpeg -v error -y -ss "${s#*:}" -i "$O/jhon-explainer.mp4" -frames:v 1 "$O/stills/${s%%:*}.png"
 done
 ```
@@ -266,19 +262,26 @@ build's renders).
     not the published files; the published ones were rendered from the GSAP
     build while it existed.
 
-- The `palette` card and the `commands` proof (136.8–145.9 s) show the
-  command palette (`alt+k`), which the shell no longer has (T169, L1438).
-  The film stays as made, the record of its release; `media/build.ts` no
-  longer renders `command-palette.png`.
+- The published films show the command palette (`alt+k`: the `palette` card
+  and the `commands` proof, 136.8–145.9 s) and the changes view (the
+  `changes` proof, 145.9–152.6 s), which the shell no longer has (T169,
+  L1438; T174-S1). The script dropped those three shots (the "In the
+  terminal" chapter) and `build.ts` no longer renders `command-palette.png`
+  or `changes.png`, so the next render is about 16 s shorter and shows
+  neither; until then the published files keep them.
+- The bench shot's line now names the Prism review and its facet agents
+  (T177). Until that line is spoken again (`narrate.mjs`), `compose.mjs`
+  stops at it and `index.html` and `captions.es.json` still carry the 4R
+  line; once spoken, the times from that shot on (the shot list above)
+  move by the new line's length.
 
 - The marks' timing follows each phrase's share of its line's characters,
   not measured word times; a mark can land a few tenths of a second before
   or after its word.
 - The proof screens are as large as the frame allows above the subtitle
   band (1700×790 at most), so the widest captures (112 columns: the shell
-  bar, the two refusals, `changes`, `audit`) are set at about 23 px a text
-  cell row, and `command-palette` (22 rows) at about 23 px too: legible at
-  1080p, small on a phone.
+  bar, the two refusals, `audit`) are set at about 23 px a text cell row:
+  legible at 1080p, small on a phone.
 - `executions-red-green` is too tall for the frame: the shot shows its
   first run and pans down to the second, rather than showing all of it at once.
 - The seam checks of `motion-doctrine` (`ledger.json`, `seam-gate.mjs`)

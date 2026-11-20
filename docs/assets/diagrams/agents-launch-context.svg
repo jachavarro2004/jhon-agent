@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="t d">
 <title id="t">Jhon's agents and their launch context</title>
-<desc id="d">The orchestrator holds the conversation and launches focused sub-agents: explore, worker, verify, and the 4R lenses with a refuter and a validator. Each launch carries the brief and, when found, the decisions on record from Engram, a code map from CodeGraph, and for verify and the lenses the tests to judge.</desc>
+<desc id="d">The orchestrator holds the conversation and launches focused sub-agents: jhon-scout, jhon-builder, jhon-checker, and the Prism facets with a challenger and an arbiter. Each launch carries the brief and, when found, the decisions on record from Engram, a code map from CodeGraph, and for jhon-checker and the facets the tests to judge.</desc>
 <defs>
 <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#e7bbc8"/></marker>
 <marker id="arf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#d2c3c6"/></marker>
@@ -48,47 +48,47 @@
 <rect x="314" y="398" width="376" height="52" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
 <rect x="314" y="398" width="4" height="52" fill="#98bb6c"/>
 <text x="328" y="420" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="15" font-weight="600" fill="#e9e0e1" text-anchor="start">## Tests to judge</text>
-<text x="328" y="441" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">verify and 4R · jhon context --judge</text>
+<text x="328" y="441" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="15" font-weight="400" fill="#d2c3c6" text-anchor="start">jhon-checker, Prism · jhon context --judge</text>
 <line x1="272" y1="265" x2="296" y2="265" stroke="#e7bbc8" stroke-width="2" marker-end="url(#ar)"/>
 <rect x="744" y="128" width="508" height="62" fill="#000000"/>
 <rect x="740" y="124" width="508" height="62" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
 <rect x="740" y="124" width="4" height="62" fill="#b594a0"/>
-<text x="756" y="150" font-family="Fraunces, Georgia, serif" font-size="19" font-weight="500" fill="#e9e0e1" text-anchor="start">explore</text>
+<text x="756" y="150" font-family="Fraunces, Georgia, serif" font-size="19" font-weight="500" fill="#e9e0e1" text-anchor="start">jhon-scout</text>
 <text x="756" y="174" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="14" font-weight="400" fill="#d2c3c6" text-anchor="start">reads, researches · writes only exploration.md or research.md</text>
 <line x1="708" y1="155" x2="734" y2="155" stroke="#e7bbc8" stroke-width="1.6" marker-end="url(#ar)"/>
 <rect x="744" y="204" width="508" height="62" fill="#000000"/>
 <rect x="740" y="200" width="508" height="62" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
 <rect x="740" y="200" width="4" height="62" fill="#e6c384"/>
-<text x="756" y="226" font-family="Fraunces, Georgia, serif" font-size="19" font-weight="500" fill="#e9e0e1" text-anchor="start">worker</text>
+<text x="756" y="226" font-family="Fraunces, Georgia, serif" font-size="19" font-weight="500" fill="#e9e0e1" text-anchor="start">jhon-builder</text>
 <text x="756" y="250" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="14" font-weight="400" fill="#d2c3c6" text-anchor="start">writes the slice inside its edit surfaces</text>
 <line x1="708" y1="231" x2="734" y2="231" stroke="#e7bbc8" stroke-width="1.6" marker-end="url(#ar)"/>
 <rect x="744" y="280" width="508" height="62" fill="#000000"/>
 <rect x="740" y="276" width="508" height="62" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
 <rect x="740" y="276" width="4" height="62" fill="#98bb6c"/>
-<text x="756" y="302" font-family="Fraunces, Georgia, serif" font-size="19" font-weight="500" fill="#e9e0e1" text-anchor="start">verify</text>
+<text x="756" y="302" font-family="Fraunces, Georgia, serif" font-size="19" font-weight="500" fill="#e9e0e1" text-anchor="start">jhon-checker</text>
 <text x="756" y="326" font-family="&apos;Space Grotesk&apos;, sans-serif" font-size="14" font-weight="400" fill="#d2c3c6" text-anchor="start">independent check · writes only its report</text>
 <line x1="708" y1="307" x2="734" y2="307" stroke="#e7bbc8" stroke-width="1.6" marker-end="url(#ar)"/>
 <rect x="744" y="356" width="508" height="132" fill="#000000"/>
 <rect x="740" y="352" width="508" height="132" fill="#2a2a37" stroke="#4f4447" stroke-width="1"/>
 <rect x="740" y="352" width="4" height="132" fill="#e7bbc8"/>
-<text x="756" y="378" font-family="Fraunces, Georgia, serif" font-size="19" font-weight="500" fill="#e9e0e1" text-anchor="start">4R review</text>
+<text x="756" y="378" font-family="Fraunces, Georgia, serif" font-size="19" font-weight="500" fill="#e9e0e1" text-anchor="start">Prism review</text>
 <text x="1234" y="378" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="400" fill="#9b8d90" text-anchor="end">read-only · inspect-guard</text>
-<rect x="756" y="394" width="56" height="28" fill="#1f1f28" stroke="#e7bbc8" stroke-width="1"/>
-<text x="784" y="413" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="middle">risk</text>
-<rect x="820" y="394" width="108" height="28" fill="#1f1f28" stroke="#e7bbc8" stroke-width="1"/>
-<text x="874" y="413" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="middle">resilience</text>
-<rect x="936" y="394" width="117" height="28" fill="#1f1f28" stroke="#e7bbc8" stroke-width="1"/>
-<text x="994.5" y="413" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="middle">reliability</text>
-<rect x="1061" y="394" width="117" height="28" fill="#1f1f28" stroke="#e7bbc8" stroke-width="1"/>
-<text x="1119.5" y="413" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="middle">readability</text>
-<rect x="756" y="438" width="82" height="28" fill="#1f1f28" stroke="#d2c3c6" stroke-width="1"/>
-<text x="797" y="457" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#d2c3c6" text-anchor="middle">refuter</text>
-<line x1="842" y1="452" x2="864" y2="452" stroke="#d2c3c6" stroke-width="1.6" marker-end="url(#arf)"/>
-<rect x="868" y="438" width="100" height="28" fill="#1f1f28" stroke="#d2c3c6" stroke-width="1"/>
-<text x="918" y="457" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#d2c3c6" text-anchor="middle">validator</text>
-<line x1="972" y1="452" x2="994" y2="452" stroke="#d2c3c6" stroke-width="1.6" marker-end="url(#arf)"/>
-<rect x="998" y="438" width="125" height="28" fill="#1f1f28" stroke="#e6c384" stroke-width="1"/>
-<text x="1060.5" y="457" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="middle">review-4r.md</text>
+<rect x="756" y="394" width="74" height="28" fill="#1f1f28" stroke="#e7bbc8" stroke-width="1"/>
+<text x="793" y="413" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="middle">safety</text>
+<rect x="838" y="394" width="82" height="28" fill="#1f1f28" stroke="#e7bbc8" stroke-width="1"/>
+<text x="879" y="413" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="middle">failure</text>
+<rect x="928" y="394" width="82" height="28" fill="#1f1f28" stroke="#e7bbc8" stroke-width="1"/>
+<text x="969" y="413" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="middle">clarity</text>
+<rect x="1018" y="394" width="91" height="28" fill="#1f1f28" stroke="#e7bbc8" stroke-width="1"/>
+<text x="1063.5" y="413" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e7bbc8" text-anchor="middle">behavior</text>
+<rect x="756" y="438" width="108" height="28" fill="#1f1f28" stroke="#d2c3c6" stroke-width="1"/>
+<text x="810" y="457" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#d2c3c6" text-anchor="middle">challenger</text>
+<line x1="868" y1="452" x2="890" y2="452" stroke="#d2c3c6" stroke-width="1.6" marker-end="url(#arf)"/>
+<rect x="894" y="438" width="82" height="28" fill="#1f1f28" stroke="#d2c3c6" stroke-width="1"/>
+<text x="935" y="457" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#d2c3c6" text-anchor="middle">arbiter</text>
+<line x1="980" y1="452" x2="1002" y2="452" stroke="#d2c3c6" stroke-width="1.6" marker-end="url(#arf)"/>
+<rect x="1006" y="438" width="151" height="28" fill="#1f1f28" stroke="#e6c384" stroke-width="1"/>
+<text x="1081.5" y="457" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="middle">review-prism.md</text>
 <line x1="708" y1="418" x2="734" y2="418" stroke="#e7bbc8" stroke-width="1.6" marker-end="url(#ar)"/>
 <text x="32" y="520" font-family="&apos;FiraCode Nerd Font Mono&apos;, &apos;CaskaydiaCove Nerd Font Mono&apos;, &apos;Noto Sans CJK JP&apos;, monospace" font-size="14" font-weight="600" fill="#e6c384" text-anchor="start" letter-spacing="1.68">WHERE THE CONTEXT COMES FROM</text>
 <rect x="32" y="536" width="395" height="72" fill="#1f1f28" stroke="#4f4447" stroke-width="1"/>

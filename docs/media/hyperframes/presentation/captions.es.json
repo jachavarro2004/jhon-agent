@@ -21,9 +21,6 @@
   "c_agents": "Un orquestador habla contigo y planifica. Agentes enfocados hacen el trabajo.",
   "c_launch": "Cada lanzamiento lleva las decisiones registradas y un mapa del código.",
   "c_jobs": "Los sub-agentes y los trabajos en segundo plano se ven en vivo, con sus tokens y su tiempo.",
-  "c_palette": "En pi, alt+k abre la paleta de comandos.",
-  "c_commands": "Los comandos del shell, en grupos, con sus atajos.",
-  "c_changes": "Changes muestra cada archivo que tocó la sesión y su diff, sin salir de la terminal.",
   "c_yours": "Un modo y un grant son solo tuyos. Un agente puede leer el modo, nunca fijarlo.",
   "c_grant": "Un grant temporal amplía una clase: jhon grant push --for 30m.",
   "c_hard": "Credenciales, .git/, los grants y los modos, y los archivos de Jhon siguen rechazados.",
@@ -31,7 +28,7 @@
   "c_norepo": "Una carpeta que no es repo no tiene modo: sus llamadas se juzgan como en modo normal.",
   "c_audit": "jhon audit lee una sesión después, buscando lo que salió mal. Señala rechazos evitados, entregas sin probar y ediciones antes de RED.",
   "c_finding": "Aquí, un push a main sin ninguna ejecución de tests registrada.",
-  "c_bench": "Con defectos sembrados, la revisión 4R nativa encontró los mismos 9 de 9 que los agentes de lentes, con unas 3,4 veces menos tokens ponderados.",
+  "c_bench": "Con defectos sembrados, la revisión Prism nativa encontró los mismos 9 de 9 que los agentes de facetas, con unas 3,4 veces menos tokens ponderados.",
   "c_start": "Instala con el script de una línea y luego ejecuta jhon setup. jhon doctor ejecuta los chequeos de salud. Luego jhon start, dentro de tu proyecto.",
   "c_close": "Jhon. Deja correr al agente. Entrega solo lo probado."
 }
