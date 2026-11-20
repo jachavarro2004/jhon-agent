@@ -4,14 +4,15 @@
  *
  * The top row says where the session is: `力 repo  ~/path`, nothing more.
  * The status bar at the bottom says how it runs: the branch, the sandbox and
- * the owner's mode on the left; model · effort, the context and the cost on
- * the right, the most volatile last, thin dividers between.
+ * the owner's mode on the left; model · effort, the context, the
+ * subscription's windows (the week, the 5h one from 70%; T174-S5b) and the
+ * cost on the right, the most volatile last, thin dividers between.
  *
  * Under NARROW_BELOW columns the status bar takes the narrow form (04): no
  * meter, the branch capped at NARROW_BRANCH_CELLS. When a row still does not
  * fit, the branch shortens first (to BRANCH_MIN_CELLS), then the pieces in
  * DROP_ORDER give way one at a time, why the sandbox is not running first;
- * the cost is the last thing left.
+ * the windows go before model · effort, the cost is the last thing left.
  *
  * Both renders are pure: data, a theme and a width in, one row of exactly
  * that width out.
@@ -19,11 +20,12 @@
 import { basename } from "node:path";
 import { homedir } from "node:os";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { clip, glyph, meterTone, paintSurface, renderMeter, themePainter, type MeterTone, type Painter, type Role, type ThemeLike } from "./primitives/index.ts";
+import { clip, glyph, METER_CELLS, meterTone, paintSurface, renderMeter, themePainter, type MeterTone, type Painter, type Role, type ThemeLike } from "./primitives/index.ts";
 import { sanitizeTerminalText } from "./terminal-theme.ts";
 import { panelSurfaceOpener } from "./shell-panel.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { shellSettings, type ShellSettings } from "../settings.ts";
+import { resetDay, type BarWindow } from "./usage.ts";
 
 /** What the two bars show. */
 export interface BarModel {
@@ -47,6 +49,8 @@ export interface BarModel {
 	costTotal: number;
 	/** The model is paid by subscription: the cost reads `sub`. */
 	subscription?: boolean;
+	/** The subscription's windows to show (usage.ts barWindows), the 5h first. */
+	usage?: BarWindow[];
 }
 
 export interface BarOptions {
@@ -182,8 +186,12 @@ export function renderTopRow(model: Pick<BarModel, "cwd" | "hostShowsPath">, the
 
 // ---------------------------------------------------------------- the status bar
 
-/** What gives way when the bar does not fit, first to last; the cost is never in it. */
-export const DROP_ORDER = ["why", "meter", "profile", "note", "exec", "sandbox", "branch", "ctx", "mode"] as const;
+/**
+ * What gives way when the bar does not fit, first to last; the cost is never
+ * in it. Of the subscription's windows the reset goes first, then the week's
+ * meter, then the window without the reset, then the windows.
+ */
+export const DROP_ORDER = ["why", "meter", "profile", "resets", "usageMeter", "note", "window", "usage", "exec", "sandbox", "branch", "ctx", "mode"] as const;
 type Droppable = (typeof DROP_ORDER)[number];
 
 const METER_ROLE: Record<MeterTone, Role> = { success: "ok", warning: "warn", error: "bad", dim: "dim" };
@@ -231,6 +239,21 @@ export function renderStatusBar(model: BarModel, theme: ThemeLike, cells: number
 			ctx.push({ role: "ink", text: percent === null ? "?%" : `${percent}%` });
 			if (note && shown("note")) ctx.push({ role: "dim", text: `${dot().text}compacts at ${compacts}%` });
 			right.push(ctx);
+		}
+		if (shown("usage")) {
+			const windows = shown("window") || (model.usage?.length ?? 0) < 2 ? model.usage ?? [] : (model.usage ?? []).filter((w) => w.reset).slice(0, 1);
+			for (const w of windows.length ? windows : (model.usage ?? []).slice(0, 1)) {
+				const tone = METER_ROLE[meterTone(w.percent)];
+				const group: Run[] = [{ role: "dim", text: clean(w.label) }, { role: "ink", text: " " }];
+				if (w.meter && !narrow && shown("usageMeter")) {
+					const meter = renderMeter(w.percent, undefined, ascii);
+					const filled = Math.round((Math.max(0, Math.min(100, w.percent)) / 100) * METER_CELLS) * glyph("meterFilled", ascii).length;
+					group.push({ role: tone, text: meter.slice(0, filled) }, { role: "frameSoft", text: meter.slice(filled) }, { role: "ink", text: " " });
+				}
+				group.push({ role: tone, text: `${Math.round(w.percent)}%` });
+				if (w.reset && w.resetAt !== null && shown("resets")) group.push({ role: "dim", text: `${dot().text}resets ${resetDay(w.resetAt)}` });
+				right.push(group);
+			}
 		}
 		right.push([{ role: "ink", text: formatCost(model.costTotal, model.subscription) }]);
 		return { left, right };

@@ -1,10 +1,9 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text, type TUI } from "@earendil-works/pi-tui";
-import { invalidatePane, paneSlot } from "../lib/ui/pane.ts";
-import { renderPanelHeader, renderPanelRow, type PanelTheme } from "../lib/ui/shell-panel.ts";
+import { invalidatePane, paneSlot, paneState } from "../lib/ui/pane.ts";
+import type { PanelTheme } from "../lib/ui/shell-panel.ts";
 import { asciiText } from "../lib/ui/primitives/glyphs.ts";
-import { STATES } from "../lib/ui/primitives/states.ts";
-import { THEME_NAME } from "../lib/ui/primitives/paint.ts";
+import { plainTodoRows, renderTodoBlock, renderTodoPane, todoHeight, TODO_SCROLL_KEYS, TODO_SCROLL_ROWS, type TodoView } from "../lib/ui/todo-section.ts";
 import { selectedChange } from "../lib/ui/ldd-status.ts";
 import { contextLevel } from "../lib/lean-context.ts";
 import {
@@ -14,21 +13,22 @@ import {
 	staleTurns,
 	TODO_DETAILS_KEY,
 	TODO_GLYPH,
-	TODO_STATUS,
 	TODO_TOOL_NAME,
 	todoPromptBlock,
 	todoStartBlock,
 	todoSummary,
 	type TodoParams,
 	type TodoState,
-	type TodoStatus,
 } from "../lib/todo.ts";
 import { counted } from "../lib/ui-use.ts";
 import { shellSettings } from "../lib/settings.ts";
 
 // Jhon's todo: the task list the model keeps while it works, drawn in the
-// right pane's TODOS section while no LDD change is active (T174, L1469:
-// with one, the LDD section rules and the list is hidden). Three things keep it current that a
+// right pane's TODOS section, or above the prompt in a regular terminal and
+// the narrow form (lib/ui/todo-section.ts), while no LDD change is active
+// (T174, L1469: with one, the LDD section rules and the list is hidden);
+// alt+t (shell.keys.todos) folds it, alt+PgUp/PgDn scroll it (T174-S5b,
+// L1495). Three things keep it current that a
 // static tool description cannot: `write` replaces the whole list in one
 // call, each run's system prompt carries the open tasks and the rules, and
 // a list that goes untouched while tasks stay open is marked stale for both
@@ -110,29 +110,12 @@ export function todoEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 	return !inChild(env) || (env.JHON_PI_TOOLS ?? "").split(",").includes(TODO_TOOL_NAME);
 }
 
-// The shell's state glyphs (primitives/states.ts): blocked needs you, so it is
-// ◉ in the bad role; dropped is a dim ✕.
-const MARK: Record<TodoStatus, string> = { [TODO_STATUS.PENDING]: STATES.pending.glyph, [TODO_STATUS.IN_PROGRESS]: STATES.working.glyph, [TODO_STATUS.BLOCKED]: STATES.blocked.glyph, [TODO_STATUS.DONE]: STATES.done.glyph, [TODO_STATUS.DROPPED]: "✕" };
-const MARK_ROLE: Record<TodoStatus, string> = { [TODO_STATUS.PENDING]: THEME_NAME[STATES.pending.role], [TODO_STATUS.IN_PROGRESS]: THEME_NAME[STATES.working.role], [TODO_STATUS.BLOCKED]: THEME_NAME[STATES.blocked.role], [TODO_STATUS.DONE]: THEME_NAME[STATES.done.role], [TODO_STATUS.DROPPED]: "muted" };
-
 /**
- * The right pane's TODOS section: `▾ TODOS … done/planned`, then one row per
- * task, its state glyph, its title and, in progress or blocked, its note.
- * Nothing without tasks. S5's LDD panel replaces it.
+ * The right pane's TODOS section open, with no key and every task
+ * (lib/ui/todo-section.ts draws it). Nothing without tasks.
  */
 export function renderTodoRail(state: TodoState, theme: PanelTheme, width: number, ascii = false): string[] {
-	if (state.tasks.length === 0) return [];
-	const { done, total } = todoSummary(state);
-	const planned = total - state.tasks.filter((task) => task.status === TODO_STATUS.DROPPED).length;
-	const rows = [
-		renderPanelHeader(theme, width, { title: "Todos", count: `${done}/${planned}`, open: true, ascii }),
-		...state.tasks.map((task) => {
-			const closed = task.status === TODO_STATUS.DONE || task.status === TODO_STATUS.DROPPED;
-			const note = task.note && (task.status === TODO_STATUS.IN_PROGRESS || task.status === TODO_STATUS.BLOCKED) ? theme.fg("muted", ` · ${task.note}`) : "";
-			return renderPanelRow(width, `${theme.fg(MARK_ROLE[task.status], MARK[task.status])} ${theme.fg(closed ? "dim" : "text", task.title)}${note}`);
-		}),
-	];
-	return ascii ? rows.map(asciiText) : rows;
+	return plainTodoRows(state, theme, width, ascii);
 }
 
 interface TodoSession {
@@ -149,6 +132,9 @@ interface TodoSession {
 	clearedByOwnerTurn: boolean;
 	/** A finished list stays on screen for the turn it finished in, then clears. */
 	clearOnNextTurn: boolean;
+	/** The owner folded it (alt+t); the first task row shown (alt+PgUp/PgDn). */
+	collapsed: boolean;
+	top: number;
 	ui: ExtensionContext["ui"] | undefined;
 	tui: TUI | undefined;
 	/** The session's id, for the LDD section's selection of its change. */
@@ -177,19 +163,39 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 	if (!todoEnabled(env)) return;
 	const child = inChild(env);
 	const sessions = new Map<string, TodoSession>();
+	// A child's list has no screen, so no keys.
+	const collapseKey = child ? undefined : shellSettings().key("todos");
 
 	const session = (ctx: ExtensionContext): TodoSession => {
 		const key = sessionKey(ctx);
 		let current = sessions.get(key);
 		if (!current) {
-			current = { state: emptyTodo(), turn: 0, toolTurnsSinceWrite: 0, reminded: false, wroteThisTurn: false, ownerToolTurns: 0, ownerChanged: false, startNudged: false, clearedByOwnerTurn: false, clearOnNextTurn: false, ui: undefined, tui: undefined, id: key };
+			current = { state: emptyTodo(), turn: 0, toolTurnsSinceWrite: 0, reminded: false, wroteThisTurn: false, ownerToolTurns: 0, ownerChanged: false, startNudged: false, clearedByOwnerTurn: false, clearOnNextTurn: false, collapsed: false, top: 0, ui: undefined, tui: undefined, id: key };
 			sessions.set(key, current);
 		}
 		return current;
 	};
 
-	// The right pane's TODOS section, while the LDD section shows no change; a
-	// regular terminal and the narrow form show no list (T174, L1469).
+	const redraw = (current: TodoSession) => {
+		if (!current.tui) return;
+		invalidatePane(current.tui);
+		current.tui.requestRender();
+	};
+	const toggle = (current: TodoSession) => {
+		current.collapsed = !current.collapsed;
+		current.top = 0;
+		redraw(current);
+	};
+	const scroll = (current: TodoSession, rows: number) => {
+		if (current.collapsed) return;
+		current.top = Math.max(0, current.top + rows);
+		redraw(current);
+	};
+
+	// The right pane's TODOS section; where the pane is not beside the
+	// conversation (a regular terminal, the narrow form) the Todos block above
+	// the prompt. Either only while it has tasks and no LDD change shows (T174,
+	// L1469, L1495).
 	const show = (current: TodoSession) => {
 		if (current.tui) invalidatePane(current.tui);
 		// A child's list is its own: no section (T134).
@@ -197,15 +203,44 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		const snapshot = current;
 		current.ui.setWidget(WIDGET_KEY, (tui, theme) => {
 			snapshot.tui = tui;
-			const hidden = () => selectedChange(snapshot.id) !== undefined;
+			const hidden = () => snapshot.state.tasks.length === 0 || selectedChange(snapshot.id) !== undefined;
+			const view = (): TodoView => ({
+				collapsed: snapshot.collapsed, top: snapshot.top, staleTurns: staleTurns(snapshot.state, snapshot.turn),
+				...(collapseKey ? { key: collapseKey } : {}), height: todoHeight(tui.terminal?.rows ?? 48), ascii: shellSettings().ascii(),
+			});
 			const dispose = paneSlot(tui, "todo", {
-				digest: () => JSON.stringify([snapshot.state.tasks, hidden(), shellSettings().ascii()]),
-				render: (width) => hidden() ? [] : renderTodoRail(snapshot.state, theme, width, shellSettings().ascii()),
+				digest: () => JSON.stringify([snapshot.state.tasks, hidden(), view()]),
+				render: (width) => {
+					if (hidden()) return [];
+					const drawn = renderTodoPane(snapshot.state, theme, width, view());
+					snapshot.top = drawn.top;
+					return drawn.rows;
+				},
+				// A click on the title row folds or unfolds it.
+				handleMouse(event) {
+					if (event.type !== "click" || event.button !== "left" || event.y !== 0) return undefined;
+					toggle(snapshot);
+					return { handled: true, render: true };
+				},
 				invalidate() {},
 			});
-			return { render: () => [], invalidate() {}, dispose };
+			return {
+				render: (width: number) => {
+					if (hidden() || paneState(tui).wide?.()) return [];
+					const drawn = renderTodoBlock(snapshot.state, theme, width, view());
+					snapshot.top = drawn.top;
+					return drawn.rows;
+				},
+				invalidate() {},
+				dispose,
+			};
 		});
 	};
+
+	if (collapseKey) pi.registerShortcut(collapseKey as Parameters<ExtensionAPI["registerShortcut"]>[0], { description: "Folds or unfolds the todo list", handler: async (ctx) => { toggle(session(ctx)); } });
+	for (const [key, rows] of child ? [] : [[TODO_SCROLL_KEYS.up, -TODO_SCROLL_ROWS], [TODO_SCROLL_KEYS.down, TODO_SCROLL_ROWS]] as const) {
+		pi.registerShortcut(key, { description: `Scrolls the todo list ${rows < 0 ? "up" : "down"}`, handler: async (ctx) => { scroll(session(ctx), rows); } });
+	}
 
 	pi.registerTool({
 		name: TODO_TOOL_NAME,

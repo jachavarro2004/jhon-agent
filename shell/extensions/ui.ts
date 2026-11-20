@@ -38,6 +38,7 @@ import { installSessionChangeCapture } from "../lib/ui/session-change-capture.ts
 import { SelectionEngine } from "../lib/ui/selection-engine.ts";
 import { HOST_EVENT, hostShowsPath } from "../lib/host.ts";
 import { counted } from "../lib/ui-use.ts";
+import { installUsage } from "../lib/ui/usage-shell.ts";
 
 // jhon-shell's UI: the visual layer Jhon puts on top of pi. It installs the
 // status bar, the right pane, the prompt and customization.
@@ -68,6 +69,8 @@ export interface ShellDeps {
 	watch?: typeof watch;
 	/** The stall recovery's one-shot timer (lib/ui/stall-recovery.ts); returns its cancel. */
 	schedule?: Schedule;
+	/** What a registered usage source fetches with (lib/ui/usage.ts); the global fetch by default. */
+	fetch?: typeof fetch;
 }
 
 export type ActiveProfileReader = (() => string | undefined) & {
@@ -654,6 +657,11 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	});
 	let registry: SessionWorktreeRegistry | undefined;
 	let currentContext: ExtensionContext | undefined;
+	// The subscription usage (T174-S5b): the status bar's windows and /jhon:usage, alt+u.
+	const usage = installUsage(pi, env, {
+		settings, now: () => deps.now(), fetch: deps.fetch, current: () => currentContext,
+		repaint: () => { renderHost?.invalidatePane?.(); renderHost?.requestRender(); },
+	});
 	// This session's running background tasks (lib/background-tasks-tools.ts).
 	let runningJobs: RunningJobDisplay[] | undefined;
 	let jobClock: ReturnType<typeof setInterval> | undefined;
@@ -871,6 +879,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				...(sandboxWhy ? { sandboxWhy } : {}),
 				...(mode ? { mode } : {}),
 				...(hostShowsPath() ? { hostShowsPath: true } : {}),
+				...(usage.bar(ctx).length ? { usage: usage.bar(ctx) } : {}),
 			});
 			// Design 01 and 04 (T174-S3, S4): the top row above everything and the
 			// status bar at the bottom, one row each; the status bar takes its

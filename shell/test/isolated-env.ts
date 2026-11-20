@@ -37,6 +37,9 @@ export const SETTING_OVERRIDES: readonly string[] = Object.freeze([
 	"JHON_SHELL_DOUBLE_ESC_CANCEL",
 	"JHON_SHELL_JHON_KEY",
 	"JHON_SHELL_TASKS_KEY",
+	"JHON_SHELL_JOBS_KEY",
+	"JHON_SHELL_USAGE_KEY",
+	"JHON_SHELL_TODO_KEY",
 ]);
 
 /** The scratch directory this process's Jhon settings and state live in. */

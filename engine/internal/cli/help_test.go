@@ -116,7 +116,8 @@ func repoRoot(t *testing.T) string {
 
 // `jhon settings --help` names the keys migrate drops or moves: T167 moved
 // keys.tasks to keys.agents; T169 retired keys.rail and keys.commands
-// (L1438); T174 retired keys.changes, keys.usage and keys.todos (L1462).
+// (L1438); T174 retired keys.changes (L1462); T174-S5b brought keys.usage
+// and keys.todos back (L1495), so migrate no longer names them.
 func TestSettingsHelpNamesTheRetiredKeys(t *testing.T) {
 	_, out := capture(t, []string{"settings", "--help"})
 	at := strings.Index(out, "jhon settings migrate")
@@ -127,9 +128,14 @@ func TestSettingsHelpNamesTheRetiredKeys(t *testing.T) {
 	if end := strings.Index(entry, "jhon profile"); end > 0 {
 		entry = entry[:end]
 	}
-	for _, key := range []string{"keys.tasks", "keys.rail", "keys.commands", "keys.changes", "keys.usage", "keys.todos"} {
+	for _, key := range []string{"keys.tasks", "keys.rail", "keys.commands", "keys.changes"} {
 		if !strings.Contains(entry, key) {
 			t.Errorf("jhon settings --help does not name %s among the dropped keys:\n%s", key, entry)
+		}
+	}
+	for _, kept := range []string{"keys.usage", "keys.todos"} {
+		if strings.Contains(entry, kept) {
+			t.Errorf("jhon settings --help names %s among the dropped keys, a setting again:\n%s", kept, entry)
 		}
 	}
 }
@@ -227,5 +233,16 @@ func TestExecutionsHelpNamesTheInnerLoop(t *testing.T) {
 		if strings.Count(flat, want) > 1 {
 			t.Errorf("jhon executions --help says %q more than once", want)
 		}
+	}
+}
+
+// T174-S5b (L1495): `jhon settings --help` names the shell's shortcut keys
+// with their defaults, the jobs key among them.
+func TestSettingsHelpNamesTheShellKeys(t *testing.T) {
+	_, out := capture(t, []string{"settings", "--help"})
+	flat := strings.Join(strings.Fields(out), " ")
+	want := "shell.keys.* are the shell's shortcuts, each a key or off: panel (alt+j, the LDD status), agents (alt+s), jobs (alt+o), usage (alt+u) and todos (alt+t, folds the todo list)"
+	if !strings.Contains(flat, want) {
+		t.Errorf("jhon settings --help does not say %q:\n%s", want, out)
 	}
 }

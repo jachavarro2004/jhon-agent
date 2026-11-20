@@ -133,6 +133,7 @@ contract. A listener must ignore fields it does not know.
 | `jhon:palette-changed` | the shell | `{ palette: string }` | The desktop palette the shell follows changed (`integrations.theme.palette` is `desktop`, or `ryoku`, its older name; `palette` is `desktop`). Rose ink is rewritten from it when it is pi's active theme; the event is emitted on every change either way. The shell runs no other program for it. |
 | `jhon:host?` | the shell | `{}` | The main session starts (pi's `session_start`): a query, answered with `jhon:host`. |
 | `jhon:host` | a bridge | `{ name: string, alerts?: boolean, showsPath?: boolean }` | A bridge announces the host it runs under: when it starts and in answer to every `jhon:host?`. |
+| `jhon-shell:usage-source/v1` | another extension | `{ schema: "jhon-shell.usage-source/v1", provider: string, fetch(apiKey, fetchFn, now), pendingNote?: string }` | An extension registers its provider's subscription usage (T174-S5b): the shell calls `fetch` with the key pi holds for `provider` and a fetch bounded by 10 s (`JHON_SHELL_USAGE_TIMEOUT_MS`), at a session's start, after a turn at most every 5 minutes, and on `r` in `/jhon:usage`; it answers `{ provider, plan?, limits: [{ name, limitReached, windows: [{ label, usedPercent, windowSeconds, resetAt }] }], fetchedAt }`, checked field by field (any other shape counts as no answer). The newest registration for a provider wins. |
 
 What the shell does with `jhon:host`, heard at any time of the session:
 

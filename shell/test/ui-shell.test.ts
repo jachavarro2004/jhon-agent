@@ -504,7 +504,7 @@ test("sections, the default: the prompt under a rule line, one status line at th
 		assert.match(editor.render(60).map(stripAnsi)[1], /^› hola +$/);
 		const footer = renderFooter(ui);
 		assert.match(footer, /^ ⎇ main +claude-opus-5-5 · medium │ ctx ▰▰▰▰▱▱▱▱ 45% │ \$0\.000 sub $/, "the cost closes the bar");
-		assert.equal(handlers.has("after_provider_response"), false, "T174: no usage read from the replies");
+		assert.equal(handlers.has("after_provider_response"), true, "T174-S5b: the subscription windows are read from the replies again");
 		// The README teaches the keys; the prompt keeps none (L105).
 		assert.equal(ui.widgets.has("jhon-shell-key-hints"), false);
 	} finally { editor.dispose(); }
@@ -2640,7 +2640,7 @@ test("/jhon:settings is not registered; /jhon:customize completes its categories
 	assert.deepEqual(await customize.getArgumentCompletions!(""), [
 		{ value: "appearance", label: "appearance", description: "Theme, animations, glyphs, tool icons, cards, surface, density, status line, reset" },
 		{ value: "behaviour", label: "behaviour", description: "Compaction, the fresh-session notice, stall recovery, double Esc" },
-		{ value: "keys", label: "keys", description: "The shell's keys: LDD status, agents; reload" },
+		{ value: "keys", label: "keys", description: "The shell's keys: LDD status, agents, jobs, usage, todos; reload" },
 		{ value: "permissions", label: "permissions", description: "The project's permission mode" },
 	]);
 	assert.deepEqual((await customize.getArgumentCompletions!("pe"))!.map((item) => item.value), ["permissions"]);
@@ -2681,9 +2681,10 @@ test("the shell registers no command palette and no panel sheet: no /jhon:comman
 		for (const name of ["jhon:commands", "jhon:panel"]) assert.equal(commands.has(name), false, `${name} with ${JSON.stringify(env)}`);
 		for (const key of ["alt+k", "alt+r", "ctrl+alt+r", "ctrl+p"]) assert.equal(shortcuts.has(key), false, `${key} with ${JSON.stringify(env)}`);
 		assert.ok(commands.has("jhon:customize"));
-		// T174: the changes and usage views are gone too.
-		for (const name of ["jhon:usage", "jhon:changes"]) assert.equal(commands.has(name), false, name);
-		for (const key of ["alt+u", "alt+g"]) assert.equal(shortcuts.has(key), false, key);
+		// T174: the changes view is gone too; T174-S5b brought the usage view back.
+		assert.equal(commands.has("jhon:changes"), false, "jhon:changes");
+		assert.equal(shortcuts.has("alt+g"), false, "alt+g");
+		assert.ok(commands.has("jhon:usage") && shortcuts.has("alt+u"), "/jhon:usage and alt+u are back");
 	}
 });
 

@@ -47,6 +47,15 @@ export function backgroundTasksKey(settings: ShellSettings = shellSettings()): s
 	return settings.key("agents");
 }
 
+/**
+ * The key that opens /jhon:jobs, shell.keys.jobs (T174-S5b, L1495): alt+o,
+ * another (JHON_SHELL_JOBS_KEY overrides it), or off. pi binds no alt+o and
+ * the shell's other keys leave it free.
+ */
+export function jobsKey(settings: ShellSettings = shellSettings()): string | undefined {
+	return settings.key("jobs");
+}
+
 export function formatTaskDuration(ms: number): string {
 	const seconds = Math.max(0, Math.round(ms / 1000));
 	if (seconds < 60) return `${seconds}s`;
@@ -534,6 +543,8 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 	});
 	const tasksKey = backgroundTasksKey(deps.settings ?? shellSettings(env));
 	if (tasksKey) pi.registerShortcut?.(tasksKey, { description: "Opens the Agents view (the rail's AGENTS)", handler: async (ctx: any) => openTasks(ctx, "agents") });
+	const jobsShortcut = jobsKey(deps.settings ?? shellSettings(env));
+	if (jobsShortcut) pi.registerShortcut?.(jobsShortcut, { description: "Opens the Jobs view (the pane's Jobs)", handler: async (ctx: any) => openTasks(ctx, "jobs") });
 
 	pi.on("session_start", (_event: unknown, ctx: ExtensionContext) => {
 		current = ctx;
