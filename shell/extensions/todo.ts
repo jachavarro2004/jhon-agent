@@ -124,6 +124,17 @@ export function todoCollapseKey(settings: ShellSettings = shellSettings()): stri
 	return settings.key("todos");
 }
 
+/**
+ * The keys that scroll the todo list three rows, and how its position row
+ * names them (T165). Not ctrl+shift+up/down: pi 1.5.2 binds those to
+ * tui.altScreen.previousPrompt/nextPrompt, and in fullscreen its transcript
+ * listener consumes them before the editor asks the extensions, so the
+ * todo's shortcut never ran there. pi binds no alt+pageUp/alt+pageDown
+ * (docs/keybindings.md), and its plain pageUp/pageDown do not match them.
+ * A constant until shell.keys.* holds a pair for it (settings.ts, the engine).
+ */
+export const TODO_SCROLL_KEYS = Object.freeze({ up: "alt+pageUp", down: "alt+pageDown", hint: "alt+PgUp/PgDn" } as const);
+
 interface TodoSession {
 	state: TodoState;
 	turn: number;
@@ -252,7 +263,7 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 				const visible = scroll.render(width).slice(scroll.scrollTop, scroll.scrollTop + scroll.viewportHeight);
 				const output = [...head, ...visible, ...foot];
 				if (overflow) {
-					const position = `↑↓ ${scroll.scrollTop + 1}–${scroll.scrollTop + visible.length}/${body.length} · ctrl+shift+↑/↓`;
+					const position = `↑↓ ${scroll.scrollTop + 1}–${scroll.scrollTop + visible.length}/${body.length} · ${TODO_SCROLL_KEYS.hint}`;
 					output.push(spacer ? theme.fg("muted", truncateToWidth(position, width)) : renderPanelRow(width, theme.fg("muted", position)));
 				}
 				return spacer && output.length > 0 ? [...output, ""] : output;
@@ -381,7 +392,7 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		});
 	}
 
-	for (const [key, lines] of child ? [] : [["ctrl+shift+up", -3], ["ctrl+shift+down", 3]] as const) {
+	for (const [key, lines] of child ? [] : [[TODO_SCROLL_KEYS.up, -3], [TODO_SCROLL_KEYS.down, 3]] as const) {
 		pi.registerShortcut(key, {
 			description: `Scroll the plan ${lines < 0 ? "up" : "down"}`,
 			handler: async (ctx) => session(ctx).scrollTodo?.(lines),
