@@ -47,8 +47,8 @@ const LIST_MAX_WIDTH = 48;
 const LIST_RATIO = 0.35;
 const CHROME_ROWS = 3;
 const MIN_BODY_ROWS = 1;
-const EMPTY_DIFF = "no diff for this file";
-const CLEAN_TREE = "working tree is clean";
+const EMPTY_DIFF = "this file has no diff";
+const CLEAN_TREE = "nothing uncommitted";
 const KEYS = [
 	["j/k", "file"],
 	["ctrl+j/k", "scroll"],
@@ -85,7 +85,7 @@ const FILE_STATUS = {
 } as const;
 
 function fileCounts(file: ChangedFile, theme: ChangesViewTheme): string {
-	if (file.countsUnavailable) return theme.fg("dim", "counts unavailable");
+	if (file.countsUnavailable) return theme.fg("dim", "no line counts");
 	return `${theme.fg(ROLE.ADDED, `+${file.added}`)} ${theme.fg(ROLE.REMOVED, `-${file.deleted}`)}`;
 }
 
@@ -200,7 +200,7 @@ function rootSummary(tree: WorktreeChanges, width: number): string[] {
 	const said = note ? wrapTextWithAnsi(note, Math.max(1, width)) : [];
 	// A root read against HEAD with nothing uncommitted: listed so that its uncounted commits are said.
 	if (tree.model.files.length === 0) return [displayText(tree.root), "No uncommitted changes.", ...said];
-	return [displayText(tree.root), changesSummary(tree.model), ...said, "Expand a group and select a file."];
+	return [displayText(tree.root), changesSummary(tree.model), ...said, "Open a group and pick a file to see its diff."];
 }
 
 export interface WorktreeChangesViewDeps {
@@ -406,8 +406,8 @@ export class WorktreeChangesView {
 			return `${marker} ${text}`;
 		};
 		const keys = theme.fg(ROLE.KEY_TEXT, this.diffOnly
-			? "j/k file   ctrl+j/k scroll   o open   r refresh   F files   esc files"
-			: "j/k select   enter toggle/open   ← fold   ctrl+j/k scroll   r refresh   F diff only   esc close");
+			? "j/k file   ctrl+j/k scroll   o editor   r reread   F file list   esc file list"
+			: "j/k move   enter open/fold   ← fold   ctrl+j/k scroll   r reread   F diff alone   esc close");
 		this.pointerLayout = pointerLayout(width, height, this.diffOnly);
 		const title = `✎ Changes · ${this.only ? displayText(basename(this.only)) : `${this.trees.length} worktrees`}`;
 		const lines = renderPanes(width, height, theme, title, leftLine, preview, keys, selected?.file, this.diffOnly);

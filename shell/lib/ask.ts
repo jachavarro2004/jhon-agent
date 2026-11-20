@@ -5,7 +5,7 @@
  * Each question offers two to four options, each a label and an optional
  * description, or none for a free answer. A single choice is one selection;
  * a multiple choice toggles options until the owner picks Done. Every
- * question with options also offers "Type something.", which takes typed text. The
+ * question with options also offers "Write my own answer.", which takes typed text. The
  * questions go through pi's own dialogs, one after another; dismissing one
  * ends the round, and the answers given so far are returned.
  *
@@ -27,7 +27,7 @@ export const MIN_OPTIONS = 2;
 export const MAX_OPTIONS = 4;
 export const MAX_HEADER = 12;
 /** G's always-available free-text row (its CUSTOM_ROW_LABEL). */
-export const OTHER = "Type something.";
+export const OTHER = "Write my own answer.";
 export const DONE = "Done";
 
 export type AskOption = { label: string; description?: string };

@@ -402,7 +402,7 @@ export class ProfilesCard {
 			out.push(`${paint.fg("accent", "New profile")}   ${paint.fg("dim", `enter or n names one, a copy of ${d.active}.`)}`);
 		} else {
 			const here = p.name === this.session, def = p.name === d.active;
-			const said = here && def ? "Used in this session. Default for new sessions." : here ? "Used in this session." : def ? "Default for new sessions." : "Not in use.";
+			const said = here && def ? "This session runs on it. New sessions start on it." : here ? "This session runs on it." : def ? "New sessions start on it." : "Not in use.";
 			const what = p.name === "default" ? `${said} agents.yaml, read-only.` : said;
 			const left = `${paint.fg("accent", p.name)}   ${paint.fg("dim", what)}`;
 			out.push(`${left}${" ".repeat(Math.max(2, width - visibleWidth(left) - visibleWidth(legend)))}${paint.fg("dim", legend)}`);

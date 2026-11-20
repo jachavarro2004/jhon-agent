@@ -72,14 +72,14 @@ export interface PromptFrameOptions {
 // frames flowers of that family; Jhon's brand 力 takes them all (L146), so
 // working turns the petal's tone alone.
 export const PROMPT_PETAL = "力";
-export const PROMPT_HINT = "type, or / for commands";
+export const PROMPT_HINT = "write, or / for a command";
 /** The idle label of the panel editor's rule and the float hint. */
-export const IDLE_LABEL = "waiting for input";
+export const IDLE_LABEL = "ready for you";
 const PANEL_PROMPT = "› ";
 /** The `›` mark's role, as the Gentle Shell's: the accent, bold. */
 const PROMPT_MARK_ROLE = "accent";
-export const DOUBLE_ESC_CANCEL_HINT = "esc again to cancel";
-export const IDLE_ESC_CLEAR_HINT = "esc again to clear";
+export const DOUBLE_ESC_CANCEL_HINT = "esc again stops it";
+export const IDLE_ESC_CLEAR_HINT = "esc again clears it";
 const LABEL_ROLE = "muted";
 const HINT_ROLE = "dim";
 // The fake cursor on an empty line: pi-tui 1.4.0 wraps it in APC markers the

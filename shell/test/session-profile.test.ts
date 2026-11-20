@@ -273,7 +273,7 @@ test("A5: the panel shows the session's profile, marked while it differs from th
 	await s.fire("session_start", { reason: "startup" });
 	const panel = await s.panel();
 	await settle(() => /Orchestrator/.test(panel.render(120).join("\n")));
-	assert.match(panel.render(120).join("\n"), /│ p {3}Used in this session\. Default for new sessions\./);
+	assert.match(panel.render(120).join("\n"), /│ p {3}This session runs on it\. New sessions start on it\./);
 	assert.doesNotMatch(panel.render(120).join("\n"), /this session only/, "no mark while the session follows the default");
 	panel.handleInput("\x1b[C");
 	panel.handleInput("u");
@@ -285,7 +285,7 @@ test("A5: the panel shows the session's profile, marked while it differs from th
 	assert.match(text, /│ {2}p ⊙★ {2}x ⇄● /, "the tabs: ★ on the default, ● on this session's profile");
 	assert.match(text, /● this session only/, "the legend names the mark");
 	again.handleInput("\x1b[C");
-	assert.match(again.render(120).join("\n"), /│ x {3}Used in this session\./);
+	assert.match(again.render(120).join("\n"), /│ x {3}This session runs on it\./);
 });
 
 test("A5: the header names the session's profile, marked while it differs from the default", async (t) => {

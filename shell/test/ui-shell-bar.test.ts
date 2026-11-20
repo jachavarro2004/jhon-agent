@@ -189,7 +189,7 @@ test("INTEGRATIONS says what a mode other than normal means, as the Gentle Shell
 	const yolo = renderShellStatusSections(model({ mode: "yolo", statuses: ["MCP connected"] }), plainTheme, 50).join("\n");
 	assert.match(yolo, /▾ INTEGRATIONS +2\n[\s\S]*- permissions nothing asks but destroy[\s\S]*- MCP connected/);
 	assert.match(renderShellStatusSections(model({ mode: "super-yolo" }), plainTheme, 60).join("\n"), /▾ INTEGRATIONS +1\n[\s\S]*- permissions nothing asks, destroy included/);
-	assert.doesNotMatch(renderShellStatusSections(model({ mode: "super-yolo" }), plainTheme, 60).join("\n"), /no status reported/);
+	assert.doesNotMatch(renderShellStatusSections(model({ mode: "super-yolo" }), plainTheme, 60).join("\n"), /nothing reported/);
 	for (const mode of [undefined, "normal"]) assert.doesNotMatch(renderShellStatusSections(model({ mode }), plainTheme, 60).join("\n"), /permissions/);
 	assert.match(renderShellStatusBar(model({ mode: "yolo" }), plainTheme, 160).rows[0]!, /YOLO/, "the status bar keeps its badge");
 });
@@ -229,7 +229,7 @@ test("Status is the rail's sections LDD, CHANGES and INTEGRATIONS in that order,
 	assert.match(unread({ roots: 2, of: 3 }, head), /▾ CHANGES +unknown\n {2}Git status could not be read +\/jhon:changes\n {2}in 2 of 3 roots *\n {2}app: the session's base 0123456 no longer *\n {2}exists\./);
 	assert.doesNotMatch(unread({ roots: 1, of: 2 }), /since session start|CHANGES +none/);
 	for (const width of [1, 8, 24, 46]) assert.ok(renderShellStatusSections({ ...model(), changes: { files: 2, added: 3, deleted: 1, ...head, failed: { roots: 1, of: 2 } } }, plainTheme, width).every((line) => visibleWidth(line) <= width));
-	assert.match(quiet, /▾ INTEGRATIONS +none\n {2}no status reported/);
+	assert.match(quiet, /▾ INTEGRATIONS +none\n {2}nothing reported/);
 	// L174: LDD leads the rail on its own; the footer keeps CHANGES and INTEGRATIONS.
 	const only = (sections: readonly StatusSection[]) => { const l = renderShellStatusLayout(data, plainTheme, 46, new Set(), undefined, sections); return l.groups.map((g) => l.lines[g.start]!.match(/^▾ (\S+)/)?.[1]); };
 	assert.deepEqual(only(["LDD"]), ["LDD"]);
@@ -351,6 +351,6 @@ test("JOBS and AGENTS render one row each at 30, 40 and 60 columns, finished job
 		const idleJobs = renderShellJobsSection([], plainTheme, 50, now);
 		const idleAgents = renderShellAgentsSection([], plainTheme, 50, now).map(stripAnsi);
 		assert.deepEqual(idleJobs, [], `${style}: JOBS hides with nothing to show`);
-		assert.deepEqual(idleAgents, ["▾ AGENTS" + " ".repeat(50 - 12) + "idle", "  none running · /jhon:agents".padEnd(50)], `${style}: AGENTS idle as G's (L165)`);
+		assert.deepEqual(idleAgents, ["▾ AGENTS" + " ".repeat(50 - 12) + "idle", "  no agent running · /jhon:agents".padEnd(50)], `${style}: AGENTS idle as G's (L165)`);
 	}
 });

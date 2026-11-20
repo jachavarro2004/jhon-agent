@@ -284,12 +284,10 @@ Its commands:
 | `/jhon:agents` | `alt+s` | the session's sub-agents and each one's live thread |
 | `/jhon:jobs` | | background commands and monitors |
 | `/jhon:changes` | `alt+g` | what the session's agents changed, per worktree |
-| `/jhon:panel` | `alt+r` | the rail's sections full width: LDD, todos, jobs, agents, stats, changes, integrations |
 | `/jhon:usage` | `alt+u` | each provider's usage windows and resets: the session's provider and every provider its profile (the session's own included) routes sub-agents to; Claude and ChatGPT (openai-codex: 5h and week) from each reply, NaN from its quota |
 | `/jhon:profile` | | the model profiles |
 | `/jhon:grants` | | the project's grants |
 | `/jhon:customize` | | the shell's settings, and the permission mode |
-| `/jhon:commands` | `alt+k` | the command palette |
 
 ## You decide
 
@@ -335,7 +333,7 @@ after a backup. The main groups:
 | `[integrations]` | `engram` and `codegraph` (always on), `context7` (hosted documentation for explore and worker, on by default), telemetry (opt-in), the palette |
 | `[sandbox]` | `mode` (`on` or `off`, on by default on Linux where the sandbox can run, off elsewhere), `allow_write` |
 | `[agents]` | `act_on_announce`: a turn that announces an action and takes none is sent back once |
-| `[pi]`, `[shell.*]` | the active profile, and the shell's appearance, behaviour, keys and notifications |
+| `[pi]`, `[shell.*]` | the active profile, and the shell's appearance, behaviour and keys |
 
 **Profiles** choose each agent's model per runtime (`jhon profile list`,
 `jhon profile use <name>`); `default` is `prose/agents.yaml`. A pi model is

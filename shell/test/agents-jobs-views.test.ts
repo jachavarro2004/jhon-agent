@@ -57,7 +57,7 @@ test("the Agents view is G's overlay: its title, Subagent rows, the thread heade
 		assert.match(text, /  Output/);
 		assert.match(text, / {4}ok 12 tests/);
 		assert.match(text, /Tool · read · Running/);
-		assert.match(lines.at(-2)!, /^│ \[ Follow \] \[ Open session \] \[Stop\] \[Scope\] j\/k task {3}ctrl\+j\/k scroll {3}f follow {3}s Stop selected {3}a all sessions {3}o open session {3}esc back {3}q close +│$/);
+		assert.match(lines.at(-2)!, /^│ \[ Follow \] \[ Open session \] \[Stop\] \[Scope\] j\/k task {3}ctrl\+j\/k scroll {3}f follow {3}s stop it {3}a all sessions {3}o open session {3}esc back {3}q close +│$/);
 	} finally { h.v.dispose(); }
 });
 

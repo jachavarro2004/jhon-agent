@@ -106,7 +106,7 @@ const ROLE = {
 	SEPARATOR: "muted",
 } as const;
 export const USAGE_EMPTY_MESSAGE = "No subscription usage yet. It arrives with the next reply, or press r to fetch it.";
-const DEFAULT_PENDING_NOTE = "no usage yet · r to fetch";
+const DEFAULT_PENDING_NOTE = "not fetched yet · r fetches";
 const REPLY_PENDING_NOTE = "usage arrives with the first reply";
 const PENDING_NOTE: Record<string, string> = {
 	[NAN_PROVIDER]: DEFAULT_PENDING_NOTE,

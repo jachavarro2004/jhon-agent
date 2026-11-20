@@ -181,6 +181,11 @@ yuv420p, 1920×1080, 30 fps; AAC LC 48 kHz stereo.
 
 ## Known limits
 
+- The `palette` card and the `commands` proof (136.8–145.9 s) show the
+  command palette (`alt+k`), which the shell no longer has (T169, L1438).
+  The film stays as made, the record of its release; `media/build.ts` no
+  longer renders `command-palette.png`.
+
 - The marks' timing follows each phrase's share of its line's characters,
   not measured word times; a mark can land a few tenths of a second before
   or after its word.

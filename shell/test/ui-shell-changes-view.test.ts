@@ -601,18 +601,18 @@ test("ChangesView scrolls the diff pane and shows an empty state for files witho
 
 	const empty = view({ async loadDiff() { return ""; } });
 	await settle();
-	assert.match(stripAnsi(empty.view.render(80)[2]), /no diff for this file/);
+	assert.match(stripAnsi(empty.view.render(80)[2]), /this file has no diff/);
 });
 
 test("ChangesView shows an oversized diff as one plain open-in-editor line and stays responsive", async () => {
 	const tagged = view({ theme: taggedTheme, async loadDiff() { return DIFF_TOO_LARGE; } }).view;
 	await settle();
 	const rendered = tagged.render(100).join("\n");
-	assert.match(rendered, /<dim>Diff too large/, "one plain line instead of a colored diff");
-	assert.doesNotMatch(rendered, /<toolDiff\w+>Diff too large/);
+	assert.match(rendered, /<dim>Too large to draw/, "one plain line instead of a colored diff");
+	assert.doesNotMatch(rendered, /<toolDiff\w+>Too large to draw/);
 	const { view: component, events } = view({ async loadDiff(target) { return target.path === "lib/a.ts" ? DIFF_TOO_LARGE : DIFF_A; } });
 	await settle();
-	assert.match(stripAnsi(component.render(140).join("\n")), /Diff too large — press o to open in editor\./);
+	assert.match(stripAnsi(component.render(140).join("\n")), /Too large to draw here: o opens the file in your editor\./);
 	component.handleInput("j");
 	await settle();
 	assert.match(stripAnsi(component.render(140).join("\n")), /\+const c = 4;/);
@@ -755,7 +755,7 @@ test("ChangesView.update keeps the selected file, reloads moved diffs, and survi
 	component.update(changesModel([]));
 	const plain = component.render(80).map(stripAnsi);
 	assert.match(plain[0], /0 files · \+0 −0/);
-	assert.match(plain[1], /working tree is clean/);
+	assert.match(plain[1], /nothing uncommitted/);
 	component.handleInput("j");
 	component.handleInput("o");
 });
@@ -787,7 +787,7 @@ test("F hides the file list and its separator so the diff spans the full inner w
 	const normal = component.render(100);
 	assert.match(normal[1]!, /^│ +▾ main · main +│ M a\.ts +│$/, "the normal view keeps the two-pane layout");
 	assert.match(stripAnsi(normal[2]!), /^│ ▸   M a\.ts .*│ \+\/main:a\.ts x+…│$/, "the narrow diff pane clips a long line");
-	assert.match(normal[8]!, /F diff only/);
+	assert.match(normal[8]!, /F diff alone/);
 	component.handleInput("F");
 	await settle();
 	const wide = component.render(100);
@@ -796,7 +796,7 @@ test("F hides the file list and its separator so the diff spans the full inner w
 	assert.match(wide[1]!, /^│ M a\.ts +│$/, "the path header starts at the frame edge");
 	assert.equal(wide[2]!, `│ ${`+/main:a.ts ${"x".repeat(80)}`.padEnd(96)} │`, "the diff uses the full inner width");
 	assert.doesNotMatch(wide.slice(1, 8).join("\n"), /main · main|│.*│.*│/, "no list column and no separator remain");
-	assert.match(wide[8]!, /F files/);
+	assert.match(wide[8]!, /F file list/);
 	component.handleInput("F");
 	assert.match(component.render(100)[1]!, /▾ main · main/, "F toggles back to the file list");
 });

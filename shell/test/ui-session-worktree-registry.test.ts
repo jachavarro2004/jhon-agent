@@ -49,9 +49,9 @@ test("canonical roots include cwd, dedupe aliases immediately and reject unrelat
 	registry.register(f.linked, "explicit");
 	assert.deepEqual(registry.roots(), [f.main, f.linked]);
 	assert.equal(h.session.getEntries().length, 2);
-	assert.throws(() => registry.register(f.other, "explicit"), /same Git clone/);
+	assert.throws(() => registry.register(f.other, "explicit"), /own Git clone/);
 	// The refusal names the runnable exit for an independent repository (#1915).
-	assert.throws(() => registry.register(f.other, "explicit"), /subagent_run with repository_root/);
+	assert.throws(() => registry.register(f.other, "explicit"), /another repository cannot be one of its worktrees/);
 	assert.throws(() => registry.register(join(f.dir, "missing"), "explicit"), /worktree/);
 	assert.equal(resolveSessionWorktree(f.alias, f.main)?.root, f.linked);
 });
@@ -65,8 +65,8 @@ test("a registry constructed before Git init adopts only its original cwd in the
 	const id = h.session.getSessionId();
 	registry.start();
 	assert.deepEqual(registry.roots(), []);
-	assert.throws(() => registry.register(f.other, "explicit"), /same Git clone/);
-	assert.throws(() => registry.register(cwd, "explicit"), /same Git clone/);
+	assert.throws(() => registry.register(f.other, "explicit"), /own Git clone/);
+	assert.throws(() => registry.register(cwd, "explicit"), /own Git clone/);
 	execFileSync("git", ["init", "--quiet", `--template=${join(f.dir, "empty")}`, cwd], {
 		env: { ...worktreeGitEnvironment(), GIT_CONFIG_GLOBAL: join(f.dir, "empty", "config"), GIT_CONFIG_NOSYSTEM: "1" }, stdio: "pipe",
 	});
@@ -84,7 +84,7 @@ test("a registry constructed before Git init adopts only its original cwd in the
 	assert.deepEqual(registry.roots(), [cwd]);
 	assert.equal(h.session.getSessionId(), id);
 	assert.equal(h.session.getEntries().length, 1, "adoption does not double append");
-	assert.throws(() => registry.register(f.other, "explicit"), /same Git clone/);
+	assert.throws(() => registry.register(f.other, "explicit"), /own Git clone/);
 });
 
 test("malformed local metadata cannot adopt a foreign registration target", (t) => {
@@ -95,8 +95,8 @@ test("malformed local metadata cannot adopt a foreign registration target", (t) 
 	const h = host(cwd);
 	const registry = h.registry();
 	registry.start();
-	assert.throws(() => registry.register(f.other, "explicit"), /same Git clone/);
-	assert.throws(() => registry.register(cwd, "explicit"), /same Git clone/);
+	assert.throws(() => registry.register(f.other, "explicit"), /own Git clone/);
+	assert.throws(() => registry.register(cwd, "explicit"), /own Git clone/);
 	assert.deepEqual(registry.roots(), []);
 	assert.deepEqual(h.session.getEntries(), []);
 });
@@ -110,7 +110,7 @@ for (const drift of ["root", "commonDir", "missing"] as const) {
 			{ getSessionId: () => "bound", getEntries: () => [] }, "/session/subdir", (path) => path === "/session/subdir" ? current : original);
 		registry.start();
 		current = drift === "missing" ? undefined : { ...original, [drift]: "/foreign" };
-		assert.throws(() => registry.register(original.root, "explicit"), /identity changed/);
+		assert.throws(() => registry.register(original.root, "explicit"), /not the one it started in/);
 		assert.deepEqual(registry.roots(), []);
 		assert.equal(entries.length, 1);
 		current = original;
@@ -127,7 +127,7 @@ test("closed and replaced sessions cannot adopt bootstrap identity", () => {
 			{ getSessionId: () => id, getEntries: () => [] }, "/bound", () => { resolutions++; return identity; });
 		identity = { root: "/bound", commonDir: "/bound/.git" };
 		if (closed) registry.close(); else id = "replacement";
-		assert.throws(() => registry.register("/bound", "explicit"), /inactive session/);
+		assert.throws(() => registry.register("/bound", "explicit"), /no longer the active one/);
 		assert.deepEqual(registry.roots(), []);
 		assert.equal(resolutions, 1, "the inactive guard precedes refresh");
 	}
@@ -169,7 +169,7 @@ test("durable append works without a shell listener and independent registries d
 	shell.register(f.alias, "explicit");
 	assert.equal(h.session.getEntries().filter((e) => e.type === "custom" && e.customType === SESSION_WORKTREE_ENTRY).length, 2);
 	agents.close();
-	assert.throws(() => agents.register(f.main, "explicit"), /inactive session/);
+	assert.throws(() => agents.register(f.main, "explicit"), /no longer the active one/);
 });
 
 test("restoration validates entries and hides missing roots without deleting their registrations", (t) => {

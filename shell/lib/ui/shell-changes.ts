@@ -122,7 +122,7 @@ export const CHANGES_COMMAND = "/jhon:changes";
 // limit the panel shows DIFF_TOO_LARGE instead of buffering and coloring it.
 export const DIFF_MAX_BYTES = 1024 * 1024;
 export const DIFF_MAX_LINES = 20_000;
-export const DIFF_TOO_LARGE = "Diff too large — press o to open in editor.";
+export const DIFF_TOO_LARGE = "Too large to draw here: o opens the file in your editor.";
 const WIDGET_GLYPH = "✎";
 const STATUS_BY_CODE: Record<string, ChangeStatus> = {
 	A: CHANGE_STATUS.ADDED,

@@ -61,7 +61,7 @@ test("the split view is G's agents overlay: the titled top border with [F Fullsc
 		assert.match(text, /\$ gh run watch 42 --exit-status/);
 		assert.match(text, /\/tmp\/jobs\/job-1\.log/);
 		assert.match(text, /check test: pending/);
-		assert.match(lines.at(-2)!, /^│ \[ Follow \] \[Stop\] j\/k task {3}ctrl\+j\/k scroll {3}f follow {3}s Stop selected {3}esc back {3}q close +│$/);
+		assert.match(lines.at(-2)!, /^│ \[ Follow \] \[Stop\] j\/k task {3}ctrl\+j\/k scroll {3}f follow {3}s stop it {3}esc back {3}q close +│$/);
 		assert.match(lines.at(-1)!, /^╰─+╯$/);
 	} finally { h.view.dispose(); }
 });
@@ -134,8 +134,8 @@ test("an empty session says so", () => {
 	try {
 		const text = h.screen().join("\n");
 		assert.match(text, /力 Jobs · 0 active · 0 finished/);
-		assert.match(text, /no tasks yet/, "G's empty list");
-		assert.match(text, /Select a task to inspect its thread/, "G's empty thread");
+		assert.match(text, /nothing started yet/, "the empty list");
+		assert.match(text, /Pick a row to read its thread/, "the empty thread");
 	} finally { h.view.dispose(); }
 });
 

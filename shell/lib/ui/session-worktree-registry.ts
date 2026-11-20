@@ -159,10 +159,10 @@ export class SessionWorktreeRegistry {
 	}
 
 	validate(path: string): string {
-		if (!this.isCurrent()) throw new Error("Cannot register a worktree for an inactive session.");
+		if (!this.isCurrent()) throw new Error("This session is no longer the active one: it takes no new worktree.");
 		const identity = this.refreshIdentity();
 		const target = this.resolver(path, this.cwd);
-		if (!target || !identity || target.commonDir !== identity.commonDir) throw new Error("Select an existing worktree in the same Git clone as this session. To work in an independent Git repository, delegate with subagent_run with repository_root instead; it asks for your consent first.");
+		if (!target || !identity || target.commonDir !== identity.commonDir) throw new Error("Name a worktree that exists in this session's own Git clone; a folder of another repository cannot be one of its worktrees.");
 		return target.root;
 	}
 
@@ -171,7 +171,7 @@ export class SessionWorktreeRegistry {
 		// Never adopt a requested target, or replace an already established clone.
 		const current = this.resolver(this.cwd, this.cwd);
 		if (this.identity && (!current || current.root !== this.identity.root || current.commonDir !== this.identity.commonDir)) {
-			throw new Error("Session Git identity changed; cannot register a worktree.");
+			throw new Error("The session's repository is not the one it started in; the worktree is not registered.");
 		}
 		if (!this.identity && current) this.identity = { ...current };
 		return this.identity;
