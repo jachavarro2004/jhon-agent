@@ -269,6 +269,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            it (an empty list is written in the file: []).
                            Both are the owner's: the file is read-only
                            inside the sandbox.
+                           shell.keys.* are the shell's shortcuts, each a
+                           key or off: panel (alt+j, the LDD status), agents
+                           (alt+s), jobs (alt+o), usage (alt+u) and todos
+                           (alt+t, folds the todo list).
                            jhon setup sets the runtimes
                            and integrations, /jhon:customize the shell.* keys
   jhon settings migrate [--json]
@@ -276,7 +280,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            the keys v0.1, v0.2 and v0.4 removed
                            (card_style, quiet_tools, key_hints, [shell.extra],
                            keys.tasks, keys.rail, keys.commands,
-                           keys.changes, keys.usage, keys.todos, ...),
+                           keys.changes, ...),
                            placing renamed values (keys.tasks as
                            keys.agents), after a
                            backup to settings-backup-<UTC>/settings.toml; rewrites the old agent names in

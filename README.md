@@ -284,7 +284,8 @@ Its commands:
 | `/jhon:status` | `alt+j` | the change's LDD detail |
 | `/jhon-ldd <action>` | | an LDD action, as in Claude Code |
 | `/jhon:agents` | `alt+s` | the session's sub-agents and each one's live thread |
-| `/jhon:jobs` | | background commands and monitors |
+| `/jhon:jobs` | `alt+o` | background commands and monitors |
+| `/jhon:usage` | `alt+u` | each provider's subscription windows and resets: Claude and ChatGPT (openai-codex) from each reply |
 | `/jhon:profile` | | the model profiles |
 | `/jhon:grants` | | the project's grants |
 | `/jhon:customize` | | the shell's settings, and the permission mode |

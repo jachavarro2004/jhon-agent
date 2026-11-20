@@ -114,6 +114,9 @@ func TestDefaultsWithNoFile(t *testing.T) {
 		"shell.behaviour.double_esc_cancel":      false, // today's shell default (L199)
 		"shell.keys.panel":                       "alt+j",
 		"shell.keys.agents":                      "alt+s",
+		"shell.keys.jobs":                        "alt+o",
+		"shell.keys.usage":                       "alt+u",
+		"shell.keys.todos":                       "alt+t",
 	}
 	for key, w := range want {
 		v := valueOf(t, vals, key)

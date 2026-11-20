@@ -112,17 +112,22 @@ in `~/.pi/jhon/settings.json`, so pi loads it from that path.
 | `/jhon:customize [<category>]` | | The shell's settings by category, each setting one line with its values and a preview of the highlighted one. Appearance opens with the Theme row and ends with Reset (every `shell.appearance.*` key back to its default after a second `enter`). Behaviour holds the timings and budgets. Keys holds each shortcut: a key pi already uses in the editor, the app or the fullscreen transcript is refused, naming pi's action (`ctrl+shift+up is pi's key for "Jump to the previous marked message" (tui.altScreen.previousPrompt); pick another key.`), and nothing is written; Reload now reloads pi so a changed key applies. Permissions holds the project's mode (normal, yolo, super yolo): `←/→` hold a choice, `enter` sets it with `jhon mode <mode> --root <root>`, the only place the mode changes (L214), super yolo only after your Yes. `↑/↓` or `j/k` move, `→`, `Tab`, `Enter` or `Space` open a category, `←/→` change a setting and apply it at once, `Enter` edits a free value, `Esc` closes; a click picks a category, a setting or a value. A refused value is a notice (`Customize: <why>`). Runtimes and integrations are `jhon setup`'s; `pi.profile` is `/jhon:profile`'s. |
 | `/jhon:dashboard` | | This session's audit in the browser at `http://127.0.0.1:7480/#/s/<session id>`, starting `jhon dashboard` detached when it does not answer, or replacing one that runs an older build than this shell's `jhon` (no `/api/version`, or another binary; stopped only when it is proven Jhon's). One that is not replaced is opened all the same, and the notice says to run `jhon dashboard --port <p>` to see why. With no display it says the address instead. |
 | `/jhon:agents` | `alt+s` | The sub-agents, full screen (T92, L657): this session's, or every session's this pi ran after `a`, running first, beside the selected one's live thread (its model, tokens, cost and time, its task, its thinking, text and tool events, then its answer). `j/k` select, `ctrl+j/k` scroll, `f` follows, `s` stops the selected agent, `o` opens its saved session in `$VISUAL`/`$EDITOR`, `F` (or `tab` when narrow) shows the thread alone, `esc` goes back, `q` closes; a click selects a row or presses a button. The work row opens it. |
-| `/jhon:jobs` | | The background commands and monitors (T92): the list beside the selected job's command line, output file and tail, with the agents view's keys but `a` and `o`. |
+| `/jhon:jobs` | `alt+o` | The background commands and monitors (T92): the list beside the selected job's command line, output file and tail, with the agents view's keys but `a` and `o`. |
+| `/jhon:usage` | `alt+u` | Each provider's subscription usage (T174-S5b, `lib/ui/usage.ts`): the session's provider first, marked `力`, then each one the sub-agents' models name, each with its plan, its windows (name, meter, used share, reset) and a warning from 80%; a provider without data says why. Claude (anthropic, claude-bridge) and ChatGPT (openai-codex) send theirs with each reply; a provider another extension registers (`jhon-shell:usage-source/v1` on pi.events) is fetched at a session's start, at most every 5 minutes after each turn, and on `r`, each fetch bounded by 10 s (`JHON_SHELL_USAGE_TIMEOUT_MS`). `r` refreshes, `esc` or `q` closes. |
+| | `alt+t` | Folds or unfolds the agent's todo list; `alt+PgUp/PgDn` scroll it three rows. |
 
 `/jhon:stats` and the rail's STATS went (L117, T169), and T174 removed
-`/jhon:changes` and `/jhon:usage`: the usage is the dashboard's.
+`/jhon:changes`.
 
-Each key is set or turned off (`off`) in `[shell.keys]`: `panel`, `agents`;
-each has its variable (`JHON_SHELL_JHON_KEY`, `JHON_SHELL_TASKS_KEY`).
-Customize → Keys shows them. `keys.tasks` reads as `keys.agents`;
-`keys.todos`, `keys.changes` and `keys.usage` are retired with a notice
+Each key is set or turned off (`off`) in `[shell.keys]`: `panel` (alt+j),
+`agents` (alt+s), `jobs` (alt+o), `usage` (alt+u) and `todos` (alt+t);
+each has its variable (`JHON_SHELL_JHON_KEY`, `JHON_SHELL_TASKS_KEY`,
+`JHON_SHELL_JOBS_KEY`, `JHON_SHELL_USAGE_KEY`, `JHON_SHELL_TODO_KEY`).
+Customize → Keys has a row for each, and each refuses a key pi uses.
+`keys.tasks` reads as `keys.agents`; `keys.changes` is retired with a notice
 (read until v0.4); `jhon settings migrate` moves or drops them after a backup.
-`alt+a` stays the prompt's select-all alias, so the Agents view takes `alt+s`.
+`alt+a` stays the prompt's select-all alias, so the Agents view takes `alt+s`;
+the Jobs view takes `alt+o`, which pi binds nowhere.
 
 The chrome wears Jhon's brand (`力`, rose ink) and has only Jhon's options
 (L146). In a fullscreen terminal the top row holds the project and its path
@@ -135,13 +140,16 @@ status gave no answer: what `lib/sandbox.ts` read at the session's start)
 and the permission mode when it is not normal
 (`YOLO` in amber, `SUPER YOLO` in red and bold); on the right
 `model · effort · profile`, `ctx` with its 70/90 meter, the percent and
-`· compacts at N%` near it, and the cost, thin `│` dividers between.
-Running agents and jobs are not on the bar. Under 140 columns the status
-bar takes its narrow form: no meter, the branch cut to 18 cells. Narrowing
-further, the branch shortens first (to 8 cells); then why the sandbox is not
-running, the meter, the profile, the compaction note, model · effort,
-sandbox, the branch, ctx and the mode badge go in that order; the cost goes
-last. `shell.appearance.status = "hidden"` hides it, with the right pane and
+`· compacts at N%` near it, the subscription's windows (T174-S5b): the week
+with its meter, its percent and `· resets Thu 14:00`, and `5h N%` once the
+5-hour window reaches 70% (the reset then on the more urgent of the two),
+and the cost, thin `│` dividers between. Running agents and jobs are not on
+the bar. Under 140 columns the status bar takes its narrow form: no meter,
+the branch cut to 18 cells. Narrowing further, the branch shortens first (to
+8 cells); then why the sandbox is not running, the meter, the profile, the
+reset, the week's meter, the compaction note, the window without the reset,
+the windows, model · effort, sandbox, the branch, ctx and the mode badge go
+in that order; the cost goes last. `shell.appearance.status = "hidden"` hides it, with the right pane and
 the strip.
 
 Cards come in two styles, `shell.appearance.cards`: `float` (the default: a
@@ -185,10 +193,17 @@ Jobs show only while something runs, a row each: its state glyph, its name
 the right; a click on a row opens `/jhon:agents` or `/jhon:jobs`.
 
 TODOS is the agent's own list (the todo tool), one row per task with its
-state glyph and, in progress or blocked, its note. It shows only while the
-LDD section has no change (L1469): with one, the change's tasks are the LDD
-section's alone (L154). It has no key; a regular terminal and the narrow
-form show no list.
+state glyph and, in progress or blocked, its note (`lib/ui/todo-section.ts`).
+It shows only while it has tasks and the LDD section has no change (L1469):
+with one, the change's tasks are the LDD section's alone (L154). Its title
+names its fold key and `done/planned` (`▾ TODOS … alt+t  0/2`), and
+`stale · N turns` once the agent let open work sit two turns. `alt+t`
+(`shell.keys.todos`), or a click on the title, folds it to the task at hand;
+it keeps to a third of the terminal (16 rows at most), past which `alt+PgUp`
+and `alt+PgDn` scroll it three rows and a row says where it is
+(`↑↓ 4–11/12 · alt+PgUp/PgDn`). In a regular terminal and the narrow form it
+sits above the prompt as the Running block does: `── ▾ Todos  alt+t · 0/2 ──`,
+its rows two columns in, then a blank row.
 
 In a fullscreen terminal the prompt is a ruled editor:
 `─ 力 ready for you ── <hint> ─`, the petal's tone turning while the agent works, the esc hint
@@ -198,7 +213,8 @@ In a fullscreen terminal the prompt is a ruled editor:
 (under 140 columns, Status hidden, or no layout hook) the Running block sits
 above the rule while agents or jobs run (design 04): `── Running  2 agents ·
 1 job ──`, then their rows; a click on a row opens its view. With
-no pane, `alt+j` (the LDD status) and `alt+s` (the agents) remain. `ask_user` asks in the dock between two accent
+no pane, `alt+j` (the LDD status), `alt+s` (the agents), `alt+o` (the jobs),
+`alt+u` (the usage) and `alt+t` (the todo list, above the rule) remain. `ask_user` asks in the dock between two accent
 rules, never an overlay.
 
 Every tool call's header starts with its family's icon, geometric by default:

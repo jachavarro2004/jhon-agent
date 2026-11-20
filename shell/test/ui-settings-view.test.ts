@@ -271,8 +271,8 @@ test("the real Settings at 186, 120, 80 and 60 columns: previews for animations,
 		assert.match(text, /Preview · 60 · what happens/, at);
 		assert.match(text, /At 60% of the context window the session compacts;/, at);
 		text = open("keys");
-		assert.match(text, /Keys · 1\/2/, at);
-		assert.match(text, /Preview · alt\+j · what the key opens/, at);
+		assert.match(text, /Keys · 1\/5/, at);
+		assert.match(text, /Preview · alt\+j · what the key does/, at);
 		assert.match(text, /alt\+j opens the LDD status\./, at);
 		text = open("appearance", 1);
 		assert.match(text, /Click · ↑\/↓ setting /, at, "a choice row's footer");
@@ -305,8 +305,9 @@ test("the Settings rows are exactly the shell.* keys `jhon settings list --json`
 	const settingRows = rowsShown.filter((row) => !row.action);
 	assert.equal(settingRows.length, engine.size, "one row per engine shell.* key");
 	const keyLabels = rowsShown.filter((row) => row.group === "Keys").map((row) => row.label);
-	// T169 (L1438): the panel sheet's and the palette's rows went with them; T174 (L1462): Todos, Changes and Usage too.
-	assert.deepEqual(keyLabels, ["LDD status", "Agents"]);
+	// T169 (L1438): the panel sheet's and the palette's rows went with them; T174 (L1462): Changes too.
+	// T174-S5b (L1495): Jobs is new, Usage and Todos are back.
+	assert.deepEqual(keyLabels, ["LDD status", "Agents", "Jobs", "Usage", "Todos"]);
 	const shown = new Set(settingRows.map((row) => row["key"]));
 	assert.deepEqual([...shown].filter((k) => !engine.has(k)).sort(), [], "rows the engine does not know");
 	assert.deepEqual([...engine].filter((k) => !shown.has(k)).sort(), [], "engine keys Settings does not show");

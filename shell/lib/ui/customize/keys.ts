@@ -6,8 +6,10 @@
 import type { ShellKey } from "../../settings.ts";
 import { NEXT_START, saveSetting, textRow, type CustomizeCategory, type CustomizeRow } from "./row.ts";
 
-const OPENS: Record<ShellKey, string> = {
-	panel: "the LDD status", agents: "the Agents view",
+/** What each key does, for its preview: `<key> opens the Jobs view.` */
+const DOES: Record<ShellKey, { opens: string } | { does: string; what: string }> = {
+	panel: { opens: "the LDD status" }, agents: { opens: "the Agents view" }, jobs: { opens: "the Jobs view" },
+	usage: { opens: "the subscription usage" }, todos: { does: "folds", what: "the todo list" },
 };
 
 /**
@@ -95,10 +97,17 @@ export function piReservedAction(key: string, windows: boolean = onWindows()): {
 	return undefined;
 }
 
+/** `alt+o opens the Jobs view.`, `alt+t folds the todo list.`; off: `No key opens the Jobs view.` */
+function keyLine(name: ShellKey, value: string): string {
+	const does = DOES[name];
+	const [verb, what] = "opens" in does ? ["opens", does.opens] : [does.does, does.what];
+	return !value || value === "off" ? `No key ${verb} ${what}.` : `${value} ${verb} ${what}.`;
+}
+
 const keyRow = (name: ShellKey, label: string): CustomizeRow => textRow(`shell.keys.${name}`, label, NEXT_START, {
 	preview: (v) => ({
-		caption: "what the key opens",
-		lines: [!v || v === "off" ? `No key opens ${OPENS[name]}.` : `${v} opens ${OPENS[name]}.`],
+		caption: "what the key does",
+		lines: [keyLine(name, v)],
 	}),
 	save: (h, value) => {
 		const pi = piReservedAction(value);
@@ -108,10 +117,13 @@ const keyRow = (name: ShellKey, label: string): CustomizeRow => textRow(`shell.k
 });
 
 export const KEYS: CustomizeCategory = {
-	id: "keys", title: "Keys", summary: "The shell's keys: LDD status, agents; reload",
+	id: "keys", title: "Keys", summary: "The shell's keys: LDD status, agents, jobs, usage, todos; reload",
 	rows: [
 		keyRow("panel", "LDD status"),
 		keyRow("agents", "Agents"),
+		keyRow("jobs", "Jobs"),
+		keyRow("usage", "Usage"),
+		keyRow("todos", "Todos"),
 		{
 			// G's "Reload now to apply keymap changes" (L198): pi's reload, no restart.
 			key: "reload", label: "Reload now", kind: "action",

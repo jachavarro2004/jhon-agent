@@ -57,10 +57,9 @@ var retiredWhy = map[string]string{
 	// T169 (L1437, L1438): the panel sheet and the command palette are gone.
 	"shell.keys.rail":     "the panel sheet (/jhon:panel) was removed from the shell",
 	"shell.keys.commands": "the command palette (/jhon:commands) was removed from the shell",
-	// T174 (L1462, L1469): the changes view, the usage view and the todo card are gone.
+	// T174 (L1462, L1469): the changes view is gone. Its usage view and todo
+	// keys came back (T174-S5b, L1495): shell.keys.usage and todos are settings.
 	"shell.keys.changes": "the changes view (/jhon:changes) was removed from the shell",
-	"shell.keys.usage":   "the usage view (/jhon:usage) was removed from the shell; the dashboard has the stats",
-	"shell.keys.todos":   "the todo card and its keys were removed; the agent's list shows in the right pane while no LDD change is active",
 }
 
 const herdrGone = "herdr is no longer part of Jhon; use any multiplexer, or none"
@@ -82,8 +81,6 @@ var retiredIn = map[string]string{
 	"shell.keys.commands": "v0.4",
 	// T174.
 	"shell.keys.changes": "v0.4",
-	"shell.keys.usage":   "v0.4",
-	"shell.keys.todos":   "v0.4",
 }
 
 // RetiredIn is the release that removed key: v0.1 unless retiredIn says,

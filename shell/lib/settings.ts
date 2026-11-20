@@ -61,6 +61,9 @@ export const SETTINGS_DEFAULTS: Readonly<Record<string, SettingValue>> = Object.
 	"shell.behaviour.double_esc_cancel": false,
 	"shell.keys.panel": "alt+j",
 	"shell.keys.agents": "alt+s",
+	"shell.keys.jobs": "alt+o",
+	"shell.keys.usage": "alt+u",
+	"shell.keys.todos": "alt+t",
 });
 
 /**
@@ -76,7 +79,7 @@ export const SETTINGS_DEFAULTS: Readonly<Record<string, SettingValue>> = Object.
 export const ENGINE_ONLY_SETTINGS: readonly string[] = Object.freeze(["integrations.context7", "agents.act_on_announce", "sandbox.mode", "sandbox.allow_write"]);
 
 export type SettingsKey = keyof typeof SETTINGS_DEFAULTS & string;
-export type ShellKey = "panel" | "agents";
+export type ShellKey = "panel" | "agents" | "jobs" | "usage" | "todos";
 export type AnimationsSetting = "full" | "off";
 export type IconsSetting = "geometric" | "emoji";
 export type StatusSetting = "auto" | "hidden";

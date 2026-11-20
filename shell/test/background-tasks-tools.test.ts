@@ -324,11 +324,11 @@ test("the BACKGROUND key (alt+s) opens /jhon:agents, and registers nothing when 
 		return { shortcuts, commands };
 	};
 	const { shortcuts } = register({});
-	assert.deepEqual([...shortcuts.keys()], ["alt+s"]);
+	assert.deepEqual([...shortcuts.keys()], ["alt+s", "alt+o"], "alt+o is the jobs key (T174-S5b)");
 	let noted = "";
 	await shortcuts.get("alt+s").handler({ hasUI: true, mode: "rpc", sessionManager: { getSessionId: () => "main" }, ui: { notify: (m: string) => { noted = m; } } });
 	assert.equal(noted, "The Agents view needs TUI mode.");
-	assert.equal(register({ JHON_SHELL_TASKS_KEY: "off" }).shortcuts.size, 0);
+	assert.deepEqual([...register({ JHON_SHELL_TASKS_KEY: "off" }).shortcuts.keys()], ["alt+o"], "off takes alt+s alone");
 });
 
 test("the owner's own command shows among the running tasks, ends in its panel and never as the agent's turn, and the agent's tools never see it", async () => {

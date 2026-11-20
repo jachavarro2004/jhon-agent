@@ -80,11 +80,14 @@ function fakeContext(branch: unknown[] = [], hasUI = true) {
 			},
 		},
 	} as unknown as ExtensionContext;
-	// T174 (L1469): the list is the right pane's TODOS section alone; nothing renders above the prompt.
+	// T174 (L1469): with the pane beside the conversation the list is its TODOS
+	// section, and nothing renders above the prompt (T174-S5b: a regular
+	// terminal and the narrow form draw it there, test/ui-todo-keys.test.ts).
 	const widget = () => {
 		const factory = widgets.get("jhon-todo");
 		if (!factory) return undefined;
 		const tui = { ...fakeTui, terminal: { rows: 48, columns: 180 } };
+		paneState(tui as never).wide = () => true;
 		assert.deepEqual(factory(tui, plainTheme).render(70), [], "nothing above the prompt");
 		return paneState(tui as never).parts.get("todo")!.render(70).map(stripAnsi);
 	};
@@ -151,7 +154,7 @@ test("the todo tool writes the list, shows it in the right pane after the call, 
 	assert.equal((result.details.jhonTodo as { tasks: unknown[] }).tasks.length, 2);
 	await fire("tool_execution_end", ctx, { toolName: "todo" });
 	const lines = widget()!;
-	assert.match(lines[0], /^▾ TODOS +0\/2$/);
+	assert.match(lines[0], /^▾ TODOS +alt\+t {2}0\/2$/);
 	assert.match(lines[1], /◐ Write the parser · parsing/);
 	assert.match(lines[2], /· Add tests/);
 	assert.equal(lines.length, 3);
@@ -447,7 +450,7 @@ test("a changed list reaches the model as a persisted message (never a returned 
 	const staleEvent = promptEvent();
 	await fire("before_agent_start", ctx, staleEvent);
 	assert.match(session(staleEvent), /stale: 2 turns without an update/);
-	assert.match(widget()![0], /TODOS +0\/1$/);
+	assert.match(widget()![0], /TODOS +alt\+t {2}stale · 2 turns · 0\/1$/, "T174-S5b: the stale marker");
 	assert.equal(widget()![1].trim(), "· Fix the bug");
 });
 
@@ -488,7 +491,7 @@ test("a finished list stays for its turn and clears at the next", async () => {
 	await tools.get("todo")!.execute("c2", { action: "write", tasks: [{ id: 1, title: "A", status: "done" }, { id: 2, title: "B", status: "done" }] }, undefined, undefined, ctx);
 	await fire("tool_execution_end", ctx, { toolName: "todo" });
 	await fire("agent_end", ctx);
-	assert.match(widget()![0], /TODOS +2\/2$/, "the finished list is still visible at the end of its turn");
+	assert.match(widget()![0], /TODOS +alt\+t {2}2\/2$/, "the finished list is still visible at the end of its turn");
 	const next = await fire("before_agent_start", ctx, { systemPrompt: "base" }) as { systemPrompt?: string; message?: SentMessage };
 	assert.equal(next.systemPrompt, undefined, "no replacement systemPrompt");
 	assert.equal(next.message?.content, START_RULE, "nothing open: only the rule to start a list, as a message");
@@ -506,7 +509,7 @@ test("session_start replays the list from the branch, rpiv-todo results included
 	const { ctx, widget } = fakeContext(branch);
 	await fire("session_start", ctx);
 	const lines = widget()!;
-	assert.match(lines[0], /TODOS +0\/1$/);
+	assert.match(lines[0], /TODOS +alt\+t {2}0\/1$/);
 	assert.match(lines[1], /◐ Old task · still going/);
 	const headless = fakeContext(branch, false);
 	await fire("session_start", headless.ctx);
@@ -548,7 +551,7 @@ test("a list left with only dropped tasks open finishes and clears; a blocked-on
 	await tools.get("todo")!.execute("c1", { action: "write", tasks: [{ title: "A", status: "done" }, { title: "Old plan", status: "dropped" }] }, undefined, undefined, ctx);
 	await fire("tool_execution_end", ctx, { toolName: "todo" });
 	await fire("agent_end", ctx);
-	assert.match(widget()![0], /TODOS +1\/1$/);
+	assert.match(widget()![0], /TODOS +alt\+t {2}1\/1$/);
 	await fire("before_agent_start", ctx, promptEvent());
 	assert.deepEqual(widget(), [], "a done-and-dropped list clears at the next turn");
 
@@ -596,7 +599,7 @@ test("inside a change TODOS hides and LDD shows only the change's tasks: nothing
 	assert.doesNotMatch(ldd, /write the test|fix tsc/, "the agent's tasks are TODOS' alone");
 	selectChange("s1", undefined);
 	const todos = widget()!.join("\n");
-	assert.match(todos, /TODOS +0\/2/);
+	assert.match(todos, /TODOS +alt\+t {2}0\/2/);
 	assert.match(todos, /◐ write the test[\s\S]*fix tsc/);
 	assert.doesNotMatch(todos, /Read tasks|Draw rows|Docs|└|1\/3|rail-redesign|Slice/, "outside a change: the agent's own tasks, nothing of the change");
 });

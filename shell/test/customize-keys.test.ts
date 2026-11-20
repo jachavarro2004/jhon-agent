@@ -11,7 +11,7 @@ import { piReservedAction } from "../lib/ui/customize/keys.ts";
 import { memorySettings } from "./fake-jhon-settings.ts";
 
 const noop = () => {};
-const KEY_SETTINGS = ["shell.keys.panel", "shell.keys.agents"];
+const KEY_SETTINGS = ["shell.keys.panel", "shell.keys.agents", "shell.keys.jobs", "shell.keys.usage", "shell.keys.todos"];
 
 function keyRows() {
 	const settings = memorySettings();
