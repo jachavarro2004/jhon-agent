@@ -1,193 +1,123 @@
 import "./isolated-env.ts";
 import assert from "node:assert/strict";
-import { execFileSync, execFile, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { after } from "node:test";
-import { initTheme, type ExtensionAPI, type ExtensionContext, type SlashCommandInfo, type SourceInfo } from "@earendil-works/pi-coding-agent";
-import { CURSOR_MARKER, matchesKey, visibleWidth, VStack, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
-import { registerSubagentWorktree, resolveSessionWorktree } from "../lib/ui/session-worktree-registry.ts";
+import { initTheme, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { visibleWidth, VStack, type TUI } from "@earendil-works/pi-tui";
+import { resolveSessionWorktree } from "../lib/ui/session-worktree-registry.ts";
 import { SESSION_PROFILE_CHANGED, SESSION_PROFILE_ENTRY } from "../lib/session-profile.ts";
-import installShellUi, { createActiveProfileReader, extractQueuedText, JhonPromptEditor } from "../extensions/ui.ts";
+import installShellUi, { createActiveProfileReader, JhonPromptEditor } from "../extensions/ui.ts";
 import { barModel, renderTopRow } from "../lib/ui/bars.ts";
 import { SANDBOX_EVENT } from "../lib/events.ts";
-import { openInExternalEditor } from "../lib/ui/jhon-panel-editor.ts";
 import { paneState, type PanePart } from "../lib/ui/pane.ts";
 import type { ThemeLike as ShellBarTheme } from "../lib/ui/primitives/index.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
-import { CARD_STYLE, cardStyle, setCardStyle } from "../lib/ui/primitives/index.ts";
-import { chromeSurface, setChromeSurface } from "../lib/ui/shell-panel.ts";
-import { resolveAnimationPolicy, resolveVisualSettings, writeVisualSettings } from "../lib/ui/appearance-policy.ts";
 import { installShellSettings, type SettingValue } from "../lib/settings.ts";
 import { envOverrides, memorySettings } from "./fake-jhon-settings.ts";
 
-// The jhon-shell UI extension wires the pure bar renderer into pi's footer
-// slot. These tests drive it with a fake ExtensionAPI and context.
+// extensions/ui.ts against a stand-in pi: the status bar and the top row,
+// the pane's parts, the prompt, the stall recovery, the LDD reads and
+// Customize. The prompt's Esc handling, its editor slot, paste and
+// Customize's appearance rows have files of their own (ui-prompt-esc,
+// ui-prompt-claim, ui-customize-settings), as do the worktree tool
+// (ui-session-worktree-tool) and the external editor (ui-external-editor).
 
 initTheme("dark");
 
+/** Every path under /repo (and ".") is the one clone's /repo; anything else is a root of its own in the same clone. */
 const resolveWorktree = (path: string) => ({ root: path.startsWith("/repo") || path === "." ? "/repo" : path, commonDir: "/clone/git" });
-// The extension reads the owner's settings through `jhon settings`
-// (lib/settings.ts). Each test's JHON_SHELL_CONFIG_HOME names its own
-// in-memory settings (homeSettings), installed for the process when the
-// shell is made, with the JHON_SHELL_* variables of its env resolved as the
-// engine resolves them; a developer's persisted preferences (for example
-// /jhon:animations off) never leak into tests.
-const settingsByHome = new Map<string, ReturnType<typeof memorySettings>>();
-// The settings `jhon settings` would give the shell under an environment (S38).
-const envSettings = (env: NodeJS.ProcessEnv) => memorySettings({}, undefined, envOverrides(env));
+
+// Settings: each home (JHON_SHELL_CONFIG_HOME) names in-memory settings of
+// its own, made on first use and installed for the process when a shell is
+// made, with the JHON_SHELL_* variables of the shell's env applied as the
+// engine applies them. No test sees the owner's settings or another test's.
+const homes = new Map<string, ReturnType<typeof memorySettings>>();
 function homeSettings(home: string, file: Record<string, SettingValue> = {}): ReturnType<typeof memorySettings> {
-	let settings = settingsByHome.get(home);
-	if (!settings) settingsByHome.set(home, settings = memorySettings(file));
+	let settings = homes.get(home);
+	if (!settings) { settings = memorySettings(file); homes.set(home, settings); }
 	return settings;
 }
-/** What a home's settings.toml holds for one of the old preference files: its policy as that file named it, or undefined when unset. */
-const SAVED = {
-	animations: ["shell.appearance.animations", (v: SettingValue) => ({ full: "quality", off: "potato" })[v as string]],
-	"double-esc-cancel": ["shell.behaviour.double_esc_cancel", (v: SettingValue) => v ? "on" : "off"],
-} as const;
-function savedPolicy(home: string, kind: keyof typeof SAVED): SettingValue | undefined {
-	const [key, read] = SAVED[kind];
-	const file = homeSettings(home).jhon.file;
-	return key in file ? read(file[key]) : undefined;
-}
-let freshHomes = 0;
-// Each test gets a fresh home unless it names its own.
-function isolatedEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-	if (env.JHON_SHELL_CONFIG_HOME === undefined) {
-		const home = `fresh-settings-${++freshHomes}`;
-		homeSettings(home);
-		env = { ...env, JHON_SHELL_CONFIG_HOME: home };
-	}
-	const settings = homeSettings(env.JHON_SHELL_CONFIG_HOME!);
+let homeCount = 0;
+/** The env a shell is made with: its own home unless the test names one, and that home's settings installed. */
+function withSettings(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+	const home = env.JHON_SHELL_CONFIG_HOME ?? `ui-shell-home-${++homeCount}`;
+	const settings = homeSettings(home);
 	settings.jhon.env = envOverrides(env);
 	settings.refresh();
 	installShellSettings(settings);
-	return env;
+	return { ...env, JHON_SHELL_CONFIG_HOME: home };
 }
-// The default profile reader reads a profiles.json of the suite's own (absent:
-// `default`), never the machine's; a test that shows a profile injects it.
+// The profile reader reads a profiles.json of the suite's own, which does
+// not exist (so `default`); a test that shows a profile passes its own reader.
 const profilesDir = mkdtempSync(join(tmpdir(), "jhon-ui-profiles-"));
 after(() => rmSync(profilesDir, { recursive: true, force: true }));
 process.env.JHON_PROFILES = join(profilesDir, "profiles.json");
-const shellUi: typeof installShellUi = (pi, env, deps) => installShellUi(pi, isolatedEnv(env), { resolveWorktree, gitRunner: (cwd) => async (args) => pi.exec("git", ["-C", cwd, ...args], { timeout: 5000 }), rootExists: () => true, ...deps });
+const shellUi: typeof installShellUi = (pi, env, deps) => installShellUi(pi, withSettings(env), { resolveWorktree, rootExists: () => true, ...deps });
 
+/** A theme that leaves text as it is. */
 const plainTheme = {
-	fg(_color: string, value: string) {
-		return value;
-	},
-	bold(value: string) {
-		return value;
-	},
-	bg(_color: string, value: string) {
-		return value;
-	},
-	getBgAnsi() {
-		return "";
-	},
+	fg: (_role: string, text: string) => text,
+	bold: (text: string) => text,
+	bg: (_role: string, text: string) => text,
+	getBgAnsi: () => "",
 } satisfies ShellBarTheme & { bg(color: string, value: string): string; getBgAnsi(): string };
 
+/** What the shell set on a session's UI. */
 interface FakeUi {
 	footerFactory: unknown;
 	editorFactory: unknown;
 	widgets: Map<string, unknown>;
-	widgetSets: number;
 	workingVisible: boolean | undefined;
 	notices: string[];
+	/** The last overlay's factory and the view it built. */
 	overlay: unknown;
 	overlayView: { render(width: number): string[]; handleInput(data: string): void; handleMouse?(event: unknown): unknown } | undefined;
-	closeOverlay: (() => void) | undefined;
-	/** The options the last overlay opened with. */
-	overlayOptions?: unknown;
 }
 
-interface GitScript {
-	numstat: string;
-	porcelain: string;
-}
+type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
+interface Registered { description?: string; handler: (...args: never[]) => unknown }
 
-interface CommandRegistration {
-	description?: string;
-	handler: (args: string, ctx: ExtensionContext) => Promise<void>;
-}
-
-interface ShortcutRegistration {
-	handler: (ctx: ExtensionContext) => Promise<void>;
-}
-
-type MessageRenderer = (message: { customType: string; content: unknown }, options: { expanded: boolean }, theme: unknown) => { render(width: number): string[] };
-const renderers = new Map<string, MessageRenderer>();
-
-const FAKE_SOURCE_INFO: SourceInfo = { path: "extensions/ui.ts", source: "jhon-shell", scope: "project", origin: "top-level" };
-
-const DEFAULT_COMMANDS: SlashCommandInfo[] = [
-	{ name: "jhon:profile", description: "Configure models", source: "extension", sourceInfo: FAKE_SOURCE_INFO },
-	{ name: "jhon:changes", description: "View changes", source: "extension", sourceInfo: FAKE_SOURCE_INFO },
-	{ name: "jhon:status", description: "The LDD detail", source: "extension", sourceInfo: FAKE_SOURCE_INFO },
-	{ name: "jhon:not-in-catalog", description: "Not a curated command", source: "extension", sourceInfo: FAKE_SOURCE_INFO },
-	{ name: "skill:foo", description: "A skill", source: "skill", sourceInfo: FAKE_SOURCE_INFO },
-];
-
-function fakePi(script: GitScript[] = [{ numstat: "", porcelain: "" }], commandsList: SlashCommandInfo[] = DEFAULT_COMMANDS) {
-	const handlers = new Map<string, Array<(event: unknown, ctx: ExtensionContext) => unknown>>();
-	const commands = new Map<string, CommandRegistration>();
-	const shortcuts = new Map<string, ShortcutRegistration>();
-	const git: string[][] = [];
-	let entries: unknown[] = [];
-	const sentMessages: Array<{ content: string; options?: { deliverAs?: "steer" | "followUp"; expandPromptTemplates?: boolean } }> = [];
+/** A stand-in pi: what the shell registers, and what it sends. */
+function fakePi() {
+	const handlers = new Map<string, Handler[]>();
+	const commands = new Map<string, Registered & { handler(args: string, ctx: ExtensionContext): Promise<void> }>();
+	const shortcuts = new Map<string, Registered & { handler(ctx: ExtensionContext): Promise<void> }>();
 	const tools = new Map<string, { renderShell?: string; execute(id: string, params: unknown, signal: undefined, update: undefined, ctx: ExtensionContext): Promise<unknown> }>();
+	const sentMessages: Array<{ content: string; options?: { deliverAs?: "steer" | "followUp" } }> = [];
 	const listeners = new Map<string, (data: unknown) => void>();
-	let round = 0;
+	let entries: unknown[] = [];
 	const pi = {
-		on(event: string, handler: (event: unknown, ctx: ExtensionContext) => unknown) {
-			handlers.set(event, [...(handlers.get(event) ?? []), (payload, ctx) => {
-				entries = ctx.sessionManager.getEntries();
-				return handler(payload, ctx);
-			}]);
+		// Each handler sees the entries of the context it ran with, which appendEntry adds to.
+		on(name: string, handler: Handler) {
+			handlers.set(name, [...(handlers.get(name) ?? []), (event, ctx) => { entries = ctx.sessionManager.getEntries() as unknown[]; return handler(event, ctx); }]);
 		},
 		appendEntry(customType: string, data: unknown) { entries.push({ type: "custom", customType, data }); },
-		events: { on(name: string, fn: (data: unknown) => void) { listeners.set(name, fn); return () => listeners.delete(name); }, emit(name: string, data: unknown) { listeners.get(name)?.(data); } },
+		events: {
+			on(name: string, fn: (data: unknown) => void) { listeners.set(name, fn); return () => listeners.delete(name); },
+			emit(name: string, data: unknown) { listeners.get(name)?.(data); },
+		},
 		registerTool(tool: { name: string }) { tools.set(tool.name, tool as never); },
-		registerCommand(name: string, registration: CommandRegistration) {
-			commands.set(name, registration);
-		},
-		registerShortcut(key: string, registration: ShortcutRegistration) {
-			shortcuts.set(key, registration);
-		},
-		registerMessageRenderer(type: string, renderer: MessageRenderer) {
-			renderers.set(type, renderer);
-		},
-		getThinkingLevel() {
-			return "medium";
-		},
-		getCommands() {
-			return commandsList;
-		},
-		sendUserMessage(content: string, options?: { deliverAs?: "steer" | "followUp"; expandPromptTemplates?: boolean }) {
-			sentMessages.push({ content, options });
-		},
-		async exec(_command: string, args: string[]) {
-			git.push(args);
-			if (args.includes("worktree")) return { stdout: "worktree /repo\0branch refs/heads/main\0\0", stderr: "", code: 0, killed: false };
-			// Roots outside the worktree list read as a detached HEAD.
-			if (args.includes("symbolic-ref")) return { stdout: "", stderr: "", code: 1, killed: false };
-			const isNumstat = args.includes("diff");
-			const step = script[Math.min(isNumstat ? round : round++, script.length - 1)];
-			return { stdout: isNumstat ? step.numstat : step.porcelain, stderr: "", code: 0, killed: false };
-		},
+		registerCommand(name: string, command: never) { commands.set(name, command); },
+		registerShortcut(key: string, shortcut: never) { shortcuts.set(key, shortcut); },
+		registerMessageRenderer() {},
+		getThinkingLevel: () => "medium",
+		getCommands: () => [],
+		sendUserMessage(content: string, options?: { deliverAs?: "steer" | "followUp" }) { sentMessages.push({ content, options }); },
+		async exec() { return { stdout: "", stderr: "", code: 0, killed: false }; },
 	} as unknown as ExtensionAPI;
-	return { pi, handlers, git, commands, shortcuts, tools, sentMessages };
+	return { pi, handlers, commands, shortcuts, tools, sentMessages };
 }
 
-async function fire(handlers: Map<string, Array<(event: unknown, ctx: ExtensionContext) => unknown>>, event: string, ctx: ExtensionContext): Promise<void> {
+async function fire(handlers: Map<string, Handler[]>, event: string, ctx: ExtensionContext): Promise<void> {
 	for (const handler of handlers.get(event) ?? []) await handler({}, ctx);
 }
 
-function fakeContext(options: { theme?: typeof plainTheme & { getBgAnsi?(): string }; hasUI?: boolean; entries?: unknown[]; oauth?: boolean; pending?: boolean; idle?: boolean; editorFactory?: unknown; token?: string; select?: (title: string, options: string[]) => Promise<string | undefined> } = {}): { ctx: ExtensionContext; ui: FakeUi; overlayReady: Promise<void> } {
-	const ui: FakeUi = { footerFactory: undefined, editorFactory: options.editorFactory, widgets: new Map(), widgetSets: 0, workingVisible: undefined, notices: [], overlay: undefined, overlayView: undefined, closeOverlay: undefined };
-	let resolveOverlay: () => void;
-	const overlayReady = new Promise<void>((resolve) => { resolveOverlay = resolve; });
+/** A session in a full-screen TUI on /repo, with Opus 5.5 at 45% of its context; what the shell sets lands in `ui`. */
+function fakeContext(options: { theme?: typeof plainTheme & { getBgAnsi?(): string }; hasUI?: boolean; entries?: unknown[]; pending?: boolean; idle?: boolean; editorFactory?: unknown; select?: (title: string, options: string[]) => Promise<string | undefined> } = {}): { ctx: ExtensionContext; ui: FakeUi } {
+	const ui: FakeUi = { footerFactory: undefined, editorFactory: options.editorFactory, widgets: new Map(), workingVisible: undefined, notices: [], overlay: undefined, overlayView: undefined };
 	const entries = options.entries ?? [];
 	const ctx = {
 		hasUI: options.hasUI ?? true,
@@ -196,70 +126,35 @@ function fakeContext(options: { theme?: typeof plainTheme & { getBgAnsi?(): stri
 		isIdle: () => options.idle ?? true,
 		cwd: "/repo",
 		model: { id: "claude-opus-5-5", provider: "anthropic", reasoning: true, contextWindow: 272_000 },
-		sessionManager: {
-			getCwd: () => "/repo",
-			getSessionName: () => "Release notes",
-			getEntries: () => entries,
-			getSessionId: () => "shell-session",
-		},
-		modelRegistry: { isUsingOAuth: () => options.oauth ?? true, getApiKeyForProvider: async () => options.token },
+		sessionManager: { getCwd: () => "/repo", getSessionName: () => "Release notes", getEntries: () => entries, getSessionId: () => "shell-session" },
+		modelRegistry: { isUsingOAuth: () => true, getApiKeyForProvider: async () => undefined },
 		getContextUsage: () => ({ tokens: 122_400, contextWindow: 272_000, percent: 45 }),
 		ui: {
 			theme: options.theme ?? plainTheme,
 			getAllThemes: () => [{ name: "dark", path: undefined }, { name: "light", path: undefined }],
-			getTheme: (name: string) => name === "dark" || name === "light" ? { name } : undefined,
+			getTheme: (name: string) => (name === "dark" || name === "light" ? { name } : undefined),
 			setTheme: (name: string) => ({ success: name === "dark" || name === "light" }),
-			// Added only when requested: an absent select keeps the no-menu fallback
-			// that every pre-existing test relies on.
+			// Only when asked for: without it, a question falls back to having no menu.
 			...(options.select ? { select: options.select } : {}),
-			setFooter(factory: unknown) {
-				ui.footerFactory = factory;
-			},
-			setEditorComponent(factory: unknown) {
-				ui.editorFactory = factory;
-			},
-			getEditorComponent() {
-				return ui.editorFactory;
-			},
-			setWidget(key: string, content: unknown) {
-				ui.widgetSets += 1;
-				if (content === undefined) ui.widgets.delete(key);
-				else ui.widgets.set(key, content);
-			},
-			notify(message: string) {
-				ui.notices.push(message);
-			},
-			setWorkingVisible(visible: boolean) {
-				ui.workingVisible = visible;
-			},
-			// Generic over the result type: real callers resolve `custom` with
-			// whatever their `done` callback is given (see ExtensionUIContext.custom
-			// in pi-coding-agent), not always null. `closeOverlay` stays a
-			// null-resolving escape hatch for tests that only need to end the wait.
-			custom<T>(factory: (tui: unknown, theme: unknown, keybindings: unknown, done: (value: T) => void) => { render(width: number): string[]; handleInput(data: string): void }, options?: unknown) {
+			setFooter: (factory: unknown) => { ui.footerFactory = factory; },
+			setEditorComponent: (factory: unknown) => { ui.editorFactory = factory; },
+			getEditorComponent: () => ui.editorFactory,
+			setWidget: (key: string, content: unknown) => { if (content === undefined) ui.widgets.delete(key); else ui.widgets.set(key, content); },
+			notify: (message: string) => { ui.notices.push(message); },
+			setWorkingVisible: (visible: boolean) => { ui.workingVisible = visible; },
+			// The overlay resolves with what its `done` gets; the view is built at once. No bg, so a focused row shows as ▸.
+			custom<T>(factory: (tui: unknown, theme: unknown, keybindings: unknown, done: (value: T) => void) => { render(width: number): string[]; handleInput(data: string): void }) {
 				ui.overlay = factory;
-				ui.overlayOptions = options;
-				return new Promise<T | null>((resolve) => {
-					ui.closeOverlay = () => resolve(null);
-					// An identity bg mock hides focused rows; omit it so overlay navigation
-					// remains inspectable through Commands' ▸ fallback.
-					ui.overlayView = factory(fakeTui, { ...plainTheme, bg: undefined }, fakeKeybindings, (value: T) => resolve(value));
-					resolveOverlay();
-				});
+				return new Promise<T | null>((resolve) => { ui.overlayView = factory(fakeTui, { ...plainTheme, bg: undefined }, fakeKeybindings, (value: T) => resolve(value)); });
 			},
 		},
 	} as unknown as ExtensionContext;
-	return { ctx, ui, overlayReady };
+	return { ctx, ui };
 }
 
+/** An assistant message's usage entry. */
 function assistantEntry(usage: { input: number; output: number; cost: number }) {
-	return {
-		type: "message",
-		message: {
-			role: "assistant",
-			usage: { input: usage.input, output: usage.output, cacheRead: 0, cacheWrite: 0, cost: { total: usage.cost } },
-		},
-	};
+	return { type: "message", message: { role: "assistant", usage: { input: usage.input, output: usage.output, cacheRead: 0, cacheWrite: 0, cost: { total: usage.cost } } } };
 }
 
 test("barModel reads the session, the model and the footer data (T174-S3)", () => {
@@ -303,22 +198,17 @@ test("barModel keeps the folder whole for the top row, which shows the home as ~
 	assert.equal(built.branch, null);
 });
 
-test("shellUi installs the footer on session_start when a UI exists", () => {
+test("with a UI, the session start sets the footer: in a regular terminal one row, the status bar", () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
 	const { ctx, ui } = fakeContext();
 	for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
-	assert.equal(typeof ui.footerFactory, "function");
-
-	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, footerData: unknown) => { render(width: number): string[] };
-	const component = factory(
-		{ requestRender() {} },
-		plainTheme,
-		{ getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} },
-	);
-	const lines = component.render(120);
-	assert.equal(lines.length, 1);
-	assert.match(lines[0], /^ ⎇ main +claude-opus-5-5 · medium │ ctx 45% │ \$0\.000 sub $/, "a regular terminal: the status bar alone, its narrow form under 140 columns");
+	const footer = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, data: unknown) => { render(width: number): string[] };
+	assert.equal(typeof footer, "function");
+	const data = { getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} };
+	const drawn = footer({ requestRender() {} }, plainTheme, data).render(120);
+	assert.equal(drawn.length, 1);
+	assert.match(drawn[0]!, /^ ⎇ main +claude-opus-5-5 · medium │ ctx 45% │ \$0\.000 sub $/, "under 140 columns the bar's narrow form");
 });
 
 test("the fullscreen LDD rail and the bars carry live digests: a profile switch refreshes the status bar, never the top row; an extension status shows nowhere (T174)", async () => {
@@ -397,38 +287,30 @@ test("the fullscreen status line carries a live digest so model, context, and co
 	}
 });
 
-test("shellUi stays out of the way without a UI or when disabled", () => {
-	const disabled = fakePi();
-	shellUi(disabled.pi, { JHON_SHELL: "0" });
-	assert.equal(disabled.commands.size, 0);
-	assert.ok(disabled.handlers.has("tool_call"), "capture remains available to headless children");
-
-	const headless = fakePi();
-	shellUi(headless.pi, {});
+test("with JHON_SHELL=0 the shell registers nothing but the change capture; without a UI it sets no footer", () => {
+	const off = fakePi();
+	shellUi(off.pi, { JHON_SHELL: "0" });
+	assert.equal(off.commands.size, 0);
+	assert.equal(off.tools.size, 0);
+	assert.ok(off.handlers.has("tool_call"), "a headless child still records its writes");
+	const on = fakePi();
+	shellUi(on.pi, {});
 	const { ctx, ui } = fakeContext({ hasUI: false });
-	for (const handler of headless.handlers.get("session_start") ?? []) handler({}, ctx);
+	for (const handler of on.handlers.get("session_start") ?? []) handler({}, ctx);
 	assert.equal(ui.footerFactory, undefined);
+	assert.equal(ui.editorFactory, undefined);
 });
 
 const fakeTui = { terminal: { rows: 40, columns: 120 }, requestRender() {} };
-// The shell runs fullscreen: the installed prompt is G's panel editor (T169: its rule carries no [ Panel ]).
+// The shell runs full-screen; its prompt's rule carries no [ Panel ] (T169).
 const promptTui = Object.create(fakeTui, { mode: { value: "fullscreen" } }) as typeof fakeTui & { mode: string };
 const editorTheme = { borderColor: (text: string) => text, selectList: {} };
 const fakeKeybindings = { matches: () => false };
 
-function installedPrompt(
-	ctx: ExtensionContext,
-	ui: FakeUi,
-	handlers: Map<string, Array<(event: unknown, ctx: ExtensionContext) => unknown>>,
-	keybindings: unknown = fakeKeybindings,
-): JhonPromptEditor {
+/** Starts the session and builds the shell's prompt as pi would. */
+function installedPrompt(ctx: ExtensionContext, ui: FakeUi, handlers: Map<string, Handler[]>, keybindings: unknown = fakeKeybindings): JhonPromptEditor {
 	for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
-	const factory = ui.editorFactory as (tui: unknown, theme: unknown, keybindings: unknown) => JhonPromptEditor;
-	return factory(promptTui, editorTheme, keybindings);
-}
-
-interface MutablePromptThemeHost {
-	theme: ExtensionContext["ui"]["theme"];
+	return (ui.editorFactory as (tui: unknown, theme: unknown, keybindings: unknown) => JhonPromptEditor)(promptTui, editorTheme, keybindings);
 }
 
 test("the installed prompt says the Esc hints at the working line's right end and queued on it; it ends on its rule (T174-S8)", () => {
@@ -448,16 +330,6 @@ test("the installed prompt says the Esc hints at the working line's right end an
 		editor.handleInput("\x1b");
 		assert.match(stripAnsi(editor.render(80)[0]!), /^ 力 Working…  thinking · \d+s · queued +esc again stops it $/);
 	} finally { editor.dispose(); }
-});
-
-// The working line says «Working…»; pi's own loader row would say it twice,
-// whatever the environment names (no multiplexer keeps it, T24b).
-test("shellUi hides Pi's native Working row whatever multiplexer it runs in", () => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { PI_CODING_AGENT_DIR: "/nonexistent-agent-dir" });
-	const { ctx, ui } = fakeContext();
-	installedPrompt(ctx, ui, handlers);
-	assert.equal(ui.workingVisible, false);
 });
 
 test("the prompt never names the LDD phase: the Status card says it, once", async () => {
@@ -727,126 +599,6 @@ test("an unknown or unreported phase falls back to the generic working label", (
 	} finally {
 		editor.dispose();
 	}
-});
-
-// in ordinary editing another extension's alt+a shortcut
-// must win over prompt select-all, for empty and non-empty drafts alike.
-test("JhonPromptEditor gives extension shortcuts precedence over selection chords", () => {
-	const { pi, handlers } = fakePi(); shellUi(pi, {});
-	const { ctx, ui } = fakeContext(); const editor = installedPrompt(ctx, ui, handlers);
-	try {
-		const seen: string[] = [];
-		editor.onExtensionShortcut = (data) => { seen.push(data); return matchesKey(data, "alt+a"); };
-		for (const altA of ["\x1ba", "\x1b[97;3u", "\x1b[97;3:1u"]) {
-			seen.length = 0;
-			editor.setText("");
-			editor.handleInput(altA);
-			assert.deepEqual(seen, [altA], "empty draft dispatches the shortcut");
-			seen.length = 0;
-			editor.setText("abc\ndef");
-			editor.handleInput(altA);
-			assert.deepEqual(seen, [altA], "non-empty draft dispatches the shortcut");
-			assert.doesNotMatch(editor.render(40).join("\n"), /\x1b\[7mabc/);
-			editor.handleInput("\x7f");
-			assert.equal(editor.getText(), "abc\nde", "the draft was not selected");
-		}
-		// alt+e is the dedicated select-all chord while alt+a belongs to Agents.
-		editor.setText("abc\ndef");
-		editor.handleInput("\x1be");
-		assert.match(editor.render(40).join("\n"), /\x1b\[7mabc/);
-		editor.handleInput("\x7f");
-		assert.equal(editor.getText(), "");
-	} finally { editor.dispose(); }
-});
-
-test("JhonPromptEditor keeps alt+a select-all when no extension claims it", () => {
-	const { pi, handlers } = fakePi(); shellUi(pi, {});
-	const { ctx, ui } = fakeContext(); const editor = installedPrompt(ctx, ui, handlers);
-	try {
-		editor.onExtensionShortcut = () => false;
-		editor.setText("abc\ndef");
-		editor.handleInput("\x1ba");
-		assert.match(editor.render(40).join("\n"), /\x1b\[7mabc/);
-		editor.handleInput("\x7f");
-		assert.equal(editor.getText(), "");
-	} finally { editor.dispose(); }
-});
-
-test("an esc again hint leaves the screen when its window closes, with no key pressed", () => {
-	let now = 0, renders = 0;
-	const timers: Array<{ fn: () => void; ms: number }> = [];
-	const editor = new JhonPromptEditor(fakeTui as never, editorTheme as never, { matches: (data: string, action: string) => action === "app.interrupt" && data === "\x1b" } as never, {
-		fg: (_color, text) => text, bold: (text) => text, requestRender() { renders++; },
-		pending: () => false, now: () => now, doubleEscCancelEnabled: () => false,
-		dispatchQueuedText() {}, schedule: (fn, ms) => { timers.push({ fn, ms }); return () => {}; },
-	});
-	try {
-		editor.focused = true;
-		editor.setText("draft");
-		editor.handleInput("\x1b");
-		assert.match(stripAnsi(editor.render(80).join("\n")), /esc again clears it/);
-		assert.equal(timers.length, 1);
-		now = timers[0]!.ms;
-		const before = renders;
-		timers[0]!.fn();
-		assert.equal(renders, before + 1, "the window's end repaints");
-		assert.doesNotMatch(stripAnsi(editor.render(80).join("\n")), /esc again/);
-		assert.equal(editor.getText(), "draft");
-	} finally { editor.dispose(); }
-});
-
-test("JhonPromptEditor autocomplete respects narrow frame widths", () => {
- const { pi, handlers } = fakePi();
- shellUi(pi, {});
- const { ctx, ui } = fakeContext();
- const editor = installedPrompt(ctx, ui, handlers);
- const internal = editor as unknown as { autocompleteState: string; autocompleteList: { render(width: number): string[] } };
- internal.autocompleteState = "force";
- internal.autocompleteList = { render: () => ["completion"] };
- try {
-  for (const width of [0, 1, 2, 30]) {
-   const rows = editor.render(width).map(stripAnsi);
-   assert.ok(rows.every((row) => [...row].length <= width), `width ${width}: ${JSON.stringify(rows)}`);
-   if (width === 30) assert.ok(rows.some((row) => row.includes("completion")));
-  }
- } finally { editor.dispose(); }
-});
-
-test("registered prompt stays transparent while idle, working, and queued", () => {
-	const { pi, handlers, tools } = fakePi();
-	shellUi(pi, {});
-	const { ctx, ui } = fakeContext({ theme: { ...plainTheme, getBgAnsi: () => "\x1b[44m" } });
-	const editor = installedPrompt(ctx, ui, handlers);
-	try {
-		for (const state of ["idle", "working", "queued"]) {
-			if (state === "working") for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-			(ctx as unknown as { hasPendingMessages(): boolean }).hasPendingMessages = () => state === "queued";
-			for (const width of [8, 40, 80]) assert.doesNotMatch(editor.render(width).join("\n"), /\x1b\[44m/, state);
-		}
-	} finally {
-		editor.dispose();
-	}
-	assert.equal(tools.get("session_worktree_register")?.renderShell, "self");
-});
-
-test("shellUi shows working while the agent runs and queued when messages wait", () => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, {});
-	const pending = { value: false };
-	const { ctx, ui } = fakeContext();
-	(ctx as unknown as { hasPendingMessages: () => boolean }).hasPendingMessages = () => pending.value;
-	const editor = installedPrompt(ctx, ui, handlers);
-
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	assert.match(stripAnsi(editor.render(60)[0]), /^ 力 Working…  thinking · \d+s +esc interrupts $/);
-	pending.value = true;
-	assert.match(stripAnsi(editor.render(60)[0]), /^ 力 Working…  thinking · \d+s · queued/);
-	for (const handler of handlers.get("agent_end") ?? []) handler({}, ctx);
-	assert.match(stripAnsi(editor.render(60)[0]), /queued/, "low-level run end is not settled");
-	pending.value = false;
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.match(stripAnsi(editor.render(60)[0]), /^ 力 ready for you +$/);
-	editor.dispose();
 });
 
 test("after 60 s with no stream event and no tool running, the working line says it waits for the Claude API, until the next event or the turn's end", () => {
@@ -1137,899 +889,12 @@ test("a child session and JHON_SHELL_STALL_SECONDS=0 never recover; another valu
 	}
 });
 
-test("visual customization registers once and remains discoverable", async (t) => {
-	const home = scopedDoubleEscCancelConfigHome(t);
-	const { pi, commands } = fakePi();
-	const registrations: string[] = [];
-	const register = pi.registerCommand.bind(pi);
-	pi.registerCommand = ((name, registration) => {
-		registrations.push(name);
-		register(name, registration);
-	}) as typeof pi.registerCommand;
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home });
-	assert.equal(registrations.filter((registered) => registered === "jhon:customize").length, 1, "jhon:customize must register once");
-	for (const merged of ["jhon:vim", "jhon:animations", "jhon:double-esc-cancel"]) assert.equal(commands.has(merged), false, `${merged} merged into /jhon:customize`);
-	// T15.13: Customize is G's Customization view; typing does not filter it. L174: Settings is Customize.
-	assert.equal(commands.get("jhon:customize")!.description, "Customize the shell: appearance, behaviour, keys, permissions");
-	const { ctx, ui } = fakeContext();
-	const shown = await setViaSettings(commands, ctx, ui, "Animations", "off");
-	assert.ok(shown.some((row) => /Animations.*off/.test(row)), shown.join("\n"));
-	assert.equal(savedPolicy(home, "animations"), "potato");
-});
-
-test("incomplete bracketed paste buffered up to exactly the 16 MiB bound still completes with one-step undo", () => {
-	const BOUND = 16 * 1024 * 1024;
-	const deps = {
-		fg: (_color: string, text: string) => text, bold: (text: string) => text, requestRender() {}, pending: () => false,
-		now: () => 0, doubleEscCancelEnabled: () => false, dispatchQueuedText() {},
-	};
-	const editor = new JhonPromptEditor(fakeTui as never, editorTheme as never, fakeKeybindings as never, deps);
-	try {
-		editor.setText("hello");
-		editor.handleInput("\x1b[1;2H");
-		editor.handleInput("\x1b[200~");
-		const payload = "z".repeat(BOUND - "\x1b[200~".length);
-		editor.handleInput(payload);
-		editor.handleInput("\x1b[201~");
-		assert.equal(editor.getExpandedText(), payload, "a frame buffered up to exactly the bound still completes");
-		(editor as unknown as { undo(): void }).undo();
-		assert.equal(editor.getText(), "hello", "one undo restores the selection's original text");
-	} finally { editor.dispose(); }
-});
-
-test("a complete bracketed paste larger than the 16 MiB incomplete-frame bound, delivered as one chunk, is never capped", () => {
-	const BOUND = 16 * 1024 * 1024;
-	const deps = {
-		fg: (_color: string, text: string) => text, bold: (text: string) => text, requestRender() {}, pending: () => false,
-		now: () => 0, doubleEscCancelEnabled: () => false, dispatchQueuedText() {},
-	};
-	const editor = new JhonPromptEditor(fakeTui as never, editorTheme as never, fakeKeybindings as never, deps);
-	try {
-		editor.setText("hello");
-		editor.handleInput("\x1b[1;2H");
-		const payload = "z".repeat(BOUND + 1024);
-		editor.handleInput(`\x1b[200~${payload}\x1b[201~`);
-		assert.equal(editor.getExpandedText(), payload, "a complete frame larger than the incomplete-frame bound is never capped");
-		(editor as unknown as { undo(): void }).undo();
-		assert.equal(editor.getText(), "hello");
-	} finally { editor.dispose(); }
-});
-
-test("an incomplete bracketed paste that crosses the 16 MiB bound without a terminator is abandoned, never forwarded to native", () => {
-	const BOUND = 16 * 1024 * 1024;
-	const deps = {
-		fg: (_color: string, text: string) => text, bold: (text: string) => text, requestRender() {}, pending: () => false,
-		now: () => 0, doubleEscCancelEnabled: () => false, dispatchQueuedText() {},
-	};
-	const editor = new JhonPromptEditor(fakeTui as never, editorTheme as never, fakeKeybindings as never, deps);
-	try {
-		editor.setText("hello");
-		editor.handleInput("\x1b[1;2H");
-		editor.handleInput("\x1b[200~");
-		const payload = "z".repeat(BOUND - "\x1b[200~".length + 1);
-		editor.handleInput(payload);
-		assert.equal(editor.getText(), "hello", "no partial paste bytes are ever forwarded to the native editor");
-		editor.handleInput("x");
-		assert.equal(editor.getText(), "x", "input after abandonment behaves like a fresh keystroke over the still-active selection");
-	} finally { editor.dispose(); }
-});
-
-// T29 S3: the prompt has no vim mode. An owner file that still sets
-// shell.editor.vim = true changes nothing: Esc then i types the i, and the
-// rule names no mode.
-test("the prompt has no vim mode: Esc then i types i even with shell.editor.vim = true", async (t) => {
-	const home = mkdtempSync(join(tmpdir(), "jhon-no-vim-"));
+/** A settings home of the test's own, removed after it. */
+function configHome(t: { after(callback: () => void): void }): string {
+	const home = mkdtempSync(join(tmpdir(), "jhon-shell-home-"));
 	t.after(() => rmSync(home, { recursive: true, force: true }));
-	homeSettings(home, { "shell.editor.vim": true } as Record<string, SettingValue>);
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers);
-	try {
-		editor.setText("draft");
-		editor.handleInput("\x1b");
-		editor.handleInput("i");
-		assert.equal(editor.getText(), "drafti");
-		assert.doesNotMatch(editor.render(60).join("\n"), /NORMAL|INSERT|VISUAL/);
-	} finally { editor.dispose(); }
-});
-
-test("the Animations setting switches the live pulse", async (t) => {
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const delays: number[] = [];
-	let active = 0;
-	t.mock.method(globalThis, "setInterval", (_callback: () => void, delay: number) => {
-		delays.push(delay); active++; return { unref() {} };
-	});
-	t.mock.method(globalThis, "clearInterval", () => { active--; });
-	const { pi, handlers, commands } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: configHome });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers);
-	assert.equal(commands.has("jhon:animations"), false, "merged into /jhon:customize");
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	assert.deepEqual(delays, [2000, 60_000, 80], "the profile poll, STATUS's minute re-read, and the live pulse");
-	assert.equal(active, 3);
-	await setViaSettings(commands, ctx, ui, "Animations", "off");
-	assert.equal(active, 2, "the pulse stops; the polls stay");
-	assert.match(stripAnsi(editor.render(60)[0]), /Working…/);
-	assert.equal(savedPolicy(configHome, "animations"), "potato");
-	await setViaSettings(commands, ctx, ui, "Animations", "full");
-	assert.deepEqual(delays, [2000, 60_000, 80, 80]);
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.equal(active, 2);
-	editor.dispose();
-	await fire(handlers, "session_shutdown", ctx);
-	assert.equal(active, 0);
-});
-
-test("potato repaints start/settle and shows queued state on the host's next render without intervals", async (t) => {
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	homeSettings(configHome, { "shell.appearance.animations": "off" });
-	const intervals = t.mock.method(globalThis, "setInterval", (_callback: () => void, delay: number) => {
-		assert.ok(delay === 2000 || delay === 60_000, "potato must not animate: only the profile poll and STATUS's minute re-read tick");
-		return { unref() {} };
-	});
-	const renders = t.mock.method(fakeTui, "requestRender", () => {});
-	const { pi, handlers, commands } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: configHome });
-	const { ctx, ui } = fakeContext();
-	const pending = { value: false };
-	(ctx as unknown as { hasPendingMessages(): boolean }).hasPendingMessages = () => pending.value;
-	const editor = installedPrompt(ctx, ui, handlers);
-	let before = renders.mock.callCount();
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	assert.ok(renders.mock.callCount() > before);
-	assert.match(stripAnsi(editor.render(60)[0]), /力 Working…/);
-	before = renders.mock.callCount();
-	pending.value = true;
-	assert.equal(renders.mock.callCount(), before, "changing the queue flag is not a shell repaint event");
-	// Pi owns enqueue and its repaint scheduling; this fake context exposes only
-	// hasPendingMessages, not Pi's enqueue path. Simulate the host's render request:
-	// this proves next-render visibility, not real Pi enqueue-to-paint latency.
-	fakeTui.requestRender();
-	assert.equal(renders.mock.callCount(), before + 1);
-	assert.match(stripAnsi(editor.render(60)[0]), /· queued/);
-	before = renders.mock.callCount();
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.ok(renders.mock.callCount() > before);
-	assert.doesNotMatch(stripAnsi(editor.render(60)[0]), /Working|queued/);
-	for (const handler of handlers.get("session_shutdown") ?? []) handler({}, ctx);
-	assert.equal(intervals.mock.callCount(), 2, "the profile poll and STATUS's minute re-read; no animation");
-});
-
-test("the Animations setting reports a failed write and changes nothing", async (t) => {
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const jhon = homeSettings(configHome).jhon;
-	const { pi, commands } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: configHome });
-	const { ctx, ui } = fakeContext();
-	jhon.failSet = "EPERM: settings.toml is not writable";
-	const shown = await setViaSettings(commands, ctx, ui, "Animations", "off");
-	assert.match(ui.notices.join("\n"), /^Customize: .*EPERM/m, "a refused value is a notice, as G's");
-	assert.doesNotMatch(shown.join("\n"), /EPERM/, "not the Preview's headline");
-	assert.deepEqual(jhon.file, {});
-});
-
-// ---------------------------------------------------------------------------
-// double-esc-cancel: opt-in, off by default. While the prompt
-// is working and autocomplete is hidden, the first Esc is swallowed and the
-// frame shows a hint; a second Esc within the window falls through to
-// CustomEditor's own handleInput so Pi's onEscape performs the abort exactly
-// as it always has. Idle double-Esc (tree/fork), bash-mode Esc, and
-// autocomplete cancel live entirely in Pi's own onEscape/CustomEditor and are
-// untouched by this gate.
-// ---------------------------------------------------------------------------
-
-const escapeKeybindings = { matches: (_data: string, keybinding: string) => keybinding === "app.interrupt" };
-
-test("double-esc-cancel default off: a single Esc while working still aborts immediately, exactly as before", (t) => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 1);
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again stops it/);
-	editor.dispose();
-});
-
-function scopedDoubleEscCancelConfigHome(t: { after(callback: () => void): void }): string {
-	const configHome = mkdtempSync(join(tmpdir(), "gp-esc-cfg-"));
-	t.after(() => rmSync(configHome, { recursive: true, force: true }));
-	return configHome;
+	return home;
 }
-
-/** Open /jhon:customize, open the category that holds a row's label, move to it and step it with ←/→ (G's keys) until it shows `value`; then close. */
-async function setViaSettings(commands: Map<string, { handler(args: string, ctx: ExtensionContext): Promise<void> | void }>, ctx: ExtensionContext, ui: FakeUi, label: string, value: string): Promise<string[]> {
-	const pending = commands.get("jhon:customize")!.handler("", ctx);
-	const view = ui.overlayView!;
-	const lines = () => view.render(120).map(stripAnsi);
-	for (let i = 0; i < 6 && !lines().some((line) => line.includes(`  ${label}`)); i++) view.handleInput("\x1b[B");
-	view.handleInput("\x1b[C");
-	for (let i = 0; i < 12 && !lines().some((line) => line.includes(`▸ ${label}`)); i++) view.handleInput("\x1b[B");
-	const row = () => lines().find((line) => line.includes(`▸ ${label}`)) ?? "";
-	// The current value is the radio `● value`, G's.
-	for (const key of ["\x1b[C", "\x1b[C", "\x1b[C", "\x1b[D", "\x1b[D", "\x1b[D"]) { if (new RegExp(`● ${value}(\\s|$)`).test(row())) break; view.handleInput(key); }
-	const shown = view.render(100).map(stripAnsi);
-	view.handleInput("\x1b");
-	await pending;
-	return shown;
-}
-
-test("settings writes animations through `jhon settings set` (S38)", async (t) => {
-	const home = scopedDoubleEscCancelConfigHome(t);
-	const { pi, handlers, commands } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers);
-	try {
-		await setViaSettings(commands, ctx, ui, "Animations", "off");
-	} finally { editor.dispose(); }
-	assert.deepEqual(homeSettings(home).jhon.sets, [
-		["shell.appearance.animations", "off"],
-	]);
-	assert.deepEqual(homeSettings(home).jhon.file, {
-		"shell.appearance.animations": "off",
-	});
-});
-
-// T15.12d (L153 answers 1-2): Cards and Surface are Appearance rows; each
-// change is saved with `jhon settings set` and applies at once, and a
-// session starts with the saved ones.
-test("settings writes the card style and the surface through `jhon settings set` and applies them live", async (t) => {
-	const home = scopedDoubleEscCancelConfigHome(t);
-	t.after(() => { setCardStyle(CARD_STYLE.FLOAT); setChromeSurface("transparent"); });
-	const { pi, handlers, commands } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers);
-	try {
-		await setViaSettings(commands, ctx, ui, "Cards", "neon");
-		assert.equal(cardStyle(), CARD_STYLE.NEON);
-		await setViaSettings(commands, ctx, ui, "Surface", "tinted");
-		assert.equal(chromeSurface(), "tinted");
-	} finally { editor.dispose(); }
-	assert.deepEqual(homeSettings(home).jhon.sets, [["shell.appearance.cards", "neon"], ["shell.appearance.surface", "tinted"]]);
-	setCardStyle(CARD_STYLE.FLOAT);
-	setChromeSurface("transparent");
-	await fire(handlers, "session_start", ctx);
-	assert.equal(cardStyle(), CARD_STYLE.NEON, "a session starts with the saved style");
-	assert.equal(chromeSurface(), "tinted", "and the saved surface");
-});
-
-test("settings refuses noninteractive UI and points at `jhon settings`", async (t) => {
-	const home = scopedDoubleEscCancelConfigHome(t);
-	const { pi, commands } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home });
-	const { ctx: rpc, ui: rpcUi } = fakeContext();
-	(rpc as unknown as { mode: string }).mode = "rpc";
-	await commands.get("jhon:customize")!.handler("", rpc);
-	assert.equal(rpcUi.overlayView, undefined);
-	assert.match(rpcUi.notices.at(-1)!, /interactive terminal.*jhon settings/);
-});
-
-test("double-esc-cancel enabled: the first Esc while working is swallowed and shows the hint instead of aborting", (t) => {
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_DOUBLE_ESC_CANCEL: "on", JHON_SHELL_CONFIG_HOME: configHome });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 0, "the first Esc must be swallowed, not aborted");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again stops it/);
-	editor.dispose();
-});
-
-test("double-esc-cancel enabled: a second Esc within the window falls through and aborts, clearing the hint", (t) => {
-	let now = 1_000_000;
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_DOUBLE_ESC_CANCEL: "on", JHON_SHELL_CONFIG_HOME: configHome }, { now: () => now });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 0);
-	now += 500;
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 1, "the second Esc within the window must fall through to abort");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again stops it/);
-	editor.dispose();
-});
-
-test("double-esc-cancel enabled: an Esc after the window expires is a fresh first press, not an abort", (t) => {
-	let now = 1_000_000;
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_DOUBLE_ESC_CANCEL: "on", JHON_SHELL_CONFIG_HOME: configHome }, { now: () => now });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 0);
-	now += 1001;
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 0, "the window expired, so this must be treated as a new first press");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again stops it/);
-	editor.dispose();
-});
-
-test("double-esc-cancel enabled: Esc while idle passes straight through, untouched by this gate", (t) => {
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_DOUBLE_ESC_CANCEL: "on", JHON_SHELL_CONFIG_HOME: configHome });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	// agent_start never fired: the prompt stays idle.
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 1, "idle Esc must be unaffected by the policy");
-	editor.dispose();
-});
-
-test("double-esc-cancel enabled: Esc while autocomplete is visible bypasses this gate entirely", (t) => {
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_DOUBLE_ESC_CANCEL: "on", JHON_SHELL_CONFIG_HOME: configHome });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	(editor as unknown as { isShowingAutocomplete(): boolean }).isShowingAutocomplete = () => true;
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again stops it/, "autocomplete must bypass the gate, matching CustomEditor's own guard");
-	editor.dispose();
-});
-
-// ---------------------------------------------------------------------------
-// Working-cancel keeps the queue moving. Pi's own onEscape
-// restores `[queuedText, currentText].filter(t => t.trim()).join("\n\n")`
-// into the editor and aborts. These tests fake that join in `onEscape` (the
-// same seam the double-esc-cancel tests above use), then check that the
-// user's own draft is all that is left in the editor and that the queued
-// text is sent exactly once, after the aborted run settles.
-// ---------------------------------------------------------------------------
-
-test("extractQueuedText reverses Pi's queued+draft join", () => {
-	assert.equal(extractQueuedText("follow up\n\ndraft reply", "draft reply"), "follow up");
-	assert.equal(extractQueuedText("draft reply", "draft reply"), "", "no queue: the join degenerates to the draft alone");
-	assert.equal(extractQueuedText("only queued", ""), "only queued", "empty draft: the join degenerates to the queue alone");
-	assert.equal(extractQueuedText("", ""), "", "both empty");
-	assert.equal(extractQueuedText("unrelated text", "draft reply"), undefined, "a shape that does not match the join is unrecognized, not an empty queue: Pi's own text must win, not be discarded");
-});
-
-test("extractQueuedText treats a whitespace-only draft as empty, matching Pi's own trim filter", () => {
-	assert.equal(extractQueuedText("only queued", "   "), "only queued", "a whitespace-only draft never survives Pi's filter, so the whole join is the queue");
-	assert.equal(extractQueuedText("", "   "), "", "whitespace-only draft with no queue is still no queue, not unrecognized");
-});
-
-test("working cancel: an aborted turn with a queued message sends it once settled and keeps the draft", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.onEscape = () => { editor.setText(`follow up\n\n${editor.getText()}`); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	assert.equal(editor.getText(), "draft reply", "the user's own draft stays in the editor");
-	assert.equal(sentMessages.length, 0, "nothing is sent until the aborted run settles");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.deepEqual(sentMessages.map((m) => m.content), ["follow up"]);
-	editor.dispose();
-});
-
-test("working cancel: an aborted turn with no queued messages behaves exactly as before, with no redundant setText", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	// Pi's own onEscape restore is the one real setText call on this path
-	// (it always writes the combined text, even when that equals the
-	// draft); the spy below counts every call, so it must see only that one
-	// and none added by abortAndDispatchQueued itself.
-	editor.onEscape = () => { editor.setText(editor.getText()); };
-	let setTextCalls = 0;
-	const originalSetText = editor.setText.bind(editor);
-	(editor as unknown as { setText(text: string): void }).setText = (text: string) => { setTextCalls++; originalSetText(text); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	assert.equal(setTextCalls, 1, "the no-queue path must not add its own write on top of Pi's own restore");
-	assert.equal(editor.getText(), "draft reply");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.equal(sentMessages.length, 0, "an empty queue must never trigger a send");
-	editor.dispose();
-});
-
-test("working cancel: an unrecognized restore shape leaves Pi's own text untouched and dispatches nothing", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	// Simulates a future Pi restore shape this code does not recognize.
-	editor.onEscape = () => { editor.setText("an unrecognized shape"); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	assert.equal(editor.getText(), "an unrecognized shape", "Pi's own restore wins on a shape mismatch; nothing here overwrites it");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.equal(sentMessages.length, 0, "an unrecognized shape must never be dispatched as if it were queued text");
-	editor.dispose();
-});
-
-test("working cancel: an empty draft with a queued message sends the whole queue and leaves the editor empty", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.onEscape = () => { editor.setText("only queued"); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	assert.equal(editor.getText(), "", "an empty draft stays empty");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.deepEqual(sentMessages.map((m) => m.content), ["only queued"]);
-	editor.dispose();
-});
-
-test("working cancel: the same dispatch applies to the confirming second Esc when double-esc-cancel is enabled", (t) => {
-	let now = 1_000_000;
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_DOUBLE_ESC_CANCEL: "on", JHON_SHELL_CONFIG_HOME: configHome }, { now: () => now });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.onEscape = () => { editor.setText(`follow up\n\n${editor.getText()}`); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	now += 500;
-	editor.handleInput("\x1b");
-	assert.equal(editor.getText(), "draft reply");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.deepEqual(sentMessages.map((m) => m.content), ["follow up"]);
-	editor.dispose();
-});
-
-test("working cancel: queued text is never sent twice even if agent_settled fires again", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.onEscape = () => { editor.setText(`follow up\n\n${editor.getText()}`); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.deepEqual(sentMessages.map((m) => m.content), ["follow up"]);
-	editor.dispose();
-});
-
-test("working cancel: a new agent_start before the aborted run settles keeps the pending text and sends it once that turn settles", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.onEscape = () => { editor.setText(`follow up\n\n${editor.getText()}`); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	// The user sent the draft (or another turn started) before the aborted
-	// run's own agent_settled fired. Nothing is sent from inside agent_start:
-	// Pi is mid-turn there, so the text waits for that turn to settle.
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	assert.equal(sentMessages.length, 0, "never send from inside agent_start");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.deepEqual(sentMessages.map((m) => ({ content: m.content, deliverAs: m.options?.deliverAs })), [{ content: "follow up", deliverAs: undefined }]);
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.equal(sentMessages.length, 1, "the pending text must not be delivered a second time");
-	editor.dispose();
-});
-
-test("working cancel: a whitespace-only recognized queue is treated as no queue and never dispatched", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.onEscape = () => { editor.setText(`   \n\n${editor.getText()}`); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.equal(sentMessages.length, 0, "whitespace is not a message");
-	assert.equal(editor.getText(), "draft reply", "the recognized whitespace prefix is stripped and the draft comes back alone");
-	editor.dispose();
-});
-
-test("working cancel: a failing sendUserMessage on settle is reported, not thrown, and the prompt still leaves the working state", (t) => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.onEscape = () => { editor.setText(`follow up\n\n${editor.getText()}`); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	(pi as unknown as { sendUserMessage: (content: string) => void }).sendUserMessage = () => { throw new Error("session is switching"); };
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.ok(ui.notices.some((notice) => /session is switching/.test(notice)), "the failure surfaces as a notice");
-	assert.equal(editor.getText(), "follow up\n\ndraft reply", "the queued text is put back in front of the draft, exactly as Pi's own restore would have left it");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again stops it/, "the prompt is idle again");
-	editor.dispose();
-});
-
-test("working cancel: a failing send reported through a context without UI still restores the queued text into the editor", (t) => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const headless = fakeContext({ hasUI: false });
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.onEscape = () => { editor.setText(`follow up\n\n${editor.getText()}`); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	(pi as unknown as { sendUserMessage: (content: string) => void }).sendUserMessage = () => { throw new Error("session is switching"); };
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, headless.ctx);
-	assert.equal(headless.ui.notices.length, 0, "no UI, no notice");
-	assert.equal(editor.getText(), "follow up\n\ndraft reply", "with or without a UI to tell the user, the text is never dropped");
-	editor.dispose();
-});
-
-test("working cancel: agent_settled never sends while another turn is still in flight; the text waits for an idle settle", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const busy = fakeContext({ idle: false }).ctx;
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.onEscape = () => { editor.setText(`follow up\n\n${editor.getText()}`); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, busy);
-	assert.equal(sentMessages.length, 0, "a settle reported while not idle must not inject the text mid-turn");
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 1, "a run is still in flight, so the prompt stays working and Esc takes the cancel path");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "not the idle clear");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.deepEqual(sentMessages.map((m) => m.content), ["follow up"]);
-	editor.dispose();
-});
-
-test("working cancel: two aborts before an idle settle deliver both queued texts, in order, as one message", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const busy = fakeContext({ idle: false }).ctx;
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	let aborts = 0;
-	editor.onEscape = () => { aborts++; editor.setText(aborts === 1 ? "first" : "second"); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, busy);
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.deepEqual(sentMessages.map((m) => m.content), ["first\n\nsecond"], "nothing from the first abort is lost, and order is preserved");
-	editor.dispose();
-});
-
-test("working cancel: pending queued text never crosses a session boundary", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.onEscape = () => { editor.setText(`follow up\n\n${editor.getText()}`); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	for (const handler of handlers.get("session_shutdown") ?? []) handler({}, ctx);
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.equal(sentMessages.length, 0, "the old session's queued text must not be sent into the next session");
-});
-
-test("working cancel: agent_settled firing first delivers the pending text without a deliverAs override", (t) => {
-	const { pi, handlers, sentMessages } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.onEscape = () => { editor.setText(`follow up\n\n${editor.getText()}`); };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.deepEqual(sentMessages.map((m) => ({ content: m.content, deliverAs: m.options?.deliverAs })), [{ content: "follow up", deliverAs: undefined }]);
-	// The next turn's own agent_start must not re-deliver the already-sent text.
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	assert.equal(sentMessages.length, 1);
-	editor.dispose();
-});
-
-// ---------------------------------------------------------------------------
-// Idle double-Esc clears the draft. With the prompt idle,
-// autocomplete hidden, and a non-empty draft, a first Esc shows a hint
-// instead of doing nothing; a second Esc within 500ms adds the draft to
-// history and clears it. An empty editor, autocomplete, or the working state
-// are all untouched: Pi's own idle double-Esc (tree/fork) and the
-// working-cancel gate above keep deciding those cases.
-// ---------------------------------------------------------------------------
-
-test("idle draft: the first Esc shows the clear hint and keeps the text", (t) => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 0, "the first Esc must be swallowed, not passed to Pi's own idle handler");
-	assert.equal(editor.getText(), "draft reply");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again clears it/);
-	editor.dispose();
-});
-
-test("idle draft: a second Esc within the window adds the draft to history and clears it", (t) => {
-	let now = 1_000_000;
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) }, { now: () => now });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	const history: string[] = [];
-	(editor as unknown as { addToHistory(text: string): void }).addToHistory = (text: string) => history.push(text);
-	editor.handleInput("\x1b");
-	now += 400;
-	editor.handleInput("\x1b");
-	assert.deepEqual(history, ["draft reply"]);
-	assert.equal(editor.getText(), "");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/);
-	editor.dispose();
-});
-
-test("idle draft: an Esc after the window expires is a fresh first press, not a clear", (t) => {
-	let now = 1_000_000;
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) }, { now: () => now });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.handleInput("\x1b");
-	now += 501;
-	editor.handleInput("\x1b");
-	assert.equal(editor.getText(), "draft reply", "the window expired, so this is a new first press, not a clear");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again clears it/);
-	editor.dispose();
-});
-
-test("idle empty editor: Esc passes straight through to Pi's own tree/fork double-Esc", (t) => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 1, "an empty editor must be untouched by the idle-clear gate");
-	editor.dispose();
-});
-
-test("idle draft: Esc while autocomplete is visible bypasses the idle-clear gate", (t) => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	(editor as unknown as { isShowingAutocomplete(): boolean }).isShowingAutocomplete = () => true;
-	editor.handleInput("\x1b");
-	assert.equal(editor.getText(), "draft reply", "autocomplete cancel must never clear the draft");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "autocomplete must bypass the idle-clear gate, matching CustomEditor's own guard");
-	editor.dispose();
-});
-
-test("working state: a non-empty draft's Esc is decided by the working-cancel gate, never the idle-clear hint", (t) => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.onEscape = () => { editor.setText(editor.getText()); };
-	editor.handleInput("\x1b");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "working must never show the idle-clear hint");
-	editor.dispose();
-});
-
-test("idle draft: editing the text between two Esc presses starts a fresh clear window instead of clearing the edit away", (t) => {
-	let now = 1_000_000;
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) }, { now: () => now });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("draft reply");
-	editor.handleInput("\x1b");
-	editor.setText("draft reply, edited");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "the edit invalidates the pending clear, so the hint goes away with it");
-	now += 400;
-	editor.handleInput("\x1b");
-	assert.equal(editor.getText(), "draft reply, edited", "an edit invalidates the earlier snapshot, so this must not clear");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "the edit starts a fresh first press, with its own hint");
-	now += 400;
-	editor.handleInput("\x1b");
-	assert.equal(editor.getText(), "", "the fresh window's own second Esc, on the unchanged edited text, does clear");
-	editor.dispose();
-});
-
-test("idle draft: typing and deleting between two Esc presses still invalidates the pending clear", (t) => {
-	let now = 1_000_000;
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) }, { now: () => now });
-	const { ctx, ui } = fakeContext();
-	// Esc-only matching: ordinary keystrokes must reach the editor as text.
-	const preciseEscape = { matches: (data: string, keybinding: string) => keybinding === "app.interrupt" && data === "\x1b" };
-	const editor = installedPrompt(ctx, ui, handlers, preciseEscape);
-	editor.setText("draft reply");
-	editor.handleInput("\x1b");
-	editor.handleInput("x");
-	editor.handleInput("\x7f");
-	assert.equal(editor.getText(), "draft reply", "type then backspace lands on the same text");
-	now += 400;
-	editor.handleInput("\x1b");
-	assert.equal(editor.getText(), "draft reply", "an intervening keystroke invalidates the confirmation even when the text ends up identical");
-	editor.dispose();
-});
-
-test("idle draft: selection-only input and same-character replacement cancel pending clear", (t) => {
-	let now = 1_000_000;
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) }, { now: () => now });
-	const { ctx, ui } = fakeContext();
-	const preciseEscape = { matches: (data: string, keybinding: string) => keybinding === "app.interrupt" && data === "\x1b" };
-	const editor = installedPrompt(ctx, ui, handlers, preciseEscape);
-	try {
-		for (const inputs of [["\x1b[1;2H"], ["\x1b[1;2H", "x"]]) {
-			editor.setText("x");
-			editor.handleInput("\x1b");
-			for (const input of inputs) editor.handleInput(input);
-			assert.equal(editor.getText(), "x", "selection or same-character replacement leaves the draft unchanged");
-			assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/);
-			now += 400;
-			editor.handleInput("\x1b");
-			assert.equal(editor.getText(), "x", "intervening input must make this a fresh first Esc");
-			assert.match(stripAnsi(editor.render(60).join("\n")), /esc again clears it/);
-			now += 501;
-		}
-	} finally { editor.dispose(); }
-});
-
-test("idle draft: a bash-mode draft's Esc bypasses the idle-clear gate entirely", (t) => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("!ls");
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 1, "a bash-mode draft's first Esc must reach Pi's own bash-mode onEscape, which clears bash mode");
-	assert.equal(editor.getText(), "!ls", "this gate never touches bash-mode text; Pi's own onEscape owns it");
-	assert.doesNotMatch(stripAnsi(editor.render(60).join("\n")), /esc again clears it/, "bash mode must bypass the idle-clear gate, matching Pi's own bash-mode Esc");
-	editor.dispose();
-});
-
-test("idle draft: a bash-mode draft with leading whitespace still bypasses the idle-clear gate", (t) => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: scopedDoubleEscCancelConfigHome(t) });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	editor.setText("  !ls");
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 1, "Pi detects bash mode from the trimmed start of the text, so this gate must match the same rule");
-	editor.dispose();
-});
-
-// ---------------------------------------------------------------------------
-// The double-Esc preference, set from /jhon:customize.
-// ---------------------------------------------------------------------------
-
-test("the Double Esc setting writes on and off through the settings", async (t) => {
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const { pi, commands } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: configHome });
-	const { ctx, ui } = fakeContext();
-	await setViaSettings(commands, ctx, ui, "Double Esc", "on");
-	assert.equal(savedPolicy(configHome, "double-esc-cancel"), "on");
-	await setViaSettings(commands, ctx, ui, "Double Esc", "off");
-	assert.equal(savedPolicy(configHome, "double-esc-cancel"), "off");
-});
-
-test("the Double Esc setting updates the in-memory policy so an already-installed prompt picks it up without re-reading the file", async (t) => {
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const { pi, handlers, commands } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: configHome });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 1, "off by default: the first Esc still aborts");
-	await setViaSettings(commands, ctx, ui, "Double Esc", "on");
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 1, "now on: the same prompt instance must swallow the first Esc instead of aborting");
-	assert.match(stripAnsi(editor.render(60).join("\n")), /esc again stops it/);
-	editor.dispose();
-});
-
-test("Settings reads the double-Esc preference again when opened, so its row and the keypress gate agree", async (t) => {
-	const configHome = scopedDoubleEscCancelConfigHome(t);
-	const { pi, handlers, commands } = fakePi();
-	shellUi(pi, { JHON_SHELL_CONFIG_HOME: configHome });
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers, escapeKeybindings);
-	let aborted = 0;
-	editor.onEscape = () => { aborted++; };
-	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	// Another session (or a hand edit) turns the preference on underneath this one.
-	homeSettings(configHome).jhon.file["shell.behaviour.double_esc_cancel"] = true;
-	// The row steps from what the file holds now (on), so one enter on it turns it off.
-	const pending = commands.get("jhon:customize")!.handler("behaviour", ctx);
-	const lines = () => ui.overlayView!.render(120).map(stripAnsi);
-	for (let i = 0; i < 30 && !lines().some((row) => row.includes("▸ Double Esc")); i++) ui.overlayView!.handleInput("\x1b[B");
-	assert.ok(lines().some((row) => row.includes("▸ Double Esc")), "the cursor must reach the Double Esc row");
-	assert.ok(lines().some((row) => /Double Esc to cancel\s+● on/.test(row)));
-	ui.overlayView!.handleInput("\x1b[C"); // G's → steps to the next value and applies it
-	ui.overlayView!.handleInput("\x1b");
-	await pending;
-	assert.equal(savedPolicy(configHome, "double-esc-cancel"), "off");
-	editor.handleInput("\x1b");
-	assert.equal(aborted, 1, "off now: the first Esc aborts");
-	editor.dispose();
-});
-
-test("shellUi leaves an editor another extension already installed", () => {
-	const { pi, handlers } = fakePi();
-	shellUi(pi, {});
-	const theirs = () => ({});
-	const { ctx, ui } = fakeContext({ editorFactory: theirs });
-	for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
-	assert.equal(ui.editorFactory, theirs);
-	assert.notEqual(ui.workingVisible, false, "a custom owner still needs native working feedback");
-});
-
-test("the shell replaces its retained factory on reload so new lifecycle handlers own the prompt", () => {
-	const first = fakePi();
-	shellUi(first.pi, {});
-	const { ctx, ui } = fakeContext();
-	const oldEditor = installedPrompt(ctx, ui, first.handlers);
-	const previousFactory = ui.editorFactory;
-	const next = fakePi();
-	shellUi(next.pi, {});
-	const editor = installedPrompt(ctx, ui, next.handlers);
-	try {
-		assert.notEqual(ui.editorFactory, previousFactory);
-		for (const handler of next.handlers.get("agent_start") ?? []) handler({}, ctx);
-		assert.match(stripAnsi(editor.render(60)[0]), /Working…/);
-	} finally {
-		oldEditor.dispose();
-		editor.dispose();
-	}
-});
 
 const footerData = { getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} };
 
@@ -2037,147 +902,6 @@ function renderFooter(ui: FakeUi): string {
 	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, footerData: unknown) => { render(width: number): string[] };
 	return factory(fakeTui, plainTheme, footerData).render(160)[0];
 }
-
-// T132: a session over a real repository, with the shell's own resolver.
-function realRepoSession(t: { after(fn: () => void): void }) {
-	const dir = realpathSync(mkdtempSync(join(tmpdir(), "changes-ui-")));
-	t.after(() => rmSync(dir, { recursive: true, force: true }));
-	const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-	const repo = join(dir, "app");
-	git(dir, "init", "-q", "--initial-branch=main", repo);
-	writeFileSync(join(repo, "a.txt"), "one\n");
-	git(repo, "add", ".");
-	git(repo, "commit", "-q", "-m", "init");
-	const install = () => {
-		const made = fakePi();
-		shellUi(made.pi, {}, {
-			resolveWorktree: resolveSessionWorktree,
-			rootExists: (root) => existsSync(join(root, ".git")),
-			lddStatus: async () => undefined,
-		});
-		return made;
-	};
-	const session = (cwd = repo, entries: unknown[] = []) => { const made = fakeContext({ entries }); (made.ctx as unknown as { cwd: string }).cwd = cwd; return made; };
-	const registrations = (ctx: ExtensionContext) => (ctx.sessionManager.getEntries() as Array<{ customType?: string; data?: { root?: string; evidence?: string; base?: string } }>).filter((entry) => entry.customType === "jhon-shell.session-worktree/v1").map((entry) => entry.data!);
-	// fakePi's own `git` (its scripted calls) is not this fixture's.
-	return { dir, repo, install, session, registrations, ...install(), git };
-}
-async function waitFor(check: () => boolean): Promise<void> {
-	for (const deadline = Date.now() + 5000; !check(); await new Promise((resolve) => setTimeout(resolve, 10))) if (Date.now() > deadline) throw new Error("timed out waiting");
-}
-
-// T132, GAP-1 (L943): a root read against HEAD with a clean working tree is
-// not "no changes since session start": its commits are not counted. The
-// rail and /jhon:changes say what was compared, and why, root by root.
-const railWords = () => railChanges().replace(/\s+/g, " ");
-
-test("session_worktree_register still registers a worktree of the session's clone, once, with its base", async (t) => {
- const s = realRepoSession(t);
- const linked=join(s.dir,"linked");
- s.git(s.repo,"worktree","add","-q","-b","linked",linked);
- const {ctx}=s.session();
- await fire(s.handlers,"session_start",ctx);
- const register=s.tools.get("session_worktree_register")!;
- const result=await register.execute("r",{path:linked},undefined,undefined,ctx) as { content: Array<{ text: string }>; details: unknown };
- assert.deepEqual(result,{content:[{type:"text",text:`${linked} is now one of this session's worktrees.`}],details:{root:linked,sessionId:"shell-session"}});
- await register.execute("again",{path:linked},undefined,undefined,ctx);
- const head=s.git(s.repo,"rev-parse","HEAD");
- assert.deepEqual(s.registrations(ctx),[{sessionId:"shell-session",root:s.repo,evidence:"session:cwd",base:head},{sessionId:"shell-session",root:linked,evidence:"explicit",base:head}]);
- await fire(s.handlers,"session_shutdown",ctx);
-});
-
-test("a worktree of another clone is still refused, and registers nothing", async (t) => {
- const s = realRepoSession(t);
- const other=join(s.dir,"other");
- s.git(s.dir,"init","-q",other);
- const {ctx}=s.session();
- await fire(s.handlers,"session_start",ctx);
- await assert.rejects(s.tools.get("session_worktree_register")!.execute("r",{path:other},undefined,undefined,ctx),/Name a worktree that exists in this session's own Git clone;/);
- assert.deepEqual(s.registrations(ctx).map((entry) => entry.root),[s.repo]);
- await fire(s.handlers,"session_shutdown",ctx);
-});
-
-test("a turn end never waits for Git", async () => {
- const { pi, handlers } = fakePi();
- (pi as unknown as { exec: () => Promise<never> }).exec = () => new Promise<never>(() => {});
- shellUi(pi,{});
- const {ctx}=fakeContext();
- await fire(handlers,"session_start",ctx);
- await Promise.race([fire(handlers,"agent_end",ctx), new Promise((_, reject) => setTimeout(() => reject(new Error("agent_end waited for Git")), 100))]);
- await fire(handlers,"session_shutdown",ctx);
-});
-
-test("explicit registration validates the clone", async () => {
-	const { pi, handlers, commands, tools } = fakePi();
-	let bootstrapped = false;
-	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, {
-		resolveWorktree: (path) => bootstrapped ? { root: path === "." ? "/repo" : path, commonDir: path === "/foreign" ? "/foreign/git" : "/repo/.git" } : undefined,
-	});
-	const { ctx, ui } = fakeContext();
-	const manager = ctx.sessionManager;
-	await fire(handlers, "session_start", ctx);
-	const register = tools.get("session_worktree_register")!;
-	await assert.rejects(register.execute("before", { path: "/repo" }, undefined, undefined, ctx), /own Git clone/);
-	bootstrapped = true;
-	await register.execute("after", { path: "/repo" }, undefined, undefined, ctx);
-	await register.execute("dedup", { path: "/repo" }, undefined, undefined, ctx);
-	await assert.rejects(register.execute("foreign", { path: "/foreign" }, undefined, undefined, ctx), /own Git clone/);
-	await assert.rejects(register.execute("foreign", { path: "/foreign" }, undefined, undefined, ctx), /another repository cannot be one of its worktrees/);
-	assert.equal(ctx.sessionManager, manager);
-	assert.equal(ctx.sessionManager.getEntries().length, 1);
-	assert.equal(commands.has("jhon:changes"), false, "T174: no changes view");
-	assert.equal(ui.overlay, undefined);
-	await fire(handlers, "session_shutdown", ctx);
-});
-
-test("new sessions do not inherit another session's worktrees", async () => {
- const h=fakePi(); shellUi(h.pi,{});
- const first=fakeContext();
- await fire(h.handlers,"session_start",first.ctx);
- await h.tools.get("session_worktree_register")!.execute("r",{path:"/linked"},undefined,undefined,first.ctx);
- await fire(h.handlers,"session_shutdown",first.ctx);
- const next=fakeContext({entries:[...first.ctx.sessionManager.getEntries()]});
- (next.ctx.sessionManager as any).getSessionId=()=>"new-session";
- await fire(h.handlers,"session_start",next.ctx);
- const roots=(next.ctx.sessionManager.getEntries() as Array<{ customType?: string; data?: { sessionId?: string; root?: string } }>).filter((entry)=>entry.customType==="jhon-shell.session-worktree/v1"&&entry.data?.sessionId==="new-session").map((entry)=>entry.data!.root);
- assert.ok(!roots.includes("/linked"), JSON.stringify(roots));
- await fire(h.handlers,"session_shutdown",next.ctx);
-});
-
-test("openInExternalEditor stops the TUI around the editor and honors $VISUAL over $EDITOR", () => {
-	const events: string[] = [];
-	const host = { stop: () => events.push("stop"), start: () => events.push("start"), requestRender: (force?: boolean) => events.push(`render:${force}`) };
-	const spawn = ((command: string, args: string[]) => {
-		events.push(`spawn:${command} ${args.join(" ")}`);
-		return { status: 0 } as ReturnType<typeof import("node:child_process").spawnSync>;
-	}) as typeof import("node:child_process").spawnSync;
-	assert.equal(openInExternalEditor(host, "lib/a.ts", { VISUAL: "nvim -u none", EDITOR: "vi" }, spawn), undefined);
-	assert.deepEqual(events, ["stop", 'spawn:sh -c nvim -u none "$@" nvim -u none lib/a.ts', "start", "render:true"]);
-	assert.equal(openInExternalEditor(host, "lib/a.ts", {}, spawn), "No editor: set $VISUAL or $EDITOR.");
-});
-
-test("the editor command is read by the shell, so quotes and spaces work, and its failure is reported", { skip: process.platform === "win32" }, () => {
-	const dir = mkdtempSync(join(tmpdir(), "jhon-editor-"));
-	try {
-		const bin = join(dir, "my editor");
-		writeFileSync(bin, `#!/bin/sh\nprintf '%s|' "$@" > "${join(dir, "args")}"\n`);
-		chmodSync(bin, 0o755);
-		const host = { stop() {}, start() {}, requestRender() {} };
-		assert.equal(openInExternalEditor(host, "a file.ts", { EDITOR: `"${bin}" --wait` }, spawnSync, dir), undefined);
-		assert.equal(readFileSync(join(dir, "args"), "utf8"), "--wait|a file.ts|");
-		assert.match(openInExternalEditor(host, "a.ts", { EDITOR: "false" }, spawnSync, dir)!, /The editor \(false\) ended with code 1/);
-	} finally { rmSync(dir, { recursive: true, force: true }); }
-});
-
-test("external editor receives the selected worktree as process cwd", () => {
-	let cwd: string | undefined;
-	const spawn = ((_command: string, _args: string[], options: { cwd?: string }) => {
-		cwd = options.cwd;
-		return { status: 0 };
-	}) as typeof import("node:child_process").spawnSync;
-	openInExternalEditor({ stop() {}, start() {}, requestRender() {} }, "same.ts", { EDITOR: "vi" }, spawn, "/linked");
-	assert.equal(cwd, "/linked");
-});
 
 async function settle(): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, 0));
@@ -2439,7 +1163,7 @@ test("a watch that cannot be made leaves its lane to be read at the next refresh
 // once, at the first session start, what went and why; the shell drops them
 // with `jhon settings migrate` (backed up), so the next start says nothing.
 test("retired settings are dropped once with `jhon settings migrate`, and the owner is told what went and why", async (t) => {
-	const home = scopedDoubleEscCancelConfigHome(t);
+	const home = configHome(t);
 	const jhon = homeSettings(home).jhon;
 	jhon.retired = [
 		{ key: "shell.appearance.card_style", was: "float", why: "the card style is shell.appearance.cards now (float or neon)", now: "shell.appearance.cards = \"float\"" },
@@ -2465,7 +1189,7 @@ test("retired settings are dropped once with `jhon settings migrate`, and the ow
 
 // T15.7: /jhon:customize <section> opens on that section, the focus on its settings.
 test("/jhon:customize keys opens Customize on Keys", async (t) => {
-	const home = scopedDoubleEscCancelConfigHome(t);
+	const home = configHome(t);
 	const { pi, commands } = fakePi();
 	shellUi(pi, { JHON_SHELL_CONFIG_HOME: home });
 	const { ctx, ui } = fakeContext();

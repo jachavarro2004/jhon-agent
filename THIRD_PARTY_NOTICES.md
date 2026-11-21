@@ -15,30 +15,9 @@ from the file named (gentle-pi's paths, at the version given).
 
 Sources:
 
-- `shell/extensions/pretty.ts`: `extensions/pi-pretty.ts` (gentle-pi 4.1.0)
-- `shell/extensions/todo.ts`: `extensions/gentle-todo.ts` (gentle-pi 4.1.0)
-- `shell/extensions/ui.ts`: `extensions/ui.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/append-system-prompt.ts`: `lib/append-system-prompt.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/session-change-capture.ts`: `lib/session-change-capture.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/session-changes.ts`: `lib/session-changes.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/session-worktree-registry.ts`: `lib/session-worktree-registry.ts` (gentle-pi 4.1.0)
-- `shell/lib/todo.ts`: `lib/shell-todo.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/terminal-theme.ts`: `lib/terminal-theme.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/user-directories.ts`: `lib/bounded-writer-admission.ts` (gentle-pi 4.1.0)
 
 Tests:
 
-- `shell/test/card-text.ts`: `tests/gentle-card-text.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-append-system-prompt.test.ts`: `tests/append-system-prompt.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-pretty.test.ts`: `tests/pi-pretty.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-quiet-bash-runtime.test.ts`: `tests/quiet-bash-runtime.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-session-change-capture.test.ts`: `tests/session-change-capture.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-session-changes.test.ts`: `tests/session-changes.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-session-worktree-registry.test.ts`: `tests/session-worktree-registry.test.ts` (gentle-pi 4.1.0)
-- `shell/test/todo-list.test.ts`: `tests/shell-todo.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-shell.test.ts`: `tests/gentle-shell.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-terminal-theme.test.ts`: `tests/terminal-theme.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-todo.test.ts`: `tests/gentle-todo.test.ts` (gentle-pi 4.1.0)
 
 ```text
 MIT License

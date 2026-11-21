@@ -1,9 +1,10 @@
 /**
- * shell/extensions/pretty.ts — pi-pretty (@heyhuynhgiabuu/pi-pretty, MIT:
- * syntax-highlighted reads, diffs, and file trees) under jhon-shell's UI. The
- * render lists the package pinned with every resource filtered out, so pi
- * installs it into `<agent dir>/npm` without loading it; this extension loads
- * it from there and keeps the prompt editor and the working row the UI's.
+ * shell/extensions/pretty.ts: pi-pretty (@heyhuynhgiabuu/pi-pretty, MIT:
+ * highlighted reads, diffs and file trees) under the shell's UI. The render
+ * pins the package with every resource filtered out, so pi installs it into
+ * `<agent dir>/npm` without loading it; this extension loads it from there.
+ * The shell keeps what is its own: the five tools it draws (extensions/quiet.ts),
+ * the prompt editor, the working row and the thinking label.
  */
 import {
 	createBashToolDefinition,
@@ -22,51 +23,77 @@ import { installThinkingLabel } from "../lib/ui/thinking-label.ts";
 
 type PiPrettyExtension = (pi: unknown, deps?: unknown) => unknown;
 
-// jhon-shell's quiet tools (extensions/quiet.ts) draw these; pi-pretty leaves them to it.
-const QUIET_TOOL_NAMES = ["read", "bash", "ls", "find", "grep"] as const;
+/** The tools the shell draws itself (L76): pi-pretty is told to leave them alone. */
+const SHELL_TOOLS = ["read", "bash", "ls", "find", "grep"] as const;
+/** The UI calls that stay the shell's while pi-pretty runs in the TUI. */
+const SHELL_UI = new Set(["setEditorComponent", "setWorkingIndicator", "setWorkingMessage", "setWorkingVisible"]);
 
-function mergeDisabledTools(existing: string | undefined, tools: readonly string[]): string {
-	const disabled = new Set((existing ?? "").split(",").map((tool) => tool.trim().toLowerCase()).filter(Boolean));
-	for (const tool of tools) disabled.add(tool);
-	return [...disabled].join(",");
+/** A comma list of tool names with the shell's added: lower case, without blanks or repeats, the list's own first. */
+function withShellTools(list: string | undefined): string {
+	const names: string[] = [];
+	for (const name of [...(list ?? "").split(","), ...SHELL_TOOLS]) {
+		const tool = name.trim().toLowerCase();
+		if (tool && !names.includes(tool)) names.push(tool);
+	}
+	return names.join(",");
 }
 
-/** pi-pretty's extension as pi installed it under `<agent dir>/npm`, or undefined when it is not installed. */
+/** pi-pretty's extension as pi installed it under `<agent dir>/npm`, or undefined when it is not there. */
 export async function loadPiPretty(agentDir: string): Promise<PiPrettyExtension | undefined> {
 	const root = join(agentDir, "npm", "node_modules", "@heyhuynhgiabuu", "pi-pretty");
-	let entry: string;
+	let entry: unknown;
 	try {
-		const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-		entry = manifest?.pi?.extensions?.[0];
-		if (typeof entry !== "string") return undefined;
+		entry = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))?.pi?.extensions?.[0];
 	} catch {
 		return undefined;
 	}
-	const module = await import(pathToFileURL(join(root, entry)).href);
-	const extension: unknown = typeof module === "function" ? module : module.default;
+	if (typeof entry !== "string") return undefined;
+	const loaded = await import(pathToFileURL(join(root, entry)).href);
+	const extension: unknown = typeof loaded === "function" ? loaded : loaded.default;
 	if (typeof extension !== "function") throw new TypeError("pi-pretty must export an extension function");
 	return extension as PiPrettyExtension;
 }
 
-// pi-pretty keeps its FFF database under deps.sdk.getAgentDir(), else
-// $HOME/.pi/agent. Under `jhon start pi` it gets Jhon's agent dir; a deps.sdk
-// also replaces the host tool factories it would otherwise import, so the same
-// five come along. A host that passes its own sdk keeps it.
-function withAgentDir(deps: unknown, env: NodeJS.ProcessEnv): unknown {
+/**
+ * pi-pretty keeps its file index under deps.sdk.getAgentDir(), and under
+ * $HOME/.pi/agent without one. Under `jhon start pi` it gets Jhon's agent
+ * dir; since a deps.sdk also takes the place of the tool factories it would
+ * import, the same five come with it. A host that passes its own sdk keeps it.
+ */
+function depsWithAgentDir(deps: unknown, env: NodeJS.ProcessEnv): unknown {
 	const agentDir = env.PI_CODING_AGENT_DIR;
 	const given = (deps ?? {}) as { sdk?: unknown };
 	if (!agentDir || given.sdk !== undefined) return deps;
-	return {
-		...given,
-		sdk: {
-			createReadToolDefinition,
-			createBashToolDefinition,
-			createLsToolDefinition,
-			createFindToolDefinition,
-			createGrepToolDefinition,
-			getAgentDir: () => agentDir,
-		},
+	const sdk = { createReadToolDefinition, createBashToolDefinition, createLsToolDefinition, createFindToolDefinition, createGrepToolDefinition, getAgentDir: () => agentDir };
+	return { ...given, sdk };
+}
+
+/** In the TUI, a context whose UI ignores the calls that are the shell's. */
+function withShellUi(ctx: ExtensionContext): ExtensionContext {
+	if (ctx.mode !== "tui") return ctx;
+	const ui = new Proxy(ctx.ui, { get: (target, name) => (SHELL_UI.has(String(name)) ? () => {} : Reflect.get(target, name)) });
+	return new Proxy(ctx, { get: (target, name) => (name === "ui" ? ui : Reflect.get(target, name)) });
+}
+
+/** pi's API as pi-pretty sees it: the same, except that its handlers get withShellUi's context. */
+function apiForPretty(api: ExtensionAPI): ExtensionAPI {
+	type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
+	const on = (event: Parameters<ExtensionAPI["on"]>[0], handler: Handler) => {
+		api.on(event, ((payload: unknown, ctx: ExtensionContext) => handler(payload, withShellUi(ctx))) as never);
 	};
+	return new Proxy(api, { get: (target, name) => (name === "on" ? on : Reflect.get(target, name)) });
+}
+
+/** Runs `fn` with an environment variable set, and puts the variable back as it was. */
+async function withEnv<T>(name: string, value: string, fn: () => Promise<T> | T): Promise<T> {
+	const before = process.env[name];
+	process.env[name] = value;
+	try {
+		return await fn();
+	} finally {
+		if (before === undefined) delete process.env[name];
+		else process.env[name] = before;
+	}
 }
 
 export default async function jhonPretty(
@@ -75,46 +102,20 @@ export default async function jhonPretty(
 	upstream?: PiPrettyExtension,
 	env: NodeJS.ProcessEnv = process.env,
 ): Promise<unknown> {
-	// A sub-agent has no transcript to prettify, and pi-pretty would index files in every child.
+	// A sub-agent has no transcript to dress, and pi-pretty would index files in every child.
 	if (env.JHON_PI_CHILD === "1") return undefined;
-	// The thinking row's label is the shell's, with or without pi-pretty (lib/ui/thinking-label.ts).
+	// The thinking row's label is the shell's, with pi-pretty or without (lib/ui/thinking-label.ts).
 	installThinkingLabel(pi as ExtensionAPI, env);
 	const extension = upstream ?? (env.PI_CODING_AGENT_DIR ? await loadPiPretty(env.PI_CODING_AGENT_DIR) : undefined);
 	if (!extension) return undefined;
-	// The shell always draws these tools (L76): pi-pretty never registers its own.
-	process.env.PRETTY_DISABLE_TOOLS = mergeDisabledTools(process.env.PRETTY_DISABLE_TOOLS, QUIET_TOOL_NAMES);
-	deps = withAgentDir(deps, env);
-	if (!shellEnabled(env)) return extension(pi, deps);
+	process.env.PRETTY_DISABLE_TOOLS = withShellTools(process.env.PRETTY_DISABLE_TOOLS);
+	const prettyDeps = depsWithAgentDir(deps, env);
+	if (!shellEnabled(env)) return extension(pi, prettyDeps);
 	const api = pi as ExtensionAPI;
-	// Its tools, autocomplete, and status pass through; the prompt editor and the
-	// working row stay the shell UI's, which also blocks stale restores.
-	const owned = new Set(["setEditorComponent", "setWorkingIndicator", "setWorkingMessage", "setWorkingVisible"]);
-	const delegated = new Proxy(api, {
-		get(target, key) {
-			if (key !== "on") return Reflect.get(target, key);
-			return (event: Parameters<ExtensionAPI["on"]>[0], handler: (event: unknown, ctx: ExtensionContext) => unknown) => {
-				api.on(event, ((event: unknown, ctx: ExtensionContext) => {
-					if (ctx.mode !== "tui") return handler(event, ctx);
-					const ui = new Proxy(ctx.ui, { get: (target, key) => owned.has(String(key)) ? () => {} : Reflect.get(target, key) });
-					return handler(event, new Proxy(ctx, { get: (target, key) => key === "ui" ? ui : Reflect.get(target, key) }));
-				}) as never);
-			};
-		},
-	});
-	// pi-pretty's hidden-thinking animation is global and can animate every
-	// historical Thinking row; the shell keeps collapsed labels static, its own
-	// `▸ Thinking…` (lib/ui/thinking-label.ts).
-	const previousThinkingIndicator = process.env.PRETTY_THINKING_INDICATOR;
-	process.env.PRETTY_THINKING_INDICATOR = "off";
-	let result: unknown;
-	try {
-		result = await extension(delegated, deps);
-	} finally {
-		if (previousThinkingIndicator === undefined) delete process.env.PRETTY_THINKING_INDICATOR;
-		else process.env.PRETTY_THINKING_INDICATOR = previousThinkingIndicator;
-	}
-	// The prompt frame carries the live working state, so pi's separate loader
-	// row would repeat it.
+	// pi-pretty's animated thinking indicator is global and would move every
+	// old Thinking row; the shell's label stays still (lib/ui/thinking-label.ts).
+	const result = await withEnv("PRETTY_THINKING_INDICATOR", "off", () => extension(apiForPretty(api), prettyDeps));
+	// The prompt frame shows the working state, so pi's own loader row would say it twice.
 	api.on("session_start", (_event, ctx) => {
 		if (ctx.mode === "tui") ctx.ui.setWorkingVisible(false);
 	});

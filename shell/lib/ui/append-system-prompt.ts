@@ -1,44 +1,52 @@
-// pi-claude-bridge only forwards the structured
-// systemPromptOptions parts of before_agent_start, dropping any
-// handler-returned replacement systemPrompt. Extensions mutate
-// options.appendSystemPrompt instead so the harness reaches every provider.
+/**
+ * How the shell's extensions add their text to the system prompt. They never
+ * return a replacement prompt from before_agent_start: a provider bridge
+ * (pi-claude-bridge) passes on only the structured systemPromptOptions parts,
+ * so each extension writes into those options instead.
+ *
+ * Both helpers add a block once: a handler that runs again on the same
+ * options object leaves it as it is. A block loses its leading newlines and
+ * follows what is already there after one blank line.
+ */
+
 export interface AppendableSystemPromptOptions {
 	appendSystemPrompt: string;
 }
 
-// Safe to call more than once with the same options object and the same
-// text: a text already present is a no-op, so a handler that runs more than
-// once against the same systemPromptOptions never duplicates its own block.
-export function appendSystemPromptOnce(
-	options: AppendableSystemPromptOptions | null | undefined,
-	text: string,
-): void {
-	const normalized = text.replace(/^\n+/, "");
-	if (!options || !normalized) return;
-	const current = options.appendSystemPrompt ?? "";
-	if (current.includes(normalized)) return;
-	options.appendSystemPrompt = current ? `${current}\n\n${normalized}` : normalized;
+/** The block as it is added: without its leading newlines. */
+const asBlock = (text: string) => text.replace(/^\n+/, "");
+
+/** `current` with `block` after it, or undefined when it already holds the block. */
+function withBlock(current: string, block: string): string | undefined {
+	if (current.includes(block)) return undefined;
+	return current === "" ? block : `${current}\n\n${block}`;
 }
 
-// T45b: the custom section pi renders after the appended prompt (pi's builder
-// puts custom sections last; pi-claude-bridge forwards them after the append
-// too). Text that changes per run or per owner message goes here, so the
-// appended prompt, and the cached prefix up to it, stays byte-identical.
+/** Adds `text` to the appended prompt, the part every provider receives. */
+export function appendSystemPromptOnce(options: AppendableSystemPromptOptions | null | undefined, text: string): void {
+	const block = asBlock(text);
+	if (!options || block === "") return;
+	const next = withBlock(options.appendSystemPrompt ?? "", block);
+	if (next !== undefined) options.appendSystemPrompt = next;
+}
+
+/**
+ * The prompt section that changes per run or per owner message (T45b). pi
+ * draws custom sections after the appended prompt, and pi-claude-bridge
+ * passes them on after it, so text that varies goes here and the appended
+ * prompt, with the cached prefix that ends at it, never changes.
+ */
 export const SESSION_SECTION = "jhon_session";
 
 export interface SectionedSystemPromptOptions {
 	sections?: Record<string, string>;
 }
 
-/** text appended once to the session section, as appendSystemPromptOnce does to the appended prompt. */
-export function appendSessionOnce(
-	options: SectionedSystemPromptOptions | null | undefined,
-	text: string,
-): void {
-	const normalized = text.replace(/^\n+/, "");
-	if (!options || !normalized) return;
-	options.sections ??= {};
-	const current = options.sections[SESSION_SECTION] ?? "";
-	if (current.includes(normalized)) return;
-	options.sections[SESSION_SECTION] = current ? `${current}\n\n${normalized}` : normalized;
+/** Adds `text` to the session section, once, as appendSystemPromptOnce does to the appended prompt. */
+export function appendSessionOnce(options: SectionedSystemPromptOptions | null | undefined, text: string): void {
+	const block = asBlock(text);
+	if (!options || block === "") return;
+	const sections = (options.sections ??= {});
+	const next = withBlock(sections[SESSION_SECTION] ?? "", block);
+	if (next !== undefined) sections[SESSION_SECTION] = next;
 }

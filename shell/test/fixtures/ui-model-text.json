@@ -1,0 +1,69 @@
+{
+	"definition": {
+		"name": "session_worktree_register",
+		"label": "Add a session worktree",
+		"description": "Add a worktree of this Git clone to the session: the LDD section reads the change there too.",
+		"parameters": {
+			"type": "object",
+			"required": [
+				"path"
+			],
+			"additionalProperties": false,
+			"properties": {
+				"path": {
+					"type": "string",
+					"description": "Worktree path to include in this session."
+				}
+			}
+		},
+		"renderShell": "self",
+		"promptSnippet": null,
+		"promptGuidelines": null
+	},
+	"calls": [
+		{
+			"error": "This session has no worktree list yet."
+		},
+		{
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "/repo-b is now one of this session's worktrees."
+					}
+				],
+				"details": {
+					"root": "/repo-b",
+					"sessionId": "s1"
+				}
+			}
+		},
+		{
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "/repo-b is now one of this session's worktrees."
+					}
+				],
+				"details": {
+					"root": "/repo-b",
+					"sessionId": "s1"
+				}
+			}
+		},
+		{
+			"error": "Name a worktree that exists in this session's own Git clone; a folder of another repository cannot be one of its worktrees."
+		},
+		{
+			"error": "Name a worktree that exists in this session's own Git clone; a folder of another repository cannot be one of its worktrees."
+		},
+		{
+			"error": "This session has no worktree list yet."
+		}
+	],
+	"appended": [
+		"jhon-shell.session-worktree/v1",
+		"jhon-shell.session-worktree/v1"
+	]
+}

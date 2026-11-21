@@ -168,17 +168,23 @@ test("the overlay: Subscriptions, each provider's windows with meter, % and rese
 	});
 	const rows = overlay.render(80).map(stripAnsi);
 	assert.ok(rows.every((row) => visibleWidth(row) === 80), "every row exactly the width");
+	// The shell's card (overlay.ts): the title and esc on its first row, the body two cells in.
 	assert.match(rows[0]!, /^╭─+╮$/);
-	assert.match(rows[1]!, /^│ Subscriptions +│$/);
-	assert.match(rows[3]!, /^│ 力 anthropic · updated just now +│$/);
-	assert.match(rows[4]!, /^│ {3}claude 5h +▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱ +12% · resets in 3h 0m +│$/);
-	assert.match(rows[5]!, /^│ {3}claude week +▰{13}▱{3} +84% · resets in 2d 0h +│$/);
-	assert.match(rows[6]!, /^│ {3}⊘ anthropic is at 84% of claude week; resets in 2d\. +│$/);
-	assert.match(rows[7]!, /^│ openai-codex · usage arrives with the first reply +│$/);
-	assert.match(rows.at(-2)!, /^│ r refresh {2}esc close +│$/);
+	assert.match(rows[1]!, /^│ Subscriptions +esc │$/);
+	assert.match(rows[2]!, /^│ +│$/, "no refresh running: an empty row");
+	assert.match(rows[3]!, /^│ {2}力 anthropic · updated just now +│$/);
+	assert.match(rows[4]!, /^│ {4}claude 5h +▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱ +12% · resets in 3h 0m +│$/);
+	assert.match(rows[5]!, /^│ {4}claude week +▰{13}▱{3} +84% · resets in 2d 0h +│$/);
+	assert.match(rows[6]!, /^│ {4}⊘ anthropic is at 84% of claude week; resets in 2d\. +│$/);
+	assert.match(rows[7]!, /^│ {2}openai-codex · usage arrives with the first reply +│$/);
+	assert.match(rows.at(-2)!, /^│ {2}r refresh {2}esc close +│$/);
 	assert.match(rows.at(-1)!, /^╰─+╯$/);
 	overlay.handleInput("r");
+	const refreshing = overlay.render(80).map(stripAnsi);
+	assert.match(refreshing[2]!, /^│ {2}refreshing… +│$/, "while it refreshes, the row under the title says so");
+	assert.equal(refreshing.length, rows.length, "and the card keeps its height");
 	await new Promise((resolve) => setImmediate(resolve));
+	assert.match(overlay.render(80).map(stripAnsi)[2]!, /^│ +│$/);
 	assert.equal(refreshed, 1);
 	overlay.handleInput("q");
 	overlay.handleInput("\x1b");
@@ -346,16 +352,18 @@ test("the overlay's key hints are controls: the pointer paints one, a click does
 	const tagged = { ...plainTheme, fg: (role: string, text: string) => (role === "warning" ? `«${text}»` : text) };
 	const overlay = new UsageOverlay({ tracker, now: () => NOW, theme: tagged, scope: () => [], active: () => undefined, refresh: async () => { refreshed++; }, close: () => { closed++; }, requestRender() {} });
 	const hints = overlay.render(80).length - 2;
-	assert.equal(stripAnsi(overlay.render(80)[hints]!).trim(), "│ r refresh  esc close                                                         │".trim());
-	assert.deepEqual(overlay.handleMouse({ type: "move", button: "none", x: 13, y: hints } as never), { handled: true, render: true });
-	assert.match(stripAnsi(overlay.render(80)[hints]!), /^│ r refresh {2}«esc» «close» +│$/, "esc close under the pointer");
+	assert.match(stripAnsi(overlay.render(80)[hints]!), /^│ {2}r refresh {2}esc close +│$/);
+	// The body starts three cells in: `r` at x 3, `esc` at x 14.
+	assert.equal(overlay.handleMouse({ type: "move", button: "none", x: 13, y: hints } as never), undefined, "the gap between the hints is no hint");
+	assert.deepEqual(overlay.handleMouse({ type: "move", button: "none", x: 14, y: hints } as never), { handled: true, render: true });
+	assert.match(stripAnsi(overlay.render(80)[hints]!), /^│ {2}r refresh {2}«esc» «close» +│$/, "esc close under the pointer");
 	assert.deepEqual(overlay.handleMouse({ type: "press", button: "left", x: 3, y: hints } as never), { handled: true }, "it takes the press, so pi makes the click");
 	overlay.handleMouse({ type: "click", button: "left", x: 3, y: hints } as never);
 	await new Promise((resolve) => setImmediate(resolve));
 	assert.equal(refreshed, 1, "r refresh refreshes");
-	overlay.handleMouse({ type: "click", button: "left", x: 14, y: hints } as never);
+	overlay.handleMouse({ type: "click", button: "left", x: 15, y: hints } as never);
 	assert.equal(closed, 1, "esc close closes");
-	assert.equal(overlay.handleMouse({ type: "click", button: "left", x: 30, y: hints } as never), undefined, "past the hints, nothing");
+	assert.equal(overlay.handleMouse({ type: "click", button: "left", x: 31, y: hints } as never), undefined, "past the hints, nothing");
 	overlay.handleMouse({ type: "move", button: "none", x: 30, y: 1 } as never);
 	assert.doesNotMatch(stripAnsi(overlay.render(80)[hints]!), /«/, "off the hints, none painted");
 });
@@ -380,7 +388,7 @@ test("T149: the overlay's providers follow a session-only profile's sub-agent mo
 	const providers = async () => {
 		void commands.get("jhon:usage")!.handler("", ctx);
 		await new Promise((resolve) => setTimeout(resolve, 20));
-		return ui.overlay!.render(100).map(stripAnsi).filter((row) => /^│ (力 )?[a-z]/.test(row) && !/Subscriptions|refresh/.test(row)).map((row) => row.slice(2).replace(/^力 /, "").split(" ")[0]);
+		return ui.overlay!.render(100).map(stripAnsi).filter((row) => /^│ {2}(力 )?[a-z]/.test(row) && !/Subscriptions|refresh/.test(row)).map((row) => row.slice(3).replace(/^力 /, "").split(" ")[0]);
 	};
 	assert.deepEqual(await providers(), ["openai-codex", "anthropic"], "the default: the agent file's model");
 	profile = "jhon-nan";
