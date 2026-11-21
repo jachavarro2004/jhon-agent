@@ -321,3 +321,23 @@ func TestPostToolUsePointerRoutes(t *testing.T) {
 		}
 	}
 }
+
+// T192 fix round (L11): a session that started full gets no pointer at a
+// later change moment, and a file_path relative to the session's folder
+// under the changes folder still points.
+func TestChangeMomentAfterAFullStartAndRelativePath(t *testing.T) {
+	_, full := leanHome(t)
+	repo := changeRepo(t, true)
+	sessionStart(t, repo, "startup") // session s-start, given the full context
+	proposal := map[string]any{"file_path": filepath.Join(repo, "openspec/changes/c1/proposal.md"), "content": "## Why\n"}
+	if out := postToolUseIn(t, "s-start", repo, "Write", proposal, map[string]any{}); out != "" {
+		t.Errorf("a session that started full got the pointer: %q", out)
+	}
+	if out := postToolUseIn(t, "s-start", repo, "Bash", map[string]any{"command": "git switch feat/c1"}, map[string]any{}); out != "" {
+		t.Errorf("a session that started full got the pointer: %q", out)
+	}
+	got := postToolUseIn(t, "s-relative", repo, "Write", map[string]any{"file_path": "openspec/changes/c1/proposal.md", "content": "## Why\n"}, map[string]any{})
+	if !strings.Contains(got, full) || !strings.Contains(got, "this change is not small") {
+		t.Errorf("a relative file_path: want the pointer to %s, got %q", full, got)
+	}
+}

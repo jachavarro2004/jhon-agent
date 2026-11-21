@@ -817,6 +817,35 @@ func TestPiVerifyVerdictFromABackgroundNotice(t *testing.T) {
 	eq(t, "another task's notice: verdicts", other.Verdicts, [3]int{0, 0, 1})
 }
 
+// T192 S8: a background answer read with task_result after its notice was lost is no unfinished agent.
+func TestPiBackgroundAnswerReadThroughTaskResult(t *testing.T) {
+	task := "Verify openspec/changes/" + chg + "/ against its specs"
+	started := "Started background sub-agent agent-1 (jhon-checker). Its answer arrives as a message when it finishes; task_result reads it, task_stop cancels it."
+	read := pmain(pcall{name: "task_result", args: js.Obj("id", "agent-1"), result: "Background sub-agent agent-1 (jhon-checker) completed after 2m 10s.\n\nverdict: pass\n\nEvery scenario holds."})
+	o := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started), preply("No notification arrived; reading its result."), read), chg)
+	eq(t, "task_result unfinished", o.Unfinished, 0)
+	eq(t, "task_result verdicts", o.Verdicts, [3]int{1, 0, 0})
+	// A task_result that says the agent is still running is no answer.
+	running := pmain(pcall{name: "task_result", args: js.Obj("id", "agent-1"), result: "Background sub-agent agent-1 (jhon-checker) is running (1m 5s).\nRecent activity:\nverdict: pass"})
+	r := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started), running), chg)
+	eq(t, "running unfinished", r.Unfinished, 1)
+	eq(t, "running verdicts", r.Verdicts, [3]int{0, 0, 1})
+	// Another task's result answers nothing for this launch.
+	other := pmain(pcall{name: "task_result", args: js.Obj("id", "agent-9"), result: "Background sub-agent agent-9 (jhon-checker) completed after 2m.\n\nverdict: pass"})
+	x := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started), other), chg)
+	eq(t, "another task unfinished", x.Unfinished, 1)
+}
+
+// T196 D1: a pi background launch is no completion: a builder whose answer
+// never came, launched again, is unfinished and a relaunch.
+func TestPiBackgroundLaunchIsNotCompletion(t *testing.T) {
+	launch := "Started background sub-agent agent-1 (jhon-builder). Its answer arrives as a message when it finishes; task_result reads it, task_stop cancels it."
+	task := "Apply openspec/changes/" + chg + "/ task 1.1.\n\n## Allowed edit surfaces\n- a.txt"
+	x := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("jhon-builder", task, launch), psub("jhon-builder", task, "done")), chg)
+	eq(t, "unfinished", x.Unfinished, 1)
+	eq(t, "relaunches", x.Relaunches, 1)
+}
+
 // An agent that ran into its turn cap (a call refused with pi's «you have
 // spent your N turns») did not finish: it counts as unfinished, and a verify
 // cut there keeps the report's provisional fail, which is no verdict.

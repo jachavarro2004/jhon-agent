@@ -114,11 +114,13 @@ var (
 	noticeExit    = lazyre.New(`\bexited with code (-?\d+)\b`)
 	noticeCommand = lazyre.New(`(?m)^Command: (.*)$`)
 	// A background sub-agent's launch result names its task (its details
-	// carry it as `task`), and its end notice opens with the same task
-	// (details jhonTasks.id, kind agent), its answer after a blank line
-	// (shell/lib/background-tasks-tools.ts taskText).
+	// carry it as `task`), and its end notice, or task_result's answer once
+	// it ended, opens with the same task (details jhonTasks.id, kind agent)
+	// and how it ended, its answer after a blank line
+	// (shell/lib/background-tasks-tools.ts taskText); one still running is
+	// no answer.
 	agentStarted = lazyre.New(`^Started background sub-agent (\S+) \(`)
-	agentEnded   = lazyre.New(`^Background sub-agent (\S+) \(`)
+	agentEnded   = lazyre.New(`^Background sub-agent (\S+) \([^)\n]*\) (?:completed|failed|was stopped)\b`)
 )
 
 // startedTask is the background task a subagent call's result says it
@@ -133,8 +135,9 @@ func startedTask(text string, details any) string {
 	return ""
 }
 
-// endedAgent is the background sub-agent task a jhon-tasks.notice says ended,
-// and its answer; "" for a job's or a monitor's notice.
+// endedAgent is the background sub-agent task a jhon-tasks.notice or a
+// task_result says ended, and its answer; "" for a job's or a monitor's, or
+// for an agent still running.
 func endedAgent(text string, details any) (task, answer string) {
 	m := agentEnded.FindStringSubmatch(text)
 	if m == nil {
@@ -142,7 +145,9 @@ func endedAgent(text string, details any) (task, answer string) {
 	}
 	task = m[1]
 	if d := prop(details, "jhonTasks"); js.Truthy(d) {
-		if kind, _ := strProp(d, "kind"); kind != "agent" {
+		kind, _ := strProp(d, "kind")
+		status, _ := strProp(d, "status")
+		if kind != "agent" || status == "running" {
 			return "", ""
 		}
 		if id, _ := strProp(d, "id"); id != "" {
@@ -509,6 +514,12 @@ func readPiSession(file, rel string) piRead {
 			if tool == "subagent" && !isErr {
 				if task := startedTask(shown, prop(msg, "details")); task != "" {
 					launched[task] = id
+				}
+			}
+			// T192 S8: an answer read with task_result, its notice lost, delivers its launch as the notice would.
+			if tool == "task_result" && !isErr {
+				if task, answer := endedAgent(shown, prop(msg, "details")); launched[task] != "" {
+					e.delivers, e.delivery = launched[task], answer
 				}
 			}
 			mapped, _ := piInput(tool, nil)
