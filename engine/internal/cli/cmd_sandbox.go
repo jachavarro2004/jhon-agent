@@ -165,6 +165,10 @@ func sandboxRun(argv []string) (int, error) {
 	}
 	in := sandboxInput(pinned)
 	bwrap, p := sandbox.Check(sandbox.ThisHost(), in)
+	if p == nil && os.Getenv("JHON_SETTINGS") != "" {
+		// A settings file the sandbox could write runs nothing (S9).
+		p = sandbox.SettingsFile(in, settings.Path())
+	}
 	if p != nil {
 		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
 		return sandboxRefused, nil
