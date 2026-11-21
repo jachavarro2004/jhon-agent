@@ -1,6 +1,6 @@
 // The corrections of the first independent verify (T128a, L888,
 // odd/proposals/t128a-verify-1.md, F1 to F7): what a sandboxed command wrote
-// decides nothing about the next start, the delivery variables stay out of a
+// decides nothing about the next start, the credential variables stay out of a
 // work command, and the snapshots and the session's sockets are not there.
 package sandbox
 
@@ -271,63 +271,49 @@ func TestAListedWorktreeIsWritableFromTheMainOne(t *testing.T) {
 	}
 }
 
-// deliveryVariables are the variables that carry what the delivery profile
-// shows: the tokens, the agent socket and the programs that ask for a secret.
-var deliveryVariables = []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "SSH_AUTH_SOCK", "GIT_ASKPASS", "SSH_ASKPASS"}
+// credentialVariables are the variables that carry a credential: the
+// tokens, the agent socket and the programs that ask for a secret.
+var credentialVariables = []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "SSH_AUTH_SOCK", "GIT_ASKPASS", "SSH_ASKPASS"}
 
-// withDeliveryVariables is a box with every delivery variable set, and one
-// that is none of them.
-func withDeliveryVariables(t *testing.T) box {
+// withCredentialVariables is a box with every credential variable set, and
+// one that is none of them.
+func withCredentialVariables(t *testing.T) box {
 	t.Helper()
 	extra := []string{"JHON_TEST_OTHER=kept"}
-	for _, v := range deliveryVariables {
+	for _, v := range credentialVariables {
 		extra = append(extra, v+"=ghp_FAKE-example")
 	}
 	return newBox(t, extra...)
 }
 
-// printVariables prints each delivery variable as name=value, or name=none.
+// printVariables prints each credential variable as name=value, or name=none.
 const printVariables = `for v in GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN SSH_AUTH_SOCK GIT_ASKPASS SSH_ASKPASS JHON_TEST_OTHER; do eval "echo $v=\${$v-none}"; done`
 
-// Masking hides the credential files; the delivery variables that carry the
-// same secrets must not be handed to a work command either (T128a, G1, F4).
-func TestDeliveryVariablesDoNotReachAWorkCommand(t *testing.T) {
-	b := withDeliveryVariables(t)
+// Masking hides the credential files; the variables that carry the same
+// secrets must not be handed to a work command either (T128a, G1, F4).
+func TestCredentialVariablesDoNotReachAWorkCommand(t *testing.T) {
+	b := withCredentialVariables(t)
 	r := b.sh(t, b.proj, "", printVariables)
 	if strings.Contains(r.Stdout, "FAKE-example") {
-		t.Errorf("a work command read a delivery variable: %q", r.Stdout)
+		t.Errorf("a work command read a credential variable: %q", r.Stdout)
 	}
 	want := ""
-	for _, v := range deliveryVariables {
+	for _, v := range credentialVariables {
 		want += v + "=none\n"
 	}
 	if want += "JHON_TEST_OTHER=kept\n"; r.Code != 0 || r.Stdout != want {
-		t.Errorf("exit %d, stdout %q, stderr %q; want each delivery variable unset and the rest kept", r.Code, r.Stdout, r.Stderr)
-	}
-}
-
-// The delivery profile keeps them: a push authenticates (F4, D4).
-func TestDeliveryVariablesReachADeliveryCommand(t *testing.T) {
-	b := withDeliveryVariables(t)
-	want := ""
-	for _, v := range deliveryVariables {
-		want += v + "=ghp_FAKE-example\n"
-	}
-	if r := b.sh(t, b.proj, "delivery", printVariables); r.Code != 0 || r.Stdout != want+"JHON_TEST_OTHER=kept\n" {
-		t.Errorf("exit %d, stdout %q, stderr %q; want every delivery variable kept", r.Code, r.Stdout, r.Stderr)
+		t.Errorf("exit %d, stdout %q, stderr %q; want each credential variable unset and the rest kept", r.Code, r.Stdout, r.Stderr)
 	}
 }
 
 // A snapshot folder is a second copy of the home, credentials included: it
-// is there, empty and read-only, in both profiles (F5).
+// is there, empty and read-only (F5).
 func TestASnapshotFolderIsHidden(t *testing.T) {
 	b := newBox(t)
 	support.Write(t, b.home, map[string]string{".snapshots/1/snapshot/home/u/.netrc": secret + "\n"})
-	for _, profile := range []string{"work", "delivery"} {
-		r := b.sh(t, b.proj, profile, `ls -A "$HOME/.snapshots" | wc -l; grep -rs FAKE-SECRET "$HOME/.snapshots"; echo x > "$HOME/.snapshots/new"`)
-		if strings.Contains(r.Out(), secret) || strings.TrimSpace(r.Stdout) != "0" || !readOnly(r) || exists(filepath.Join(b.home, ".snapshots", "new")) {
-			t.Errorf("%s: exit %d, stdout %q, stderr %q; want the folder empty and read-only", profile, r.Code, r.Stdout, r.Stderr)
-		}
+	r := b.sh(t, b.proj, "work", `ls -A "$HOME/.snapshots" | wc -l; grep -rs FAKE-SECRET "$HOME/.snapshots"; echo x > "$HOME/.snapshots/new"`)
+	if strings.Contains(r.Out(), secret) || strings.TrimSpace(r.Stdout) != "0" || !readOnly(r) || exists(filepath.Join(b.home, ".snapshots", "new")) {
+		t.Errorf("exit %d, stdout %q, stderr %q; want the folder empty and read-only", r.Code, r.Stdout, r.Stderr)
 	}
 }
 
@@ -343,8 +329,8 @@ func listen(t *testing.T, path string) {
 }
 
 // The runtime dir is a private one: empty but for the container sockets,
-// writable, mode 0700, and nothing written in it reaches the real one. The
-// delivery profile shows the agent socket in it too (F6).
+// writable, mode 0700, and nothing written in it reaches the real one: the
+// agent socket is not there (F6).
 func TestTheRuntimeDirIsPrivateAndShowsOnlyTheContainerSockets(t *testing.T) {
 	b := newBox(t)
 	run := filepath.Join(b.base, "run")
@@ -358,10 +344,6 @@ func TestTheRuntimeDirIsPrivateAndShowsOnlyTheContainerSockets(t *testing.T) {
 	if want := "700\n./docker.sock\n./podman\n./podman/podman.sock\nx\nsockets\n"; r.Code != 0 || r.Stdout != want {
 		t.Errorf("work: exit %d, stdout %q, stderr %q; want %q", r.Code, r.Stdout, r.Stderr, want)
 	}
-	r = b.sh(t, b.proj, "delivery", look+` && test -S "$SSH_AUTH_SOCK" && echo agent`)
-	if want := "700\n./agent.sock\n./docker.sock\n./podman\n./podman/podman.sock\nx\nsockets\nagent\n"; r.Code != 0 || r.Stdout != want {
-		t.Errorf("delivery: exit %d, stdout %q, stderr %q; want %q", r.Code, r.Stdout, r.Stderr, want)
-	}
 	if exists(filepath.Join(run, "new")) {
 		t.Error("a file written in the private runtime dir reached the real one")
 	}
@@ -373,11 +355,9 @@ func TestTheRuntimeDirIsPrivateAndShowsOnlyTheContainerSockets(t *testing.T) {
 func TestTheXAuthorityFileIsHidden(t *testing.T) {
 	b := newBox(t)
 	support.Write(t, b.home, map[string]string{".Xauthority": secret + "\n"})
-	for _, profile := range []string{"work", "delivery"} {
-		r := b.sh(t, b.proj, profile, `cat "$HOME/.Xauthority"; echo x >> "$HOME/.Xauthority"`)
-		if strings.Contains(r.Out(), secret) || support.Read(t, filepath.Join(b.home, ".Xauthority")) != secret+"\n" {
-			t.Errorf("%s: exit %d, %q; want the file empty inside and as it was on disk", profile, r.Code, r.Out())
-		}
+	r := b.sh(t, b.proj, "work", `cat "$HOME/.Xauthority"; echo x >> "$HOME/.Xauthority"`)
+	if strings.Contains(r.Out(), secret) || support.Read(t, filepath.Join(b.home, ".Xauthority")) != secret+"\n" {
+		t.Errorf("exit %d, %q; want the file empty inside and as it was on disk", r.Code, r.Out())
 	}
 }
 
@@ -513,7 +493,7 @@ func TestProjectTakesOnlyAFolderAProjectMayBe(t *testing.T) {
 	b := newBox(t)
 	support.Write(t, b.proj, map[string]string{"file.txt": "x\n"})
 	marker := filepath.Join(b.proj, "ran.txt")
-	usage := "usage: jhon sandbox run [--profile work|delivery] [--project <folder>] -- <program> [args...]\n       jhon sandbox status [--json] [--project <folder>]\n"
+	usage := "usage: jhon sandbox run [--profile work] [--project <folder>] -- <program> [args...]\n       jhon sandbox status [--json] [--project <folder>]\n"
 	for _, bad := range []string{"relative", filepath.Join(b.base, "missing"), "/", b.home, filepath.Dir(b.home), filepath.Join(b.proj, "file.txt"), ""} {
 		want := "jhon sandbox: --project takes an absolute folder that exists and is not /, the home folder or one above it: " + bad + "\n\n" + usage
 		for _, args := range [][]string{

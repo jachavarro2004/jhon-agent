@@ -27,18 +27,14 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
-// The profiles (design section 4, D4).
-const (
-	Work     = "work"     // the default
-	Delivery = "delivery" // work, plus ~/.ssh, ~/.config/gh, the SSH agent socket and the delivery variables
-)
-
-// Profiles are the profiles, the default first.
-var Profiles = []string{Work, Delivery}
+// Work is bubblewrap's one profile (design section 4, D4). The delivery
+// profile, which showed ~/.ssh, ~/.config/gh and the SSH agent socket, had
+// no caller and is gone (T181, L1503): git over SSH and gh run with no
+// sandbox, on a line of their own (ProfileFor).
+const Work = "work"
 
 // Input is everything the arguments depend on.
 type Input struct {
-	Profile string
 	// Cwd is where the program starts.
 	Cwd string
 	// Roots are the project's roots (project.Repo's): the top folder, the
@@ -56,7 +52,7 @@ type Input struct {
 	Home string
 	// Env is the environment the program gets: the XDG folders, the tool
 	// caches a variable moves, TMPDIR, the runtime dir, the session bus and
-	// the delivery variables.
+	// the credential variables.
 	Env map[string]string
 	// Path are PATH's folders, in its order.
 	Path []string
@@ -124,10 +120,10 @@ var snapshots = []string{"/.snapshots", "/home/.snapshots", "/timeshift", "/run/
 // with a guard of its own).
 var containerSockets = []string{"docker.sock", "podman/podman.sock"}
 
-// DeliveryVariables are the variables that carry what the delivery profile
-// shows: gh's and git's tokens, the SSH agent socket, and the programs git
-// and ssh ask for a secret. The work profile unsets them (F4, D4).
-var DeliveryVariables = []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "SSH_AUTH_SOCK", "GIT_ASKPASS", "SSH_ASKPASS"}
+// CredentialVariables are the variables that carry a credential: gh's and
+// git's tokens, the SSH agent socket, and the programs git and ssh ask for
+// a secret. The sandbox unsets them (F4, D4).
+var CredentialVariables = []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "SSH_AUTH_SOCK", "GIT_ASKPASS", "SSH_ASKPASS"}
 
 // A mount's kind, the weakest first: for one path the strongest wins.
 const (
@@ -141,10 +137,10 @@ type mount struct {
 	path string
 	kind int
 	dir  bool
-	// shown is a path the profile shows inside a sealed folder.
+	// shown is a path shown inside a sealed folder: a container socket.
 	shown bool
-	// sealed is a credential path or a folder of sockets, hidden or shown
-	// read-only by the profile: nothing else is mounted inside it.
+	// sealed is a credential path or a folder of sockets, hidden: nothing
+	// else is mounted inside it.
 	sealed bool
 	// guarded is one of Jhon's own or the runtimes' paths, read-only: no
 	// scratch root is bound inside it.
@@ -251,16 +247,11 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 		}
 	}
 
-	// Hidden: the credentials, but what the delivery profile shows.
-	delivery := in.Profile == Delivery
+	// Hidden: the credentials.
 	for _, rel := range slices.Concat(credentials, moreCredentials) {
-		kind := hide
-		if delivery && (rel == ".ssh" || rel == ".config/gh") {
-			kind = read
-		}
-		add(in.under(rel), mount{kind: kind, sealed: true})
+		add(in.under(rel), mount{kind: hide, sealed: true})
 		if moved, ok := strings.CutPrefix(rel, ".config/"); ok {
-			add(filepath.Join(config, moved), mount{kind: kind, sealed: true})
+			add(filepath.Join(config, moved), mount{kind: hide, sealed: true})
 		}
 	}
 	// Hidden: the snapshots, a second copy of all of the above (F5).
@@ -291,11 +282,7 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 		path, _, _ = strings.Cut(path, ",")
 		add(path, mount{kind: hide, sealed: true})
 	}
-	if delivery {
-		add(in.Env["SSH_AUTH_SOCK"], mount{kind: read, shown: true})
-	} else {
-		add(in.Env["SSH_AUTH_SOCK"], mount{kind: hide, sealed: true})
-	}
+	add(in.Env["SSH_AUTH_SOCK"], mount{kind: hide, sealed: true})
 
 	// Writable: the scratch roots, each only where one may be.
 	var allowed []string
@@ -328,8 +315,8 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 		add(in.Env["TMPDIR"], mount{kind: write})
 	}
 
-	// Nothing but what the profile shows is mounted inside a sealed folder:
-	// no writable area in ~/.ssh, hidden or shown.
+	// Nothing but what the sandbox shows (the container sockets) is mounted
+	// inside a sealed folder: no writable area in ~/.ssh.
 	sealed := func(p string) bool {
 		return slices.ContainsFunc(mounts, func(h mount) bool {
 			return h.sealed && h.dir && h.path != p && project.Within(p, h.path)
@@ -372,13 +359,13 @@ func writable(in Input) []string {
 // folder is writable inside the read-only share, Jhon's settings and a PATH
 // folder stay read-only inside a writable folder, a credential path stays
 // hidden inside one. Nothing is mounted inside a credential folder or the
-// private runtime dir but what the profile shows there. For one path, hidden
+// private runtime dir but the container sockets. For one path, hidden
 // wins over read-only, and read-only over writable. An area that is what its
 // surroundings already are (a read-only folder outside every writable one,
 // the git folder inside the project) takes no mount.
 //
-// Then the environment: the work profile unsets the delivery variables that
-// are set (F4), and a $TMPDIR that is not bound becomes /tmp (F7).
+// Then the environment: the credential variables that are set are unset
+// (F4), and a $TMPDIR that is not bound becomes /tmp (F7).
 func Args(in Input) []string {
 	mounts, tmpdir := layout(in, true)
 	args := []string{"--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev"}
@@ -417,11 +404,9 @@ func Args(in Input) []string {
 	for _, f := range folders {
 		args = append(args, "--remount-ro", f)
 	}
-	if in.Profile != Delivery {
-		for _, name := range DeliveryVariables {
-			if _, set := in.Env[name]; set {
-				args = append(args, "--unsetenv", name)
-			}
+	for _, name := range CredentialVariables {
+		if _, set := in.Env[name]; set {
+			args = append(args, "--unsetenv", name)
 		}
 	}
 	if in.Env["TMPDIR"] != "" && !tmpdir {
@@ -490,7 +475,7 @@ func remembered(stat func(string) (string, bool, bool)) func(string) (string, bo
 	}
 }
 
-// Current is the Input of a program started in cwd under profile: the
+// Current is the Input of a program started in cwd: the
 // project's roots, its common dir and its listed worktrees, all read from
 // the disk with no git process and no trust in what the project's own files
 // name; the scratch roots; and this process's environment, PATH, runtime dir
@@ -500,14 +485,14 @@ func remembered(stat func(string) (string, bool, bool)) func(string) (string, bo
 // the walk would then take an enclosing repository. In a workspace the
 // primary and the joined members are roots too (workspace.DiskRoots). The caller adds what the
 // settings and the integrations know: AllowWrite, Protected, Telemetry.
-func Current(cwd, pinned, profile string) Input {
+func Current(cwd, pinned string) Input {
 	repo := project.ReadRepo(cwd)
 	if pinned != "" {
 		repo = project.RepoAt(pinned)
 	}
 	uid := strconv.Itoa(os.Getuid())
 	in := Input{
-		Profile: profile, Cwd: cwd, Roots: append(repo.Roots(), workspace.DiskRoots(repo)...), CommonDir: repo.Common, Worktrees: repo.Worktrees(),
+		Cwd: cwd, Roots: append(repo.Roots(), workspace.DiskRoots(repo)...), CommonDir: repo.Common, Worktrees: repo.Worktrees(),
 		Tmp: project.TmpRoots(), Home: project.Realish(project.Home()), Env: map[string]string{},
 		Path:          filepath.SplitList(os.Getenv("PATH")),
 		RuntimeDir:    "/run/user/" + uid,

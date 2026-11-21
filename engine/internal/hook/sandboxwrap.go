@@ -25,7 +25,7 @@ var sandboxTools = []string{"Bash", "Monitor"}
 // The cli sets it to the one `jhon sandbox run` builds, with what the
 // settings and the integrations add: telemetry is an integration the hooks
 // never import (T55).
-var SandboxInput = func(dir, pinned string) sandbox.Input { return sandbox.Current(dir, pinned, sandbox.Work) }
+var SandboxInput = sandbox.Current
 
 // sandboxHost is the machine the wrap reads the mode for and probes; a test
 // gives another system's.
@@ -52,8 +52,10 @@ const sandboxAllowReason = "Jhon's guards allow the command; it runs in Jhon's s
 //	<jhon> sandbox run --project '<folder>' --profile unsandboxed -- <shell> -c '<command>'
 //
 // which runs it with no sandbox (git over SSH and gh cannot run in one,
-// L1220, L1302) after `jhon sandbox run` checks the line again; it has no
-// directory to follow, since such a line holds no cd. Either way `jhon
+// L1220, L1302) after `jhon sandbox run` checks the line again. Its
+// directory is not followed: the only cd such a line may hold is a leading
+// one into the project (T181, L1503), and Claude Code's next call starts
+// where this one did. Either way `jhon
 // sandbox run` ends a read-only failure with the stop note on stderr and
 // records a jhon.sandbox event (G3, G4). It is nil for a call the wrap does not take: the mode
 // off, a tool that starts no command, and pi's calls, which come scoped to

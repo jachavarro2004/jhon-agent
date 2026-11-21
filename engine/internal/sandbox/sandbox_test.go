@@ -31,9 +31,9 @@ func (d disk) stat(path string) (string, bool, bool) {
 
 // sample is a project at /home/u/project on a machine with a few of the
 // paths the sandbox knows.
-func sample(profile string, d disk) Input {
+func sample(d disk) Input {
 	return Input{
-		Profile: profile, Cwd: "/home/u/project",
+		Cwd:   "/home/u/project",
 		Roots: []string{"/home/u/project", "/home/u/project-worktrees"}, CommonDir: "/home/u/project/.git",
 		Tmp: []string{"/tmp"}, Home: "/home/u",
 		Env:       map[string]string{"XDG_RUNTIME_DIR": "/run/user/1000", "SSH_AUTH_SOCK": "/run/user/1000/agent.sock"},
@@ -62,7 +62,7 @@ func with(d disk, more disk) disk {
 }
 
 func TestArgsOfTheWorkProfile(t *testing.T) {
-	got := strings.Join(Args(sample(Work, machine)), " ")
+	got := strings.Join(Args(sample(machine)), " ")
 	want := "--ro-bind / / --dev-bind /dev /dev" +
 		" --bind /tmp /tmp" +
 		" --bind /home/u/.cache /home/u/.cache" +
@@ -80,30 +80,6 @@ func TestArgsOfTheWorkProfile(t *testing.T) {
 	}
 }
 
-// The delivery profile hides neither ~/.ssh nor ~/.config/gh: outside a
-// writable area they are the machine's, read-only. It shows the agent socket
-// in the private runtime dir, and unsets nothing.
-func TestArgsOfTheDeliveryProfile(t *testing.T) {
-	args := Args(sample(Delivery, machine))
-	got := strings.Join(args, " ")
-	for _, shown := range []string{"/home/u/.ssh", "/home/u/.config/gh"} {
-		if strings.Contains(got, " "+shown) {
-			t.Errorf("delivery mounts over %s:\n%s", shown, got)
-		}
-	}
-	for _, has := range []string{"--dev-bind /dev/null /home/u/.netrc", "--perms 0700 --tmpfs /run/user/1000 "} {
-		if !strings.Contains(got, has) {
-			t.Errorf("delivery lacks %q:\n%s", has, got)
-		}
-	}
-	if run, sock := index(args, "--tmpfs", "/run/user/1000"), index(args, "--ro-bind", "/run/user/1000/agent.sock"); !(run >= 0 && run < sock) {
-		t.Errorf("the runtime dir at %d, the agent socket shown in it at %d; want that order:\n%s", run, sock, got)
-	}
-	if strings.Contains(got, "--unsetenv") || strings.Contains(got, "/run/user/1000/bus") {
-		t.Errorf("delivery unsets a variable or mounts the session bus:\n%s", got)
-	}
-}
-
 // index is where the mount of path starts in args, -1 when it has none.
 func index(args []string, flag, path string) int {
 	for i := range args {
@@ -115,7 +91,7 @@ func index(args []string, flag, path string) int {
 }
 
 func TestWhereAreasNestTheInnerOneIsMountedLast(t *testing.T) {
-	in := sample(Work, with(machine, disk{"/home/u/.config": "dir", "/home/u/.config/git/credentials": "file"}))
+	in := sample(with(machine, disk{"/home/u/.config": "dir", "/home/u/.config/git/credentials": "file"}))
 	// The owner opens ~/.config: Jhon's folder in it stays read-only, the
 	// credentials in it hidden.
 	in.AllowWrite = []string{"/home/u/.config"}
@@ -148,9 +124,9 @@ func TestWhereAreasNestTheInnerOneIsMountedLast(t *testing.T) {
 	}
 }
 
-func TestAHiddenFolderHoldsNothingButWhatTheProfileShows(t *testing.T) {
+func TestAHiddenFolderHoldsNothing(t *testing.T) {
 	d := with(machine, disk{"/home/u/.ssh/work": "dir", "/run/user/1000/keyring": "dir", "/run/user/1000/keyring/ssh": "file", "/run/user/1000/scratch": "dir"})
-	in := sample(Work, d)
+	in := sample(d)
 	in.AllowWrite = []string{"/home/u/.ssh/work", "/run/user/1000/scratch"}
 	in.Env["SSH_AUTH_SOCK"] = "/run/user/1000/keyring/ssh"
 	args := Args(in)
@@ -158,18 +134,6 @@ func TestAHiddenFolderHoldsNothingButWhatTheProfileShows(t *testing.T) {
 		if strings.Contains(strings.Join(args, " ")+" ", " "+inside+" ") {
 			t.Errorf("work mounts %s, inside a hidden folder:\n%s", inside, strings.Join(args, " "))
 		}
-	}
-	// Delivery shows the agent socket inside the private runtime dir, which
-	// stays writable: no remount.
-	in.Profile = Delivery
-	args = Args(in)
-	folder, sock := index(args, "--tmpfs", "/run/user/1000"), index(args, "--ro-bind", "/run/user/1000/keyring/ssh")
-	if !(folder >= 0 && folder < sock) || index(args, "--remount-ro", "/run/user/1000") >= 0 {
-		t.Errorf("the runtime dir at %d, the agent socket at %d; want that order and no remount:\n%s", folder, sock, strings.Join(args, " "))
-	}
-	// ~/.ssh is shown read-only, and the owner's folder in it is not writable.
-	if index(args, "--bind", "/home/u/.ssh/work") >= 0 {
-		t.Errorf("a write area inside ~/.ssh, which delivery shows read-only:\n%s", strings.Join(args, " "))
 	}
 }
 
@@ -181,7 +145,7 @@ func TestAMissingPathTakesNoMountAndALinkIsBoundWhereItLeads(t *testing.T) {
 		"/home/u/.cache": "-> /mnt/big/cache", "/mnt/big/cache": "dir",
 		"/home/u/.npmrc": "-> /home/u/project/dotfiles/npmrc", "/home/u/project/dotfiles/npmrc": "file",
 	}
-	in := sample(Work, d)
+	in := sample(d)
 	in.AllowWrite = []string{"/opt/missing"}
 	got := strings.Join(Args(in), " ")
 	want := "--ro-bind / / --dev-bind /dev /dev" +
@@ -199,7 +163,7 @@ func TestAMissingPathTakesNoMountAndALinkIsBoundWhereItLeads(t *testing.T) {
 }
 
 func TestAWritableAreaIsNeverTheRootOrTheHome(t *testing.T) {
-	in := sample(Work, with(machine, disk{"/": "dir", "/home": "dir"}))
+	in := sample(with(machine, disk{"/": "dir", "/home": "dir"}))
 	in.AllowWrite = []string{"/", "/home", "/home/u", "relative"}
 	in.Tmp = []string{"/tmp", "/home/u"}
 	args := Args(in)
@@ -222,7 +186,7 @@ func TestToolFoldersAreCachesAndStoresAndFollowTheirVariables(t *testing.T) {
 		"/home/u/.npm": "dir", "/home/u/.gradle": "dir", "/home/u/.m2/repository": "dir", "/home/u/.nuget/packages": "dir",
 		"/data/gopath": "dir", "/data/gopath/pkg": "dir", "/data/config": "dir", "/data/config/gh": "dir",
 	})
-	in := sample(Work, d)
+	in := sample(d)
 	args := Args(in)
 	for _, open := range []string{"/home/u/go/pkg", "/home/u/.cargo/registry", "/home/u/.cargo/git", "/home/u/.bun/install/cache", "/home/u/.local/share/pnpm/store", "/home/u/.npm", "/home/u/.gradle", "/home/u/.m2/repository", "/home/u/.nuget/packages"} {
 		if index(args, "--bind", open) < 0 {
@@ -255,7 +219,7 @@ func TestAPATHFolderOutsideTheProjectIsReadOnly(t *testing.T) {
 		"/usr/bin": "dir", "/home/u/.gradle": "dir", "/home/u/.gradle/bin": "dir", "/home/u/tools": "dir", "/home/u/tools/bin": "dir",
 		"/home/u/project/node_modules/.bin": "dir", "/home/u/.cache/bin": "dir",
 	})
-	in := sample(Work, d)
+	in := sample(d)
 	in.AllowWrite = []string{"/home/u/tools", "/home/u/tools/bin"}
 	in.Path = []string{"/home/u/.gradle/bin", "/home/u/tools/bin", "/home/u/.cache/bin", "/home/u/project/node_modules/.bin", "/usr/bin", "/opt/missing/bin", "relative"}
 	args := Args(in)
@@ -271,40 +235,33 @@ func TestAPATHFolderOutsideTheProjectIsReadOnly(t *testing.T) {
 	}
 }
 
-// The work profile unsets each delivery variable that is set; the delivery
-// profile none (F4).
-func TestTheWorkProfileUnsetsTheDeliveryVariables(t *testing.T) {
-	in := sample(Work, machine)
+// The sandbox unsets each credential variable that is set (F4).
+func TestTheSandboxUnsetsTheCredentialVariables(t *testing.T) {
+	in := sample(machine)
 	in.Env = map[string]string{"GH_TOKEN": "x", "GITHUB_TOKEN": "", "GIT_ASKPASS": "/usr/bin/ask", "HOME": "/home/u", "ANTHROPIC_API_KEY": "x"}
 	got := strings.Join(Args(in), " ")
 	if !strings.Contains(got, " --unsetenv GH_TOKEN --unsetenv GITHUB_TOKEN --unsetenv GIT_ASKPASS --die-with-parent") || strings.Count(got, "--unsetenv") != 3 {
-		t.Errorf("work unsets the delivery variables that are set, and only them:\n%s", got)
+		t.Errorf("work unsets the credential variables that are set, and only them:\n%s", got)
 	}
-	in.Profile = Delivery
-	if got := strings.Join(Args(in), " "); strings.Contains(got, "--unsetenv") {
-		t.Errorf("delivery unsets a variable:\n%s", got)
-	}
-	if want := []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "SSH_AUTH_SOCK", "GIT_ASKPASS", "SSH_ASKPASS"}; !slices.Equal(DeliveryVariables, want) {
-		t.Errorf("DeliveryVariables = %v", DeliveryVariables)
+	if want := []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "SSH_AUTH_SOCK", "GIT_ASKPASS", "SSH_ASKPASS"}; !slices.Equal(CredentialVariables, want) {
+		t.Errorf("CredentialVariables = %v", CredentialVariables)
 	}
 }
 
-// The snapshot folders are hidden when they exist, in both profiles (F5).
+// The snapshot folders are hidden when they exist (F5).
 func TestTheSnapshotFoldersAreHidden(t *testing.T) {
 	folders := []string{"/.snapshots", "/home/.snapshots", "/home/u/.snapshots", "/timeshift", "/run/timeshift"}
 	d := with(machine, disk{})
 	for _, f := range folders {
 		d[f] = "dir"
 	}
-	for _, profile := range Profiles {
-		args := Args(sample(profile, d))
-		for _, f := range folders {
-			if index(args, "--tmpfs", f) < 0 || index(args, "--remount-ro", f) < 0 {
-				t.Errorf("%s: %s is not an empty read-only folder:\n%s", profile, f, strings.Join(args, " "))
-			}
+	args := Args(sample(d))
+	for _, f := range folders {
+		if index(args, "--tmpfs", f) < 0 || index(args, "--remount-ro", f) < 0 {
+			t.Errorf("%s is not an empty read-only folder:\n%s", f, strings.Join(args, " "))
 		}
 	}
-	if got := strings.Join(Args(sample(Work, machine)), " "); strings.Contains(got, "snapshots") || strings.Contains(got, "timeshift") {
+	if got := strings.Join(Args(sample(machine)), " "); strings.Contains(got, "snapshots") || strings.Contains(got, "timeshift") {
 		t.Errorf("a snapshot folder that does not exist takes a mount:\n%s", got)
 	}
 }
@@ -317,32 +274,30 @@ func TestTheSessionSocketsAreNotThere(t *testing.T) {
 		"/run/user/1000/docker.sock": "file", "/run/user/1000/podman": "dir", "/run/user/1000/podman/podman.sock": "file", "/run/user/1000/wayland-1": "file",
 		"/tmp/tmux-1000": "dir", "/tmp/.X11-unix": "dir", "/tmp/.ICE-unix": "dir", "/home/u/.Xauthority": "file",
 	})
-	for _, profile := range Profiles {
-		in := sample(profile, d)
-		in.SocketFolders = []string{"/tmp/tmux-1000", "/tmp/.X11-unix", "/tmp/.ICE-unix"}
-		args := Args(in)
-		got := strings.Join(args, " ")
-		run := index(args, "--tmpfs", "/run/user/1000")
-		if run < 1 || args[run-2] != "--perms" || args[run-1] != "0700" || index(args, "--remount-ro", "/run/user/1000") >= 0 {
-			t.Errorf("%s: the runtime dir is not a private writable folder of mode 0700:\n%s", profile, got)
+	in := sample(d)
+	in.SocketFolders = []string{"/tmp/tmux-1000", "/tmp/.X11-unix", "/tmp/.ICE-unix"}
+	args := Args(in)
+	got := strings.Join(args, " ")
+	run := index(args, "--tmpfs", "/run/user/1000")
+	if run < 1 || args[run-2] != "--perms" || args[run-1] != "0700" || index(args, "--remount-ro", "/run/user/1000") >= 0 {
+		t.Errorf("the runtime dir is not a private writable folder of mode 0700:\n%s", got)
+	}
+	for _, sock := range []string{"/run/user/1000/docker.sock", "/run/user/1000/podman/podman.sock"} {
+		if at := index(args, "--ro-bind", sock); at < run {
+			t.Errorf("%s is at %d, the runtime dir at %d; want it shown after:\n%s", sock, at, run, got)
 		}
-		for _, sock := range []string{"/run/user/1000/docker.sock", "/run/user/1000/podman/podman.sock"} {
-			if at := index(args, "--ro-bind", sock); at < run {
-				t.Errorf("%s: %s is at %d, the runtime dir at %d; want it shown after:\n%s", profile, sock, at, run, got)
-			}
+	}
+	if strings.Contains(got, "wayland-1") || strings.Contains(got, "/run/user/1000/podman ") {
+		t.Errorf("something else of the runtime dir is mounted:\n%s", got)
+	}
+	tmp := index(args, "--bind", "/tmp")
+	for _, f := range in.SocketFolders {
+		if at := index(args, "--tmpfs", f); at < tmp || index(args, "--remount-ro", f) < 0 {
+			t.Errorf("%s is not an empty read-only folder inside /tmp:\n%s", f, got)
 		}
-		if strings.Contains(got, "wayland-1") || strings.Contains(got, "/run/user/1000/podman ") {
-			t.Errorf("%s: something else of the runtime dir is mounted:\n%s", profile, got)
-		}
-		tmp := index(args, "--bind", "/tmp")
-		for _, f := range in.SocketFolders {
-			if at := index(args, "--tmpfs", f); at < tmp || index(args, "--remount-ro", f) < 0 {
-				t.Errorf("%s: %s is not an empty read-only folder inside /tmp:\n%s", profile, f, got)
-			}
-		}
-		if index(args, "--dev-bind", "/home/u/.Xauthority") < 0 {
-			t.Errorf("%s: the X authority file is not hidden:\n%s", profile, got)
-		}
+	}
+	if index(args, "--dev-bind", "/home/u/.Xauthority") < 0 {
+		t.Errorf("the X authority file is not hidden:\n%s", got)
 	}
 }
 
@@ -362,7 +317,7 @@ func TestTMPDIRIsBoundOnlyWhereAScratchRootMayBe(t *testing.T) {
 		{"/proc/sys", false}, {"/home/u/link", false}, {"/", false}, {"/home", false}, {"/home/u", false}, {"relative", false}, {"/opt/missing", false},
 		{"/home/u/.ssh/tmp", false}, {"/home/u/.config/jhon/tmp", false}, {"/home/u/.claude/tmp", false}, {"/run/user/1000/tmp", false},
 	} {
-		in := sample(Work, d)
+		in := sample(d)
 		in.AllowWrite = []string{"/opt/scratch"}
 		in.Env["TMPDIR"] = c.tmpdir
 		in.Tmp = []string{"/tmp", c.tmpdir}
@@ -382,7 +337,7 @@ func TestTMPDIRIsBoundOnlyWhereAScratchRootMayBe(t *testing.T) {
 		}
 	}
 	// No TMPDIR: nothing to set.
-	if got := strings.Join(Args(sample(Work, d)), " "); strings.Contains(got, "--setenv") {
+	if got := strings.Join(Args(sample(d)), " "); strings.Contains(got, "--setenv") {
 		t.Errorf("with no TMPDIR, Args sets one:\n%s", got)
 	}
 }
@@ -406,8 +361,8 @@ func realSandbox(t *testing.T) (bwrap, base string) {
 
 // The user's runtime dir (/run/user/<uid>) is private whether or not
 // $XDG_RUNTIME_DIR names it; where the variable names another folder, both
-// are, each with the container sockets and, in delivery, the agent socket
-// (L888 continuation, item 2).
+// are, each with the container sockets and never the agent socket (L888
+// continuation, item 2).
 func TestTheUsersRuntimeDirIsPrivateWhateverTheVariableSays(t *testing.T) {
 	d := with(machine, disk{
 		"/run/user/1000/docker.sock": "file", "/run/user/1000/wayland-1": "file",
@@ -423,36 +378,34 @@ func TestTheUsersRuntimeDirIsPrivateWhateverTheVariableSays(t *testing.T) {
 		{"another folder, the agent in the user's", "/data/run", "/run/user/1000/agent.sock", []string{"/data/run", "/run/user/1000"}},
 		{"a variable that names no folder", "relative", "/run/user/1000/agent.sock", []string{"/run/user/1000"}},
 	} {
-		for _, profile := range Profiles {
-			in := sample(profile, d)
-			in.RuntimeDir = "/run/user/1000"
-			in.Env = map[string]string{"SSH_AUTH_SOCK": c.agent}
-			if c.variable != "" {
-				in.Env["XDG_RUNTIME_DIR"] = c.variable
+		in := sample(d)
+		in.RuntimeDir = "/run/user/1000"
+		in.Env = map[string]string{"SSH_AUTH_SOCK": c.agent}
+		if c.variable != "" {
+			in.Env["XDG_RUNTIME_DIR"] = c.variable
+		}
+		args := Args(in)
+		got := strings.Join(args, " ")
+		for _, p := range c.private {
+			if at := index(args, "--tmpfs", p); at < 2 || args[at-2] != "--perms" || args[at-1] != "0700" || index(args, "--remount-ro", p) >= 0 {
+				t.Errorf("%s: %s is not a private writable folder of mode 0700:\n%s", c.name, p, got)
 			}
-			args := Args(in)
-			got := strings.Join(args, " ")
-			for _, p := range c.private {
-				if at := index(args, "--tmpfs", p); at < 2 || args[at-2] != "--perms" || args[at-1] != "0700" || index(args, "--remount-ro", p) >= 0 {
-					t.Errorf("%s, %s: %s is not a private writable folder of mode 0700:\n%s", c.name, profile, p, got)
-				}
-			}
-			if n := strings.Count(got, "--perms 0700 --tmpfs"); n != len(c.private) {
-				t.Errorf("%s, %s: %d private folders, want %d:\n%s", c.name, profile, n, len(c.private), got)
-			}
-			if docker := index(args, "--ro-bind", "/run/user/1000/docker.sock"); docker < index(args, "--tmpfs", "/run/user/1000") {
-				t.Errorf("%s, %s: docker's socket is not shown in the user's runtime dir:\n%s", c.name, profile, got)
-			}
-			if c.variable == "/data/run" && index(args, "--ro-bind", "/data/run/podman/podman.sock") < index(args, "--tmpfs", "/data/run") {
-				t.Errorf("%s, %s: podman's socket is not shown in the variable's folder:\n%s", c.name, profile, got)
-			}
-			if agent := index(args, "--ro-bind", c.agent); (agent >= 0) != (profile == Delivery) || strings.Contains(got, "wayland-1") || strings.Contains(got, "/data/run/bus") {
-				t.Errorf("%s, %s: the agent socket at %d, shown only in delivery, and nothing else of a runtime dir:\n%s", c.name, profile, agent, got)
-			}
+		}
+		if n := strings.Count(got, "--perms 0700 --tmpfs"); n != len(c.private) {
+			t.Errorf("%s: %d private folders, want %d:\n%s", c.name, n, len(c.private), got)
+		}
+		if docker := index(args, "--ro-bind", "/run/user/1000/docker.sock"); docker < index(args, "--tmpfs", "/run/user/1000") {
+			t.Errorf("%s: docker's socket is not shown in the user's runtime dir:\n%s", c.name, got)
+		}
+		if c.variable == "/data/run" && index(args, "--ro-bind", "/data/run/podman/podman.sock") < index(args, "--tmpfs", "/data/run") {
+			t.Errorf("%s: podman's socket is not shown in the variable's folder:\n%s", c.name, got)
+		}
+		if agent := index(args, "--ro-bind", c.agent); agent >= 0 || strings.Contains(got, "wayland-1") || strings.Contains(got, "/data/run/bus") {
+			t.Errorf("%s: the agent socket at %d, hidden, and nothing else of a runtime dir:\n%s", c.name, agent, got)
 		}
 	}
 	// A machine with no such folder: nothing to hide.
-	in := sample(Work, disk{"/home/u": "dir", "/home/u/project": "dir", "/tmp": "dir"})
+	in := sample(disk{"/home/u": "dir", "/home/u/project": "dir", "/tmp": "dir"})
 	in.RuntimeDir, in.Env = "/run/user/1000", map[string]string{}
 	if got := strings.Join(Args(in), " "); strings.Contains(got, "/run/user") {
 		t.Errorf("a runtime dir that does not exist takes a mount:\n%s", got)
@@ -483,7 +436,7 @@ func TestTheUsersRuntimeDirIsPrivateInARealSandbox(t *testing.T) {
 		{"the variable unset", map[string]string{}},
 		{"the variable naming another folder", map[string]string{"XDG_RUNTIME_DIR": moved}},
 	} {
-		in := Input{Profile: Work, Cwd: base, Home: home, RuntimeDir: users, Env: c.env, Stat: Disk}
+		in := Input{Cwd: base, Home: home, RuntimeDir: users, Env: c.env, Stat: Disk}
 		folders := []string{users}
 		if c.env["XDG_RUNTIME_DIR"] != "" {
 			folders = append(folders, moved)
@@ -519,7 +472,7 @@ func TestASocketFolderIsEmptyAndReadOnlyInARealSandbox(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	in := Input{Profile: Work, Cwd: tmp, Home: home, AllowWrite: []string{tmp}, SocketFolders: folders, Env: map[string]string{}, Stat: Disk}
+	in := Input{Cwd: tmp, Home: home, AllowWrite: []string{tmp}, SocketFolders: folders, Env: map[string]string{}, Stat: Disk}
 	for _, f := range folders {
 		cmd := exec.Command(bwrap, append(Args(in), "--", "sh", "-c", `ls -A "$1" | wc -l; echo x > ../tmp/beside && echo x > "$1/new"`, "sh", f)...)
 		cmd.WaitDelay = 10 * time.Second
@@ -587,7 +540,7 @@ func TestCheckNamesWhatIsMissingAndItsFix(t *testing.T) {
 		{"macOS", host("darwin", installed, nil), installed, "the sandbox does not run on this system (darwin)", "it needs Linux"},
 		{"Windows", host("windows", machine, nil), machine, "the sandbox does not run on this system (windows)", "it needs Linux"},
 	} {
-		in := sample(Work, c.disk)
+		in := sample(c.disk)
 		in.Path = path
 		bwrap, p := Check(c.host, in)
 		if c.reason == "" {
@@ -625,7 +578,7 @@ func TestCheckTakesBubblewrapOnlyFromAFolderNoCommandMayWrite(t *testing.T) {
 		{"a folder of the home no area opens", append(slices.Clone(planted), "/home/u/.local/bin", "/usr/bin"), "/home/u/.local/bin/bwrap"},
 		{"only planted ones", planted, ""},
 	} {
-		in := sample(Work, d)
+		in := sample(d)
 		in.AllowWrite = []string{"/home/u/tools"}
 		// The folder is on PATH, so the sandbox binds it read-only: a
 		// command may still have written it under another PATH.
@@ -648,25 +601,17 @@ func TestTheProbeUsesEveryOptionARunMayUse(t *testing.T) {
 		"/home/u/.gradle": "dir", "/home/u/.gradle/bin": "dir", "/home/u/.snapshots": "dir", "/home/u/.Xauthority": "file",
 		"/run/user/1000/docker.sock": "file", "/proc/sys": "dir",
 	})
-	for _, profile := range Profiles {
-		in := sample(profile, d)
-		in.Path, in.RuntimeDir = []string{"/home/u/.gradle/bin"}, "/run/user/1000"
-		in.Env["TMPDIR"], in.Env["GH_TOKEN"] = "/proc/sys", "x"
-		for _, a := range Args(in) {
-			if strings.HasPrefix(a, "--") && !slices.Contains(probeArgs, a) {
-				t.Errorf("%s: Args gives bubblewrap %s, which the probe does not try: %v", profile, a, probeArgs)
-			}
+	in := sample(d)
+	in.Path, in.RuntimeDir = []string{"/home/u/.gradle/bin"}, "/run/user/1000"
+	in.Env["TMPDIR"], in.Env["GH_TOKEN"] = "/proc/sys", "x"
+	for _, a := range Args(in) {
+		if strings.HasPrefix(a, "--") && !slices.Contains(probeArgs, a) {
+			t.Errorf("Args gives bubblewrap %s, which the probe does not try: %v", a, probeArgs)
 		}
 	}
 	for _, option := range []string{"--ro-bind", "--dev-bind", "--bind", "--perms", "--tmpfs", "--remount-ro", "--unsetenv", "--setenv", "--die-with-parent", "--chdir"} {
 		if !slices.Contains(probeArgs, option) {
 			t.Errorf("the probe does not try %s: %v", option, probeArgs)
 		}
-	}
-}
-
-func TestProfilesAreWorkThenDelivery(t *testing.T) {
-	if !slices.Equal(Profiles, []string{"work", "delivery"}) {
-		t.Errorf("Profiles = %v", Profiles)
 	}
 }

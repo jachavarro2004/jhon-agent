@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -22,7 +21,7 @@ import (
 // `jhon sandbox` (T128a, odd/proposals/t128-sandbox.md sections 3-5): the OS
 // sandbox a model-chosen command runs in.
 //
-//	jhon sandbox run [--profile work|delivery] [--project <folder>] -- <program> [args...]
+//	jhon sandbox run [--profile work] [--project <folder>] -- <program> [args...]
 //	jhon sandbox status [--json] [--project <folder>]
 //	jhon sandbox profile -- <command>
 //
@@ -38,17 +37,19 @@ import (
 // exception is the runtimes' --profile unsandboxed, which runs `<shell> -c
 // <line>` with no sandbox only when the line is a git or gh network line,
 // or a docker one (T128h), of trusted programs (sandbox.RunsOutside), and anything else with the work
-// profile. sandbox.mode in the settings is for the callers (the shell, the
+// profile; a work run that fails and holds git over SSH or gh ends with a
+// note that they run outside the sandbox only on a line of their own
+// (sandbox.DeliveryNote, T181). The delivery profile is gone (L1503). sandbox.mode in the settings is for the callers (the shell, the
 // hook), which read it through status: the setting, whether the sandbox
 // can run here, and why not. profile prints how a command line runs
 // (sandbox.ProfileFor, T128g): `unsandboxed` or `work`; the pi shell asks
 // it for each line, and Claude Code's wrap calls the same function.
 func init() {
 	register("sandbox", runSandbox)
-	hook.SandboxInput = func(dir, pinned string) sandbox.Input { return sandboxInputAt(dir, pinned, sandbox.Work) }
+	hook.SandboxInput = sandboxInputAt
 }
 
-const sandboxUsage = `usage: jhon sandbox run [--profile work|delivery] [--project <folder>] -- <program> [args...]
+const sandboxUsage = `usage: jhon sandbox run [--profile work] [--project <folder>] -- <program> [args...]
        jhon sandbox status [--json] [--project <folder>]
 `
 
@@ -87,7 +88,7 @@ func runSandbox(argv []string) (int, error) {
 			fmt.Fprintf(os.Stderr, "jhon sandbox: profile takes one command line after --\n\n%s", sandboxProfileUsage)
 			return 2, nil
 		}
-		in := sandboxInput(pinned, sandbox.Work)
+		in := sandboxInput(pinned)
 		fmt.Println(sandbox.ProfileAt(rest[1], in.Cwd, in.Roots, in.Stat))
 		return 0, nil
 	case "status":
@@ -137,8 +138,8 @@ func sandboxRun(argv []string) (int, error) {
 		}
 		switch name {
 		case "--profile":
-			if !slices.Contains(sandbox.Profiles, value) && value != sandbox.Unsandboxed {
-				return sandboxUsageError("unknown profile: " + value + " (accepted: " + strings.Join(sandbox.Profiles, ", ") + ")")
+			if value != sandbox.Work && value != sandbox.Unsandboxed {
+				return sandboxUsageError("unknown profile: " + value + " (accepted: " + sandbox.Work + ")")
 			}
 			profile = value
 		case "--project":
@@ -156,28 +157,25 @@ func sandboxRun(argv []string) (int, error) {
 	if profile == sandbox.Unsandboxed {
 		// git runs with the repository's hooks, ssh command, helpers and
 		// transports overridden (sandbox.UnsandboxedEnv, L1306).
-		if sandbox.RunsOutside(sandbox.ThisHost(), sandboxInput(pinned, sandbox.Work), program) {
-			return sandboxProgram(program[0], program, sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers()), sandbox.Unsandboxed)
+		if sandbox.RunsOutside(sandbox.ThisHost(), sandboxInput(pinned), program) {
+			return sandboxProgram(program[0], program, sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers()), sandbox.Unsandboxed, "")
 		}
 		profile = sandbox.Work
 	}
-	in := sandboxInput(pinned, profile)
+	in := sandboxInput(pinned)
 	bwrap, p := sandbox.Check(sandbox.ThisHost(), in)
 	if p != nil {
 		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
 		return sandboxRefused, nil
 	}
-	env := os.Environ()
-	if profile == sandbox.Work {
-		env = append(env, sandbox.UVToolEnv(in)...)
-	}
-	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile)
+	env := append(os.Environ(), sandbox.UVToolEnv(in)...)
+	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program))
 }
 
 // sandboxInput is the sandbox of a program started here, in the pinned
 // project or with "" the one this folder is in (sandboxInputAt).
-func sandboxInput(pinned, profile string) sandbox.Input {
-	return sandboxInputAt(cwd(), pinned, profile)
+func sandboxInput(pinned string) sandbox.Input {
+	return sandboxInputAt(cwd(), pinned)
 }
 
 // sandboxInputAt is the sandbox of a program started in dir, in the pinned
@@ -188,8 +186,8 @@ func sandboxInput(pinned, profile string) sandbox.Input {
 // the modes, and Jhon's source checkout (sourceCheckout). The guard hook
 // probes with the same one (hook.SandboxInput): telemetry is an
 // integration the hooks never import (T55).
-func sandboxInputAt(dir, pinned, profile string) sandbox.Input {
-	in := sandbox.Current(dir, pinned, profile)
+func sandboxInputAt(dir, pinned string) sandbox.Input {
+	in := sandbox.Current(dir, pinned)
 	in.AllowWrite = settings.Paths("sandbox.allow_write")
 	in.Protected = []string{settings.Path(), filepath.Dir(grant.Dir())}
 	if os.Getenv("JHON_SETTINGS") == "" {
@@ -362,7 +360,7 @@ var sandboxHost = sandbox.ThisHost
 // probe read the same sandbox, built once, and bubblewrap starts once.
 func sandboxNow(pinned string) sandboxState {
 	s := sandboxState{CanRun: true, Project: pinned}
-	in := sandboxInput(pinned, sandbox.Work)
+	in := sandboxInput(pinned)
 	e := sandbox.Mode(sandboxHost(), func() sandbox.Input { return in })
 	s.Mode, s.ModeSource = e.Mode, e.Source
 	if e.Mode == "off" && e.Problem != nil {

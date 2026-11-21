@@ -27,9 +27,20 @@ var shells = []string{"sh", "bash", "zsh", "dash"}
 // roots (Input.Roots), stat as Input.Stat (T128g, L1306): a line
 // ProfileFor leaves unsandboxed stays so only when each git on it works in
 // a folder inside the roots (cwd, after its -C folders) and a git clone
-// writes its new folder inside them; anything else gives work.
+// writes its new folder inside them; anything else gives work. A leading
+// `cd <folder> &&` (leadingCd) is taken as -C (T181, L1503): the line
+// stays unsandboxed only when the folder is inside the roots, and its
+// programs then work there.
 func ProfileAt(command, cwd string, roots []string, stat func(string) (string, bool, bool)) string {
-	if ProfileFor(command) != Unsandboxed || !filepath.IsAbs(cwd) {
+	return profileAt(command, cwd, roots, stat, false)
+}
+
+// profileAt is ProfileAt for a line zsh runs when zsh is set: a relative
+// cd folder gives work, as zsh may find it through a cdpath ~/.zshenv sets
+// (bash and sh take CDPATH only from the environment, which an unsandboxed
+// line runs without, UnsandboxedEnv).
+func profileAt(command, cwd string, roots []string, stat func(string) (string, bool, bool), zsh bool) string {
+	if classify(command, zsh) != Unsandboxed || !filepath.IsAbs(cwd) {
 		return Work
 	}
 	programs, err := sh.JudgeString(command, nil, nil, sh.Opts{})
@@ -43,6 +54,18 @@ func ProfileAt(command, cwd string, roots []string, stat func(string) (string, b
 		}
 	}
 	inside := func(p string) bool { return within(realPath(p, stat), real) }
+	if dir, ok := leadingCd(command); ok {
+		if zsh && !filepath.IsAbs(dir) {
+			return Work
+		}
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(cwd, dir)
+		}
+		if !inside(dir) {
+			return Work
+		}
+		cwd = dir
+	}
 	for _, p := range programs {
 		if p.Argv[0] == "git" && !gitInside(p.Argv[1:], cwd, inside) {
 			return Work
@@ -153,7 +176,7 @@ func cloneTarget(args []string) string {
 // PATH has no relative folder (L888, F1, as for bubblewrap). Anything else
 // runs with the work profile.
 func RunsOutside(h Host, in Input, argv []string) bool {
-	if len(argv) != 3 || argv[1] != "-c" || !filepath.IsAbs(argv[0]) || !slices.Contains(shells, filepath.Base(argv[0])) || ProfileAt(argv[2], in.Cwd, in.Roots, in.Stat) != Unsandboxed {
+	if len(argv) != 3 || argv[1] != "-c" || !filepath.IsAbs(argv[0]) || !slices.Contains(shells, filepath.Base(argv[0])) || profileAt(argv[2], in.Cwd, in.Roots, in.Stat, filepath.Base(argv[0]) == "zsh") != Unsandboxed {
 		return false
 	}
 	open := writable(in)
@@ -192,8 +215,8 @@ func RunsOutside(h Host, in Input, argv []string) bool {
 }
 
 // Unsandboxed is the answer for a line that runs outside the sandbox: not
-// a profile of bubblewrap's, which Profiles lists, but `jhon sandbox run
-// --profile unsandboxed` runs such a line with none (ProfileFor).
+// a profile of bubblewrap's, but `jhon sandbox run --profile unsandboxed`
+// runs such a line with none (ProfileFor).
 const Unsandboxed = "unsandboxed"
 
 // An option's kind in the allowlist: a flag; one that takes a value, as
@@ -362,10 +385,15 @@ func dockerDelivers(args []string) bool {
 // sandbox run --profile unsandboxed` asks it again before it runs a line
 // with no sandbox.
 //
+// The line may open with `cd <folder> &&` (leadingCd, T181, L1503): the
+// folder is judged where the line runs (ProfileAt), as -C is.
+//
 // It is an allowlist and fails closed (T128d2, L1250 A1): a line the reader
 // cannot read, an empty one, one that defines a function or an alias, and
 // one with a word the shell would still rewrite get work. That is a brace
-// ({a,b} expands after the check), a parameter, a command substitution, a
+// ({a,b} expands after the check; a lone {word} with only letters, digits,
+// _ and - does not, so gh's {owner} and {repo} are text, T181), a
+// parameter, a command substitution, a
 // glob, a $ or a backtick, unquoted (literal); a single-quoted word, and a
 // double-quoted one with no $ or backtick, reaches its program as written
 // and is judged by its text (T128h2, L1338). So does any git global option but -C <folder>, --no-pager, -P and
@@ -378,9 +406,14 @@ func dockerDelivers(args []string) bool {
 // So does a redirect but a descriptor's copy (2>&1) and a write to
 // /dev/null (quiet): outside the sandbox, `gh api ... > <file>` would write
 // what gh fetched anywhere (T128g).
-func ProfileFor(command string) string {
+func ProfileFor(command string) string { return classify(command, false) }
+
+// classify is ProfileFor for a line zsh runs when zsh is set: any unquoted
+// brace gives work, as zsh expands a lone {word} under BRACE_CCL, an
+// option ~/.zshenv may set for zsh -c.
+func classify(command string, zsh bool) string {
 	cmds, err := sh.Parse(command)
-	if err != nil || sh.DefinesFunction(command) || !literal(command) {
+	if err != nil || sh.DefinesFunction(command) || !literal(command, zsh) {
 		return Work
 	}
 	for _, c := range cmds {
@@ -398,7 +431,13 @@ func ProfileFor(command string) string {
 		}
 	}
 	programs, err := sh.JudgeString(command, nil, nil, sh.Opts{})
-	if err != nil || len(programs) == 0 {
+	if err != nil {
+		return Work
+	}
+	if _, ok := leadingCd(command); ok && len(programs) > 0 && programs[0].Argv[0] == "cd" {
+		programs = programs[1:]
+	}
+	if len(programs) == 0 {
 		return Work
 	}
 	for _, p := range programs {
@@ -519,21 +558,86 @@ func onlyListed(args []string, allowed options) bool {
 	return true
 }
 
+// leadingCd is the folder a line opens with `cd <folder> &&`, and whether
+// it does (T181, L1503): the line is one command, every && on the way to
+// its first command, which is `cd` with one literal folder (quotes
+// removed), not an option, not -, with no .. part (a logical cd through a
+// link and a physical one differ there), no backslash and no brace, and
+// with no redirect, no assignment, no negation and nothing in the
+// background. What follows the cd runs only once it succeeded, in that
+// folder.
+func leadingCd(command string) (string, bool) {
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(command), "")
+	if err != nil || len(f.Stmts) != 1 {
+		return "", false
+	}
+	plain := func(s *syntax.Stmt) bool {
+		return s != nil && !s.Background && !s.Negated && !s.Coprocess && len(s.Redirs) == 0
+	}
+	s, joined := f.Stmts[0], false
+	for plain(s) {
+		b, isBinary := s.Cmd.(*syntax.BinaryCmd)
+		if !isBinary {
+			break
+		}
+		if b.Op != syntax.AndStmt {
+			return "", false
+		}
+		s, joined = b.X, true
+	}
+	if !joined || !plain(s) {
+		return "", false
+	}
+	c, isCall := s.Cmd.(*syntax.CallExpr)
+	if !isCall || len(c.Assigns) != 0 || len(c.Args) != 2 || c.Args[0].Lit() != "cd" {
+		return "", false
+	}
+	var dir strings.Builder
+	for _, p := range c.Args[1].Parts {
+		switch x := p.(type) {
+		case *syntax.Lit:
+			dir.WriteString(x.Value)
+		case *syntax.SglQuoted:
+			if x.Dollar {
+				return "", false
+			}
+			dir.WriteString(x.Value)
+		case *syntax.DblQuoted:
+			for _, q := range x.Parts {
+				l, isLit := q.(*syntax.Lit)
+				if !isLit || x.Dollar {
+					return "", false
+				}
+				dir.WriteString(l.Value)
+			}
+		default:
+			return "", false
+		}
+	}
+	folder := dir.String()
+	if !literalWord(c.Args[1], true) || folder == "" || strings.HasPrefix(folder, "-") || strings.ContainsAny(folder, `\{}`) ||
+		slices.Contains(strings.Split(folder, "/"), "..") {
+		return "", false
+	}
+	return folder, true
+}
+
 // literal is whether the shell passes every word of command as written
 // (T128h2, L1338): the words the reader gives have their quotes removed,
 // so this reads the line's own words. A part outside quotes with a $, a
 // backtick, a glob character or a brace ({--upload-pack=x,repo} becomes
-// other words after the check) is not; nor is a parameter, a substitution
+// other words after the check) is not, but a lone {word} (loneBraces) for
+// a shell that is not zsh; nor is a parameter, a substitution
 // or an extended glob, quoted or not; a single-quoted part ('…', $'…') is,
 // and so is a double-quoted one with no $ or backtick.
-func literal(command string) bool {
+func literal(command string, zsh bool) bool {
 	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(command), "")
 	if err != nil {
 		return false
 	}
 	ok := true
 	syntax.Walk(f, func(n syntax.Node) bool {
-		if w, isWord := n.(*syntax.Word); isWord && !literalWord(w) {
+		if w, isWord := n.(*syntax.Word); isWord && !literalWord(w, zsh) {
 			ok = false
 		}
 		return ok
@@ -544,12 +648,16 @@ func literal(command string) bool {
 // literalWord is whether w is literal, as literal reads a word. A word
 // with an unquoted ~ at its start, or after = or :, is not (T128h3, L1350): the shell may put a home folder there, outside the
 // project (git clone <url> ~/y, docker run -v ~/x:/x); after : it gives
-// work though bash expands it only in an assignment, to fail closed.
-func literalWord(w *syntax.Word) bool {
+// work though bash expands it only in an assignment, to fail closed. With
+// zsh set any unquoted brace gives work.
+func literalWord(w *syntax.Word, zsh bool) bool {
 	for i, p := range w.Parts {
 		switch x := p.(type) {
 		case *syntax.Lit:
-			if strings.ContainsAny(x.Value, "$`*?[{}") || i == 0 && strings.HasPrefix(x.Value, "~") || strings.Contains(x.Value, "=~") || strings.Contains(x.Value, ":~") {
+			if strings.ContainsAny(x.Value, "$`*?[") || i == 0 && strings.HasPrefix(x.Value, "~") || strings.Contains(x.Value, "=~") || strings.Contains(x.Value, ":~") {
+				return false
+			}
+			if strings.ContainsAny(x.Value, "{}") && (zsh || !loneBraces(x.Value)) {
 				return false
 			}
 		case *syntax.SglQuoted:
@@ -567,6 +675,85 @@ func literalWord(w *syntax.Word) bool {
 		}
 	}
 	return true
+}
+
+// loneBraces is whether every brace of an unquoted part s opens a lone
+// {word} that bash and sh leave as it is (T181, L1503): one or more
+// letters, digits, _ or -, so no , and no .. a brace expansion needs, and
+// closes it; any other brace gives false.
+func loneBraces(s string) bool {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '}':
+			return false
+		case '{':
+			j := strings.IndexByte(s[i+1:], '}')
+			if j <= 0 || strings.IndexFunc(s[i+1:i+1+j], func(r rune) bool {
+				return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-')
+			}) >= 0 {
+				return false
+			}
+			i += j + 1
+		}
+	}
+	return true
+}
+
+// DeliveryNote is the note a work run of argv ends with when it fails and
+// holds git with a network subcommand or gh (T181, L1503): argv itself, or
+// the line of `<shell> -c <line>` and the words after its $0 (the Claude
+// Code wrap passes the command there). "" when it holds none.
+func DeliveryNote(argv []string) string {
+	if len(argv) == 0 {
+		return ""
+	}
+	programs := []sh.Program{{Argv: argv}}
+	if len(argv) >= 3 && argv[1] == "-c" && slices.Contains(shells, filepath.Base(argv[0])) {
+		lines := []string{argv[2]}
+		if len(argv) > 4 {
+			lines = append(lines, argv[4:]...)
+		}
+		for _, line := range lines {
+			if ps, err := sh.JudgeString(line, nil, nil, sh.Opts{}); err == nil {
+				programs = append(programs, ps...)
+			} else if cmds, err := sh.Parse(line); err == nil {
+				for _, c := range cmds {
+					programs = append(programs, sh.Program{Argv: c.Words})
+				}
+			}
+		}
+	}
+	if slices.ContainsFunc(programs, delivers) {
+		return deliveryNote
+	}
+	return ""
+}
+
+// deliveryNote is DeliveryNote's text.
+const deliveryNote = "git over SSH and gh run outside the sandbox only on a line of their own, with no pipes, $(…) or other commands: run it alone, as in git -C <dir> fetch origin main"
+
+// delivers is whether p is gh, or git with a network subcommand, by its
+// name or a path to it, whatever its options.
+func delivers(p sh.Program) bool {
+	if len(p.Argv) == 0 {
+		return false
+	}
+	switch filepath.Base(p.Argv[0]) {
+	case "gh":
+		return true
+	case "git":
+		args := p.Argv[1:]
+		for k := 0; k < len(args); k++ {
+			switch {
+			case args[k] == "-C" || args[k] == "-c":
+				k++
+			case !strings.HasPrefix(args[k], "-"):
+				_, network := gitOptions[args[k]]
+				return network || args[k] == "remote"
+			}
+		}
+	}
+	return false
 }
 
 // ghFileFlags are gh's options that read a local file: their value is a
