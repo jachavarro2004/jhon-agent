@@ -57,7 +57,7 @@ export interface TasksViewDeps {
 	icons?: IconStyle;
 }
 
-const REFRESH_MS = 1000;
+const CLOCK_MS = 1000;
 const EMPTY_LIST = "nothing started yet";
 const EMPTY_THREAD = "Pick a row to read its thread";
 const NO_OUTPUT = "no output yet";
@@ -197,7 +197,7 @@ interface Pointer { width: number; height: number; targets: Array<{ x: number; y
 
 export class TasksView {
 	private readonly deps: TasksViewDeps;
-	private selectedId: string | undefined;
+	private pickedId: string | undefined;
 	/** The thread alone: F on a split card, tab or enter on a narrow one. */
 	private details = false;
 	private listTop = 0;
@@ -218,7 +218,7 @@ export class TasksView {
 		// Times, tails and threads move while a task runs.
 		this.timer = setInterval(() => {
 			if (this.deps.tasks(this.scope).some(running)) this.deps.requestRender();
-		}, REFRESH_MS);
+		}, CLOCK_MS);
 		this.timer.unref?.();
 	}
 
@@ -353,14 +353,14 @@ export class TasksView {
 	}
 
 	private chosen(tasks: TaskRecord[]): TaskRecord | undefined {
-		const task = tasks.find((item) => item.id === this.selectedId) ?? tasks[0];
-		this.selectedId = task?.id;
+		const task = tasks.find((item) => item.id === this.pickedId) ?? tasks[0];
+		this.pickedId = task?.id;
 		return task;
 	}
 
 	private choose(task: TaskRecord | undefined): void {
-		if (!task || task.id === this.selectedId) return;
-		this.selectedId = task.id;
+		if (!task || task.id === this.pickedId) return;
+		this.pickedId = task.id;
 		this.scroll = 0;
 		this.follow = true;
 	}
@@ -379,7 +379,7 @@ export class TasksView {
 
 	private toggleScope(): void {
 		this.scope = this.scope === "session" ? "all" : "session";
-		this.selectedId = undefined;
+		this.pickedId = undefined;
 		this.listTop = 0;
 	}
 

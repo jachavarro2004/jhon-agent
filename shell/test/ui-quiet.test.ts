@@ -130,8 +130,8 @@ test("the cards never replace a native bash tool already registered", () => {
 	const { pi, tools } = fakePi({ throwOnConflict: true });
 	const native = sdkTool("bash");
 	pi.registerTool(native);
-	productionQuietTools(pi as any);
-	assert.strictEqual(tools.get("bash"), native);
+	productionQuietTools(pi as never);
+	assert.strictEqual(tools.get("bash"), native, "pi's own bash stays registered: the card attaches to it, never in its place");
 });
 
 test("bash's card draws the same whatever shellPath the context carries", () => {

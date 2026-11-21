@@ -14,6 +14,7 @@
 
 import { shellSettings, type ShellSettings } from "../settings.ts";
 import type { ApiWait } from "./api-wait.ts";
+import { CLAUDE_BRIDGE } from "./usage.ts";
 
 /** The threshold in seconds, shell.behaviour.stall_seconds (JHON_SHELL_STALL_SECONDS overrides it): 0 turns recovery off; a child never recovers. */
 export function stallSeconds(env: NodeJS.ProcessEnv, settings: ShellSettings = shellSettings(env)): number {
@@ -22,7 +23,7 @@ export function stallSeconds(env: NodeJS.ProcessEnv, settings: ShellSettings = s
 }
 
 /** The provider that runs a turn through Claude Code (pi-claude-bridge). */
-export const CLAUDE_BRIDGE_PROVIDER = "claude-bridge";
+export const CLAUDE_BRIDGE_PROVIDER = CLAUDE_BRIDGE;
 
 /** The seconds of silence that make a stall for this turn: `thinking` on claude-bridge or for a reasoning model thinking above minimal, else `stall`; 0 never recovers, and `stall` 0 turns both off. */
 export function stallThreshold(model: { provider?: string; reasoning?: boolean } | undefined, thinkingLevel: string | undefined, seconds: { stall: number; thinking: number }): number {

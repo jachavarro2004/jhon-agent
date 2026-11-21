@@ -24,8 +24,8 @@ const INVERSE_OFF = "\x1b[27m";
 /** Where pi-tui's software cursor ends (an APC mark the renderer turns into "inverse off"); pi-tui does not export it. */
 const SOFT_CURSOR_END = "\x1b_pi:/fc\x07";
 
-const PASTE_START = "\x1b[200~";
-const PASTE_END = "\x1b[201~";
+/** Bracketed paste's opening and closing marks. */
+const [PASTE_START, PASTE_END] = ["\x1b[200~", "\x1b[201~"] as const;
 /** A paste whose end mark has not come yet is dropped past this many UTF-8 bytes. A finished paste has no limit. */
 const UNFINISHED_PASTE_LIMIT = 16 * 1024 * 1024;
 

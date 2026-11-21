@@ -12,8 +12,20 @@ import { escKey, freshHome, homeSettings, noKeys, prompt, rows, session, shell, 
 const editorTheme = { borderColor: (text: string) => text, selectList: {} };
 const bare = { fg: (_role: string, text: string) => text, bold: (text: string) => text, requestRender() {}, pending: () => false, now: () => 0, doubleEscCancelEnabled: () => false, dispatchQueuedText() {} };
 const MiB16 = 16 * 1024 * 1024;
-const PASTE_START = "\x1b[200~";
-const PASTE_END = "\x1b[201~";
+/** Bracketed paste's opening and closing marks. */
+const [PASTE_START, PASTE_END] = ["\x1b[200~", "\x1b[201~"];
+
+/** Presses `key` over the draft "abc\ndef": whether it selected all of it, drawn inverse and then erased by one backspace. */
+function selectsWholeDraft(editor: JhonPromptEditor, key: string): boolean {
+	editor.setText("abc\ndef");
+	editor.handleInput(key);
+	const inverse = /\x1b\[7mabc/.test(editor.render(40).join("\n"));
+	editor.handleInput("\x7f");
+	return inverse && editor.getText() === "";
+}
+
+/** pi's editor's own undo, which its type does not expose. */
+const undo = (editor: JhonPromptEditor): void => (editor as unknown as { undo(): void }).undo();
 /** shift+home: selects the draft, so a paste replaces it. */
 const SELECT_TO_START = "\x1b[1;2H";
 
@@ -83,11 +95,7 @@ test("an extension's alt+a beats select-all; alt+e still selects everything", ()
 			editor.handleInput("\x7f");
 			assert.equal(editor.getText(), "abc\nde", "nothing was selected");
 		}
-		editor.setText("abc\ndef");
-		editor.handleInput("\x1be");
-		assert.match(editor.render(40).join("\n"), /\x1b\[7mabc/);
-		editor.handleInput("\x7f");
-		assert.equal(editor.getText(), "");
+		assert.ok(selectsWholeDraft(editor, "\x1be"), "alt+e, which no extension claims, still selects the whole draft");
 	} finally { editor.dispose(); }
 });
 
@@ -97,11 +105,7 @@ test("with no extension claiming it, alt+a selects the whole draft", () => {
 	const editor = prompt(s, ctx, ui);
 	try {
 		editor.onExtensionShortcut = () => false;
-		editor.setText("abc\ndef");
-		editor.handleInput("\x1ba");
-		assert.match(editor.render(40).join("\n"), /\x1b\[7mabc/);
-		editor.handleInput("\x7f");
-		assert.equal(editor.getText(), "");
+		assert.ok(selectsWholeDraft(editor, "\x1ba"));
 	} finally { editor.dispose(); }
 });
 
@@ -186,8 +190,8 @@ test("a paste that arrives in pieces up to exactly 16 MiB completes, and one und
 		editor.handleInput(body);
 		editor.handleInput(PASTE_END);
 		assert.equal(editor.getExpandedText(), body);
-		(editor as unknown as { undo(): void }).undo();
-		assert.equal(editor.getText(), "hello");
+		undo(editor);
+		assert.equal(editor.getText(), "hello", "one undo brings the draft back");
 	} finally { editor.dispose(); }
 });
 
@@ -199,8 +203,8 @@ test("a whole paste in one piece larger than 16 MiB is never cut", () => {
 		const body = "z".repeat(MiB16 + 1024);
 		editor.handleInput(`${PASTE_START}${body}${PASTE_END}`);
 		assert.equal(editor.getExpandedText(), body);
-		(editor as unknown as { undo(): void }).undo();
-		assert.equal(editor.getText(), "hello");
+		undo(editor);
+		assert.equal(editor.getText(), "hello", "one undo brings the draft back");
 	} finally { editor.dispose(); }
 });
 

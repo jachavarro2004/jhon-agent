@@ -15,8 +15,8 @@ import { setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { framePrompt, PROMPT_INDENT } from "../lib/ui/shell-prompt.ts";
 
 const plain = { fg: (_c: string, t: string) => t, bold: (t: string) => t, strikethrough: (t: string) => t };
-const BG_OPEN = "\x1b[48;5;236m";
-const BG_CLOSE = "\x1b[49m";
+/** The 256-colour background the plain theme paints with, and its reset. */
+const [BG_OPEN, BG_CLOSE] = ["\x1b[48;5;236m", "\x1b[49m"];
 
 // The top row and the status bar are lib/ui/bars.ts's (T174-S3):
 // test/ui-bars.test.ts holds them.

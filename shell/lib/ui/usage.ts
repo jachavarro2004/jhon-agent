@@ -21,31 +21,19 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { clip, glyph, METER_WARN, meterTone, paintMeter, themePainter, type Role, type ThemeLike } from "./primitives/index.ts";
 import { sanitizeTerminalText } from "./terminal-theme.ts";
 
-/** One window of a limit: how much of it is used and when it resets (epoch ms, or null when not said). */
-export interface UsageWindow {
-	label: string;
-	usedPercent: number;
-	windowSeconds: number;
-	resetAt: number | null;
-	/** The tokens used and allowed, for a provider that says them (NaN): totals sum these. */
-	used?: number;
-	budget?: number;
-}
+/**
+ * One stretch of time a limit is counted over: its length in seconds, the
+ * share used so far, and the reset as epoch ms (null when the provider does
+ * not say). `used` and `budget` are tokens, for a provider that reports them
+ * (NaN); totals add those up.
+ */
+export type UsageWindow = { label: string; windowSeconds: number; usedPercent: number; resetAt: number | null; used?: number; budget?: number };
 
-/** A limit a provider applies: its windows, and whether it was hit. */
-export interface UsageLimit {
-	name: string;
-	windows: UsageWindow[];
-	limitReached: boolean;
-}
+/** One limit of a provider: its windows, and whether the provider says it was hit. */
+export type UsageLimit = { name: string; limitReached: boolean; windows: UsageWindow[] };
 
-/** What one provider last said of its limits. */
-export interface ProviderUsage {
-	provider: string;
-	plan?: string;
-	limits: UsageLimit[];
-	fetchedAt: number;
-}
+/** A provider's latest report on its limits, with the time it was taken. */
+export type ProviderUsage = { provider: string; fetchedAt: number; plan?: string; limits: UsageLimit[] };
 
 export const ANTHROPIC = "anthropic";
 export const CLAUDE_BRIDGE = "claude-bridge";
@@ -64,12 +52,15 @@ export const FIVE_HOUR_FROM = METER_WARN;
 export const NEAR_LIMIT_PERCENT = 80;
 
 /** `week`, `5h`, `3d`, `45m`. */
-export function windowLabel(seconds: number): string {
+const WHOLE_UNITS: ReadonlyArray<readonly [suffix: string, size: number]> = [["d", DAY], ["h", HOUR]];
+
+export const windowLabel = (seconds: number): string => {
 	if (seconds === WEEK_SECONDS) return "week";
-	if (seconds >= DAY && seconds % DAY === 0) return `${seconds / DAY}d`;
-	if (seconds >= HOUR && seconds % HOUR === 0) return `${seconds / HOUR}h`;
-	return `${Math.round(seconds / MINUTE)}m`;
-}
+	// The largest unit the length is a whole number of; minutes, rounded, else.
+	const unit = WHOLE_UNITS.find(([, size]) => seconds >= size && seconds % size === 0);
+	if (unit) return String(seconds / unit[1]) + unit[0];
+	return String(Math.round(seconds / MINUTE)) + "m";
+};
 
 /** A number as a provider sends it: a JSON number or a header's decimal text; anything else is no number. */
 function number(value: unknown): number | undefined {
@@ -158,17 +149,24 @@ export function usageFromCodexEvent(data: unknown, now: number, provider?: strin
 
 export const NAN = "nan";
 /** NaN Cloud's dashboard backend: outside its published API, so the fetch is fixed-origin, refuses redirects and checks every field. */
-export const NAN_QUOTA_URL = "https://cloud-api.nan.builders/api/usage/quota";
+const NAN_ORIGIN = "https://cloud-api.nan.builders";
+export const NAN_QUOTA_URL = `${NAN_ORIGIN}/api/usage/quota`;
 /** The dashboard's own defaults for a model that reports a rolling window without its budget. */
 const NAN_WINDOW_TOKENS = 400_000_000;
 const NAN_WINDOW_HOURS = 4;
 
 /** A Unix-seconds number or an ISO date as epoch ms; null for anything else. */
 function when(value: unknown): number | null {
-	if (typeof value === "number" && Number.isFinite(value) && value > 0) return value * 1000;
-	if (typeof value !== "string") return null;
-	const parsed = Date.parse(value);
-	return Number.isFinite(parsed) ? parsed : null;
+	switch (typeof value) {
+		case "string": {
+			const ms = Date.parse(value);
+			return Number.isNaN(ms) ? null : ms;
+		}
+		case "number":
+			return value > 0 && value !== Infinity ? value * 1000 : null;
+		default:
+			return null;
+	}
 }
 
 /** A JSON number, positive (or at least zero without positive). */
@@ -215,17 +213,15 @@ export function parseNanQuota(payload: unknown, now: number): ProviderUsage | un
  * redirect (it never reaches another origin), no stored copy; nothing here
  * logs or keeps it. Undefined without a key or an answer.
  */
-export async function fetchNanUsage(apiKey: string | undefined, fetchFn: typeof fetch, now: number): Promise<ProviderUsage | undefined> {
-	if (!apiKey) return undefined;
-	const response = await fetchFn(NAN_QUOTA_URL, { redirect: "error", cache: "no-store", headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json", "User-Agent": "jhon-shell" } });
-	if (!response.ok) return undefined;
-	return parseNanQuota(await response.json(), now);
+export async function fetchNanUsage(key: string | undefined, request: typeof fetch, now: number): Promise<ProviderUsage | undefined> {
+	if (!key) return undefined;
+	const headers = { Authorization: `Bearer ${key}`, Accept: "application/json", "User-Agent": "jhon-shell" };
+	const response = await request(NAN_QUOTA_URL, { redirect: "error", cache: "no-store", headers });
+	return response.ok ? parseNanQuota(await response.json(), now) : undefined;
 }
 
 /** A model id's family: its leading letters (`glm5.3-flash` and `glm5.2` are both `glm`), from the id alone. */
-export function modelFamily(modelId: string): string {
-	return (/^[a-z]+/i.exec(modelId)?.[0] ?? modelId).toLowerCase();
-}
+export const modelFamily = (modelId: string): string => (/^[a-z]+/i.exec(modelId)?.[0] ?? modelId).toLowerCase();
 
 /** The allowance window of a limit that says its tokens (NaN's first), else undefined. */
 function allowance(limit: UsageLimit): UsageWindow | undefined {
@@ -242,12 +238,18 @@ function allowances(limits: readonly UsageLimit[]): boolean {
  * The limits' total as one limit named `<name> total`: Σused / Σbudget, never
  * an average of percents, and no reset (each model closes its own period).
  */
-function allowanceTotal(name: string, limits: readonly UsageLimit[]): UsageLimit | undefined {
-	if (!allowances(limits)) return undefined;
-	const windows = limits.map((limit) => allowance(limit)!);
-	const used = windows.reduce((sum, w) => sum + w.used!, 0);
-	const budget = windows.reduce((sum, w) => sum + w.budget!, 0);
-	return { name: `${name} total`, windows: [{ label: "", usedPercent: (used / budget) * 100, windowSeconds: 0, resetAt: null }], limitReached: limits.some((limit) => limit.limitReached) };
+function summed(label: string, members: readonly UsageLimit[]): UsageLimit | undefined {
+	if (!allowances(members)) return undefined;
+	let used = 0;
+	let budget = 0;
+	let reached = false;
+	for (const member of members) {
+		const window = allowance(member)!;
+		used += window.used!;
+		budget += window.budget!;
+		reached ||= member.limitReached;
+	}
+	return { name: `${label} total`, limitReached: reached, windows: [{ label: "", windowSeconds: 0, usedPercent: (used / budget) * 100, resetAt: null }] };
 }
 
 /**
@@ -262,7 +264,7 @@ export function selectLimit(usage: ProviderUsage, modelId?: string): UsageLimit 
 	if (allowances(usage.limits)) {
 		const family = modelFamily(modelId);
 		const members = usage.limits.filter((limit) => modelFamily(limit.name) === family);
-		return (members.length ? allowanceTotal(family, members) : undefined) ?? allowanceTotal(usage.provider, usage.limits) ?? usage.limits[0];
+		return (members.length ? summed(family, members) : undefined) ?? summed(usage.provider, usage.limits) ?? usage.limits[0];
 	}
 	return usage.limits[0];
 }
@@ -274,7 +276,7 @@ export function orderedLimits(limits: readonly UsageLimit[]): UsageLimit[] {
 	for (const limit of limits) families.set(modelFamily(limit.name), [...(families.get(modelFamily(limit.name)) ?? []), limit]);
 	const percent = (limit: UsageLimit) => limit.windows[0]?.usedPercent ?? 0;
 	return [...families.entries()]
-		.map(([family, members]) => ({ members: [...members].sort((a, b) => percent(b) - percent(a)), share: percent(allowanceTotal(family, members)!) }))
+		.map(([family, members]) => ({ members: [...members].sort((a, b) => percent(b) - percent(a)), share: percent(summed(family, members)!) }))
 		.sort((a, b) => b.share - a.share)
 		.flatMap((family) => family.members);
 }
@@ -282,14 +284,15 @@ export function orderedLimits(limits: readonly UsageLimit[]): UsageLimit[] {
 // ---------------------------------------------------------------- the bar
 
 /** A window as the status bar shows it; `reset` marks the one whose reset it shows. */
-export interface BarWindow {
+export type BarWindow = {
 	label: string;
-	percent: number;
-	resetAt: number | null;
+	/** Its share used, and when it resets (epoch ms; null when the provider does not say). */
+	percent: number; resetAt: number | null;
+	/** This window carries the bar's reset text. */
 	reset: boolean;
 	/** The week's meter: only the week draws one. */
 	meter: boolean;
-}
+};
 
 const TONE_RANK = { dim: 0, success: 0, warning: 1, error: 2 } as const;
 
@@ -327,11 +330,12 @@ export function resetDay(at: number): string {
 /** `resets in 41m`, `resets in 3h 12m`, `resets in 2d 4h`, `resets now`; nothing when not said. */
 export function resetsIn(resetAt: number | null, now: number): string {
 	if (resetAt === null) return "";
-	const seconds = Math.floor((resetAt - now) / 1000);
-	if (seconds <= 0) return "resets now";
-	if (seconds < HOUR) return `resets in ${Math.max(1, Math.round(seconds / MINUTE))}m`;
-	if (seconds < DAY) return `resets in ${Math.floor(seconds / HOUR)}h ${Math.floor((seconds % HOUR) / MINUTE)}m`;
-	return `resets in ${Math.floor(seconds / DAY)}d ${Math.floor((seconds % DAY) / HOUR)}h`;
+	const left = Math.floor((resetAt - now) / 1000);
+	if (left <= 0) return "resets now";
+	// Two units from a day or an hour up, the larger first; under an hour, whole minutes (at least one).
+	const two = (big: number, small: number, a: string, b: string) => `${Math.floor(left / big)}${a} ${Math.floor((left % big) / small)}${b}`;
+	const span = left >= DAY ? two(DAY, HOUR, "d", "h") : left >= HOUR ? two(HOUR, MINUTE, "h", "m") : `${Math.max(1, Math.round(left / MINUTE))}m`;
+	return "resets in " + span;
 }
 
 /** Foreign text the shell may print: no escapes, whitespace as single spaces. */
@@ -351,19 +355,20 @@ export const USAGE_SOURCE_EVENT = "jhon-shell:usage-source/v1";
 export const USAGE_SOURCE_SCHEMA = "jhon-shell.usage-source/v1";
 const PROVIDER_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export interface UsageSource {
-	provider: string;
-	pendingNote?: string;
-	fetch(apiKey: string | undefined, fetchFn: typeof fetch, now: number): unknown;
-}
+/** A provider's usage hook: fetch gets the key pi holds, a fetch to call, and the time; the note is said while nothing has been fetched yet. */
+export type UsageSource = { provider: string; fetch: (apiKey: string | undefined, fetchFn: typeof fetch, now: number) => unknown; pendingNote?: string };
+
+type SourceFields = { schema?: unknown; provider?: unknown; fetch?: unknown; pendingNote?: unknown };
 
 /** A registration as it crossed the event bus, checked field by field; undefined for any other shape. */
-export function parseUsageSource(value: unknown): UsageSource | undefined {
-	if (!value || typeof value !== "object") return undefined;
-	const raw = value as Record<string, unknown>;
-	if (raw.schema !== USAGE_SOURCE_SCHEMA || typeof raw.provider !== "string" || !PROVIDER_NAME.test(raw.provider) || typeof raw.fetch !== "function") return undefined;
-	if (raw.pendingNote !== undefined && typeof raw.pendingNote !== "string") return undefined;
-	return { provider: raw.provider, fetch: raw.fetch as UsageSource["fetch"], ...(typeof raw.pendingNote === "string" ? { pendingNote: raw.pendingNote } : {}) };
+export function parseUsageSource(payload: unknown): UsageSource | undefined {
+	if (typeof payload !== "object" || payload === null) return undefined;
+	const { schema, provider, fetch: run, pendingNote } = payload as SourceFields;
+	const named = typeof provider === "string" && PROVIDER_NAME.test(provider);
+	if (schema !== USAGE_SOURCE_SCHEMA || !named || typeof run !== "function") return undefined;
+	const source: UsageSource = { provider, fetch: run as UsageSource["fetch"] };
+	if (pendingNote === undefined) return source;
+	return typeof pendingNote === "string" ? { ...source, pendingNote } : undefined;
 }
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);

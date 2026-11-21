@@ -32,7 +32,8 @@ export interface CustomizeHooks {
 export type Preview = (value: string, ascii: boolean, h: CustomizeHooks) => ReturnType<NonNullable<SettingRow["preview"]>>;
 export type SaveResult = string | undefined | Promise<string | undefined>;
 
-export interface CustomizeRow {
+/** One row of Customize: the setting it saves, how it is chosen, shown and applied. */
+export type CustomizeRow = {
 	/** The settings key it saves (the parity test holds a shell.* key to the engine's schema), or a handler row's name. */
 	key: string;
 	label: string;
@@ -59,7 +60,7 @@ export interface CustomizeRow {
 	confirm?: boolean;
 	/** Hidden when it does not apply here. */
 	hidden?(h: CustomizeHooks): boolean;
-}
+};
 
 export interface CustomizeCategory {
 	/** The /jhon:customize word. */

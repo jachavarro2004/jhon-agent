@@ -6,14 +6,14 @@
  * there no hover ever shows; clicks still work.
  */
 
-export interface HoverTheme {
-	fg(role: string, text: string): string;
-}
+/** Anything that can paint text in a theme role. */
+export type HoverTheme = { fg: (role: string, text: string) => string };
 
-export const HOVER_ROLE = "warning";
+/** The theme role every hovered target is painted in. */
+export const HOVER_ROLE = "warning" as const;
 
 /** text in the hover role while hovered, else in idleRole (or as it is). */
 export function paintHover(theme: HoverTheme, text: string, hovered: boolean, idleRole?: string): string {
-	if (hovered) return theme.fg(HOVER_ROLE, text);
-	return idleRole === undefined ? text : theme.fg(idleRole, text);
+	const role = hovered ? HOVER_ROLE : idleRole;
+	return role === undefined ? text : theme.fg(role, text);
 }

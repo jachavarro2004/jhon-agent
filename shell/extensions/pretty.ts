@@ -21,7 +21,8 @@ import { pathToFileURL } from "node:url";
 import { shellEnabled } from "../lib/ui/panel.ts";
 import { installThinkingLabel } from "../lib/ui/thinking-label.ts";
 
-type PiPrettyExtension = (pi: unknown, deps?: unknown) => unknown;
+/** pi-pretty's default export, as far as the shell calls it: an extension factory taking pi and its optional dependencies. */
+type PiPrettyExtension = (...args: [pi: unknown, deps?: unknown]) => unknown;
 
 /** The tools the shell draws itself (L76): pi-pretty is told to leave them alone. */
 const SHELL_TOOLS = ["read", "bash", "ls", "find", "grep"] as const;

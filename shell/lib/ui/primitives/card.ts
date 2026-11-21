@@ -19,34 +19,35 @@ import { shellSettings } from "../../settings.ts";
 import { asciiText, glyph } from "./glyphs.ts";
 import { paintSurface, surfaceOpener, type SurfaceTheme } from "./tint.ts";
 
-export const CARD_TONE = { INFO: "info", SUCCESS: "success", WARNING: "warning", ERROR: "error" } as const;
-export type CardTone = (typeof CARD_TONE)[keyof typeof CARD_TONE];
+/** A card's colour: what its edge and heading say about it. */
+export type CardTone = "info" | "success" | "warning" | "error";
+export const CARD_TONE = { INFO: "info", SUCCESS: "success", WARNING: "warning", ERROR: "error" } as const satisfies Record<string, CardTone>;
 
-export const CARD_STYLE = { NEON: "neon", FLOAT: "float" } as const;
-export type CardStyle = (typeof CARD_STYLE)[keyof typeof CARD_STYLE];
+/** The two looks of shell.appearance.cards. */
+export type CardStyle = "neon" | "float";
+export const CARD_STYLE = { NEON: "neon", FLOAT: "float" } as const satisfies Record<string, CardStyle>;
 
 export interface CardTheme extends SurfaceTheme {
 	bold?(text: string): string;
 }
 
 /** A card's heading and body. */
-export interface Card {
+export type Card = {
+	tone: CardTone;
+	/** The mark before the title: 力 when absent, nothing when "". */
+	glyph?: string;
 	title: string;
 	subtitle?: string;
 	body: string[];
-	tone: CardTone;
-	/** The heading's glyph: 力 when absent, none when "". */
-	glyph?: string;
-}
+};
 
-export interface CardRenderOptions {
-	/** Every body row, or only the first (a notice) or the preview budget. */
-	expanded: boolean;
-	/** Body rows kept after wrapping; set, the card draws in the active style. */
-	previewRows?: number;
-	/** Right of the title in the top rule, dim. May carry ANSI. */
+/** How much of a card to draw, and in which style. */
+export type CardRenderOptions = {
+	/** All the body, or only its start: a notice's first line, or `previewRows` wrapped rows (giving those draws the card in the active style). */
+	expanded: boolean; previewRows?: number;
+	/** Dim text at the right end of the top rule; ANSI allowed. */
 	hint?: string;
-}
+};
 
 /** The brand, the glyph a card names when it names none. */
 export const CARD_GLYPH = glyph("brand");
@@ -54,13 +55,12 @@ export const CARD_GLYPH = glyph("brand");
 const STYLE_SLOT = Symbol.for("jhon-shell.card-style");
 const slot = globalThis as typeof globalThis & { [STYLE_SLOT]?: unknown };
 
-export function cardStyle(): CardStyle {
-	return slot[STYLE_SLOT] === CARD_STYLE.NEON ? CARD_STYLE.NEON : CARD_STYLE.FLOAT;
-}
+/** The active card style: float unless neon was set. */
+export const cardStyle = (): CardStyle => (slot[STYLE_SLOT] === "neon" ? "neon" : "float");
 
-export function setCardStyle(style: CardStyle): void {
+export const setCardStyle = (style: CardStyle): void => {
 	slot[STYLE_SLOT] = style;
-}
+};
 
 // --- the chrome -------------------------------------------------------------------
 
@@ -92,20 +92,16 @@ function floating(ascii: boolean): Chrome {
 const EDGE_ROLE: Record<CardTone, string> = { info: "border", success: "success", warning: "warning", error: "error" };
 const TITLE_ROLE: Record<CardTone, string> = { info: "accent", success: "success", warning: "warning", error: "error" };
 const FLOAT_SURFACE: Record<CardTone, string> = { info: "toolSuccessBg", success: "toolSuccessBg", warning: "toolPendingBg", error: "toolErrorBg" };
-const BODY_ROLE = "text";
-const SOFT_ROLE = "muted";
-const HINT_ROLE = "dim";
+const [BODY_ROLE, SOFT_ROLE, HINT_ROLE] = ["text", "muted", "dim"] as const;
 // Two edges and one space inside each.
 const EDGE_CELLS = 4;
-const FLOAT_MARGIN = 1;
-const FLOAT_MIN_WIDTH = 10;
+// The float sits one cell in from each side, and needs ten cells to draw at all.
+const FLOAT = { margin: 1, minWidth: 10 } as const;
 // A continued heading keeps this many cells for the call before its hint drops.
 const MIN_CALL = 12;
 
 /** The content cells of a card row at width. */
-export function cardInnerWidth(width: number): number {
-	return Math.max(1, width - EDGE_CELLS);
-}
+export const cardInnerWidth = (width: number): number => Math.max(1, width - EDGE_CELLS);
 
 const ascii = () => shellSettings().ascii();
 const cellsOf = (width: number) => Math.max(0, Math.floor(width));
@@ -212,20 +208,22 @@ function makeFrame(chrome: Chrome, tone: CardTone, theme: CardTheme, asciiOn: bo
 
 // --- drawing a card ---------------------------------------------------------------
 
-/** The rows one card component draws, by position. */
-export interface CardParts {
-	/** The top rule and any heading continuation. */
-	head?: readonly string[];
-	body?: readonly string[];
-	/** The closing rule, when this component closes the card. */
-	bottom?: string;
-	/** A component above this one drew the heading (a tool's result under its call). */
-	afterHeading?: boolean;
-}
+/** What one card component hands back to drawCard, top to bottom. */
+export type CardParts = Partial<{
+	/** Rows of the heading: the top rule, then its overflow. */
+	head: readonly string[];
+	/** Rows of content under the heading. */
+	body: readonly string[];
+	/** The last row, given only by the component that ends the card. */
+	bottom: string;
+	/** True when the heading belongs to an earlier component, as a tool result's does to its call. */
+	afterHeading: boolean;
+}>;
 
 /** The float's surface at this width in the active style, or "" for the outline. */
 function floatSurface(theme: CardTheme, tone: CardTone, width: number): string {
-	return cardStyle() === CARD_STYLE.FLOAT && Math.floor(width) >= FLOAT_MIN_WIDTH ? surfaceOpener(theme, FLOAT_SURFACE[tone]) : "";
+	if (cardStyle() !== "float" || Math.floor(width) < FLOAT.minWidth) return "";
+	return surfaceOpener(theme, FLOAT_SURFACE[tone]);
 }
 
 /**
@@ -242,22 +240,26 @@ export function drawCard(tone: CardTone, theme: CardTheme, width: number, build:
 		return [...head, ...body, ...(bottom === undefined ? [] : [bottom])];
 	}
 	const frame = makeFrame(floating(asciiOn), tone, theme, asciiOn);
-	const inner = cells - FLOAT_MARGIN * 2;
-	const { head = [], body = [], bottom, afterHeading = false } = build(frame, inner);
+	const inner = cells - FLOAT.margin * 2;
+	const parts = build(frame, inner);
 	const blank = frame.close(inner);
-	const rows = [
-		...(head.length > 0 ? [blank, ...head] : []),
-		...(body.length > 0 && (head.length > 0 || afterHeading) ? [blank] : []),
-		...body,
-		...(bottom === undefined ? [] : [bottom]),
-	];
-	const margin = " ".repeat(FLOAT_MARGIN);
-	return rows.map((row) => `${margin}${paintSurface(row, open)}${margin}`);
+	// The float breathes: a blank row over the heading, and one between the
+	// heading (this component's or the one above) and the body.
+	const out: string[] = [];
+	const heading = parts.head ?? [];
+	if (heading.length) out.push(blank, ...heading);
+	const content = parts.body ?? [];
+	if (content.length && (heading.length || parts.afterHeading)) out.push(blank);
+	out.push(...content);
+	if (parts.bottom !== undefined) out.push(parts.bottom);
+	const margin = " ".repeat(FLOAT.margin);
+	return out.map((row) => margin + paintSurface(row, open) + margin);
 }
 
 /** Body cells of a section card in the active style (the float's are two fewer). */
-export function panelInnerWidth(theme: CardTheme, width: number, tone: CardTone = CARD_TONE.INFO): number {
-	return cardInnerWidth(floatSurface(theme, tone, width) ? Math.floor(width) - FLOAT_MARGIN * 2 : width);
+export function panelInnerWidth(theme: CardTheme, width: number, tone: CardTone = "info"): number {
+	const floated = floatSurface(theme, tone, width) !== "";
+	return cardInnerWidth(floated ? Math.floor(width) - 2 * FLOAT.margin : width);
 }
 
 /**
@@ -265,18 +267,20 @@ export function panelInnerWidth(theme: CardTheme, width: number, tone: CardTone 
  * a nonpositive width; without, it is always the outline, the body collapsed
  * to its first line unless expanded, and keeps its row count at any width.
  */
-export function renderCard(card: Card, theme: CardTheme, width: number, options: CardRenderOptions): string[] {
-	if (options.previewRows !== undefined) {
-		if (width <= 0) return [];
-		return drawCard(card.tone, theme, width, (frame, inner) => ({
-			head: [frame.top(card, inner, options.hint)],
-			body: frame.bodyRows(card.body.map((row) => theme.fg(BODY_ROLE, row)), inner, options),
-			bottom: frame.close(inner),
-		}));
+export function renderCard(card: Card, theme: CardTheme, width: number, { expanded, previewRows, hint }: CardRenderOptions): string[] {
+	if (previewRows === undefined) {
+		const asciiOn = ascii();
+		const frame = makeFrame(outline(asciiOn), card.tone, theme, asciiOn);
+		const text = noticeText(card, theme, cardInnerWidth(width), expanded, asciiOn);
+		return [frame.top(card, width, hint), ...text.map((row) => frame.line(row, width)), frame.close(width)];
 	}
-	const asciiOn = ascii();
-	const frame = makeFrame(outline(asciiOn), card.tone, theme, asciiOn);
-	return [frame.top(card, width, options.hint), ...noticeText(card, theme, cardInnerWidth(width), options.expanded, asciiOn).map((row) => frame.line(row, width)), frame.close(width)];
+	if (width <= 0) return [];
+	const painted = card.body.map((row) => theme.fg(BODY_ROLE, row));
+	return drawCard(card.tone, theme, width, (frame, inner) => ({
+		head: [frame.top(card, inner, hint)],
+		body: frame.bodyRows(painted, inner, { expanded, previewRows }),
+		bottom: frame.close(inner),
+	}));
 }
 
 /** A notice's body wrapped to its content cells: all of it, or its first line with `…` when more follows. */
@@ -296,20 +300,19 @@ function noticeText(card: Card, theme: CardTheme, room: number, expanded: boolea
 // the result renderer marks the row state both share.
 const RESULT = Symbol.for("jhon-shell.card-result");
 
-/** The fields of pi's tool render context that say whether a result exists. */
-export interface CardRowContext {
-	isPartial?: boolean;
-	state?: unknown;
-}
+/** The two fields of pi's tool render context that tell whether a result came. */
+export type CardRowContext = { state?: unknown; isPartial?: boolean };
+
+const isRowState = (value: unknown): value is Record<symbol, unknown> => typeof value === "object" && value !== null;
 
 /** Marks the shared row state: from now on the result component closes the card. */
-export function markCardResult(state: unknown): void {
-	if (state !== null && typeof state === "object") (state as Record<symbol, unknown>)[RESULT] = true;
+export function markCardResult(rowState: unknown): void {
+	if (!isRowState(rowState)) return;
+	rowState[RESULT] = true;
 }
 
 /** Whether a call card still closes its own frame. Read at render time: pi builds the result after the call. */
 export function cardAwaitingResult(row: CardRowContext): boolean {
 	if (row.isPartial === false) return false;
-	const state = row.state;
-	return !(state !== null && typeof state === "object" && (state as Record<symbol, unknown>)[RESULT] === true);
+	return !(isRowState(row.state) && row.state[RESULT] === true);
 }

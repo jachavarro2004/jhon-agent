@@ -86,8 +86,4 @@ function isControl(code: number): boolean {
 	return code <= 0x1f || inRange(code, 0x7f, 0x9f);
 }
 
-export function sanitizeTerminalText(value: string): string {
-	let out = "";
-	for (const char of stripAnsi(value)) if (!isControl(char.charCodeAt(0))) out += char;
-	return out;
-}
+export const sanitizeTerminalText = (value: string): string => Array.from(stripAnsi(value)).filter((char) => !isControl(char.charCodeAt(0))).join("");

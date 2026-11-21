@@ -52,8 +52,8 @@ export interface BarModel {
 	effort?: string;
 	/** The active Jhon profile, when not the default (T120). */
 	profile?: string;
-	contextPercent: number | null;
-	contextWindow?: number;
+	/** The context used, in percent (null when pi cannot say), and the window's size in tokens. */
+	contextPercent: number | null; contextWindow?: number;
 	costTotal: number;
 	/** The model is paid by subscription: the cost reads `sub`. */
 	subscription?: boolean;
@@ -117,10 +117,7 @@ export const MODE_BADGES: Record<string, { text: string; role: Role; detail: str
 };
 
 /** `$1.42`, three decimals under a dollar; `sub` when a subscription pays. */
-export function formatCost(total: number, subscription = false): string {
-	const amount = total.toFixed(total >= 1 ? 2 : 3);
-	return `$${amount}${subscription ? " sub" : ""}`;
-}
+export const formatCost = (total: number, subscription = false): string => `$${total.toFixed(total < 1 ? 3 : 2)}${subscription ? " sub" : ""}`;
 
 /** `950`, `4.2k`, `272k`, `2.6M`, `13M`. */
 export function formatTokens(count: number): string {

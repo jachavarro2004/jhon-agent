@@ -18,12 +18,9 @@ import { stripAnsi } from "./primitives/fit.ts";
 import { asciiText, glyph } from "./primitives/glyphs.ts";
 import { elapsed } from "./panel.ts";
 
-export const PROMPT_STATE = {
-	IDLE: "idle",
-	WORKING: "working",
-	QUEUED: "queued",
-} as const;
-export type PromptState = (typeof PROMPT_STATE)[keyof typeof PROMPT_STATE];
+/** Where the session stands, as the working line shows it: at rest, at work, or at work with a message waiting. */
+export type PromptState = "idle" | "working" | "queued";
+export const PROMPT_STATE = { IDLE: "idle", WORKING: "working", QUEUED: "queued" } as const satisfies Record<string, PromptState>;
 
 /** The brand on the working line; `*` under shell.appearance.ascii (L165). */
 export const PROMPT_PETAL = "力";
@@ -50,31 +47,41 @@ export function interruptHint(doubleEsc: boolean): [keys: string, word: string] 
 
 // --- motion -------------------------------------------------------------------------
 
-/** One animation frame (shell.appearance.animations full); off draws the line still and only its seconds move. */
-export const SHELL_PULSE_MS = 80;
-/** Frames in one pass of the light across the working word. */
-export const SHELL_SCANNER_STEPS = 15;
+/**
+ * The motion's pace: one frame every 80 ms (shell.appearance.animations full;
+ * off draws the line still and only its seconds move), and 15 frames for one
+ * pass of the light across the working word.
+ */
+export const [SHELL_PULSE_MS, SHELL_SCANNER_STEPS] = [80, 15] as const;
 /** The light starts this many cells before the word, so each pass enters from the left. */
 const SCAN_LEAD = 3;
 /** The light's roles by distance from its centre; anything farther is muted. */
 const SCAN_RAMP = ["borderAccent", "accent", "thinkingHigh"] as const;
 
+/** `n` wrapped into 0..length-1, a negative `n` too. */
+const cycle = (n: number, length: number): number => ((n % length) + length) % length;
+
+/** Paints text in a theme role. */
+type Painter = (role: string, text: string) => string;
+
 /** A band of light crossing the text, one cell per frame; the text itself unchanged. */
-export function scanWorkingText(text: string, tick: number, fg: (role: string, text: string) => string): string {
-	const frame = ((Math.floor(tick) % SHELL_SCANNER_STEPS) + SHELL_SCANNER_STEPS) % SHELL_SCANNER_STEPS;
-	const centre = frame - SCAN_LEAD;
-	return Array.from(text, (char, index) => fg(SCAN_RAMP[Math.abs(centre - index)] ?? "muted", char)).join("");
+export function scanWorkingText(text: string, tick: number, paint: Painter): string {
+	const centre = cycle(Math.floor(tick), SHELL_SCANNER_STEPS) - SCAN_LEAD;
+	let out = "";
+	let index = 0;
+	for (const char of text) {
+		out += paint(SCAN_RAMP[Math.abs(centre - index)] ?? "muted", char);
+		index += 1;
+	}
+	return out;
 }
 
 /** The petal's tone: the rose ramp while working (one step per frame), warning while a message waits, bright at rest. */
 const PETAL_RAMP = ["mdQuoteBorder", "thinkingHigh", "accent", "borderAccent", "accent", "thinkingHigh", "mdQuoteBorder", "mdQuoteBorder"] as const;
 export type PetalTone = (typeof PETAL_RAMP)[number] | "warning";
 
-export function petalTone(state: PromptState, tick: number): PetalTone {
-	if (state === PROMPT_STATE.QUEUED) return "warning";
-	if (state === PROMPT_STATE.WORKING) return PETAL_RAMP[((tick % PETAL_RAMP.length) + PETAL_RAMP.length) % PETAL_RAMP.length]!;
-	return "borderAccent";
-}
+export const petalTone = (state: PromptState, tick: number): PetalTone =>
+	state === "queued" ? "warning" : state === "working" ? PETAL_RAMP[cycle(tick, PETAL_RAMP.length)]! : "borderAccent";
 
 // --- the working line ---------------------------------------------------------------
 

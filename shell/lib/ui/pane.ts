@@ -97,10 +97,10 @@ export function invalidatePane(tui: TUI): void {
 export function setPaneHover(tui: TUI, owner?: object, clear?: () => void): void {
 	if (!tui.terminal) return;
 	const state = paneState(tui);
-	if (state.hover?.owner === owner) return;
-	const previous = state.hover;
-	state.hover = owner && clear ? { owner, clear } : undefined;
-	previous?.clear();
+	const current = state.hover;
+	if (current?.owner === owner) return;
+	state.hover = owner !== undefined && clear !== undefined ? { owner, clear } : undefined;
+	current?.clear();
 }
 
 // ---------------------------------------------------------------- the pane's rows

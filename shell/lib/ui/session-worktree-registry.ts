@@ -20,21 +20,19 @@ export const SESSION_WORKTREE_CHANGED = "jhon-shell:session-worktree-changed";
 /** The evidence the `subagent` tool records for the worktree a child runs in. */
 export const SUBAGENT_WORKTREE_EVIDENCE = "subagent:spawn";
 
-export interface WorktreeIdentity { root: string; commonDir: string }
-export type WorktreeResolver = (path: string, cwd: string) => WorktreeIdentity | undefined;
+/** Where a path lives in Git: the top of its worktree and the clone's shared git dir, both real paths. */
+export type WorktreeIdentity = Record<"root" | "commonDir", string>;
+/** Answers which worktree `target` (relative to `cwd`) belongs to; undefined outside any. */
+export type WorktreeResolver = (target: string, cwd: string) => WorktreeIdentity | undefined;
 /** The commit a root's HEAD is at, or undefined when it has none yet or Git cannot say. */
 export type WorktreeBaseResolver = (root: string) => string | undefined;
 
 export const isCommitId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{40,64}$/.test(value);
 
-interface SessionReader {
-	getSessionId(): string;
-	getEntries(): readonly { type: string; customType?: string; data?: unknown }[];
-}
-interface RegistryHost {
-	appendEntry(type: string, data: unknown): void;
-	events: { emit(name: string, data: unknown): void };
-}
+/** pi's session manager, as far as the registry reads it. */
+type SessionReader = { getSessionId: () => string; getEntries: () => ReadonlyArray<{ type: string; customType?: string; data?: unknown }> };
+/** pi's extension API, as far as the registry writes through it: the session file and the event bus. */
+type RegistryHost = { appendEntry: (type: string, data: unknown) => void; events: { emit: (name: string, data: unknown) => void } };
 /**
  * One recorded root. `base` (T132) is the commit its HEAD was at when the
  * session first recorded it; an entry from before bases were kept, or a root
@@ -53,11 +51,8 @@ const MESSAGES = {
  * variable (any case) is left out, so no ambient GIT_DIR, work tree or config
  * override sends a path to another repository.
  */
-export function worktreeGitEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-	const clean: NodeJS.ProcessEnv = {};
-	for (const [name, value] of Object.entries(env)) if (!name.toUpperCase().startsWith("GIT_")) clean[name] = value;
-	return clean;
-}
+export const worktreeGitEnvironment = (env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv =>
+	Object.fromEntries(Object.entries(env).filter(([name]) => !name.toUpperCase().startsWith("GIT_")));
 
 /** A path as pi spells it (a leading @, odd spaces, ~), made real; a file stands for its folder. */
 function folderOf(path: string, cwd: string): string {
@@ -76,7 +71,7 @@ function askGit(run: typeof execFileSync, folder: string, args: string[], trim: 
 	return trim === "all" ? out.trim() : out.replace(/\r?\n$/, "");
 }
 
-export function resolveSessionWorktreeWithGit(path: string, cwd: string, run: typeof execFileSync = execFileSync): WorktreeIdentity | undefined {
+export function resolveSessionWorktreeWithGit(path: string, cwd: string, run = execFileSync): WorktreeIdentity | undefined {
 	try {
 		const folder = folderOf(path, cwd);
 		const absolute = (flag: string) => realpathSync(askGit(run, folder, ["rev-parse", "--path-format=absolute", flag], "newline"));
@@ -125,7 +120,8 @@ function filesystemProof(folder: string, identity: WorktreeIdentity): string | u
 	}
 }
 
-export interface WorktreeMemoOptions { ttlMs?: number; now?: () => number }
+/** How long a remembered answer may be used (5 s by default), and the clock that says so. */
+export type WorktreeMemoOptions = Partial<{ ttlMs: number; now: () => number }>;
 interface Remembered { identity: WorktreeIdentity; folder: string; proof: string; until: number }
 const MEMO_LIMIT = 256;
 const memoClears = new Set<() => void>();
@@ -137,7 +133,9 @@ const memoClears = new Set<() => void>();
  * kept while it was not one) shows at once. The time limit covers what the
  * filesystem cannot show, such as an edited Git config.
  */
-export function memoizeWorktreeResolver(resolver: WorktreeResolver, { ttlMs = 5000, now = Date.now }: WorktreeMemoOptions = {}): WorktreeResolver {
+export function memoizeWorktreeResolver(resolver: WorktreeResolver, options: WorktreeMemoOptions = {}): WorktreeResolver {
+	const ttlMs = options.ttlMs ?? 5000;
+	const now = options.now ?? Date.now;
 	const remembered = new Map<string, Remembered>();
 	memoClears.add(() => remembered.clear());
 	const stillTrue = (path: string, cwd: string, known: Remembered): boolean => {
@@ -168,11 +166,10 @@ export function memoizeWorktreeResolver(resolver: WorktreeResolver, { ttlMs = 50
 }
 
 /** Forgets every remembered worktree; the next question goes to Git. */
-export function clearSessionWorktreeMemo(): void {
-	for (const clear of memoClears) clear();
-}
+export const clearSessionWorktreeMemo = (): void => memoClears.forEach((clear) => clear());
 
-export const resolveSessionWorktree: WorktreeResolver = memoizeWorktreeResolver(resolveSessionWorktreeWithGit);
+/** The resolver every caller shares: Git's answer, remembered while the filesystem still proves it. */
+export const resolveSessionWorktree = memoizeWorktreeResolver(resolveSessionWorktreeWithGit);
 
 /**
  * A session's worktree list. It keeps no store of its own: the session file
@@ -181,39 +178,34 @@ export const resolveSessionWorktree: WorktreeResolver = memoizeWorktreeResolver(
  * through its own pi API.
  */
 export class SessionWorktreeRegistry {
+	/** The session's id as it was when the registry was made; empty means none, and nothing is recorded. */
 	readonly sessionId: string;
-	private readonly host: RegistryHost;
-	private readonly session: SessionReader;
-	private readonly cwd: string;
-	private readonly resolver: WorktreeResolver;
-	private readonly resolveBase: WorktreeBaseResolver;
+	/** How the registry reaches pi and Git: the session's appends and events, its entries, its folder, and the two Git questions. */
+	readonly #io: { host: RegistryHost; session: SessionReader; cwd: string; worktreeOf: WorktreeResolver; headOf: WorktreeBaseResolver };
 	/** The clone the session started in; set later only when its own folder becomes a repository. */
-	private identity: WorktreeIdentity | undefined;
-	private readonly known = new Set<string>();
-	private open = true;
+	#clone: WorktreeIdentity | undefined;
+	readonly #recorded = new Set<string>();
+	#closed = false;
 
 	constructor(host: RegistryHost, session: SessionReader, cwd: string, resolver: WorktreeResolver = resolveSessionWorktree, resolveBase: WorktreeBaseResolver = resolveWorktreeHeadWithGit) {
-		this.host = host;
-		this.session = session;
-		this.cwd = cwd;
-		this.resolver = resolver;
-		this.resolveBase = resolveBase;
+		this.#io = { host, session, cwd, worktreeOf: resolver, headOf: resolveBase };
 		this.sessionId = session.getSessionId();
-		this.identity = resolver(cwd, cwd);
+		this.#clone = resolver(cwd, cwd);
 	}
 
 	/** Records the session's own root, when its folder is in a repository. */
 	start(): void {
-		if (this.identity) this.register(this.identity.root, "session:cwd");
+		const own = this.#clone?.root;
+		if (own !== undefined) this.register(own, "session:cwd");
 	}
 
 	close(): void {
-		this.open = false;
+		this.#closed = true;
 	}
 
-	private stillActive(): boolean {
-		if (!this.open || this.sessionId.length === 0) return false;
-		try { return this.session.getSessionId() === this.sessionId; } catch { return false; }
+	#stillActive(): boolean {
+		if (this.#closed || this.sessionId === "") return false;
+		try { return this.#io.session.getSessionId() === this.sessionId; } catch { return false; }
 	}
 
 	/**
@@ -221,63 +213,64 @@ export class SessionWorktreeRegistry {
 	 * a repository after the start is taken (only the session's own folder,
 	 * never a path it is asked about); a clone that changed is refused.
 	 */
-	private currentClone(): WorktreeIdentity | undefined {
-		const now = this.resolver(this.cwd, this.cwd);
-		const started = this.identity;
+	#currentClone(): WorktreeIdentity | undefined {
+		const { cwd, worktreeOf } = this.#io;
+		const now = worktreeOf(cwd, cwd);
+		const started = this.#clone;
 		if (started && (!now || now.root !== started.root || now.commonDir !== started.commonDir)) throw new Error(MESSAGES.moved);
-		if (!started && now) this.identity = { ...now };
-		return this.identity;
+		if (!started && now) this.#clone = { ...now };
+		return this.#clone;
 	}
 
 	/** The root `path` is in, when it is a worktree of the session's own clone; throws otherwise. */
 	validate(path: string): string {
-		if (!this.stillActive()) throw new Error(MESSAGES.inactive);
-		const clone = this.currentClone();
-		const target = this.resolver(path, this.cwd);
+		if (!this.#stillActive()) throw new Error(MESSAGES.inactive);
+		const clone = this.#currentClone();
+		const target = this.#io.worktreeOf(path, this.#io.cwd);
 		if (!clone || !target || target.commonDir !== clone.commonDir) throw new Error(MESSAGES.foreign);
 		return target.root;
 	}
 
 	/** Reads the roots the session file already records for this session. */
-	private readRecorded(): void {
-		for (const entry of this.session.getEntries()) {
+	#readRecorded(): void {
+		for (const entry of this.#io.session.getEntries()) {
 			if (entry.type !== "custom" || entry.customType !== SESSION_WORKTREE_ENTRY) continue;
 			const data = entry.data as Partial<Registration> | null | undefined;
 			if (!data || typeof data !== "object") continue;
-			if (data.sessionId === this.sessionId && typeof data.root === "string" && typeof data.evidence === "string") this.known.add(data.root);
+			if (data.sessionId === this.sessionId && typeof data.root === "string" && typeof data.evidence === "string") this.#recorded.add(data.root);
 		}
 	}
 
 	/** Records the root `path` is in, once; returns the root. */
 	register(path: string, evidence: string): string {
 		const root = this.validate(path);
-		this.readRecorded();
-		if (this.known.has(root)) return root;
+		this.#readRecorded();
+		if (this.#recorded.has(root)) return root;
 		// Its base is read once, now: a resumed session finds the root recorded
 		// and keeps the base the first entry holds.
 		let base: string | undefined;
-		try { base = this.resolveBase(root); } catch { /* No base: the root reads against its HEAD. */ }
+		try { base = this.#io.headOf(root); } catch { /* No base: the root reads against its HEAD. */ }
 		const registration: Registration = { sessionId: this.sessionId, root, evidence, ...(isCommitId(base) ? { base } : {}) };
 		// appendEntry is synchronous, so two tools ending together cannot both
 		// append; the root counts as known only once the append went through.
-		this.host.appendEntry(SESSION_WORKTREE_ENTRY, registration);
-		this.known.add(root);
-		this.host.events.emit(SESSION_WORKTREE_CHANGED, { sessionId: this.sessionId });
+		this.#io.host.appendEntry(SESSION_WORKTREE_ENTRY, registration);
+		this.#recorded.add(root);
+		this.#io.host.events.emit(SESSION_WORKTREE_CHANGED, { sessionId: this.sessionId });
 		return root;
 	}
 
 	/** The root a sub-agent runs in joins the list; the session's own root is on it already, and adds nothing. */
 	registerChild(path: string): string | undefined {
 		const root = this.validate(path);
-		return root === this.identity?.root ? undefined : this.register(root, SUBAGENT_WORKTREE_EVIDENCE);
+		return root === this.#clone?.root ? undefined : this.register(root, SUBAGENT_WORKTREE_EVIDENCE);
 	}
 
 	/** The recorded roots that still are worktrees of the clone; a removed one stays recorded but is not listed. */
 	roots(): string[] {
-		if (!this.stillActive()) return [];
-		this.readRecorded();
+		if (!this.#stillActive()) return [];
+		this.#readRecorded();
 		const roots = new Set<string>();
-		for (const root of this.known) {
+		for (const root of this.#recorded) {
 			try { roots.add(this.validate(root)); } catch { /* Gone or pruned: kept on record, not listed. */ }
 		}
 		return [...roots];

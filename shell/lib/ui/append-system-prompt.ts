@@ -9,9 +9,8 @@
  * follows what is already there after one blank line.
  */
 
-export interface AppendableSystemPromptOptions {
-	appendSystemPrompt: string;
-}
+/** The part of pi's options this module touches: the text appended to the system prompt. */
+export type AppendableSystemPromptOptions = { appendSystemPrompt: string };
 
 /** The block as it is added: without its leading newlines. */
 const asBlock = (text: string) => text.replace(/^\n+/, "");

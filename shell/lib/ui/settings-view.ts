@@ -60,6 +60,32 @@ export interface SettingsViewOptions {
 const EDIT_CURSOR = "▏";
 const TITLE = "Customize";
 const MAX_HEIGHT = 24;
+
+/** The first row of a window of `visible` rows over `length` that keeps row `position` in sight, the window kept full. */
+const scrollTop = (position: number, length: number, visible: number): number => Math.max(0, Math.min(position + 1 - visible, length - visible));
+
+/** Preview rows under the list by the card's height: the list gets the room first. */
+const PREVIEW_STEPS: ReadonlyArray<readonly [minHeight: number, rows: number]> = [[18, 6], [11, 3], [8, 1]];
+
+/**
+ * How the card's rows and columns are shared at this size. Two panes from
+ * SETTINGS_TWO_PANES columns, the categories taking 28% of the inner width
+ * within 14..20 cells plus a 3-cell divider; the headings and the click
+ * footer from 6 rows, the gap under the headings from 12, the one above the
+ * footer from 9; the list keeps what is left, at least one row.
+ */
+function cardLayout(inner: number, height: number, narrow: boolean) {
+	const leftWidth = narrow ? 0 : Math.max(14, Math.min(20, Math.floor(inner * 0.28)));
+	const previewLines = PREVIEW_STEPS.find(([minHeight]) => height >= minHeight)?.[1] ?? 0;
+	// The rows each optional part needs before it shows.
+	const [showHeading, showTopGap, showBottomGap] = [6, 12, 9].map((rows) => height >= rows);
+	// The overlay card's top border, title row and bottom border.
+	let taken = 3 + previewLines;
+	if (showHeading) taken += 2;
+	if (showTopGap) taken += 1;
+	if (showBottomGap) taken += 1;
+	return { leftWidth, rightWidth: inner - leftWidth - (leftWidth > 0 ? 3 : 0), previewLines, showHeading, showTopGap, showBottomGap, contentHeight: Math.max(1, height - taken) };
+}
 /** Under this many columns the categories take the whole card until one is opened, as G's. */
 export const SETTINGS_TWO_PANES = 60;
 
@@ -82,7 +108,7 @@ interface Frame {
 export class SettingsView {
 	private readonly o: SettingsViewOptions;
 	private readonly categories: string[];
-	private categoryIndex = 0;
+	private categoryAt = 0;
 	private pane: Pane = "categories";
 	private readonly cursors = new Map<string, number>();
 	private editing: string | undefined;
@@ -97,13 +123,13 @@ export class SettingsView {
 		this.categories = [...new Set(options.rows.map((row) => row.group))];
 		const named = options.group ? this.categories.findIndex((name) => name.toLowerCase() === options.group!.toLowerCase()) : -1;
 		if (named >= 0) {
-			this.categoryIndex = named;
+			this.categoryAt = named;
 			this.pane = "controls";
 		}
 	}
 
 	private category(): string {
-		return this.categories[this.categoryIndex] ?? TITLE;
+		return this.categories[this.categoryAt] ?? TITLE;
 	}
 
 	private rows(): SettingRow[] {
@@ -199,8 +225,8 @@ export class SettingsView {
 		const down = matchesKey(data, "down") || data === "j";
 		const length = this.categories.length;
 		if (this.pane === "categories") {
-			if (up && length) this.categoryIndex = (this.categoryIndex + length - 1) % length;
-			else if (down && length) this.categoryIndex = (this.categoryIndex + 1) % length;
+			if (up && length) this.categoryAt = (this.categoryAt + length - 1) % length;
+			else if (down && length) this.categoryAt = (this.categoryAt + 1) % length;
 			else if (matchesKey(data, "right") || matchesKey(data, "tab") || enter) { if (rows.length) this.pane = "controls"; }
 			else return;
 		} else {
@@ -258,22 +284,15 @@ export class SettingsView {
 		const rows = this.rows();
 		const cursor = this.cursor();
 		const narrow = width < SETTINGS_TWO_PANES;
-		const navOnly = narrow && this.pane === "categories" && this.categories.length > 1;
-		const leftWidth = narrow ? 0 : Math.min(20, Math.max(14, Math.floor(inner * 0.28)));
-		const rightWidth = inner - leftWidth - (leftWidth ? 3 : 0);
-		const previewLines = height >= 18 ? 6 : height >= 11 ? 3 : height >= 8 ? 1 : 0;
-		const showHeading = height >= 6;
-		const showTopGap = height >= 12;
-		const showBottomGap = height >= 9;
-		const chrome = 1 + Number(showHeading) * 2 + Number(showTopGap) + Number(showBottomGap);
-		const contentHeight = Math.max(1, height - 2 - chrome - previewLines);
+		// Narrow and on the categories, the one pane lists them (with more than one to pick).
+		const navOnly = this.pane === "categories" && narrow && this.categories.length > 1;
+		const { leftWidth, rightWidth, previewLines, showHeading, showTopGap, showBottomGap, contentHeight } = cardLayout(inner, height, narrow);
 		const focusedRow = this.pane === "controls" ? rows[cursor] : undefined;
 		const focusedSetting = focusedRow?.options?.length ? focusedRow : undefined;
-		const position = navOnly ? this.categoryIndex : cursor;
-		const listLength = navOnly ? this.categories.length : rows.length;
+		const position = navOnly ? this.categoryAt : cursor;
 		const nameWidth = Math.min(20, Math.max(0, ...rows.map((row) => visibleWidth(row.label))));
-		const start = Math.min(Math.max(0, position - contentHeight + 1), Math.max(0, listLength - contentHeight));
-		const navStart = Math.min(Math.max(0, this.categoryIndex - contentHeight + 1), Math.max(0, this.categories.length - contentHeight));
+		const start = scrollTop(position, navOnly ? this.categories.length : rows.length, contentHeight);
+		const navStart = scrollTop(this.categoryAt, this.categories.length, contentHeight);
 		const paint = (value: string, size: number, role = "text") => {
 			const clipped = truncateToWidth(text(value), Math.max(0, size), glyph("ellipsis", ascii));
 			return theme.fg(role, clipped + " ".repeat(Math.max(0, size - visibleWidth(clipped))));
@@ -286,17 +305,20 @@ export class SettingsView {
 		const hits: Hit[] = [];
 		const fgOnly = { fg: theme.fg.bind(theme) };
 		const openCategory = (index: number) => {
-			this.categoryIndex = index;
+			this.categoryAt = index;
 			this.pane = narrow ? "controls" : "categories";
 		};
-		if (showHeading) lines.push(join(leftWidth ? paint("CATEGORIES", leftWidth, "accent") : "", paint(heading, rightWidth, "accent")));
+		if (showHeading) {
+			const over = leftWidth > 0 ? paint("CATEGORIES", leftWidth, "accent") : "";
+			lines.push(join(over, paint(heading, rightWidth, "accent")));
+		}
 		// The divider runs through the gap under the headings, as artboard 05.
 		if (showTopGap) lines.push(join("", ""));
 		const rightX = 3 + (leftWidth ? leftWidth + 3 : 0);
 		for (let i = 0; i < contentHeight; i++) {
 			const y = lines.length + 2; // the card adds its top border and title row
 			const nav = this.categories[navStart + i];
-			const left = leftWidth && nav ? renderPick(nav, leftWidth, navStart + i === this.categoryIndex, this.pane === "categories" ? theme : fgOnly, ascii) : "";
+			const left = leftWidth && nav ? renderPick(nav, leftWidth, navStart + i === this.categoryAt, this.pane === "categories" ? theme : fgOnly, ascii) : "";
 			if (leftWidth && nav) hits.push({ id: `category:${navStart + i}`, x: 5, end: 5 + Math.min(visibleWidth(nav), leftWidth - 2), y, activate: () => openCategory(navStart + i) });
 			let right: string;
 			if (navOnly) {

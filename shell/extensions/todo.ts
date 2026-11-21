@@ -131,10 +131,9 @@ const GUIDELINES = [
 /** A sub-agent's process: it has the tool only when its tools (its rendered `tools:`) name it. */
 const isChild = (env: NodeJS.ProcessEnv): boolean => env.JHON_PI_CHILD === "1";
 
-export function todoEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	if (!isChild(env)) return true;
-	return (env.JHON_PI_TOOLS ?? "").split(",").includes(TODO_TOOL_NAME);
-}
+/** Whether this process gets the todo tool: the main session always, a sub-agent when its tools name it. */
+export const todoEnabled = (env: NodeJS.ProcessEnv = process.env): boolean =>
+	!isChild(env) || (env.JHON_PI_TOOLS ?? "").split(",").includes(TODO_TOOL_NAME);
 
 /** The right pane's TODOS section unfolded, with no key and every task (lib/ui/todo-section.ts); nothing without tasks. */
 export function renderTodoRail(state: TodoState, theme: PanelTheme, width: number, ascii = false): string[] {

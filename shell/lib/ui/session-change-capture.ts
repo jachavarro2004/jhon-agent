@@ -11,7 +11,7 @@ import { generateUnifiedPatch } from "@earendil-works/pi-coding-agent";
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { homedir } from "node:os";
-import { resolveSessionWorktree, type WorktreeResolver } from "./session-worktree-registry.ts";
+import { resolveSessionWorktree } from "./session-worktree-registry.ts";
 import { SessionChanges, readChangeSnapshot, sameSnapshot, textSnapshot,
 	SESSION_CHANGE_ENTRY, type SessionChangeEvidence, type ChangeSnapshot } from "./session-changes.ts";
 
@@ -57,7 +57,7 @@ async function refusedTarget(path: string): Promise<boolean> {
 	}
 }
 
-export function installSessionChangeCapture(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, resolver: WorktreeResolver = resolveSessionWorktree): void {
+export function installSessionChangeCapture(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, resolver = resolveSessionWorktree): void {
 	if (env.JHON_PI_CHILD === "1") return;
 	const inFlight = new Map<string, InFlight>();
 	let session: ExtensionContext | undefined;

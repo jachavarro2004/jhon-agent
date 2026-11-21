@@ -28,7 +28,10 @@ import { envOverrides, memorySettings } from "./fake-jhon-settings.ts";
 initTheme("dark");
 
 /** Every path under /repo (and ".") is the one clone's /repo; anything else is a root of its own in the same clone. */
-const resolveWorktree = (path: string) => ({ root: path.startsWith("/repo") || path === "." ? "/repo" : path, commonDir: "/clone/git" });
+const resolveWorktree = (path: string) => {
+	const underRepo = path === "." || path.startsWith("/repo");
+	return { root: underRepo ? "/repo" : path, commonDir: "/clone/git" };
+};
 
 // Settings: each home (JHON_SHELL_CONFIG_HOME) names in-memory settings of
 // its own, made on first use and installed for the process when a shell is
@@ -65,6 +68,22 @@ const plainTheme = {
 	getBgAnsi: () => "",
 } satisfies ShellBarTheme & { bg(color: string, value: string): string; getBgAnsi(): string };
 
+/** pi's footer data: the branch (main unless given) and the other extensions' statuses, which the test may change. */
+function footerStub(statuses: ReadonlyMap<string, string> = new Map(), branch: string | null = "main") {
+	return { getGitBranch: () => branch, getExtensionStatuses: () => statuses, getAvailableProviderCount: () => 1, onBranchChange: () => () => {} };
+}
+
+/** A full-screen-sized terminal for the footer: 160 columns unless given. */
+const wideTui = (columns = 160) => ({ terminal: { rows: 40, columns }, requestRender() {} });
+
+type Footer = { render(width: number): string[]; dispose(): void };
+
+/** The footer the shell set on `ui`, built as pi builds it: on `tui`, in the plain theme, over `data`. */
+function mountFooter(ui: FakeUi, tui: unknown, data: unknown = footerStub()): Footer {
+	const build = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, data: unknown) => Footer;
+	return build(tui, plainTheme, data);
+}
+
 /** What the shell set on a session's UI. */
 interface FakeUi {
 	footerFactory: unknown;
@@ -86,7 +105,7 @@ function fakePi() {
 	const commands = new Map<string, Registered & { handler(args: string, ctx: ExtensionContext): Promise<void> }>();
 	const shortcuts = new Map<string, Registered & { handler(ctx: ExtensionContext): Promise<void> }>();
 	const tools = new Map<string, { renderShell?: string; execute(id: string, params: unknown, signal: undefined, update: undefined, ctx: ExtensionContext): Promise<unknown> }>();
-	const sentMessages: Array<{ content: string; options?: { deliverAs?: "steer" | "followUp" } }> = [];
+	const userMessages: Array<{ content: string; options?: { deliverAs?: "steer" | "followUp" } }> = [];
 	const listeners = new Map<string, (data: unknown) => void>();
 	let entries: unknown[] = [];
 	const pi = {
@@ -105,10 +124,10 @@ function fakePi() {
 		registerMessageRenderer() {},
 		getThinkingLevel: () => "medium",
 		getCommands: () => [],
-		sendUserMessage(content: string, options?: { deliverAs?: "steer" | "followUp" }) { sentMessages.push({ content, options }); },
+		sendUserMessage(content: string, options?: { deliverAs?: "steer" | "followUp" }) { userMessages.push({ content, options }); },
 		async exec() { return { stdout: "", stderr: "", code: 0, killed: false }; },
 	} as unknown as ExtensionAPI;
-	return { pi, handlers, commands, shortcuts, tools, sentMessages };
+	return { pi, handlers, commands, shortcuts, tools, userMessages };
 }
 
 async function fire(handlers: Map<string, Handler[]>, event: string, ctx: ExtensionContext): Promise<void> {
@@ -152,46 +171,27 @@ function fakeContext(options: { theme?: typeof plainTheme & { getBgAnsi?(): stri
 	return { ctx, ui };
 }
 
-/** An assistant message's usage entry. */
-function assistantEntry(usage: { input: number; output: number; cost: number }) {
-	return { type: "message", message: { role: "assistant", usage: { input: usage.input, output: usage.output, cacheRead: 0, cacheWrite: 0, cost: { total: usage.cost } } } };
-}
+/** A reply of the model as the session keeps it: its tokens in and out, and what it cost. */
+const reply = (input: number, output: number, cost: number) => ({ type: "message", message: { role: "assistant", usage: { input, output, cacheRead: 0, cacheWrite: 0, cost: { total: cost } } } });
 
 test("barModel reads the session, the model and the footer data (T174-S3)", () => {
-	const { pi } = fakePi();
-	const { ctx } = fakeContext({
-		entries: [assistantEntry({ input: 1000, output: 200, cost: 0.5 }), assistantEntry({ input: 500, output: 100, cost: 0.25 }), { type: "message", message: { role: "user" } }],
-	});
-	const footerData = {
-		getGitBranch: () => "main",
-		getExtensionStatuses: () => new Map([["mcp", "MCP: 3 servers enabled"]]),
-		getAvailableProviderCount: () => 1,
-		onBranchChange: () => () => {},
-	};
-	const built = barModel(pi, ctx, footerData);
+	const session = fakeContext({ entries: [reply(1000, 200, 0.5), reply(500, 100, 0.25), { type: "message", message: { role: "user" } }] });
+	const built = barModel(fakePi().pi, session.ctx, footerStub(new Map([["mcp", "MCP: 3 servers enabled"]])));
 	assert.equal(built.cwd, "/repo");
 	assert.equal(built.branch, "main");
 	assert.equal("sessionName" in built, false, "the session name is on no bar");
 	assert.equal(built.modelId, "claude-opus-5-5");
-	assert.equal(built.effort, "medium");
-	assert.equal(built.contextPercent, 45);
-	assert.equal(built.costTotal, 0.75);
-	assert.equal(built.subscription, true);
+	// Effort from pi's thinking level, the context share pi reports, the two replies' cost summed, and an OAuth login read as a subscription.
+	const { effort, contextPercent, costTotal, subscription } = built;
+	assert.deepEqual({ effort, contextPercent, costTotal, subscription }, { effort: "medium", contextPercent: 45, costTotal: 0.75, subscription: true });
 	assert.deepEqual(built.statuses, ["MCP: 3 servers enabled"], "T174-S5b: other extensions' statuses are back on the bar");
 });
 
 test("barModel keeps the folder whole for the top row, which shows the home as ~; no effort for a non-reasoning model", () => {
-	const { pi } = fakePi();
-	const { ctx } = fakeContext();
-	(ctx as unknown as { model: { reasoning: boolean } }).model.reasoning = false;
-	(ctx.sessionManager as unknown as { getCwd: () => string }).getCwd = () => "/home/alan/work/jhon-demo";
-	const footerData = {
-		getGitBranch: () => null,
-		getExtensionStatuses: () => new Map(),
-		getAvailableProviderCount: () => 1,
-		onBranchChange: () => () => {},
-	};
-	const built = barModel(pi, ctx, footerData);
+	const session = fakeContext();
+	Object.assign(session.ctx.model!, { reasoning: false });
+	Object.assign(session.ctx.sessionManager, { getCwd: () => "/home/alan/work/jhon-demo" });
+	const built = barModel(fakePi().pi, session.ctx, footerStub(new Map(), null));
 	assert.equal(built.cwd, "/home/alan/work/jhon-demo");
 	assert.match(stripAnsi(renderTopRow(built, plainTheme, 60, { home: "/home/alan" })), /^ 力 jhon-demo {2}~\/work\/jhon-demo +$/);
 	assert.equal(built.effort, undefined);
@@ -201,12 +201,11 @@ test("barModel keeps the folder whole for the top row, which shows the home as ~
 test("with a UI, the session start sets the footer: in a regular terminal one row, the status bar", () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
-	const { ctx, ui } = fakeContext();
-	for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
-	const footer = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, data: unknown) => { render(width: number): string[] };
-	assert.equal(typeof footer, "function");
-	const data = { getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} };
-	const drawn = footer({ requestRender() {} }, plainTheme, data).render(120);
+	const session = fakeContext();
+	// Not awaited: the footer is set before the start's first await.
+	for (const handler of handlers.get("session_start") ?? []) void handler({}, session.ctx);
+	assert.equal(typeof session.ui.footerFactory, "function", "the start set a footer");
+	const drawn = mountFooter(session.ui, { requestRender() {} }).render(120);
 	assert.equal(drawn.length, 1);
 	assert.match(drawn[0]!, /^ ⎇ main +claude-opus-5-5 · medium │ ctx 45% │ \$0\.000 sub $/, "under 140 columns the bar's narrow form");
 });
@@ -215,14 +214,12 @@ test("the fullscreen LDD rail and the bars carry live digests: a profile switch 
 	const { pi, handlers } = fakePi();
 	let profile: string | undefined = "team";
 	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" }, { activeProfile: () => profile });
-	const { ctx, ui } = fakeContext();
-	await fire(handlers, "session_start", ctx);
-
+	const session = fakeContext();
+	await fire(handlers, "session_start", session.ctx);
+	// The statuses map is live: the test adds one below.
 	const statuses = new Map<string, string>();
-	const liveFooterData = { getGitBranch: () => "main", getExtensionStatuses: () => statuses, getAvailableProviderCount: () => 1, onBranchChange: () => () => {} };
-	const tui = { terminal: { rows: 40, columns: 160 }, requestRender() {} };
-	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, footerData: unknown) => { render(width: number): string[]; dispose(): void };
-	const component = factory(tui, plainTheme, liveFooterData);
+	const tui = wideTui();
+	const component = mountFooter(session.ui, tui, footerStub(statuses));
 	try {
 		const rail = paneState(tui as unknown as TUI).parts.get("ldd") as PanePart;
 		assert.equal(typeof rail.digest, "function", "the LDD card paints live state and must declare a digest");
@@ -241,7 +238,7 @@ test("the fullscreen LDD rail and the bars carry live digests: a profile switch 
 
 		statuses.set("mcp", "MCP: 3 servers enabled");
 		assert.doesNotMatch(rail.render(46).join("\n"), /MCP/, "no INTEGRATIONS: an extension's status is not drawn");
-		assert.equal(rail.digest?.(), rail.digest?.(), "an unchanged digest still reuses the prepared rail");
+		assert.equal(rail.digest?.(), rail.digest?.(), "asked twice with nothing new, the rail's digest is the same, so its rows are drawn once");
 	} finally {
 		component.dispose();
 	}
@@ -250,14 +247,12 @@ test("the fullscreen LDD rail and the bars carry live digests: a profile switch 
 test("the fullscreen status line carries a live digest so model, context, and cost changes refresh it", async () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, { JHON_SHELL_CHANGES_WATCH_MS: "off" });
-	const entries: unknown[] = [];
-	const { ctx, ui } = fakeContext({ entries });
+	const { ctx, ui } = fakeContext({ entries: [] });
+	// The session's own entries: a reply pushed here is one the bar must cost.
+	const entries = ctx.sessionManager.getEntries() as unknown[];
 	await fire(handlers, "session_start", ctx);
-
-	const liveFooterData = { getGitBranch: () => "main", getExtensionStatuses: () => new Map([["mcp", "MCP: 3 servers enabled"]]), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} };
-	const tui = { terminal: { rows: 40, columns: 160 }, requestRender() {} };
-	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, footerData: unknown) => { render(width: number): string[]; dispose(): void };
-	const component = factory(tui, plainTheme, liveFooterData);
+	const tui = wideTui();
+	const component = mountFooter(ui, tui, footerStub(new Map([["mcp", "MCP: 3 servers enabled"]])));
 	try {
 		const header = paneState(tui as unknown as TUI).parts.get("statusbar") as PanePart;
 		assert.equal(typeof header.digest, "function", "the status line paints live state every frame and must declare a digest");
@@ -278,10 +273,10 @@ test("the fullscreen status line carries a live digest so model, context, and co
 		assert.match(text(), /74%/);
 
 		const beforeCost = live();
-		entries.push(assistantEntry({ input: 100, output: 20, cost: 0.42 }));
+		entries.push(reply(100, 20, 0.42));
 		assert.notEqual(live(), beforeCost, "session cost must change the status line's digest");
 		assert.match(text(), /\$0\.420/);
-		assert.equal(live(), live(), "an unchanged digest still reuses the prepared status line");
+		assert.equal(live(), live(), "asked twice with nothing new, the status line's digest is the same");
 	} finally {
 		component.dispose();
 	}
@@ -345,15 +340,15 @@ test("the prompt never names the LDD phase: the Status card says it, once", asyn
 test("shellUi takes over the prompt: pi's Working row hidden, the working line over the rule, a hint while empty", () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers);
-	assert.equal(ui.workingVisible, false, "pi's own Working row must be hidden");
+	const session = fakeContext();
+	const editor = installedPrompt(session.ctx, session.ui, handlers);
+	assert.equal(session.ui.workingVisible, false, "the shell hides pi's own Working row");
 	editor.focused = true;
-	const lines = editor.render(60).map(stripAnsi);
-	assert.match(lines[0], /^ 力 ready for you +$/);
-	assert.match(lines[1], /^─+$/);
+	const [working, rule, input] = editor.render(60).map(stripAnsi);
+	assert.match(working!, /^ 力 ready for you +$/);
+	assert.match(rule!, /^─+$/);
 	assert.doesNotMatch(editor.render(60).join("\n"), /\x1b\[44m/, "prompt must not paint passive backgrounds");
-	assert.match(lines[2], /^ ❯ .*write, or \/ for a command/);
+	assert.match(input!, /^ ❯ .*write, or \/ for a command/);
 	editor.setText("hola");
 	assert.doesNotMatch(editor.render(60).map(stripAnsi)[2], /write, or/);
 	editor.dispose();
@@ -588,13 +583,13 @@ test("a regular (not fullscreen) terminal draws the same prompt as the full scre
 	} finally { editor.dispose(); }
 });
 
-test("an unknown or unreported phase falls back to the generic working label", () => {
+test("with no phase said, a started turn's working line names the default activity, thinking", async () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
-	const { ctx, ui } = fakeContext();
-	const editor = installedPrompt(ctx, ui, handlers);
+	const session = fakeContext();
+	const editor = installedPrompt(session.ctx, session.ui, handlers);
 	try {
-		for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
+		await fire(handlers, "agent_start", session.ctx);
 		assert.match(editor.render(60).map(stripAnsi)[0], /^ 力 Working…  thinking · \d+s +esc interrupts $/);
 	} finally {
 		editor.dispose();
@@ -673,7 +668,7 @@ function stallHarness(env: NodeJS.ProcessEnv = {}, model: { provider?: string; r
 		}
 		clock.now = target;
 	};
-	const { pi, handlers, sentMessages } = fakePi();
+	const { pi, handlers, userMessages } = fakePi();
 	(pi as unknown as { getThinkingLevel(): string }).getThinkingLevel = () => model.thinking ?? "off";
 	shellUi(pi, env, { now: () => clock.now, schedule });
 	const { ctx, ui } = fakeContext();
@@ -691,7 +686,7 @@ function stallHarness(env: NodeJS.ProcessEnv = {}, model: { provider?: string; r
 	const settle = (aborted: boolean) => { on("agent_end"); on("agent_settled", { type: "agent_settled", aborted }); };
 	const live = () => timers.filter((timer) => timer.live).length;
 	const top = () => stripAnsi(editor!.render(100)[0]);
-	return { advance, on, ownerMessage, settle, live, top, aborts, ui, sentMessages, editor };
+	return { advance, on, ownerMessage, settle, live, top, aborts, ui, userMessages, editor };
 }
 
 test("a 75 s stall with no stream event and no tool aborts the turn once and sends one continue after it settles", () => {
@@ -704,14 +699,14 @@ test("a 75 s stall with no stream event and no tool aborts the turn once and sen
 		assert.equal(h.aborts.count, 1);
 		assert.deepEqual(h.ui.notices.filter((notice) => /Claude API/.test(notice)), ["Claude API did not answer in 75s; retried"]);
 		// The continue goes out once the aborted run settles, as an Esc's queued text does.
-		assert.deepEqual(h.sentMessages, []);
+		assert.deepEqual(h.userMessages, []);
 		h.settle(true);
-		assert.deepEqual(h.sentMessages, [{ content: STALL_CONTINUE, options: undefined }]);
+		assert.deepEqual(h.userMessages, [{ content: STALL_CONTINUE, options: undefined }]);
 		// Nothing stays armed once the turn ended.
 		assert.equal(h.live(), 0);
 		h.advance(1_000_000);
 		assert.equal(h.aborts.count, 1);
-		assert.equal(h.sentMessages.length, 1);
+		assert.equal(h.userMessages.length, 1);
 	} finally {
 		h.editor?.dispose();
 	}
@@ -726,7 +721,7 @@ test("a second stall in the same owner message only shows the waiting label, and
 		h.ownerMessage(STALL_CONTINUE);
 		h.advance(600_000);
 		assert.equal(h.aborts.count, 1);
-		assert.equal(h.sentMessages.length, 1);
+		assert.equal(h.userMessages.length, 1);
 		assert.match(h.top(), /waiting for Claude API · 600s/);
 		assert.equal(h.ui.notices.filter((notice) => /Claude API did not answer/.test(notice)).length, 1);
 		h.settle(false);
@@ -734,7 +729,7 @@ test("a second stall in the same owner message only shows the waiting label, and
 		h.advance(75_000);
 		assert.equal(h.aborts.count, 2);
 		h.settle(true);
-		assert.deepEqual(h.sentMessages.map((message) => message.content), [STALL_CONTINUE, STALL_CONTINUE]);
+		assert.deepEqual(h.userMessages.map((message) => message.content), [STALL_CONTINUE, STALL_CONTINUE]);
 	} finally {
 		h.editor?.dispose();
 	}
@@ -772,7 +767,7 @@ function assertRecoversAt(h: ReturnType<typeof stallHarness>, at: number, secs: 
 	assert.equal(h.aborts.count, 1, label);
 	assert.deepEqual(h.ui.notices.filter((notice) => /Claude API did not answer/.test(notice)), [`Claude API did not answer in ${secs}s; retried`], label);
 	h.settle(true);
-	assert.deepEqual(h.sentMessages.map((message) => message.content), [`The Claude API sent no answer for ${secs}s; the turn was restarted. Continue where you stopped.`], label);
+	assert.deepEqual(h.userMessages.map((message) => message.content), [`The Claude API sent no answer for ${secs}s; the turn was restarted. Continue where you stopped.`], label);
 }
 
 test("a thinking model waits thinking_stall_seconds (300 s), not 75 s; with thinking off or minimal a real stall recovers at 75 s (T38, L382)", () => {
@@ -883,7 +878,7 @@ test("a child session and JHON_SHELL_STALL_SECONDS=0 never recover; another valu
 		assert.equal(h.aborts.count, 1);
 		assert.ok(h.ui.notices.includes("Claude API did not answer in 120s; retried"));
 		h.settle(true);
-		assert.deepEqual(h.sentMessages.map((message) => message.content), ["The Claude API sent no answer for 120s; the turn was restarted. Continue where you stopped."]);
+		assert.deepEqual(h.userMessages.map((message) => message.content), ["The Claude API sent no answer for 120s; the turn was restarted. Continue where you stopped."]);
 	} finally {
 		h.editor?.dispose();
 	}
@@ -896,12 +891,10 @@ function configHome(t: { after(callback: () => void): void }): string {
 	return home;
 }
 
-const footerData = { getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} };
+const footerData = footerStub();
 
-function renderFooter(ui: FakeUi): string {
-	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, footerData: unknown) => { render(width: number): string[] };
-	return factory(fakeTui, plainTheme, footerData).render(160)[0];
-}
+/** The footer's one row at 160 columns, in a regular terminal. */
+const renderFooter = (ui: FakeUi): string => mountFooter(ui, fakeTui).render(160)[0]!;
 
 async function settle(): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, 0));
@@ -955,7 +948,7 @@ test("T120: the status bar shows the session's profile from its branch at the st
 	Object.assign(ctx.sessionManager, { getBranch: () => [{ type: "custom", customType: SESSION_PROFILE_ENTRY, data: { profile: "fast" } }] });
 	await fire(handlers, "session_start", ctx);
 	const tui = { mode: "fullscreen", terminal: { rows: 40, columns: 160 }, requestRender() {} };
-	const footer = (ui.footerFactory as (tui: unknown, theme: unknown, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, plainTheme, { getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} });
+	const footer = mountFooter(ui, tui);
 	const bar = () => paneState(tui as unknown as TUI).parts.get("statusbar")!.render(160).map(stripAnsi)[0]!;
 	try {
 		assert.match(bar(), /claude-opus-5-5 · medium · fast \(session\) │ ctx/);
@@ -974,9 +967,7 @@ test("the bar never counts the background tasks lib/background-tasks-tools.ts re
 	const { ctx, ui } = fakeContext();
 	await fire(handlers, "session_start", ctx);
 	const tui = { terminal: { rows: 40, columns: 180 }, requestRender() {} };
-	const footer = (ui.footerFactory as (tui: unknown, theme: ShellBarTheme, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, plainTheme, {
-		getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {},
-	});
+	const footer = mountFooter(ui, tui);
 	try {
 		const idle = footer.render(180);
 		const sessionId = ctx.sessionManager.getSessionId();
@@ -1426,9 +1417,7 @@ test("the rail has no STATS part, whatever the session and its sub-agents spent 
 	const { ctx, ui } = fakeContext({ entries });
 	await fire(handlers, "session_start", ctx);
 	const tui = { terminal: { rows: 40, columns: 180 }, requestRender() {} };
-	const footer = (ui.footerFactory as (tui: unknown, theme: ShellBarTheme, data: unknown) => { render(width: number): string[]; dispose(): void })(tui, plainTheme, {
-		getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {},
-	});
+	const footer = mountFooter(ui, tui);
 	try {
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "agent-1", kind: "agent", label: "explore: callers", startedAt: 1 }], spend: { runs: 2, tokens: 3000, cost: 0.1 } });
 		const parts = paneState(tui as unknown as TUI).parts;

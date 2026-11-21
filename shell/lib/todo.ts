@@ -5,67 +5,34 @@ import { sanitizeTerminalText } from "./ui/terminal-theme.ts";
 // lives on the session branch, where every todo result carries a whole copy,
 // and a list goes stale when turns pass with open work and no update.
 
-export const TODO_STATUS = {
-	PENDING: "pending",
-	IN_PROGRESS: "in_progress",
-	/** Open, but waiting on something outside the list; it always has a note naming what. */
-	BLOCKED: "blocked",
-	DONE: "done",
-	/** Given up on purpose: finished, never open. */
-	DROPPED: "dropped",
-} as const;
+/**
+ * A task's state. `blocked` is still open but waits on something outside the
+ * list, and always carries a note naming what; `dropped` was given up on
+ * purpose: it counts as finished, never as open.
+ */
+export type TodoStatus = "pending" | "in_progress" | "blocked" | "done" | "dropped";
+export const TODO_STATUS = { PENDING: "pending", IN_PROGRESS: "in_progress", BLOCKED: "blocked", DONE: "done", DROPPED: "dropped" } as const satisfies Record<string, TodoStatus>;
 
-export type TodoStatus = (typeof TODO_STATUS)[keyof typeof TODO_STATUS];
+/** What one todo call does: replace the list, add or change one task, empty it, or read it. */
+export const TODO_ACTION = { WRITE: "write", ADD: "add", UPDATE: "update", CLEAR: "clear", LIST: "list" } as const;
 
-export const TODO_ACTION = {
-	WRITE: "write",
-	ADD: "add",
-	UPDATE: "update",
-	CLEAR: "clear",
-	LIST: "list",
-} as const;
+/** One step of the list. */
+export type TodoTask = { id: number; title: string; status: TodoStatus; note?: string };
 
-export interface TodoTask {
-	id: number;
-	title: string;
-	status: TodoStatus;
-	note?: string;
-}
+/** The whole list: its tasks, the id a new task gets next, and the turn it last changed in (null before any change). */
+export type TodoState = { tasks: TodoTask[]; nextId: number; updatedTurn: number | null };
 
-export interface TodoState {
-	tasks: TodoTask[];
-	nextId: number;
-	/** The turn of the last change, or null before the first. */
-	updatedTurn: number | null;
-}
+/** A task as the model sends it: any field may be missing or wrong until it is checked. */
+export type TodoTaskInput = Partial<{ id: number; title: string; status: string; note: string }>;
 
-export interface TodoTaskInput {
-	id?: number;
-	title?: string;
-	status?: string;
-	note?: string;
-}
+/** One todo call: its action and, by action, a whole list or one task's fields. */
+export type TodoParams = TodoTaskInput & { action: string; tasks?: TodoTaskInput[] };
 
-export interface TodoParams {
-	action: string;
-	tasks?: TodoTaskInput[];
-	id?: number;
-	title?: string;
-	status?: string;
-	note?: string;
-}
+/** A call's outcome: the list after it, what the model reads back, and the reason when it was refused. */
+export type TodoResult = { state: TodoState; text: string; error?: string };
 
-export interface TodoResult {
-	state: TodoState;
-	text: string;
-	error?: string;
-}
-
-export interface TodoSummary {
-	done: number;
-	total: number;
-	open: number;
-}
+/** Finished tasks, all tasks, and the ones still open. */
+export type TodoSummary = Record<"done" | "total" | "open", number>;
 
 /** Where a todo result's details keep the list's copy. */
 export const TODO_DETAILS_KEY = "jhonTodo";
@@ -79,6 +46,7 @@ export function todoDetails(details: Record<string, unknown> | undefined): { sta
 	return key === undefined ? undefined : { state: details[key] as TodoState | undefined };
 }
 
+/** The tool's name as the model calls it. */
 export const TODO_TOOL_NAME = "todo";
 /** The glyph of the todo card's title (L146). */
 export const TODO_GLYPH = "力";
@@ -103,9 +71,7 @@ const ERRORS = {
 	action: (given: unknown) => `unknown action "${given}" (use write, add, update, clear, or list)`,
 } as const;
 
-export function emptyTodo(): TodoState {
-	return { tasks: [], nextId: 1, updatedTurn: null };
-}
+export const emptyTodo = (): TodoState => ({ tasks: [], nextId: 1, updatedTurn: null });
 
 /** A title or note on one line, with nothing a terminal would act on. */
 function oneLine(value: unknown): string {
@@ -126,17 +92,21 @@ const plural = (count: number) => (count === 1 ? "task" : "tasks");
 const noteSuffix = (task: TodoTask) => (task.note ? ` — ${task.note}` : "");
 
 /** Done is done; dropped tasks count in the total but neither as done nor as open. */
-export function todoSummary(state: TodoState): TodoSummary {
-	const done = countOf(state, "done");
-	const total = state.tasks.length;
-	return { done, total, open: total - done - countOf(state, "dropped") };
+export function todoSummary({ tasks }: TodoState): TodoSummary {
+	let done = 0;
+	let dropped = 0;
+	for (const { status } of tasks) {
+		if (status === "done") done += 1;
+		else if (status === "dropped") dropped += 1;
+	}
+	return { done, total: tasks.length, open: tasks.length - done - dropped };
 }
 
 /** Turns since the last update, while some task can be worked on; tasks that only wait never go stale. */
-export function staleTurns(state: TodoState, currentTurn: number): number {
-	if (state.updatedTurn === null) return 0;
-	if (!state.tasks.some((task) => task.status === "pending" || task.status === "in_progress")) return 0;
-	return Math.max(0, currentTurn - state.updatedTurn);
+export function staleTurns({ tasks, updatedTurn }: TodoState, turn: number): number {
+	const workable = tasks.some(({ status }) => status === "pending" || status === "in_progress");
+	if (updatedTurn === null || !workable) return 0;
+	return Math.max(0, turn - updatedTurn);
 }
 
 function progressLine(state: TodoState): string {
@@ -166,20 +136,20 @@ function taskFrom(input: TodoTaskInput, id: number): TodoTask | string {
 const refused = (state: TodoState, error: string): TodoResult => ({ state, text: `Error: ${error}`, error });
 
 function writeAll(state: TodoState, inputs: TodoTaskInput[], turn: number): TodoResult {
-	const tasks: TodoTask[] = [];
-	let nextId = state.nextId;
+	const written: TodoTask[] = [];
+	let following = state.nextId;
 	for (const input of inputs) {
 		// An id the model passes back is kept, once; a new task gets the next one.
 		const given = input.id;
-		const reuse = typeof given === "number" && Number.isInteger(given) && given > 0 && tasks.every((task) => task.id !== given);
-		const id = reuse ? (given as number) : nextId++;
-		if (id + 1 > nextId) nextId = id + 1;
+		const keep = typeof given === "number" && Number.isInteger(given) && given > 0 && !written.some((task) => task.id === given);
+		const id = keep ? (given as number) : following++;
+		following = Math.max(following, id + 1);
 		const task = taskFrom(input, id);
 		if (typeof task === "string") return refused(state, task);
-		tasks.push(task);
+		written.push(task);
 	}
-	const written: TodoState = { tasks, nextId, updatedTurn: turn };
-	return { state: written, text: `Todo list written: ${progressLine(written)}` };
+	const list: TodoState = { tasks: written, nextId: following, updatedTurn: turn };
+	return { state: list, text: `Todo list written: ${progressLine(list)}` };
 }
 
 function addOne(state: TodoState, params: TodoParams, turn: number): TodoResult {
@@ -204,42 +174,50 @@ function listed(state: TodoState): TodoResult {
 	return { state, text: state.tasks.map((task) => `[${task.status}] #${task.id} ${task.title}${noteSuffix(task)}`).join("\n") };
 }
 
-export function applyTodo(state: TodoState, params: TodoParams, turn: number): TodoResult {
-	switch (params.action) {
-		case "write": return writeAll(state, Array.isArray(params.tasks) ? params.tasks : [], turn);
-		case "add": return addOne(state, params, turn);
-		case "update": return updateOne(state, params, turn);
-		case "clear": {
-			const count = state.tasks.length;
-			return { state: { ...emptyTodo(), updatedTurn: turn }, text: `Cleared ${count} ${plural(count)}` };
-		}
-		case "list": return listed(state);
-		default: return refused(state, ERRORS.action(params.action));
-	}
+type Action = (state: TodoState, params: TodoParams, turn: number) => TodoResult;
+
+function cleared(state: TodoState, _params: TodoParams, turn: number): TodoResult {
+	const gone = state.tasks.length;
+	return { state: { ...emptyTodo(), updatedTurn: turn }, text: `Cleared ${gone} ${plural(gone)}` };
 }
 
-interface BranchEntry {
-	type?: string;
-	message?: { role?: string; toolName?: string; isError?: boolean; details?: unknown };
+/** Each action's handler, by the name the model passes. */
+const ACTIONS: Readonly<Record<string, Action>> = {
+	write: (state, params, turn) => writeAll(state, Array.isArray(params.tasks) ? params.tasks : [], turn),
+	add: addOne,
+	update: updateOne,
+	clear: cleared,
+	list: (state) => listed(state),
+};
+
+/** One todo call on the list; an unknown action leaves it as it was, with the error. */
+export function applyTodo(current: TodoState, call: TodoParams, turn: number): TodoResult {
+	const handler = Object.hasOwn(ACTIONS, call.action) ? ACTIONS[call.action] : undefined;
+	return handler === undefined ? refused(current, ERRORS.action(call.action)) : handler(current, call, turn);
 }
 
-/** A task of rpiv-todo, the list's shape before Jhon's. */
-interface RpivTask {
-	id?: number;
-	subject?: string;
-	status?: string;
-	activeForm?: string;
+/** The details of a successful todo result on the branch, or undefined for any other entry. */
+function todoResultDetails(entry: unknown): Record<string, unknown> | undefined {
+	if (typeof entry !== "object" || entry === null) return undefined;
+	const { type, message } = entry as { type?: unknown; message?: unknown };
+	if (type !== "message" || typeof message !== "object" || message === null) return undefined;
+	const { role, toolName, isError, details } = message as Record<string, unknown>;
+	if (role !== "toolResult" || toolName !== TODO_TOOL_NAME || isError === true) return undefined;
+	return typeof details === "object" && details !== null ? (details as Record<string, unknown>) : undefined;
 }
 
-function fromRpiv(details: { tasks?: RpivTask[]; nextId?: number }): TodoState {
-	const tasks: TodoTask[] = [];
-	for (const old of details.tasks ?? []) {
-		if (old.status === "deleted" || typeof old.id !== "number") continue;
-		const task = taskFrom({ id: old.id, title: old.subject, status: old.status, note: old.status === "in_progress" ? old.activeForm : undefined }, old.id);
-		if (typeof task !== "string") tasks.push(task);
-	}
-	const nextId = typeof details.nextId === "number" ? details.nextId : Math.max(0, ...tasks.map((task) => task.id)) + 1;
-	return { tasks, nextId, updatedTurn: null };
+/** rpiv-todo's details, the list's shape before Jhon's: its tasks (a subject, and an activeForm while in progress) and the next id. */
+type RpivList = { tasks?: Array<{ id?: number; subject?: string; status?: string; activeForm?: string }>; nextId?: number };
+
+function fromRpiv({ tasks: earlier = [], nextId }: RpivList): TodoState {
+	const tasks = earlier.flatMap((item): TodoTask[] => {
+		if (item.status === "deleted" || typeof item.id !== "number") return [];
+		const note = item.status === "in_progress" ? item.activeForm : undefined;
+		const task = taskFrom({ id: item.id, title: item.subject, status: item.status, note }, item.id);
+		return typeof task === "string" ? [] : [task];
+	});
+	const following = typeof nextId === "number" ? nextId : Math.max(0, ...tasks.map(({ id }) => id)) + 1;
+	return { tasks, nextId: following, updatedTurn: null };
 }
 
 /**
@@ -247,24 +225,22 @@ function fromRpiv(details: { tasks?: RpivTask[]; nextId?: number }): TodoState {
  * results keep a copy under `jhonTodo` (`gentleTodo` before T59); rpiv-todo's
  * kept `tasks` and `nextId` at the top of the details.
  */
-export function replayTodo(entries: readonly unknown[]): TodoState {
-	let state = emptyTodo();
-	for (const entry of entries as BranchEntry[]) {
-		const message = entry?.message;
-		if (entry?.type !== "message" || message?.role !== "toolResult" || message.toolName !== TODO_TOOL_NAME || message.isError === true) continue;
-		const details = message.details as Record<string, unknown> | undefined;
-		if (!details || typeof details !== "object") continue;
+export function replayTodo(branch: readonly unknown[]): TodoState {
+	let latest = emptyTodo();
+	for (const entry of branch) {
+		const details = todoResultDetails(entry);
+		if (details === undefined) continue;
 		const copy = todoDetails(details)?.state;
-		if (copy && Array.isArray(copy.tasks)) state = { tasks: copy.tasks, nextId: copy.nextId, updatedTurn: copy.updatedTurn ?? null };
-		else if (Array.isArray(details.tasks)) state = fromRpiv(details as { tasks?: RpivTask[]; nextId?: number });
+		if (copy && Array.isArray(copy.tasks)) latest = { tasks: copy.tasks, nextId: copy.nextId, updatedTurn: copy.updatedTurn ?? null };
+		else if (Array.isArray(details.tasks)) latest = fromRpiv(details as RpivList);
 	}
-	return state;
+	return latest;
 }
 
 const LIST_HEADING = "## Todo list";
 
 /** The open list as the model reads it at a run's start, with its rules, and the stale line once it is stale. */
-export function todoPromptBlock(state: TodoState, stale: number): string | undefined {
+export function todoPromptBlock(state: TodoState, stale = 0): string | undefined {
 	if (todoSummary(state).open === 0) return undefined;
 	const rows = state.tasks.map((task, index) => `${index + 1}. [${task.status}] ${task.title}${noteSuffix(task)}`);
 	const block = [

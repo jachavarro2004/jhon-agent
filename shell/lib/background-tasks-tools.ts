@@ -208,14 +208,17 @@ export function taskNoticeText(task: TaskRecord, now: number, stoppedBy?: "owner
 	return taskText(long ? { ...task, result: noticeResult(task.result!, task.id) } : task, now, stoppedBy);
 }
 
-/** The notice of one batch of a monitor's lines. */
-export function monitorEventsText(job: JobRecord, batch: MonitorBatch): string {
-	const more = batch.omitted > 0 ? [`(${count(batch.omitted, "more line")} not shown; full output in ${job.outputPath})`] : [];
-	return [`Monitor ${named(job)} reported ${count(batch.lines.length, "new line")}:`, ...batch.lines, ...more].join("\n");
+/** A batch of a monitor's lines: a count line, the lines, and how many more did not fit. */
+function batchText(job: JobRecord, { lines, omitted }: MonitorBatch): string {
+	const rows = [`Monitor ${named(job)} reported ${count(lines.length, "new line")}:`, ...lines];
+	if (omitted > 0) rows.push(`(${count(omitted, "more line")} not shown; full output in ${job.outputPath})`);
+	return rows.join("\n");
 }
 
-/** The notice of a monitor stopped at its timeout or as a flood. */
-export function monitorStoppedText(job: JobRecord, reason: MonitorStopReason): string {
+/** What the agent reads of a monitor: a batch of its lines, or why it was stopped (its timeout, or a flood). */
+export function monitorNoticeText(notice: MonitorNotice): string {
+	if (notice.kind === "events") return batchText(notice.job, notice.batch);
+	const { job, reason } = notice;
 	const events = count(job.events ?? 0, "event");
 	const why = reason === "timeout"
 		? `reached ${job.timeoutSeconds === undefined ? "its timeout" : `its ${job.timeoutSeconds}s timeout`} after ${events} and was stopped. Start a new monitor if you still need to watch it.`
@@ -236,8 +239,8 @@ export function taskDetails(task: TaskRecord, event?: "events" | MonitorStopReas
 	return { jhonTasks: { id: task.id, kind: task.kind, label: task.label, status: task.status, succeeded: taskSucceeded(task), ...job, ...(event ? { event } : {}) } };
 }
 
-type ToolText = { content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> };
-const reply = (text: string, details: Record<string, unknown> = {}): ToolText => ({ content: [{ type: "text", text }], details });
+/** A tool's answer: one text block for the model, and details for its card. */
+const reply = (text: string, details: Record<string, unknown> = {}) => ({ content: [{ type: "text" as const, text }], details });
 
 // ---------------------------------------------------------------- registration
 
@@ -331,11 +334,8 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 			onEnd?.(task as JobRecord);
 			return;
 		}
-		let content: string;
-		let event: "events" | MonitorStopReason | undefined;
-		if (notice.kind === "events") { content = monitorEventsText(notice.job, notice.batch); event = "events"; }
-		else if (notice.kind === "stopped") { content = monitorStoppedText(notice.job, notice.reason); event = notice.reason; }
-		else content = taskNoticeText(task, now(), notice.stoppedBy);
+		const event = notice.kind === "end" ? undefined : notice.kind === "events" ? "events" : notice.reason;
+		const content = notice.kind === "end" ? taskNoticeText(task, now(), notice.stoppedBy) : monitorNoticeText(notice);
 		const message = { customType: TASK_NOTICE_TYPE, content, display: true, details: taskDetails(task, event) };
 		// pi queues a follow-up sent during a turn, and the owner's Esc clears
 		// that queue: agent-2's notice was lost so (T47, L164). Held here, it
@@ -361,7 +361,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		runAgent: deps.runAgent ?? runAgent,
 		onSettled: (task) => {
 			// A monitor's open batch goes out before its end.
-			if (task.kind === "monitor") monitors.finish(task);
+			if (task.kind === "monitor") watchers.finish(task);
 			deliver({ task, kind: "end" });
 			announce();
 		},
@@ -370,7 +370,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 			announce();
 		},
 	});
-	const monitors = createMonitorController({ registry: tasks, schedule, now, deliver });
+	const watchers = createMonitorController({ registry: tasks, schedule, now, deliver });
 
 	/** Tells the shell UI what runs and what ended in the last minute; with the shell off, pi's status line counts the running tasks. */
 	const announce = () => {
@@ -454,7 +454,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 			const command = params.command;
 			if (typeof command !== "string" || command.trim() === "") throw new Error("monitor requires a non-empty command");
 			const timeoutSeconds = typeof params.timeout_seconds === "number" ? params.timeout_seconds : Number.NaN;
-			const job = monitors.start({ command, cwd: ctx.cwd, ownerSessionId: callerId(ctx), label: label(params.label), timeoutSeconds });
+			const job = watchers.start({ command, cwd: ctx.cwd, ownerSessionId: callerId(ctx), label: label(params.label), timeoutSeconds });
 			announce();
 			return reply(`Started monitor ${named(job)} for up to ${timeoutSeconds}s.\nOutput: ${job.outputPath}\nEach new output line reaches you as an event; keep working or end your turn. task_stop stops it.`, taskDetails(job));
 		},
@@ -491,7 +491,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		async execute(_id: string, params: { id?: unknown }, _signal: unknown, _onUpdate: unknown, ctx: ExtensionContext) {
 			const task = callersTask(ctx, params.id);
 			const wasRunning = task.status === "running";
-			monitors.cancel(task.id);
+			watchers.cancel(task.id);
 			tasks.stop(task.id);
 			announce();
 			if (wasRunning) return reply(`Stopped ${named(task)}.`, taskDetails(task));
@@ -577,7 +577,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 				},
 				// x: the agent was told it would hear, so the owner's stop is reported.
 				onStop: (task) => {
-					if (task.kind === "monitor") monitors.finish(task);
+					if (task.kind === "monitor") watchers.finish(task);
 					const stopped = tasks.stop(task.id);
 					if (stopped) deliver({ task: stopped, kind: "end", stoppedBy: "owner" });
 					announce();
@@ -668,7 +668,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		held = [];
 		waitNotes.clear();
 		wake?.();
-		monitors.cancelAll();
+		watchers.cancelAll();
 		const stopping = tasks.stopAll();
 		announce();
 		session = undefined;

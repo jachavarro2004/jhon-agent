@@ -18,7 +18,7 @@ import { ago as shortAgo } from "./pane.ts";
 import { formatTokens } from "./bars.ts";
 
 /** A running background task (a job or a sub-agent) as lib/background-tasks-tools.ts reports it. */
-export interface RunningJobDisplay {
+export type RunningJobDisplay = {
 	id: string;
 	/** What runs: a shell command, a monitor, or a sub-agent. */
 	kind?: "command" | "monitor" | "agent";
@@ -33,22 +33,18 @@ export interface RunningJobDisplay {
 	endedAt?: number;
 	status?: "exited" | "completed" | "failed" | "stopped";
 	exitCode?: number | null;
-}
+};
 
 /** How long a finished job is reported after it ends (lib/background-tasks-tools.ts). */
-export const JOBS_FINISHED_TTL_MS = 60_000;
+export const JOBS_FINISHED_TTL_MS = 60 * 1000;
 
 /** The shell draws its chrome unless JHON_SHELL turns it off; never in a jhon child session. */
-export function shellEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	if (env.JHON_PI_CHILD === "1") return false;
-	const value = env.JHON_SHELL?.trim().toLowerCase();
-	return !(value === "0" || value === "false" || value === "off");
-}
+const SHELL_OFF = new Set(["0", "false", "off"]);
+export const shellEnabled = (env: NodeJS.ProcessEnv = process.env): boolean =>
+	env.JHON_PI_CHILD !== "1" && !SHELL_OFF.has(env.JHON_SHELL?.trim().toLowerCase() ?? "");
 
 /** `⧗ N jobs`: the regular terminal's footer while Status is hidden. */
-export function shellJobsCount(count: number): string {
-	return `${glyph("job")} ${count} job${count === 1 ? "" : "s"}`;
-}
+export const shellJobsCount = (count: number): string => `${glyph("job")} ${count} ${count === 1 ? "job" : "jobs"}`;
 
 /** `18s`, `1m03s`, `4m12s`, `1h02m`. */
 export function elapsed(ms: number): string {

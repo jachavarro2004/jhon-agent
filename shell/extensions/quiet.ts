@@ -513,10 +513,7 @@ function settle(tool: CardTool, result: AgentToolResult<unknown>, text: string, 
 }
 
 /** The card renderers for one tool; bash's attach to pi's own bash through the resolver below. */
-export function createQuietToolRenderer(
-	tool: CardTool,
-	officialRenderResult?: ToolDefinition["renderResult"],
-): Pick<ToolDefinition, "renderShell" | "renderCall" | "renderResult"> {
+export function createQuietToolRenderer(tool: CardTool, piRenderResult?: ToolDefinition["renderResult"]): Pick<ToolDefinition, "renderShell" | "renderCall" | "renderResult"> {
 	return {
 		renderShell: "self",
 		renderCall: ownsIcon((args, theme, context) => {
@@ -543,9 +540,9 @@ export function createQuietToolRenderer(
 			const made = () => {
 				if (card) return card;
 				card = settle(tool, result, text, isError === true, ctx, row, t, lookOf(t).ascii);
-				if (tool === "read" && options.expanded && officialRenderResult && result.content.some((part) => part.type === "image")) {
+				if (tool === "read" && options.expanded && piRenderResult && result.content.some((part) => part.type === "image")) {
 					const safe = { ...result, content: result.content.map((part) => (part.type === "image" ? { ...part, mimeType: clean(part.mimeType) } : part.type === "text" ? { ...part, text: clean(part.text) } : part)) };
-					card.body.own = officialRenderResult(safe, options, theme, { ...(context as object), args: argsOf(ctx.args), cwd: typeof ctx.cwd === "string" ? clean(ctx.cwd) : ctx.cwd } as any);
+					card.body.own = piRenderResult(safe, options, theme, { ...(context as object), args: argsOf(ctx.args), cwd: typeof ctx.cwd === "string" ? clean(ctx.cwd) : ctx.cwd } as any);
 				}
 				return card;
 			};

@@ -1,7 +1,7 @@
 /**
- * The panel primitives (T15.12b, slice 1): Gentle Shell's lib/shell-panel.ts
- * with Jhon's brand (力) and rose ink's band. Every row is exactly the width
- * asked for at 120/80/60 columns; ASCII prints only ASCII.
+ * The right pane's section chrome (lib/ui/shell-panel.ts): the header row
+ * and the indented rows under it. Every row is exactly the width asked for at
+ * 120/80/60 columns; ASCII prints only ASCII.
  *
  *   cd shell && node --experimental-strip-types --test test/ui-shell-panel.test.ts
  */

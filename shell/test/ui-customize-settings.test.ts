@@ -98,15 +98,16 @@ test("Cards and Surface are written, apply at once, and are what the next sessio
 	const editor = prompt(s, ctx, ui);
 	try {
 		await customize(s, ctx, ui, "Cards", "neon");
-		assert.equal(cardStyle(), CARD_STYLE.NEON);
+		assert.equal(cardStyle(), "neon");
 		await customize(s, ctx, ui, "Surface", "tinted");
 		assert.equal(chromeSurface(), "tinted");
 	} finally { editor.dispose(); }
 	assert.deepEqual(s.settings.jhon.sets, [["shell.appearance.cards", "neon"], ["shell.appearance.surface", "tinted"]]);
-	setCardStyle(CARD_STYLE.FLOAT);
+	// Another start reads the saved choices back over whatever the slots hold.
+	setCardStyle("float");
 	setChromeSurface("transparent");
 	await s.fire("session_start", ctx);
-	assert.equal(cardStyle(), CARD_STYLE.NEON);
+	assert.equal(cardStyle(), "neon");
 	assert.equal(chromeSurface(), "tinted");
 });
 

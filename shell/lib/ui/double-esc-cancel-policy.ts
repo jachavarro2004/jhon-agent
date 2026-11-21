@@ -13,18 +13,19 @@
  */
 import { shellSettings, type ShellSettings } from "../settings.ts";
 
-export type DoubleEscCancelPolicy = "on" | "off";
+/** Whether a running turn waits for a second esc before it stops. */
+export type DoubleEscCancelPolicy = ReturnType<typeof loadDoubleEscCancelPolicy>;
 
 export const DOUBLE_ESC_CANCEL_KEY = "shell.behaviour.double_esc_cancel";
-/** Stopping a turn throws its work away, so the second press gets a full second: twice pi's own idle esc-esc window. */
-export const DOUBLE_ESC_CANCEL_WINDOW_MS = 1000;
 /** Clearing a draft keeps it in the history: pi's own idle esc-esc window. */
 export const IDLE_ESC_CLEAR_WINDOW_MS = 500;
+/** Stopping a turn throws its work away, so the second press gets a full second: twice pi's own idle esc-esc window. */
+export const DOUBLE_ESC_CANCEL_WINDOW_MS = 2 * IDLE_ESC_CLEAR_WINDOW_MS;
 
 interface PolicyOptions { settings?: ShellSettings }
 
 /** The policy the settings hold now; off when they cannot be read. */
-export function loadDoubleEscCancelPolicy(options: PolicyOptions = {}): DoubleEscCancelPolicy {
+export function loadDoubleEscCancelPolicy(options: PolicyOptions = {}): "on" | "off" {
 	const settings = options.settings ?? shellSettings();
 	return settings.doubleEscCancel() ? "on" : "off";
 }
@@ -112,10 +113,10 @@ export function createEscGate(now: () => number): EscGate {
  * This takes the queued part back out: "" when nothing was queued, undefined
  * when the editor holds something else (then pi's text stays as it is).
  */
-export function extractQueuedText(combined: string, draft: string): string | undefined {
-	if (combined === draft) return "";
-	if (draft.trim() === "") return combined;
-	const tail = `\n\n${draft}`;
-	if (!combined.endsWith(tail)) return undefined;
-	return combined.slice(0, -tail.length);
+export function extractQueuedText(restored: string, draft: string): string | undefined {
+	if (restored === draft) return "";
+	// pi joins only what is not blank: with a blank draft, all it restored was queued.
+	if (!draft.trim()) return restored;
+	const joint = "\n\n" + draft;
+	return restored.endsWith(joint) ? restored.slice(0, restored.length - joint.length) : undefined;
 }

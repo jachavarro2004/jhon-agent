@@ -57,7 +57,7 @@ test("layout: auto, transparent and compact by default; the density and surface 
 
 test("the status line: each placement saved through jhon settings and read back; a refused write keeps the file; unreadable settings show it", (t) => {
 	const memory = memorySettings();
-	for (const statusPlacement of Object.values(STATUS_PLACEMENT)) {
+	for (const statusPlacement of ["auto", "hidden"] as const) {
 		writeVisualSettings({ statusPlacement }, { settings: memory });
 		assert.equal(resolveVisualSettings({ settings: memory }).settings.statusPlacement, statusPlacement);
 		assert.equal(memory.jhon.file[STATUS], statusPlacement);

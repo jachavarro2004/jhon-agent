@@ -33,8 +33,8 @@ const keys = {
 /** pi-tui's cursor markers (APC sequences) carry no cell; test/rows.ts strips CSI only. */
 const noApc = (row: string) => row.replace(/\x1b_[^\x07]*\x07/g, "");
 
-const SHIFT_HOME = "\x1b[1;2H";
-const SHIFT_END = "\x1b[1;2F";
+/** shift+home and shift+end, as xterm sends them. */
+const [SHIFT_HOME, SHIFT_END] = ["\x1b[1;2H", "\x1b[1;2F"];
 const HOME = "\x1b[H";
 const END = "\x1b[F";
 const LEFT = "\x1b[D";
@@ -46,8 +46,8 @@ const BACKSPACE = "\x7f";
 const ALT_A = "\x1ba";
 const ALT_E = "\x1be";
 const UNDO = "\x1f"; // ctrl+-, pi's undo
-const PASTE_START = "\x1b[200~";
-const PASTE_END = "\x1b[201~";
+/** Bracketed paste's opening and closing marks. */
+const [PASTE_START, PASTE_END] = ["\x1b[200~", "\x1b[201~"];
 const MIB_16 = 16 * 1024 * 1024;
 
 function prompt(setup: { ascii?: boolean; doubleEsc?: boolean } = {}) {
@@ -78,6 +78,14 @@ const hinted = (width: number, n: number, glyph = "─") => `${rule(width - visi
 const hintOf = (rows: string[]) => /(\d+) chars? selected/.exec(rows.at(-1) ?? "")?.[1];
 
 // --- the keys that select -------------------------------------------------------------
+
+/** A completion provider of slash commands: choosing one makes it the whole draft. */
+function slashCommands(...names: string[]) {
+	return {
+		getSuggestions: async () => ({ prefix: "/", items: names.map((name) => ({ value: `/${name}`, label: name })) }),
+		applyCompletion: (_lines: string[], _line: number, _col: number, item: { value: string }) => ({ lines: [item.value], cursorLine: 0, cursorCol: item.value.length }),
+	};
+}
 
 test("shift+home selects back to the line's start: inverted, counted on the bottom rule, at 180 and 100 columns", () => {
 	const { editor, render, type } = prompt();
@@ -443,10 +451,7 @@ test("shift+home leaves the history the up arrow was browsing", () => {
 test("select all closes the completion menu; typing over a selection closes it too", async () => {
 	const { editor, type } = prompt();
 	const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
-	editor.setAutocompleteProvider({
-		async getSuggestions() { return { prefix: "/", items: [{ value: "/alpha", label: "alpha" }] }; },
-		applyCompletion(_lines, _line, _col, item) { return { lines: [item.value], cursorLine: 0, cursorCol: item.value.length }; },
-	});
+	editor.setAutocompleteProvider(slashCommands("alpha"));
 	try {
 		type("/");
 		await settle();

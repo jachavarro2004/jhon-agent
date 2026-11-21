@@ -20,7 +20,8 @@ import { memorySettings, useMemorySettings } from "./fake-jhon-settings.ts";
 
 const plain = { fg: (_r: string, t: string) => t, bold: (t: string) => t };
 const flush = () => new Promise((r) => setImmediate(r));
-const NOW = 1_788_600_000_000;
+/** A fixed clock: 5 September 2026, 09:20 UTC. */
+const NOW = Date.UTC(2026, 8, 5, 9, 20);
 
 function pureAscii(name: string, lines: string[]): void {
 	assert.ok(lines.length > 0, `${name} drew nothing`);

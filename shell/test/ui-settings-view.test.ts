@@ -21,13 +21,8 @@ import { memorySettings } from "./fake-jhon-settings.ts";
 const plain = { fg: (_c: string, t: string) => t, bold: (t: string) => t };
 const tagged = { fg: (c: string, t: string) => `<${c}>${t}</${c}>`, bg: (c: string, t: string) => `[${c}]${t}[/${c}]`, bold: (t: string) => `<b>${t}</b>` };
 const ENTER = "\r";
-const ESC = "\x1b";
-const DOWN = "\x1b[B";
-const UP = "\x1b[A";
-const BACKSPACE = "\x7f";
-const TAB = "\t";
-const RIGHT = "\x1b[C";
-const LEFT = "\x1b[D";
+/** The keys the view reads, as a terminal sends them. */
+const [ESC, DOWN, UP, BACKSPACE, TAB, RIGHT, LEFT] = ["\x1b", "\x1b[B", "\x1b[A", "\x7f", "\t", "\x1b[C", "\x1b[D"];
 
 function rows(applied: Array<[string, string]>): SettingRow[] {
 	const values: Record<string, string> = { animations: "full", icons: "geometric", dblesc: "off", compact: "60", panel: "alt+j" };

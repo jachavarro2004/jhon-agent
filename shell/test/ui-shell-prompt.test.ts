@@ -44,8 +44,7 @@ test("the light crosses the working word one cell per frame at 80 ms, entering f
 test("the petal walks the rose ramp while working, turns to warning while a message waits, and rests bright", () => {
 	assert.deepEqual(Array.from({ length: 9 }, (_, tick) => petalTone(PROMPT_STATE.WORKING, tick)),
 		["mdQuoteBorder", "thinkingHigh", "accent", "borderAccent", "accent", "thinkingHigh", "mdQuoteBorder", "mdQuoteBorder", "mdQuoteBorder"]);
-	assert.equal(petalTone(PROMPT_STATE.QUEUED, 2), "warning");
-	assert.equal(petalTone(PROMPT_STATE.IDLE, 2), "borderAccent");
+	assert.deepEqual([petalTone("queued", 2), petalTone("idle", 2)], ["warning", "borderAccent"], "a waiting message warns; at rest the petal is bright");
 });
 
 test("the working line paints the design's roles: 力 bold, Working… italic in the accent, the time muted, the keys muted and their word dim", () => {

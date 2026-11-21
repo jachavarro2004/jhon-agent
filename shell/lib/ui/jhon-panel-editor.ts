@@ -5,11 +5,8 @@
  */
 import { spawnSync } from "node:child_process";
 
-export interface ExternalEditorHost {
-	stop(): void;
-	start(): void;
-	requestRender(force?: boolean): void;
-}
+/** The TUI as the editor launch needs it: stopped while the editor owns the terminal, started and repainted after. */
+export type ExternalEditorHost = { stop: () => void; start: () => void; requestRender: (force?: boolean) => void };
 
 /**
  * Open `path` in $VISUAL or $EDITOR with the TUI stopped around it: why it
