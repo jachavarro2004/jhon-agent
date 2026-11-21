@@ -15,18 +15,27 @@ import { completeWord, type Completion } from "./ui/jhon-commands.ts";
 /** The skill in this release; the shell sits beside it (shell/ and runtimes/ in one tree). */
 export const LDD_SKILL = fileURLToPath(new URL("../../runtimes/claude-code/plugin/skills/jhon-ldd/SKILL.md", import.meta.url));
 
-/** pi's parseCommandArgs: bash-style words, quotes kept together. */
+/**
+ * pi's parseCommandArgs (1.5.1, #11861): bash-style words, quotes kept
+ * together. A quote opens only at the start of a word (`doesn't` stays one
+ * word), an unclosed one is kept as text, and `\"` inside `"..."` (or `\'`
+ * inside `'...'`) is a literal quote.
+ */
 function parseArgs(text: string): string[] {
 	const args: string[] = [];
 	let current = "";
 	let started = false;
 	let quote: string | null = null;
-	for (const char of text) {
+	let quoteAt = 0;
+	for (let i = 0; i < text.length; i++) {
+		const char = text[i]!;
 		if (quote) {
-			if (char === quote) quote = null;
+			if (char === "\\" && text[i + 1] === quote) { current += quote; i++; }
+			else if (char === quote) quote = null;
 			else current += char;
-		} else if (char === '"' || char === "'") {
+		} else if ((char === '"' || char === "'") && !started) {
 			quote = char;
+			quoteAt = i;
 			started = true;
 		} else if (/\s/.test(char)) {
 			if (started) { args.push(current); current = ""; started = false; }
@@ -34,6 +43,8 @@ function parseArgs(text: string): string[] {
 			current += char;
 			started = true;
 		}
+		// Unclosed: the quote is text, and the rest is read again after it.
+		if (quote && i === text.length - 1) { quote = null; current = text[quoteAt]!; i = quoteAt; }
 	}
 	if (started) args.push(current);
 	return args;
