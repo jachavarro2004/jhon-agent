@@ -190,6 +190,9 @@ func piSessionWith(t *testing.T, steps ...pstep) string {
 		case "notice":
 			w.entry("custom_message", "customType", "jhon-tasks.notice", "content", s.text, "display", true,
 				"details", js.Obj("jhonTasks", js.Obj("id", "job-3", "kind", "command", "status", "exited", "succeeded", s.n == 0, "exitCode", float64(s.n))))
+		case "agentNotice":
+			w.entry("custom_message", "customType", "jhon-tasks.notice", "content", s.text, "display", true,
+				"details", js.Obj("jhonTasks", js.Obj("id", s.task, "kind", "agent", "label", s.agent, "status", "completed", "succeeded", true)))
 		case "compaction":
 			w.entry("compaction", "summary", "s", "firstKeptEntryId", "x", "tokensBefore", float64(s.n), "fromHook", s.text == "hook")
 		case "auth":
@@ -774,6 +777,44 @@ func TestPiVerifyVerdictIsTheReportsPlainLine(t *testing.T) {
 	r := piAudit(t, pstart("tui"), puser("verify it"),
 		psub("verify", "Verify openspec/changes/"+chg+"/ against its specs", "Started background sub-agent agent-1 (verify).", write))
 	eq(t, "verdicts", outcomeOf(r, chg).Verdicts, [3]int{1, 0, 0})
+}
+
+// pagentNotice is the notice Jhon's tasks extension records when a
+// background sub-agent ends (shell/lib/background-tasks-tools.ts taskText):
+// its head line, then its answer.
+func pagentNotice(task, agent, answer string) pstep {
+	return pstep{kind: "agentNotice", agent: agent, task: task, text: "Background sub-agent " + task + " (" + agent + ") completed after 2m 10s.\n\n" + answer}
+}
+
+// T192 S8: a background checker's answer reaches the main session as a
+// jhon-tasks.notice, not as its launch's result; the audit reads its
+// verdict as it reads one returned inline, and the launch's own "Started
+// background sub-agent" line is no answer.
+func TestPiVerifyVerdictFromABackgroundNotice(t *testing.T) {
+	task := "Verify openspec/changes/" + chg + "/ against its specs"
+	started := "Started background sub-agent agent-1 (jhon-checker). Its answer arrives as a message when it finishes; task_result reads it, task_stop cancels it."
+	for _, c := range []struct {
+		answer string
+		want   [3]int
+	}{
+		{"verdict: pass\n\nEvery scenario holds.", [3]int{1, 0, 0}},
+		{"verdict: fail\n\nS2 does not hold.", [3]int{0, 1, 0}},
+	} {
+		inline := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, c.answer)), chg)
+		notice := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started),
+			preply("The checker runs in the background."), pagentNotice("agent-1", "jhon-checker", c.answer)), chg)
+		eq(t, "inline verdicts", inline.Verdicts, c.want)
+		eq(t, "notice verdicts", notice.Verdicts, c.want)
+		eq(t, "notice unfinished", notice.Unfinished, 0)
+	}
+	// A launch whose answer never arrived is unfinished, with no verdict.
+	none := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started)), chg)
+	eq(t, "no notice: verdicts", none.Verdicts, [3]int{0, 0, 1})
+	eq(t, "no notice: unfinished", none.Unfinished, 1)
+	// Another task's notice delivers nothing for this launch.
+	other := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started),
+		pagentNotice("agent-9", "jhon-checker", "verdict: pass")), chg)
+	eq(t, "another task's notice: verdicts", other.Verdicts, [3]int{0, 0, 1})
 }
 
 // An agent that ran into its turn cap (a call refused with pi's «you have

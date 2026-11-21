@@ -159,6 +159,16 @@ func fullMark(session string) string {
 	return filepath.Join(cache, "jhon", "full-context", sess)
 }
 
+// hasFull is whether session was given, or pointed to, the full context.
+func hasFull(session string) bool {
+	mark := fullMark(session)
+	if mark == "" {
+		return false
+	}
+	_, err := os.Stat(mark)
+	return err == nil
+}
+
 // markFull records that session has the full context; whether it had it
 // already.
 func markFull(session string) bool {
@@ -180,28 +190,59 @@ func markFull(session string) bool {
 // server registered by hand (T192 S5).
 var mcpStatusTools = map[string]bool{"mcp__plugin_jhon_jhon__status": true, "mcp__jhon__status": true}
 
+// changesFolder is a layout's changes folder in a path: openspec/changes/ or
+// ldd/changes/ (internal/ldd/layout).
+var changesFolder = regexp.MustCompile(`(^|/)(openspec|ldd)/changes/`)
+
+// changeCommand is a Bash command that may make or select a change: a git
+// branch switch, a jhon run or risk read, or one naming the changes folder.
+var changeCommand = regexp.MustCompile(`\bgit\s+(switch|checkout)\b|(^|[;&|(]\s*|\s)jhon\s+(executions|risk)\b|(^|[\s'"=/])(openspec|ldd)/changes/`)
+
+// changeMoment is, for a call that may have made or selected a change
+// (T192 S7), the directory whose repository to ask: a Write or Edit under
+// the changes folder (the file's directory), or a changeCommand (the
+// session's); "" for any other call.
+func changeMoment(p Payload) string {
+	in := p.Obj("tool_input")
+	switch p.Str("tool_name") {
+	case "Write", "Edit", "MultiEdit":
+		file, _ := in["file_path"].(string)
+		if file == "" || !changesFolder.MatchString(filepath.ToSlash(file)) {
+			return ""
+		}
+		if !filepath.IsAbs(file) {
+			file = filepath.Join(p.Cwd(), file)
+		}
+		return filepath.Dir(file)
+	case "Bash":
+		if cmd, _ := in["command"].(string); changeCommand.MatchString(cmd) {
+			return p.Cwd()
+		}
+	}
+	return ""
+}
+
 // fullPointer is PostToolUse's pointer to the full context (T146h T4), for
 // the main agent's call that shows the work is not small: `jhon status`
 // printing its not-small line, through Bash or the jhon MCP server's status
-// tool (T192 S5), or a sub-agent launch. Once per session; "" for any other
-// call, or a session that has the full context already. The full text
-// exceeds the 10,000 characters a hook's context shows, so the pointer
-// names the file.
+// tool (T192 S5), a sub-agent launch, or a call that made or selected a
+// change (changeMoment) when the engine then finds it not small (T192 S7,
+// ldd.NotSmall, the reading SessionStart starts full on). Once per session;
+// "" for any other call, or a session that has the full context already.
+// The full text exceeds the 10,000 characters a hook's context shows, so
+// the pointer names the file.
 func fullPointer(p Payload, home string) string {
 	tool := p.Str("tool_name")
 	notSmall := func() bool {
 		resp, _ := json.Marshal(p["tool_response"])
 		return strings.Contains(string(resp), "not small: read ")
 	}
+	cmd, _ := p.Obj("tool_input")["command"].(string)
 	trigger := ""
 	switch {
 	case tool == "Agent" || tool == "Task":
 		trigger = "before a sub-agent"
-	case tool == "Bash":
-		cmd, _ := p.Obj("tool_input")["command"].(string)
-		if !strings.Contains(cmd, "jhon status") || !notSmall() {
-			return ""
-		}
+	case tool == "Bash" && strings.Contains(cmd, "jhon status") && notSmall():
 		trigger = "this change is not small"
 	case mcpStatusTools[tool]:
 		if !notSmall() {
@@ -209,7 +250,12 @@ func fullPointer(p Payload, home string) string {
 		}
 		trigger = "this change is not small"
 	default:
-		return ""
+		// Asked only at such a moment, and only while the session has no pointer yet.
+		dir := changeMoment(p)
+		if dir == "" || hasFull(p.Str("session_id")) || !ldd.NotSmall(dir) {
+			return ""
+		}
+		trigger = "this change is not small"
 	}
 	if markFull(p.Str("session_id")) {
 		return ""

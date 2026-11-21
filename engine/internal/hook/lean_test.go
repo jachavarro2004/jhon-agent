@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
 )
 
 // T146h (L1278, L1280): Claude Code's session starts lean (its agent's
@@ -215,6 +217,107 @@ func TestSessionBriefSaysLeanOrFull(t *testing.T) {
 		}
 		if v["context"] != c.want {
 			t.Errorf("%s: context %v, want %s (%s)", c.repo, v["context"], c.want, out.String())
+		}
+	}
+}
+
+// postToolUseIn is postToolUse for a session working in cwd.
+func postToolUseIn(t *testing.T, session, cwd, tool string, input, response any) string {
+	t.Helper()
+	p, _ := json.Marshal(map[string]any{"hook_event_name": "PostToolUse", "agent_type": "jhon-orchestrator", "session_id": session,
+		"cwd": cwd, "tool_name": tool, "tool_input": input, "tool_response": response})
+	code, out, errs := runAgentHooks(t, string(p))
+	if code != 0 || errs != "" {
+		t.Fatalf("code %d, %q", code, errs)
+	}
+	return out
+}
+
+// T192 S7: in a fresh repository the session starts lean; once the agent
+// makes or selects a change that is not small (a write or edit under the
+// changes folder, a branch switch, a jhon run), the pointer comes then,
+// before the next edit, without waiting for `jhon status`; never for a
+// small change, and once per session.
+func TestPostToolUsePointsToTheFullContextWhenANotSmallChangeAppears(t *testing.T) {
+	_, full := leanHome(t)
+	notSmall := changeRepo(t, true)
+	proposal := filepath.Join(notSmall, "openspec/changes/c1/proposal.md")
+	for i, c := range []struct {
+		tool  string
+		input map[string]any
+	}{
+		{"Write", map[string]any{"file_path": proposal, "content": "## Why\n"}},
+		{"Edit", map[string]any{"file_path": proposal, "old_string": "a", "new_string": "b"}},
+		{"MultiEdit", map[string]any{"file_path": proposal, "edits": []any{}}},
+		{"Bash", map[string]any{"command": "git switch feat/c1"}},
+		{"Bash", map[string]any{"command": "git checkout -b feat/c1"}},
+		{"Bash", map[string]any{"command": "jhon executions run"}},
+		{"Bash", map[string]any{"command": "mkdir -p openspec/changes/c1"}},
+	} {
+		session := fmt.Sprintf("s-appear-%d", i)
+		got := postToolUseIn(t, session, notSmall, c.tool, c.input, map[string]any{})
+		if !strings.Contains(got, full) || !strings.Contains(got, "this change is not small") {
+			t.Errorf("%s %v: want the pointer to %s, got %q", c.tool, c.input, full, got)
+		}
+		if again := postToolUseIn(t, session, notSmall, c.tool, c.input, map[string]any{}); again != "" {
+			t.Errorf("%s %v: the pointer came twice in one session: %q", c.tool, c.input, again)
+		}
+	}
+	// Other calls in that repository are no moment: nothing is asked or said.
+	for _, c := range []struct {
+		tool  string
+		input map[string]any
+	}{
+		{"Write", map[string]any{"file_path": filepath.Join(notSmall, "a/b.go"), "content": "package a\n"}},
+		{"Read", map[string]any{"file_path": proposal}},
+		{"Bash", map[string]any{"command": "ls"}},
+		{"Bash", map[string]any{"command": "git status"}},
+	} {
+		if out := postToolUseIn(t, "s-other", notSmall, c.tool, c.input, map[string]any{}); out != "" {
+			t.Errorf("%s %v: want nothing, got %q", c.tool, c.input, out)
+		}
+	}
+	// No change, or a small one: no pointer.
+	none := changeRepo(t, false)
+	small := changeRepo(t, false)
+	if out, err := exec.Command("git", "-C", small, "checkout", "-q", "-b", "fix-typo").CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	os.WriteFile(filepath.Join(small, "README.md"), []byte("# A\n\nA typo fixed.\n"), 0o644)
+	if ldd.NotSmall(small) || ldd.NotSmall(none) {
+		t.Fatalf("fixture: want no change (%v) and a small one (%v)", ldd.NotSmall(none), ldd.NotSmall(small))
+	}
+	for _, repo := range []string{none, small} {
+		for _, c := range []struct {
+			tool  string
+			input map[string]any
+		}{
+			{"Write", map[string]any{"file_path": filepath.Join(repo, "openspec/changes/notes.md"), "content": "x"}},
+			{"Bash", map[string]any{"command": "git switch -c fix-typo"}},
+			{"Bash", map[string]any{"command": "jhon executions run"}},
+		} {
+			if out := postToolUseIn(t, "s-small", repo, c.tool, c.input, map[string]any{}); out != "" {
+				t.Errorf("%s %s %v: want nothing, got %q", repo, c.tool, c.input, out)
+			}
+		}
+	}
+}
+
+// T7 (L5): the verifier's probes, kept: another server's status tool and
+// Engram never point, and the jhon status tool's response read as a plain
+// string still does.
+func TestPostToolUsePointerRoutes(t *testing.T) {
+	_, full := leanHome(t)
+	line := "not small: read " + full + " before the next edit"
+	blocks := []any{map[string]any{"type": "text", "text": `{"ok":true,"notes":["` + line + `"]}`}}
+	for i, tool := range []string{"mcp__other__status", "mcp__plugin_other_other__status", "mcp__engram__mem_search", "mcp__plugin_engram_engram__mem_search"} {
+		if out := postToolUse(t, fmt.Sprintf("s-route-%d", i), tool, map[string]any{}, blocks); out != "" {
+			t.Errorf("%s: want nothing, got %q", tool, out)
+		}
+	}
+	for i, tool := range []string{"mcp__plugin_jhon_jhon__status", "mcp__jhon__status"} {
+		if got := postToolUse(t, fmt.Sprintf("s-string-%d", i), tool, map[string]any{}, `{"ok":true,"notes":["`+line+`"]}`); !strings.Contains(got, full) {
+			t.Errorf("%s with a string response: want the pointer, got %q", tool, got)
 		}
 	}
 }
