@@ -106,7 +106,7 @@ export function createMonitorController({ registry, now, schedule, deliver }: Mo
 		start({ timeoutSeconds, ...job }: MonitorStartRequest): JobRecord {
 			const allowed = Number.isInteger(timeoutSeconds) && timeoutSeconds >= 1 && timeoutSeconds <= MONITOR_MAX_TIMEOUT_SECONDS;
 			if (!allowed) {
-				throw new Error(`timeout_seconds must be a whole number from 1 to ${MONITOR_MAX_TIMEOUT_SECONDS}.`);
+				throw new Error(`timeout_seconds takes a whole number of seconds, 1 to ${MONITOR_MAX_TIMEOUT_SECONDS}.`);
 			}
 			let id: string | undefined;
 			const started = registry.start({ ...job, kind: "monitor", onLine: (text) => line(id, text) });

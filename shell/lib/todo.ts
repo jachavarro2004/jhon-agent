@@ -64,11 +64,11 @@ const STATUSES: readonly string[] = Object.values(TODO_STATUS);
 
 const ERRORS = {
 	noTitle: "title is required",
-	blockedNote: "blocked needs a note naming what it waits for",
-	status: (given: unknown) => `unknown status "${given}" (use pending, in_progress, blocked, done, or dropped)`,
+	blockedNote: "a blocked task needs a note saying what it waits for",
+	status: (given: unknown) => `unknown status "${given}"; the statuses are pending, in_progress, blocked, done and dropped`,
 	noTask: (id: unknown) => `no task #${id}`,
-	nothing: "nothing to update: pass status, title, or note",
-	action: (given: unknown) => `unknown action "${given}" (use write, add, update, clear, or list)`,
+	nothing: "update needs a status, title or note to change",
+	action: (given: unknown) => `unknown action "${given}"; the actions are write, add, update, clear and list`,
 } as const;
 
 export const emptyTodo = (): TodoState => ({ tasks: [], nextId: 1, updatedTurn: null });
@@ -245,11 +245,11 @@ export function todoPromptBlock(state: TodoState, stale = 0): string | undefined
 	const rows = state.tasks.map((task, index) => `${index + 1}. [${task.status}] ${task.title}${noteSuffix(task)}`);
 	const block = [
 		LIST_HEADING,
-		"Keep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.",
-		"A blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.",
+		"Maintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.",
+		"A blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.",
 		...rows,
 	].join("\n");
-	return stale >= STALE_AFTER_TURNS ? `${block}\n(stale: ${stale} turns without an update — bring the list up to date now)` : block;
+	return stale >= STALE_AFTER_TURNS ? `${block}\n(stale: no update for ${stale} turns — update the list now)` : block;
 }
 
 /**

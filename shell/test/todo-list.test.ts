@@ -52,20 +52,20 @@ test("add, update and clear change one thing at a time; a missing id or an empty
 	const missing = after(updated.state, { action: "update", id: 9, status: "done" });
 	assert.deepEqual([missing.error, missing.text], ["no task #9", "Error: no task #9"]);
 	assert.strictEqual(missing.state, updated.state);
-	assert.equal(after(updated.state, { action: "update", id: 1 }).error, "nothing to update: pass status, title, or note");
+	assert.equal(after(updated.state, { action: "update", id: 1 }).error, "update needs a status, title or note to change");
 	const cleared = after(updated.state, { action: "clear" }, 3);
 	assert.deepEqual(cleared.state, { tasks: [], nextId: 1, updatedTurn: 3 });
 	assert.equal(cleared.text, "Cleared 1 task");
 	assert.equal(after(three(), { action: "clear" }).text, "Cleared 3 tasks");
-	assert.deepEqual(after(emptyTodo(), { action: "rename" }), { state: emptyTodo(), text: 'Error: unknown action "rename" (use write, add, update, clear, or list)', error: 'unknown action "rename" (use write, add, update, clear, or list)' });
+	assert.deepEqual(after(emptyTodo(), { action: "rename" }), { state: emptyTodo(), text: 'Error: unknown action "rename"; the actions are write, add, update, clear and list', error: 'unknown action "rename"; the actions are write, add, update, clear and list' });
 });
 
 test("statuses: other words for them count, case, spaces and dashes do not matter, an unknown one is refused; titles are one clean line", () => {
 	const statuses = (words: unknown[]) => after(emptyTodo(), { action: "write", tasks: words.map((status) => ({ title: "x", status, note: "n" })) as never }).state.tasks.map((task) => task.status);
 	assert.deepEqual(statuses(["completed", "Complete", "doing", "TODO", " In Progress ", "in-progress", null, ""]), ["done", "done", "in_progress", "pending", "in_progress", "in_progress", "pending", "pending"]);
 	const unknown = after(emptyTodo(), { action: "write", tasks: [{ title: "X", status: "later" }] });
-	assert.equal(unknown.error, 'unknown status "later" (use pending, in_progress, blocked, done, or dropped)');
-	assert.equal(after(emptyTodo(), { action: "add", title: "X", status: 3 as never }).error, 'unknown status "3" (use pending, in_progress, blocked, done, or dropped)');
+	assert.equal(unknown.error, 'unknown status "later"; the statuses are pending, in_progress, blocked, done and dropped');
+	assert.equal(after(emptyTodo(), { action: "add", title: "X", status: 3 as never }).error, 'unknown status "3"; the statuses are pending, in_progress, blocked, done and dropped');
 	assert.equal(after(emptyTodo(), { action: "add", title: "Evil\x1b[31m  title\n" }).state.tasks[0]!.title, "Evil title");
 	assert.equal(after(emptyTodo(), { action: "add", title: "   " }).error, "title is required");
 	assert.equal(after(emptyTodo(), { action: "add", title: 7 as never }).error, "title is required");
@@ -115,14 +115,14 @@ test("the run's block: the open list with its rules, stale from two turns, nothi
 	const block = todoPromptBlock(three(), 0)!;
 	assert.equal(block, [
 		"## Todo list",
-		"Keep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.",
-		"A blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.",
+		"Maintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.",
+		"A blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.",
 		"1. [done] Read the spec",
 		"2. [in_progress] Write the parser — lexer first",
 		"3. [pending] Ship",
 	].join("\n"));
 	assert.equal(todoPromptBlock(three(), 1), block);
-	assert.equal(todoPromptBlock(three(), 2), `${block}\n(stale: 2 turns without an update — bring the list up to date now)`);
+	assert.equal(todoPromptBlock(three(), 2), `${block}\n(stale: no update for 2 turns — update the list now)`);
 	assert.equal(todoPromptBlock(emptyTodo()), undefined, "an empty list adds no block");
 	assert.equal(todoPromptBlock(after(three(), { action: "write", tasks: [{ title: "A", status: "done" }] }).state, 0), undefined);
 	assert.equal(todoStartBlock(three()), undefined, "the start rule only with nothing open");
@@ -137,7 +137,7 @@ test("dropped and blocked are statuses; cancel words mean dropped; a blocked tas
 	const before = three();
 	for (const params of [{ action: "add", title: "Deploy", status: "blocked" }, { action: "update", id: 3, status: "blocked" }, { action: "write", tasks: [{ title: "Deploy", status: "blocked", note: "   " }] }]) {
 		const refused = after(before, params, 9);
-		assert.deepEqual([refused.error, refused.text], ["blocked needs a note naming what it waits for", "Error: blocked needs a note naming what it waits for"]);
+		assert.deepEqual([refused.error, refused.text], ["a blocked task needs a note saying what it waits for", "Error: a blocked task needs a note saying what it waits for"]);
 		assert.strictEqual(refused.state, before, params.action);
 	}
 	const blocked = after(before, { action: "update", id: 3, status: "blocked", note: "the API contract" }, 9);

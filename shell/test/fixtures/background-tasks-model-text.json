@@ -4,7 +4,7 @@
 			{
 				"name": "bash_background",
 				"label": "Bash (background)",
-				"description": "Run a shell command in the background; returns a task id at once. You are notified once when it exits (exit code, last lines, output file); do not poll, sleep, or delegate a subagent to wait. Use it for anything over about 30 seconds or of unknown duration (CI, builds, long tests, servers); quick checks stay in bash. Make the command's exit the event, e.g. `gh run watch <run-id> --exit-status`. Read its output file with the read tool. task_stop stops it. At most 25 run at once.",
+				"description": "Runs a shell command as a background task; returns its id at once. Its exit sends one notice (exit code, last lines, output file); never poll, sleep or send a sub-agent to wait. Use it for anything over about 30 seconds or of unknown duration (CI, builds, long tests, servers); quick checks stay in bash. Let the awaited event end the command, e.g. `gh run watch <run-id> --exit-status`. Read its output file with the read tool; task_stop stops it. Up to 25 run together.",
 				"parameters": {
 					"type": "object",
 					"additionalProperties": false,
@@ -14,12 +14,12 @@
 					"properties": {
 						"command": {
 							"type": "string",
-							"description": "Shell command to run in the background, in the session working directory."
+							"description": "Shell command to start in the background, in the session's working directory."
 						},
 						"label": {
 							"type": "string",
 							"maxLength": 80,
-							"description": "Short human-readable label, e.g. 'CI for PR 1834'."
+							"description": "A short label people read, like 'CI for PR 1834'."
 						}
 					}
 				}
@@ -27,7 +27,7 @@
 			{
 				"name": "monitor",
 				"label": "Monitor",
-				"description": "Run a command in the background and get each output line as an event while it runs. Do not poll or sleep between events. E.g. `tail -f app.log | grep --line-buffered ERROR`. For one result when a command ends, use bash_background instead. Lines within 200 ms arrive as one notice (at most 20). timeout_seconds is mandatory (1-1800); it stops at the timeout or past 120 lines in 60s, so filter the command's output. task_stop stops it.",
+				"description": "Runs a command in the background; every output line becomes an event for you while it runs. Never poll or sleep between events. Like `tail -f app.log | grep --line-buffered ERROR`. If you only need the end of a command, use bash_background. Lines within 200 ms make one notice (20 at most). timeout_seconds is required (1-1800); it ends at the timeout or past 120 lines in 60s, so keep its output filtered. task_stop stops it.",
 				"parameters": {
 					"type": "object",
 					"additionalProperties": false,
@@ -38,18 +38,18 @@
 					"properties": {
 						"command": {
 							"type": "string",
-							"description": "Shell command whose output lines are events, run in the session working directory."
+							"description": "Shell command to watch; each output line is an event. Working directory: the session's."
 						},
 						"timeout_seconds": {
 							"type": "integer",
 							"minimum": 1,
 							"maximum": 1800,
-							"description": "Mandatory: stop the monitor after this many seconds."
+							"description": "Required: seconds until the monitor stops."
 						},
 						"label": {
 							"type": "string",
 							"maxLength": 80,
-							"description": "Short human-readable label, e.g. 'CI checks for PR 1842'."
+							"description": "A short label people read, like 'CI checks for PR 1842'."
 						}
 					}
 				}
@@ -57,7 +57,7 @@
 			{
 				"name": "task_list",
 				"label": "List background tasks",
-				"description": "List this session's background tasks (commands, monitors, sub-agents) with status and output file.",
+				"description": "Lists the session's background tasks (commands, monitors, sub-agents), with status and output file.",
 				"parameters": {
 					"type": "object",
 					"additionalProperties": false,
@@ -85,7 +85,7 @@
 			{
 				"name": "task_stop",
 				"label": "Stop a task",
-				"description": "Stop a background task (a command with its process tree, or a sub-agent). A stopped task sends no notice.",
+				"description": "Ends a background task: a command and its process tree, or a sub-agent. Once stopped, it sends no notice.",
 				"parameters": {
 					"type": "object",
 					"additionalProperties": false,
@@ -129,14 +129,14 @@
 		{
 			"tool": "bash_background",
 			"params": {},
-			"error": "bash_background requires a non-empty command"
+			"error": "bash_background needs a command that is not empty"
 		},
 		{
 			"tool": "bash_background",
 			"params": {
 				"command": "  "
 			},
-			"error": "bash_background requires a non-empty command"
+			"error": "bash_background needs a command that is not empty"
 		},
 		{
 			"tool": "bash_background",
@@ -148,7 +148,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-1 (\"build\").\nOutput: <out>/job-1.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-1 (\"build\").\nOutput: <out>/job-1.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -168,7 +168,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background job job-1 (\"build\") exited with code 0 after 4s.\nCommand: make build\nLast output:\ncompiled\nok\nFull output: <out>/job-1.log (read it with the read tool if you need more).",
+					"content": "Background job job-1 (\"build\") exited with code 0 after 4s.\nCommand: make build\nLast output:\ncompiled\nok\nFull output: <out>/job-1.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -197,7 +197,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-2 (\"false\").\nOutput: <out>/job-2.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-2 (\"false\").\nOutput: <out>/job-2.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -217,7 +217,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background job job-2 (\"false\") exited with code 2 after 1m 5s.\nCommand: false\nNo output.\nFull output: <out>/job-2.log (read it with the read tool if you need more).",
+					"content": "Background job job-2 (\"false\") exited with code 2 after 1m 5s.\nCommand: false\nNo output.\nFull output: <out>/job-2.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -247,7 +247,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-3 (\"nope\").\nOutput: <out>/job-3.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-3 (\"nope\").\nOutput: <out>/job-3.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -267,7 +267,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background job job-3 (\"nope\") could not run: Working directory does not exist: /missing after 0s.\nCommand: nope\nNo output.\nFull output: <out>/job-3.log (read it with the read tool if you need more).",
+					"content": "Background job job-3 (\"nope\") could not run: Working directory does not exist: /missing after 0s.\nCommand: nope\nNo output.\nFull output: <out>/job-3.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -296,7 +296,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-4 (\"killed\").\nOutput: <out>/job-4.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-4 (\"killed\").\nOutput: <out>/job-4.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -316,7 +316,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background job job-4 (\"killed\") exited without an exit code after 1h 1m.\nCommand: killed\nNo output.\nFull output: <out>/job-4.log (read it with the read tool if you need more).",
+					"content": "Background job job-4 (\"killed\") exited with no exit code after 1h 1m.\nCommand: killed\nNo output.\nFull output: <out>/job-4.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -346,7 +346,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-5 (\"dev\").\nOutput: <out>/job-5.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-5 (\"dev\").\nOutput: <out>/job-5.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -388,7 +388,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Background job job-5 (\"dev\") is running (0s).\nCommand: npm run dev\nLast output:\nlistening on 3000\npartial\nFull output: <out>/job-5.log (read it with the read tool if you need more)."
+						"text": "Background job job-5 (\"dev\") is running (0s).\nCommand: npm run dev\nLast output:\nlistening on 3000\npartial\nFull output: <out>/job-5.log (use the read tool on it for more)."
 					}
 				],
 				"details": {
@@ -413,7 +413,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Background job job-1 (\"build\") exited with code 0 after 4s.\nCommand: make build\nLast output:\ncompiled\nok\nFull output: <out>/job-1.log (read it with the read tool if you need more)."
+						"text": "Background job job-1 (\"build\") exited with code 0 after 4s.\nCommand: make build\nLast output:\ncompiled\nok\nFull output: <out>/job-1.log (use the read tool on it for more)."
 					}
 				],
 				"details": {
@@ -546,7 +546,7 @@
 			"params": {
 				"timeout_seconds": 30
 			},
-			"error": "monitor requires a non-empty command"
+			"error": "monitor needs a command that is not empty"
 		},
 		{
 			"tool": "monitor",
@@ -554,7 +554,7 @@
 				"command": "x",
 				"timeout_seconds": 0
 			},
-			"error": "timeout_seconds must be a whole number from 1 to 1800."
+			"error": "timeout_seconds takes a whole number of seconds, 1 to 1800."
 		},
 		{
 			"tool": "monitor",
@@ -562,7 +562,7 @@
 				"command": "x",
 				"timeout_seconds": 1801
 			},
-			"error": "timeout_seconds must be a whole number from 1 to 1800."
+			"error": "timeout_seconds takes a whole number of seconds, 1 to 1800."
 		},
 		{
 			"tool": "monitor",
@@ -570,7 +570,7 @@
 				"command": "x",
 				"timeout_seconds": 1.5
 			},
-			"error": "timeout_seconds must be a whole number from 1 to 1800."
+			"error": "timeout_seconds takes a whole number of seconds, 1 to 1800."
 		},
 		{
 			"tool": "monitor",
@@ -578,7 +578,7 @@
 				"command": "x",
 				"timeout_seconds": "30"
 			},
-			"error": "timeout_seconds must be a whole number from 1 to 1800."
+			"error": "timeout_seconds takes a whole number of seconds, 1 to 1800."
 		},
 		{
 			"tool": "monitor",
@@ -591,7 +591,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started monitor job-6 (\"errors\") for up to 30s.\nOutput: <out>/job-6.log\nEach new output line reaches you as an event; keep working or end your turn. task_stop stops it."
+						"text": "Started monitor job-6 (\"errors\") for up to 30s.\nOutput: <out>/job-6.log\nEach new output line comes to you as an event; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -636,7 +636,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-6 (\"errors\") reported 20 new lines:\nline 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\n(5 more lines not shown; full output in <out>/job-6.log)",
+					"content": "Monitor job-6 (\"errors\") reported 20 new lines:\nline 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\n(5 more lines left out; the full output is in <out>/job-6.log)",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -661,7 +661,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-6 (\"errors\") reached its 30s timeout after 27 events and was stopped. Start a new monitor if you still need to watch it.\nFull output: <out>/job-6.log",
+					"content": "Monitor job-6 (\"errors\") was stopped by its 30s timeout, after 27 events. Start another monitor to keep watching.\nFull output: <out>/job-6.log",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -692,7 +692,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started monitor job-7 (\"yes\") for up to 600s.\nOutput: <out>/job-7.log\nEach new output line reaches you as an event; keep working or end your turn. task_stop stops it."
+						"text": "Started monitor job-7 (\"yes\") for up to 600s.\nOutput: <out>/job-7.log\nEach new output line comes to you as an event; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -712,7 +712,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-7 (\"yes\") reported 20 new lines:\nspam 0\nspam 1\nspam 2\nspam 3\nspam 4\nspam 5\nspam 6\nspam 7\nspam 8\nspam 9\nspam 10\nspam 11\nspam 12\nspam 13\nspam 14\nspam 15\nspam 16\nspam 17\nspam 18\nspam 19\n(101 more lines not shown; full output in <out>/job-7.log)",
+					"content": "Monitor job-7 (\"yes\") reported 20 new lines:\nspam 0\nspam 1\nspam 2\nspam 3\nspam 4\nspam 5\nspam 6\nspam 7\nspam 8\nspam 9\nspam 10\nspam 11\nspam 12\nspam 13\nspam 14\nspam 15\nspam 16\nspam 17\nspam 18\nspam 19\n(101 more lines left out; the full output is in <out>/job-7.log)",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -737,7 +737,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-7 (\"yes\") was stopped: it printed more than 120 lines within 60s (121 events). Narrow the command's filter before watching it again.\nFull output: <out>/job-7.log",
+					"content": "Monitor job-7 (\"yes\") was stopped after more than 120 lines in 60s (121 events). Tighten the command's filter before you watch it again.\nFull output: <out>/job-7.log",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -769,7 +769,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started monitor job-8 (\"CI\") for up to 1800s.\nOutput: <out>/job-8.log\nEach new output line reaches you as an event; keep working or end your turn. task_stop stops it."
+						"text": "Started monitor job-8 (\"CI\") for up to 1800s.\nOutput: <out>/job-8.log\nEach new output line comes to you as an event; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -814,7 +814,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-8 (\"CI\") exited with code 0 after 0s, 2 events.\nCommand: gh run watch 7\nLast output:\nlint: pass\ntest: pass\nFull output: <out>/job-8.log (read it with the read tool if you need more).",
+					"content": "Monitor job-8 (\"CI\") exited with code 0 after 0s, 2 events.\nCommand: gh run watch 7\nLast output:\nlint: pass\ntest: pass\nFull output: <out>/job-8.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -1125,7 +1125,7 @@
 					},
 					{
 						"type": "text",
-						"text": "Standalone sleep while background work runs (1 background task): it only held the turn. Each task's end arrives as a message and starts a new turn, so end the turn instead."
+						"text": "Standalone sleep while background work runs (1 background task): it only held the turn. Each task's end comes in a message that opens a new turn, so end the turn instead."
 					}
 				]
 			}
@@ -1140,7 +1140,7 @@
 					},
 					{
 						"type": "text",
-						"text": "Standalone sleep while background work runs (1 background task): it only held the turn. Each task's end arrives as a message and starts a new turn, so end the turn instead."
+						"text": "Standalone sleep while background work runs (1 background task): it only held the turn. Each task's end comes in a message that opens a new turn, so end the turn instead."
 					}
 				]
 			}
@@ -1173,7 +1173,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-9 (\"serve\").\nOutput: <out>/job-9.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-9 (\"serve\").\nOutput: <out>/job-9.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1197,7 +1197,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background job job-9 (\"serve\") was stopped by the owner after 0s.\nCommand: make serve\nLast output:\nready\nFull output: <out>/job-9.log (read it with the read tool if you need more).",
+					"content": "Background job job-9 (\"serve\") was stopped by the owner after 0s.\nCommand: make serve\nLast output:\nready\nFull output: <out>/job-9.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -1228,7 +1228,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started monitor job-10 (\"watch\") for up to 60s.\nOutput: <out>/job-10.log\nEach new output line reaches you as an event; keep working or end your turn. task_stop stops it."
+						"text": "Started monitor job-10 (\"watch\") for up to 60s.\nOutput: <out>/job-10.log\nEach new output line comes to you as an event; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1277,7 +1277,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-10 (\"watch\") was stopped by the owner after 0s, 1 event.\nCommand: tail -f x\nLast output:\npending line\nFull output: <out>/job-10.log (read it with the read tool if you need more).",
+					"content": "Monitor job-10 (\"watch\") was stopped by the owner after 0s, 1 event.\nCommand: tail -f x\nLast output:\npending line\nFull output: <out>/job-10.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -1355,7 +1355,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-11 (\"c0\").\nOutput: <out>/job-11.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-11 (\"c0\").\nOutput: <out>/job-11.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1380,7 +1380,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-12 (\"c1\").\nOutput: <out>/job-12.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-12 (\"c1\").\nOutput: <out>/job-12.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1405,7 +1405,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-13 (\"c2\").\nOutput: <out>/job-13.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-13 (\"c2\").\nOutput: <out>/job-13.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1430,7 +1430,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-14 (\"c3\").\nOutput: <out>/job-14.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-14 (\"c3\").\nOutput: <out>/job-14.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1455,7 +1455,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-15 (\"c4\").\nOutput: <out>/job-15.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-15 (\"c4\").\nOutput: <out>/job-15.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1480,7 +1480,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-16 (\"c5\").\nOutput: <out>/job-16.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-16 (\"c5\").\nOutput: <out>/job-16.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1505,7 +1505,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-17 (\"c6\").\nOutput: <out>/job-17.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-17 (\"c6\").\nOutput: <out>/job-17.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1530,7 +1530,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-18 (\"c7\").\nOutput: <out>/job-18.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-18 (\"c7\").\nOutput: <out>/job-18.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1555,7 +1555,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-19 (\"c8\").\nOutput: <out>/job-19.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-19 (\"c8\").\nOutput: <out>/job-19.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1580,7 +1580,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-20 (\"c9\").\nOutput: <out>/job-20.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-20 (\"c9\").\nOutput: <out>/job-20.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1605,7 +1605,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-21 (\"c10\").\nOutput: <out>/job-21.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-21 (\"c10\").\nOutput: <out>/job-21.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1630,7 +1630,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-22 (\"c11\").\nOutput: <out>/job-22.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-22 (\"c11\").\nOutput: <out>/job-22.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1655,7 +1655,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-23 (\"c12\").\nOutput: <out>/job-23.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-23 (\"c12\").\nOutput: <out>/job-23.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1680,7 +1680,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-24 (\"c13\").\nOutput: <out>/job-24.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-24 (\"c13\").\nOutput: <out>/job-24.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1705,7 +1705,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-25 (\"c14\").\nOutput: <out>/job-25.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-25 (\"c14\").\nOutput: <out>/job-25.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1730,7 +1730,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-26 (\"c15\").\nOutput: <out>/job-26.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-26 (\"c15\").\nOutput: <out>/job-26.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1755,7 +1755,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-27 (\"c16\").\nOutput: <out>/job-27.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-27 (\"c16\").\nOutput: <out>/job-27.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1780,7 +1780,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-28 (\"c17\").\nOutput: <out>/job-28.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-28 (\"c17\").\nOutput: <out>/job-28.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1805,7 +1805,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-29 (\"c18\").\nOutput: <out>/job-29.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-29 (\"c18\").\nOutput: <out>/job-29.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1830,7 +1830,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-30 (\"c19\").\nOutput: <out>/job-30.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-30 (\"c19\").\nOutput: <out>/job-30.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1855,7 +1855,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-31 (\"c20\").\nOutput: <out>/job-31.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-31 (\"c20\").\nOutput: <out>/job-31.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1880,7 +1880,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-32 (\"c21\").\nOutput: <out>/job-32.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-32 (\"c21\").\nOutput: <out>/job-32.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1905,7 +1905,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-33 (\"c22\").\nOutput: <out>/job-33.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-33 (\"c22\").\nOutput: <out>/job-33.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1930,7 +1930,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-34 (\"c23\").\nOutput: <out>/job-34.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-34 (\"c23\").\nOutput: <out>/job-34.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1955,7 +1955,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "Started background job job-35 (\"c24\").\nOutput: <out>/job-35.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+						"text": "Started background job job-35 (\"c24\").\nOutput: <out>/job-35.log\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it."
 					}
 				],
 				"details": {
@@ -1976,7 +1976,7 @@
 			"params": {
 				"command": "c25"
 			},
-			"error": "25 background tasks are already running; stop one with task_stop first."
+			"error": "25 background tasks are running, the most allowed; stop one with task_stop first."
 		},
 		{
 			"tool": "task_list",
@@ -2011,8 +2011,8 @@
 					"│ Last output:                                                                 │",
 					"│ compiled                                                                     │",
 					"│ ok                                                                           │",
-					"│ Full output: <out>/job-1.log (read it with  │",
-					"│ the read tool if you need more).                                             │",
+					"│ Full output: <out>/job-1.log (use the read  │",
+					"│ tool on it for more).                                                        │",
 					"╰──────────────────────────────────────────────────────────────────────────────╯"
 				],
 				[
@@ -2027,8 +2027,8 @@
 					"│ Background job job-2 (\"false\") exited with code 2 after 1m 5s.               │",
 					"│ Command: false                                                               │",
 					"│ No output.                                                                   │",
-					"│ Full output: <out>/job-2.log (read it with  │",
-					"│ the read tool if you need more).                                             │",
+					"│ Full output: <out>/job-2.log (use the read  │",
+					"│ tool on it for more).                                                        │",
 					"╰──────────────────────────────────────────────────────────────────────────────╯"
 				],
 				[
@@ -2044,8 +2044,8 @@
 					"│ exist: /missing after 0s.                                                    │",
 					"│ Command: nope                                                                │",
 					"│ No output.                                                                   │",
-					"│ Full output: <out>/job-3.log (read it with  │",
-					"│ the read tool if you need more).                                             │",
+					"│ Full output: <out>/job-3.log (use the read  │",
+					"│ tool on it for more).                                                        │",
 					"╰──────────────────────────────────────────────────────────────────────────────╯"
 				],
 				[
@@ -2092,21 +2092,21 @@
 					"│ line 17                                                                      │",
 					"│ line 18                                                                      │",
 					"│ line 19                                                                      │",
-					"│ (5 more lines not shown; full output in                                      │",
+					"│ (5 more lines left out; the full output is in                                │",
 					"│ <out>/job-6.log)                            │",
 					"╰──────────────────────────────────────────────────────────────────────────────╯"
 				],
 				[
 					"╭─ ⧗ Monitor · errors ───────────────────────────────────────────────── expand ╮",
-					"│ Monitor job-6 (\"errors\") reached its 30s timeout after 27 events and was     │",
-					"│ stopped. Start a new monitor if you still need to watch it.                  │",
+					"│ Monitor job-6 (\"errors\") was stopped by its 30s timeout, after 27 events.    │",
+					"│ Start another monitor to keep watching.                                      │",
 					"│ Full output: <out>/job-6.log                │",
 					"╰──────────────────────────────────────────────────────────────────────────────╯"
 				],
 				[
 					"╭─ ⧗ Monitor · errors ─────────────────────────────────────────────── collapse ╮",
-					"│ Monitor job-6 (\"errors\") reached its 30s timeout after 27 events and was     │",
-					"│ stopped. Start a new monitor if you still need to watch it.                  │",
+					"│ Monitor job-6 (\"errors\") was stopped by its 30s timeout, after 27 events.    │",
+					"│ Start another monitor to keep watching.                                      │",
 					"│ Full output: <out>/job-6.log                │",
 					"╰──────────────────────────────────────────────────────────────────────────────╯"
 				],

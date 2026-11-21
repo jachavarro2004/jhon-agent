@@ -58,7 +58,7 @@ test("a job the owner stops in the Jobs view is reported to the agent as stopped
 		s.execs[0]!.output("ready\n");
 		await inView(s, "jobs", ["x"]);
 		await until(() => s.sent.length === 1);
-		assert.equal(s.sent[0]!.message.content, `Background job job-1 ("serve") was stopped by the owner after 0s.\nCommand: make serve\nLast output:\nready\nFull output: ${s.out}/job-1.log (read it with the read tool if you need more).`);
+		assert.equal(s.sent[0]!.message.content, `Background job job-1 ("serve") was stopped by the owner after 0s.\nCommand: make serve\nLast output:\nready\nFull output: ${s.out}/job-1.log (use the read tool on it for more).`);
 		assert.deepEqual(s.sent[0]!.options, { triggerTurn: true, deliverAs: "followUp" });
 		assert.equal(s.sent[0]!.message.details.jhonTasks.status, "stopped");
 		await tick();

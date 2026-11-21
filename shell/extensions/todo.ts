@@ -63,7 +63,7 @@ const START_NUDGE_AFTER = 3;
 // pi hands a custom message to the model as user text, so every nudge says
 // who speaks first (T42d).
 const FROM_THE_HARNESS = "[Harness reminder from the Jhon shell, not a message from the owner] ";
-const REMINDER_TEXT = `${FROM_THE_HARNESS}The todo plan has not been reviewed during several tool-use turns. Check whether it still matches the work performed and update tasks where needed. Do not mark work done without verification.`;
+const REMINDER_TEXT = `${FROM_THE_HARNESS}Several tool-use turns went by without a look at the todo list. Compare it with the work done so far and update any task that no longer matches. Mark nothing done until it is verified.`;
 const START_TEXT = `${FROM_THE_HARNESS}This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in \`jhon status\`.`;
 
 /*
@@ -97,35 +97,35 @@ const PARAMETERS = {
 	additionalProperties: false,
 	required: ["action"],
 	properties: {
-		action: { type: "string", enum: ["write", "add", "update", "clear", "list"], description: "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it." },
+		action: { type: "string", enum: ["write", "add", "update", "clear", "list"], description: "write sets the whole list, add puts one task at the end, update edits a task by id, clear removes every task, list shows them." },
 		tasks: {
 			type: "array",
-			description: "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+			description: "For write: every task, in order. Give a kept task its id back so its history stays; leave id out for new tasks.",
 			items: {
 				type: "object",
 				additionalProperties: false,
 				required: ["title"],
 				properties: {
-					id: { type: "integer", description: "Existing task id to keep." },
-					title: { type: "string", description: "Short imperative title, e.g. 'Write the parser'." },
-					status: { type: "string", enum: STATUSES, description: "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose." },
-					note: { type: "string", description: "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'." },
+					id: { type: "integer", description: "Id of a task you keep." },
+					title: { type: "string", description: "A short command as title, like 'Write the parser'." },
+					status: { type: "string", enum: STATUSES, description: "pending when omitted. blocked: still open, held by something beyond the list; dropped: deliberately left undone." },
+					note: { type: "string", description: "The current activity, shown during in_progress, like 'writing tests'. A blocked task needs one that says what it waits for, like 'waiting for an admin'." },
 				},
 			},
 		},
-		id: { type: "integer", description: "Task id for update." },
-		title: { type: "string", description: "Title for add, or a new title for update." },
-		status: { type: "string", enum: STATUSES, description: "Status for add or update." },
-		note: { type: "string", description: "Note for add or update; required for blocked." },
+		id: { type: "integer", description: "Id of the task to update." },
+		title: { type: "string", description: "add: its title; update: a new title." },
+		status: { type: "string", enum: STATUSES, description: "add or update: its status." },
+		note: { type: "string", description: "add or update: its note; blocked needs one." },
 	},
 } as const;
 
 const DESCRIPTION = "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.";
 const GUIDELINES = [
 	"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
-	"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+	"Keep exactly one task in_progress; mark it done right after it is verified, never with failing tests or partial work (the blocker becomes a new task).",
 	"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
-	"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds.",
+	"Set blocked only for a wait outside the list (a person, an authorization), with a note that names it; a prerequisite inside the list keeps the task pending. When the condition is met, back to pending.",
 ];
 
 /** A sub-agent's process: it has the tool only when its tools (its rendered `tools:`) name it. */
@@ -307,7 +307,7 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		renderShell: "self",
 		label: "Todo",
 		description: DESCRIPTION,
-		promptSnippet: "Track multi-step work",
+		promptSnippet: "Track a multi-step plan",
 		promptGuidelines: GUIDELINES,
 		parameters: PARAMETERS,
 		executionMode: "sequential",

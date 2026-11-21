@@ -119,7 +119,7 @@ test("at its timeout a monitor delivers its open batch, then stops and says so",
 test("a timeout outside 1 to 1800 whole seconds is refused before anything runs", () => {
 	const m = monitors();
 	for (const timeoutSeconds of [0, -1, 1801, 1.5, Number.NaN, Infinity]) {
-		assert.throws(() => m.controller.start({ command: "x", cwd: "/", ownerSessionId: "s", timeoutSeconds }), { message: "timeout_seconds must be a whole number from 1 to 1800." });
+		assert.throws(() => m.controller.start({ command: "x", cwd: "/", ownerSessionId: "s", timeoutSeconds }), { message: "timeout_seconds takes a whole number of seconds, 1 to 1800." });
 	}
 	assert.deepEqual([m.execs.length, m.registry.list().length, m.live()], [0, 0, 0]);
 	m.controller.start({ command: "x", cwd: "/", ownerSessionId: "s", timeoutSeconds: 1800 });

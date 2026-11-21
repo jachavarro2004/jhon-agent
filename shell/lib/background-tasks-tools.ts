@@ -80,7 +80,7 @@ export function taskOutcome(task: TaskRecord): string {
 			return task.kind === "agent" ? "failed" : `could not run: ${task.error ?? "unknown error"}`;
 	}
 	if (task.kind === "agent") return "failed";
-	const exit = task.exitCode == null ? "exited without an exit code" : `exited with code ${task.exitCode}`;
+	const exit = task.exitCode == null ? "exited with no exit code" : `exited with code ${task.exitCode}`;
 	const records = task.executions;
 	return records?.failed ? `${exit}, but jhon executions recorded a failure (${records.failures} of ${records.total} failed; record ${records.records.join(", ")})` : exit;
 }
@@ -112,7 +112,7 @@ export function taskText(task: TaskRecord, now: number, stoppedBy?: "owner"): st
 		`${task.kind === "monitor" ? "Monitor" : "Background job"} ${named(task)} ${outcome}${events}.`,
 		`Command: ${task.command}`,
 		...(task.tail.length === 0 ? ["No output."] : ["Last output:", ...task.tail]),
-		`Full output: ${task.outputPath} (read it with the read tool if you need more).`,
+		`Full output: ${task.outputPath} (use the read tool on it for more).`,
 	].join("\n");
 }
 
@@ -211,7 +211,7 @@ export function taskNoticeText(task: TaskRecord, now: number, stoppedBy?: "owner
 /** A batch of a monitor's lines: a count line, the lines, and how many more did not fit. */
 function batchText(job: JobRecord, { lines, omitted }: MonitorBatch): string {
 	const rows = [`Monitor ${named(job)} reported ${count(lines.length, "new line")}:`, ...lines];
-	if (omitted > 0) rows.push(`(${count(omitted, "more line")} not shown; full output in ${job.outputPath})`);
+	if (omitted > 0) rows.push(`(${count(omitted, "more line")} left out; the full output is in ${job.outputPath})`);
 	return rows.join("\n");
 }
 
@@ -221,8 +221,8 @@ export function monitorNoticeText(notice: MonitorNotice): string {
 	const { job, reason } = notice;
 	const events = count(job.events ?? 0, "event");
 	const why = reason === "timeout"
-		? `reached ${job.timeoutSeconds === undefined ? "its timeout" : `its ${job.timeoutSeconds}s timeout`} after ${events} and was stopped. Start a new monitor if you still need to watch it.`
-		: `was stopped: it printed more than ${MONITOR_FLOOD_LINES} lines within ${MONITOR_FLOOD_WINDOW_MS / 1000}s (${events}). Narrow the command's filter before watching it again.`;
+		? `was stopped by ${job.timeoutSeconds === undefined ? "its timeout" : `its ${job.timeoutSeconds}s timeout`}, after ${events}. Start another monitor to keep watching.`
+		: `was stopped after more than ${MONITOR_FLOOD_LINES} lines in ${MONITOR_FLOOD_WINDOW_MS / 1000}s (${events}). Tighten the command's filter before you watch it again.`;
 	return `Monitor ${named(job)} ${why}\nFull output: ${job.outputPath}`;
 }
 
@@ -408,26 +408,26 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		name: BASH_BACKGROUND_TOOL,
 		label: "Bash (background)",
 		description: [
-			"Run a shell command in the background; returns a task id at once. You are notified once when it exits (exit code, last lines, output file); do not poll, sleep, or delegate a subagent to wait.",
+			"Runs a shell command as a background task; returns its id at once. Its exit sends one notice (exit code, last lines, output file); never poll, sleep or send a sub-agent to wait.",
 			"Use it for anything over about 30 seconds or of unknown duration (CI, builds, long tests, servers); quick checks stay in bash.",
-			"Make the command's exit the event, e.g. `gh run watch <run-id> --exit-status`.",
-			`Read its output file with the read tool. task_stop stops it. At most ${MAX_RUNNING_TASKS} run at once.`,
+			"Let the awaited event end the command, e.g. `gh run watch <run-id> --exit-status`.",
+			`Read its output file with the read tool; task_stop stops it. Up to ${MAX_RUNNING_TASKS} run together.`,
 		].join(" "),
 		parameters: {
 			type: "object",
 			additionalProperties: false,
 			required: ["command"],
 			properties: {
-				command: { type: "string", description: "Shell command to run in the background, in the session working directory." },
-				label: { type: "string", maxLength: 80, description: "Short human-readable label, e.g. 'CI for PR 1834'." },
+				command: { type: "string", description: "Shell command to start in the background, in the session's working directory." },
+				label: { type: "string", maxLength: 80, description: "A short label people read, like 'CI for PR 1834'." },
 			},
 		},
 		async execute(_id: string, params: { command?: unknown; label?: unknown }, _signal: unknown, _onUpdate: unknown, ctx: ExtensionContext) {
 			const command = params.command;
-			if (typeof command !== "string" || command.trim() === "") throw new Error("bash_background requires a non-empty command");
+			if (typeof command !== "string" || command.trim() === "") throw new Error("bash_background needs a command that is not empty");
 			const job = tasks.start({ command, cwd: ctx.cwd, ownerSessionId: callerId(ctx), label: label(params.label) });
 			announce();
-			return reply(`Started background job ${named(job)}.\nOutput: ${job.outputPath}\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it.`, taskDetails(job));
+			return reply(`Started background job ${named(job)}.\nOutput: ${job.outputPath}\nOne notice comes when it exits; meanwhile, work on or end your turn. task_stop stops it.`, taskDetails(job));
 		},
 	});
 
@@ -435,9 +435,9 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		name: MONITOR_TOOL,
 		label: "Monitor",
 		description: [
-			"Run a command in the background and get each output line as an event while it runs. Do not poll or sleep between events.",
-			"E.g. `tail -f app.log | grep --line-buffered ERROR`. For one result when a command ends, use bash_background instead.",
-			`Lines within ${MONITOR_BATCH_MS} ms arrive as one notice (at most ${MONITOR_LINES_PER_NOTICE}). timeout_seconds is mandatory (1-${MONITOR_MAX_TIMEOUT_SECONDS}); it stops at the timeout or past ${MONITOR_FLOOD_LINES} lines in ${MONITOR_FLOOD_WINDOW_MS / 1000}s, so filter the command's output.`,
+			"Runs a command in the background; every output line becomes an event for you while it runs. Never poll or sleep between events.",
+			"Like `tail -f app.log | grep --line-buffered ERROR`. If you only need the end of a command, use bash_background.",
+			`Lines within ${MONITOR_BATCH_MS} ms make one notice (${MONITOR_LINES_PER_NOTICE} at most). timeout_seconds is required (1-${MONITOR_MAX_TIMEOUT_SECONDS}); it ends at the timeout or past ${MONITOR_FLOOD_LINES} lines in ${MONITOR_FLOOD_WINDOW_MS / 1000}s, so keep its output filtered.`,
 			"task_stop stops it.",
 		].join(" "),
 		parameters: {
@@ -445,25 +445,25 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 			additionalProperties: false,
 			required: ["command", "timeout_seconds"],
 			properties: {
-				command: { type: "string", description: "Shell command whose output lines are events, run in the session working directory." },
-				timeout_seconds: { type: "integer", minimum: 1, maximum: MONITOR_MAX_TIMEOUT_SECONDS, description: "Mandatory: stop the monitor after this many seconds." },
-				label: { type: "string", maxLength: 80, description: "Short human-readable label, e.g. 'CI checks for PR 1842'." },
+				command: { type: "string", description: "Shell command to watch; each output line is an event. Working directory: the session's." },
+				timeout_seconds: { type: "integer", minimum: 1, maximum: MONITOR_MAX_TIMEOUT_SECONDS, description: "Required: seconds until the monitor stops." },
+				label: { type: "string", maxLength: 80, description: "A short label people read, like 'CI checks for PR 1842'." },
 			},
 		},
 		async execute(_id: string, params: { command?: unknown; label?: unknown; timeout_seconds?: unknown }, _signal: unknown, _onUpdate: unknown, ctx: ExtensionContext) {
 			const command = params.command;
-			if (typeof command !== "string" || command.trim() === "") throw new Error("monitor requires a non-empty command");
+			if (typeof command !== "string" || command.trim() === "") throw new Error("monitor needs a command that is not empty");
 			const timeoutSeconds = typeof params.timeout_seconds === "number" ? params.timeout_seconds : Number.NaN;
 			const job = watchers.start({ command, cwd: ctx.cwd, ownerSessionId: callerId(ctx), label: label(params.label), timeoutSeconds });
 			announce();
-			return reply(`Started monitor ${named(job)} for up to ${timeoutSeconds}s.\nOutput: ${job.outputPath}\nEach new output line reaches you as an event; keep working or end your turn. task_stop stops it.`, taskDetails(job));
+			return reply(`Started monitor ${named(job)} for up to ${timeoutSeconds}s.\nOutput: ${job.outputPath}\nEach new output line comes to you as an event; meanwhile, work on or end your turn. task_stop stops it.`, taskDetails(job));
 		},
 	});
 
 	pi.registerTool({
 		name: "task_list",
 		label: "List background tasks",
-		description: "List this session's background tasks (commands, monitors, sub-agents) with status and output file.",
+		description: "Lists the session's background tasks (commands, monitors, sub-agents), with status and output file.",
 		parameters: { type: "object", additionalProperties: false, properties: {} },
 		async execute(_id: string, _params: unknown, _signal: unknown, _onUpdate: unknown, ctx: ExtensionContext) {
 			const listed = tasks.list(callerId(ctx)).filter((task) => !ownersOwn(task));
@@ -486,7 +486,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 	pi.registerTool({
 		name: "task_stop",
 		label: "Stop a task",
-		description: "Stop a background task (a command with its process tree, or a sub-agent). A stopped task sends no notice.",
+		description: "Ends a background task: a command and its process tree, or a sub-agent. Once stopped, it sends no notice.",
 		parameters: taskId,
 		async execute(_id: string, params: { id?: unknown }, _signal: unknown, _onUpdate: unknown, ctx: ExtensionContext) {
 			const task = callersTask(ctx, params.id);
@@ -529,7 +529,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		if (typeof command !== "string") return undefined;
 		const busy = isStandaloneSleep(command) ? tasks.list(sessionId()).filter((task) => task.status === "running").length : 0;
 		const note = busy > 0
-			? `Standalone sleep while background work runs (${count(busy, "background task")}): it only held the turn. Each task's end arrives as a message and starts a new turn, so end the turn instead.`
+			? `Standalone sleep while background work runs (${count(busy, "background task")}): it only held the turn. Each task's end comes in a message that opens a new turn, so end the turn instead.`
 			: foregroundWaitNote(command);
 		if (note) waitNotes.set(event.toolCallId, note);
 		return undefined;
