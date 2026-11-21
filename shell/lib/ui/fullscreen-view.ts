@@ -6,6 +6,7 @@
  */
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { asciiText, glyph } from "./primitives/index.ts";
+import { THEME_NAME } from "./primitives/paint.ts";
 
 /** The overlay takes every row and column. */
 export const FULLSCREEN_OVERLAY = { overlay: true, overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%", margin: 0 } } as const;
@@ -66,7 +67,7 @@ export function renderFullscreenView(o: FullscreenViewOptions): string[] {
 	};
 	const tab = plain(o.tab);
 	const heavy = Math.min(inner, visibleWidth(tab) + 2);
-	const rule = t.fg("accent", glyph("heavyRule", ascii).repeat(heavy)) + t.fg("faint", glyph("rule", ascii).repeat(Math.max(0, inner - heavy)));
+	const rule = t.fg("accent", glyph("heavyRule", ascii).repeat(heavy)) + t.fg(THEME_NAME.faint, glyph("rule", ascii).repeat(Math.max(0, inner - heavy)));
 	const title = plain(o.title);
 	const sentence = o.sentence ? plain(o.sentence) : "";
 	const head = ` ${t.fg("accent", bold(title))}${sentence && visibleWidth(` ${title}  ${sentence}`) <= inner ? `  ${t.fg("muted", sentence)}` : ""}`;
