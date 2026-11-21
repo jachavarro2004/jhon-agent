@@ -102,7 +102,7 @@ MIT; the module ships no LICENSE file.
 | --- | --- | --- |
 | github.com/asaskevich/govalidator | v0.0.0-20230301143203-a9d515a09cc2 | MIT |
 | github.com/aymanbagabas/go-osc52/v2 | v2.0.1 | MIT |
-| github.com/BurntSushi/toml | v1.4.1-0.20240526193622-a339e1f7089c | MIT |
+| github.com/BurntSushi/toml | v1.6.0 | MIT |
 | github.com/cenkalti/backoff/v5 | v5.0.3 | MIT |
 | github.com/cespare/xxhash/v2 | v2.3.0 | MIT |
 | github.com/charmbracelet/bubbletea | v1.3.10 (`third_party/bubbletea`) | MIT |
@@ -110,7 +110,7 @@ MIT; the module ships no LICENSE file.
 | github.com/charmbracelet/lipgloss | v1.1.0 | MIT |
 | github.com/charmbracelet/x/ansi | v0.10.1 | MIT |
 | github.com/charmbracelet/x/cellbuf | v0.0.13-0.20250311204145-2c3ea96c31dd | MIT |
-| github.com/charmbracelet/x/term | v0.2.1 | MIT |
+| github.com/charmbracelet/x/term | v0.2.2 | MIT |
 | github.com/clipperhouse/uax29/v2 | v2.7.0 | MIT |
 | github.com/cyberphone/json-canonicalization | v0.0.0-20241213102144-19d51d7fe467 | Apache-2.0 |
 | github.com/digitorus/pkcs7 | v0.0.0-20260821105541-05f79448fa77 | MIT |
@@ -173,7 +173,7 @@ MIT; the module ships no LICENSE file.
 | go.opentelemetry.io/otel/trace | v1.47.0 | Apache-2.0 |
 | go.yaml.in/yaml/v3 | v3.0.5 | MIT and Apache-2.0 |
 | golang.org/x/crypto | v0.58.0 | BSD-3-Clause |
-| golang.org/x/mod | v0.42.0 | BSD-3-Clause |
+| golang.org/x/mod | v0.43.0 | BSD-3-Clause |
 | golang.org/x/net | v0.61.0 | BSD-3-Clause |
 | golang.org/x/sync | v0.24.0 | BSD-3-Clause |
 | golang.org/x/sys | v0.49.0 | BSD-3-Clause |
@@ -439,7 +439,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-- `github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c`
+- `github.com/BurntSushi/toml v1.6.0`
 
 ```text
 The MIT License (MIT)
@@ -597,7 +597,7 @@ SOFTWARE.
 
 - `github.com/charmbracelet/x/ansi v0.10.1`
 - `github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd`
-- `github.com/charmbracelet/x/term v0.2.1`
+- `github.com/charmbracelet/x/term v0.2.2`
 
 ```text
 MIT License
@@ -1112,7 +1112,7 @@ limitations under the License.
 ```
 
 - `golang.org/x/crypto v0.58.0`
-- `golang.org/x/mod v0.42.0`
+- `golang.org/x/mod v0.43.0`
 - `golang.org/x/net v0.61.0`
 - `golang.org/x/sync v0.24.0`
 - `golang.org/x/sys v0.49.0`
