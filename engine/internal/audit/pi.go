@@ -110,6 +110,13 @@ const piAuthorizationEntry = "jhon-owner-authorization"
 // (T192 S8), read as an inline answer is.
 const piJobNotice = "jhon-tasks.notice"
 
+// piSubagentResult is the message the shell before its background tasks
+// (sessions to late October 2026) sent when a background sub-agent ended:
+// `Background sub-agent <task> (<agent>) completed:` and the answer; its
+// subagent_result read one as task_result does now. Both deliver the
+// launch as their successors do.
+const piSubagentResult = "jhon-subagent.result"
+
 var (
 	noticeExit    = lazyre.New(`\bexited with code (-?\d+)\b`)
 	noticeCommand = lazyre.New(`(?m)^Command: (.*)$`)
@@ -117,10 +124,10 @@ var (
 	// carry it as `task`), and its end notice, or task_result's answer once
 	// it ended, opens with the same task (details jhonTasks.id, kind agent)
 	// and how it ended, its answer after a blank line
-	// (shell/lib/background-tasks-tools.ts taskText); one still running is
-	// no answer.
+	// (shell/lib/background-tasks-tools.ts taskText); one still running, or
+	// stopped before its answer, gave none.
 	agentStarted = lazyre.New(`^Started background sub-agent (\S+) \(`)
-	agentEnded   = lazyre.New(`^Background sub-agent (\S+) \([^)\n]*\) (?:completed|failed|was stopped)\b`)
+	agentEnded   = lazyre.New(`^Background sub-agent (\S+) \([^)\n]*\) (?:completed|failed)\b`)
 )
 
 // startedTask is the background task a subagent call's result says it
@@ -410,8 +417,10 @@ func readPiSession(file, rel string) piRead {
 			if text := contentText(prop(o, "content")); text != "" {
 				e := base
 				e.Role, e.Origin, e.Prompt = "user", optString("extension"), &text
-				if prop(o, "customType") == piJobNotice {
-					e.job = readJobNotice(text, prop(o, "details"))
+				if ct := prop(o, "customType"); ct == piJobNotice || ct == piSubagentResult {
+					if ct == piJobNotice {
+						e.job = readJobNotice(text, prop(o, "details"))
+					}
 					// T192 S8: a background sub-agent's answer delivers its launch.
 					if task, answer := endedAgent(text, prop(o, "details")); launched[task] != "" {
 						e.delivers, e.delivery = launched[task], answer
@@ -516,8 +525,8 @@ func readPiSession(file, rel string) piRead {
 					launched[task] = id
 				}
 			}
-			// T192 S8: an answer read with task_result, its notice lost, delivers its launch as the notice would.
-			if tool == "task_result" && !isErr {
+			// T192 S8: an answer read with task_result (subagent_result before), its notice lost, delivers its launch as the notice would.
+			if (tool == "task_result" || tool == "subagent_result") && !isErr {
 				if task, answer := endedAgent(shown, prop(msg, "details")); launched[task] != "" {
 					e.delivers, e.delivery = launched[task], answer
 				}

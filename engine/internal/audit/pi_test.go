@@ -190,6 +190,9 @@ func piSessionWith(t *testing.T, steps ...pstep) string {
 		case "notice":
 			w.entry("custom_message", "customType", "jhon-tasks.notice", "content", s.text, "display", true,
 				"details", js.Obj("jhonTasks", js.Obj("id", "job-3", "kind", "command", "status", "exited", "succeeded", s.n == 0, "exitCode", float64(s.n))))
+		case "subagentResult":
+			w.entry("custom_message", "customType", "jhon-subagent.result", "content", s.text, "display", true,
+				"details", js.Obj("id", s.task, "agent", s.agent, "status", "completed"))
 		case "agentNotice":
 			w.entry("custom_message", "customType", "jhon-tasks.notice", "content", s.text, "display", true,
 				"details", js.Obj("jhonTasks", js.Obj("id", s.task, "kind", "agent", "label", s.agent, "status", "completed", "succeeded", true)))
@@ -834,6 +837,32 @@ func TestPiBackgroundAnswerReadThroughTaskResult(t *testing.T) {
 	other := pmain(pcall{name: "task_result", args: js.Obj("id", "agent-9"), result: "Background sub-agent agent-9 (jhon-checker) completed after 2m.\n\nverdict: pass"})
 	x := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started), other), chg)
 	eq(t, "another task unfinished", x.Unfinished, 1)
+}
+
+// T192 S8 (L11 real-session check): the shell before background tasks
+// (2026-10-28 sessions) launched with the same line, ended a background
+// sub-agent with a `jhon-subagent.result` message (`Background sub-agent
+// <task> (<agent>) completed:` and the answer) and read one with
+// subagent_result; both are that launch's answer, a still-running read none.
+func TestPiBackgroundAnswerOfTheOlderShell(t *testing.T) {
+	task := "Verify openspec/changes/" + chg + "/ against its specs"
+	started := "Started background sub-agent agent-1 (jhon-checker). Its answer arrives as a message when it finishes; subagent_result reads it, subagent_stop cancels it."
+	answer := "Background sub-agent agent-1 (jhon-checker) completed:\n\nverdict: pass\n\nEvery scenario holds."
+	running := pmain(pcall{name: "subagent_result", args: js.Obj("id", "agent-1"), result: "Background sub-agent agent-1 (jhon-checker) is still running."})
+	ended := pstep{kind: "subagentResult", task: "agent-1", agent: "jhon-checker", text: answer}
+	o := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started), running, ended), chg)
+	eq(t, "message: unfinished", o.Unfinished, 0)
+	eq(t, "message: verdicts", o.Verdicts, [3]int{1, 0, 0})
+	read := pmain(pcall{name: "subagent_result", args: js.Obj("id", "agent-1"), result: answer})
+	r := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started), read), chg)
+	eq(t, "subagent_result: unfinished", r.Unfinished, 0)
+	eq(t, "subagent_result: verdicts", r.Verdicts, [3]int{1, 0, 0})
+	still := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started), running), chg)
+	eq(t, "still running: unfinished", still.Unfinished, 1)
+	// One stopped before its answer (task_stop, the owner) never finished.
+	stopped := pmain(pcall{name: "task_result", args: js.Obj("id", "agent-1"), result: "Background sub-agent agent-1 (jhon-checker) was stopped after 1m 2s."})
+	x := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started), stopped), chg)
+	eq(t, "stopped: unfinished", x.Unfinished, 1)
 }
 
 // T196 D1: a pi background launch is no completion: a builder whose answer
