@@ -22,7 +22,7 @@ export type RunningJobDisplay = {
 	id: string;
 	/** What runs: a shell command, a monitor, or a sub-agent. */
 	kind?: "command" | "monitor" | "agent";
-	/** A sub-agent's is `<agent>: <task>`; a job's, its command or its label. */
+	/** A sub-agent's is `<agent>: <what it does>` (its short label, lib/background-tasks.ts agentLabel); a job's, its command or its label. */
 	label: string;
 	startedAt: number;
 	/** A sub-agent's latest step. */
@@ -246,7 +246,7 @@ function shownJobs(jobs: readonly RunningJobDisplay[] | undefined, now: number):
 	return [...list.filter((job) => job.endedAt === undefined).sort((a, b) => a.startedAt - b.startedAt), ...lingering(list, now)];
 }
 
-/** A sub-agent's name and task from its label, `<agent>: <task>`. */
+/** A sub-agent's name and what it does from its label, `<agent>: <what it does>`. */
 function agentParts(job: RunningJobDisplay): { name: string; what: string } {
 	const label = clean(job.label);
 	const split = label.indexOf(": ");

@@ -341,11 +341,11 @@ function registry(extra: { outputDir?: () => string; commandPrefix?: string } = 
 	return { reg, runs, agents, settled, dir };
 }
 
-test("a label is trimmed, a blank one is the command; an agent's label is its name and the task's first line, cut at 60", () => {
+test("a label is trimmed, a blank one is the command; an agent's label is its name and the task's first line, cut at the rail's 40 (T195)", () => {
 	const { reg } = registry();
 	assert.equal(reg.start({ command: "make", cwd: "/", ownerSessionId: "s", label: "  build  " }).label, "build");
 	assert.equal(reg.start({ command: "make", cwd: "/", ownerSessionId: "s", label: " " }).label, "make");
-	assert.equal(reg.startAgent(worker, `  ${"a".repeat(70)}\nsecond`, "/", "s").label, `worker: ${"a".repeat(59)}…`);
+	assert.equal(reg.startAgent(worker, `  ${"a".repeat(70)}\nsecond`, "/", "s").label, `worker: ${"a".repeat(39)}…`);
 	assert.equal(reg.startAgent(worker, "fix  the\tbug\nthen more", "/", "s").label, "worker: fix the bug");
 });
 

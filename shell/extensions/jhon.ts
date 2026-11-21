@@ -1166,6 +1166,8 @@ export default function jhon(pi: any): void {
 
   // A model trained on other harnesses may still ask for a foreground run
   // (background: false, mode: "foreground"/"default"/"task"): it runs in the background anyway, and says so (T119, L716).
+  // T195: the short label a background sub-agent is named by on the rail; any other value is none.
+  const labelOf = (value: unknown) => (typeof value === "string" ? value : undefined);
   const PUSHED = "Its completion is pushed automatically; continue other work or end the turn.";
   const forcedBackground = (params: { background?: unknown; mode?: unknown }) =>
     params.background === false || (params.mode !== undefined && params.mode !== "background")
@@ -1187,9 +1189,10 @@ export default function jhon(pi: any): void {
         cwd: CWD,
         timeout_seconds: TIMEOUT,
         skills: { type: "array", items: { type: "string" }, description: "Exact SKILL.md paths the sub-agent also loads, beyond the ones its definition names." },
+        label: { type: "string", description: "What it does, a few words (e.g. \"web: categories page\"), shown on the agents rail; else the brief's first phrase." },
       },
     },
-    async execute(id: string, params: { agent?: unknown; task?: unknown; worktree?: unknown; cwd?: unknown; timeout_seconds?: unknown; skills?: unknown; background?: unknown; mode?: unknown }, signal: AbortSignal | undefined, onUpdate: unknown, ctx: any) {
+    async execute(id: string, params: { agent?: unknown; task?: unknown; worktree?: unknown; cwd?: unknown; timeout_seconds?: unknown; skills?: unknown; label?: unknown; background?: unknown; mode?: unknown }, signal: AbortSignal | undefined, onUpdate: unknown, ctx: any) {
       if (typeof params.agent !== "string" || typeof params.task !== "string") throw new Error("subagent needs an agent and a task");
       const timeoutSeconds = timeoutOf(params.timeout_seconds);
       const rendered = resolveAgent(agentDir, params.agent);
@@ -1215,7 +1218,7 @@ export default function jhon(pi: any): void {
       const task = params.task + await launchContext(params.task, cwd, { bin, change, agent: agent.name }).catch(() => "");
       const scope = params.task;
       if (background) {
-        const run = background.startAgent(agent, task, cwd, sm?.getSessionId?.() ?? "", { session, scope, timeoutSeconds, skills, sessionProfile: sessionProfileName });
+        const run = background.startAgent(agent, task, cwd, sm?.getSessionId?.() ?? "", { session, scope, timeoutSeconds, skills, sessionProfile: sessionProfileName, label: labelOf(params.label) });
         const started = text(`Started background sub-agent ${run.id} (${agent.name}).${forcedBackground(params)} Its answer arrives as a message when it finishes; task_result reads it, task_stop cancels it. ${PUSHED}${tree ? ` ${worktreeNote(tree)}` : ""}`);
         return { ...started, details: { task: run.id, owner: sm?.getSessionId?.() ?? "" } };
       }
@@ -1237,9 +1240,10 @@ export default function jhon(pi: any): void {
         id: { type: "string", description: "The id subagent returned." },
         message: { type: "string", description: "What it needs to go on: the answer, the decision, or the resolved refusal. A `## Allowed edit surfaces` replaces its list." },
         timeout_seconds: TIMEOUT,
+        label: { type: "string", description: "What it does now, a few words; else the message's first phrase." },
       },
     },
-    async execute(_id: string, params: { id?: unknown; message?: unknown; timeout_seconds?: unknown; background?: unknown; mode?: unknown }, signal: AbortSignal | undefined, onUpdate: unknown, ctx: any) {
+    async execute(_id: string, params: { id?: unknown; message?: unknown; timeout_seconds?: unknown; label?: unknown; background?: unknown; mode?: unknown }, signal: AbortSignal | undefined, onUpdate: unknown, ctx: any) {
       if (typeof params.id !== "string" || typeof params.message !== "string" || !params.message.trim()) throw new Error("subagent_continue needs an id and a message");
       const timeoutSeconds = timeoutOf(params.timeout_seconds);
       const sm = ctx?.sessionManager;
@@ -1254,7 +1258,7 @@ export default function jhon(pi: any): void {
       const sessionProfileName = sessionProfile.current();
       if (background) {
         const skills = childSkills(c.agent.body, resolvedSkills);
-        const next = background.startAgent(agent, params.message, c.cwd, owner, { session: c.session, scope: continuedScope(c.scope, params.message), timeoutSeconds, skills, sessionProfile: sessionProfileName });
+        const next = background.startAgent(agent, params.message, c.cwd, owner, { session: c.session, scope: continuedScope(c.scope, params.message), timeoutSeconds, skills, sessionProfile: sessionProfileName, label: labelOf(params.label) });
         const continued = text(`Continued sub-agent ${c.session.id} (${c.agent.name}) in the background as ${next.id}.${forcedBackground(params)} Its answer arrives as a message when it finishes; task_result reads it, task_stop cancels it. ${PUSHED}`);
         return { ...continued, details: { task: next.id, owner } };
       }

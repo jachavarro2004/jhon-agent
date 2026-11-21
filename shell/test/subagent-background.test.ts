@@ -270,3 +270,53 @@ test("jhon_review draws the Prism review card", () => {
 	const context = { isError: false, state: {}, expanded: false, isPartial: true };
 	assert.match(tool.renderCall({}, theme, context).render(120).join("\n"), /◇ Prism review +◐ running/);
 });
+
+// T195 (L1607, L1609): the owner saw two jhon-builder rows both reading
+// "## Why dele…" and could not tell which sub-agent to look at.
+const BRIEF = "## Why delegated\nScout rule.\n\n## Allowed edit surfaces\n- none\n\n## Task\nMap who calls parse. Then report.";
+
+test("a sub-agent is named by its label on the rail, in task_list and on its end notice, its agent beside it; without one, by its brief's first meaningful phrase, never a heading (T195)", async () => {
+	const s = setup();
+	await s.fire("session_start");
+	const gate = join(tempDir("jhon-bg-gate-"), "open");
+	await within({ ...s.vars, FAKE_PI_GATE: gate }, async () => {
+		assert.match(s.tools.get("subagent").parameters.properties.label.description, /few words/, "the tool asks for a short label");
+		await s.tools.get("subagent").execute("call-1", { agent: "explore", task: BRIEF, label: "web: categories page" }, undefined, undefined, s.ctx);
+		await s.tools.get("subagent").execute("call-2", { agent: "explore", task: BRIEF }, undefined, undefined, s.ctx);
+		const rail = s.emitted.filter((e) => e.name === TASKS_EVENT).at(-1)?.value.tasks;
+		assert.deepEqual(rail.map((t: any) => t.label).sort(), ["explore: Map who calls parse", "explore: web: categories page"]);
+		const plain = { fg: (_c: string, t: string) => t, bg: (_c: string, t: string) => t, bold: (t: string) => t };
+		const drawn = renderAgentsSection(rail, plain as any, 80, { now: Date.now() }).join("\n");
+		assert.match(drawn, /◐ explore {2}web: categories page +\d+s/);
+		assert.match(drawn, /◐ explore {2}Map who calls parse +\d+s/);
+		assert.doesNotMatch(drawn, /#/, "no heading on the rail");
+		const listed = (await s.run("task_list", {})).content[0].text;
+		assert.match(listed, /^agent-1 · agent · running · explore: web: categories page · \d+s$/m);
+		assert.match(listed, /^agent-2 · agent · running · explore: Map who calls parse · \d+s$/m);
+		writeFileSync(gate, "");
+		await until(() => s.sent.length === 2);
+		const labels = s.sent.map((m) => m.message.details.jhonTasks.label).sort();
+		assert.deepEqual(labels, ["explore: Map who calls parse", "explore: web: categories page"], "the end notice's card names it so");
+	});
+});
+
+test("subagent_continue takes a label too; without one the message's first phrase names the continued run (T195)", async () => {
+	const s = setup();
+	await s.fire("session_start");
+	const sessions = tempDir("jhon-bg-sessions-");
+	const children = join(sessions, "parent", "subagents");
+	mkdirSync(children, { recursive: true });
+	writeFileSync(join(children, "toolu_7.meta.json"), JSON.stringify({ agentType: "explore", toolUseId: "toolu_7", parentSession: "parent" }));
+	writeFileSync(join(children, "toolu_7.jsonl"), [{ type: "session", version: 3, id: "toolu_7", cwd: sessions }, { type: "message", message: { role: "user", content: [{ type: "text", text: BRIEF }] } }].map((l) => JSON.stringify(l)).join("\n") + "\n");
+	const ctx = { ...s.ctx, sessionManager: { getSessionId: () => "parent", getSessionFile: () => join(sessions, "parent.jsonl") } };
+	const gate = join(tempDir("jhon-bg-gate-"), "open");
+	await within({ ...s.vars, FAKE_PI_GATE: gate }, async () => {
+		assert.match(s.tools.get("subagent_continue").parameters.properties.label.description, /few words/);
+		await s.tools.get("subagent_continue").execute("call-1", { id: "toolu_7", message: "## Answer\nThe owner approved the push. Go on.", label: "web: push the branch" }, undefined, undefined, ctx);
+		await s.tools.get("subagent_continue").execute("call-2", { id: "toolu_7", message: "## Answer\nThe owner approved the push. Go on." }, undefined, undefined, ctx);
+		const rail = s.emitted.filter((e) => e.name === TASKS_EVENT).at(-1)?.value.tasks;
+		assert.deepEqual(rail.map((t: any) => t.label).sort(), ["explore: The owner approved the push", "explore: web: push the branch"]);
+		writeFileSync(gate, "");
+		await until(() => s.sent.length === 2);
+	});
+});

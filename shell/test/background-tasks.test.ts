@@ -116,3 +116,36 @@ test("a running sub-agent counts its tokens from each assistant message's usage,
 	assert.equal(run.tokens, 3015);
 	assert.ok(h.activity() >= before + 2, "a token change repaints the rail");
 });
+
+// T195 (L1607, L1609): two builders on the rail both read "## Why dele…", the
+// first line of their briefs. A sub-agent is named by a short label of what it
+// does: the one the call gives, else the brief's first meaningful phrase.
+const BRIEF = [
+	"## Why delegated",
+	"Writer rule: the slice touches four files.",
+	"",
+	"## Allowed edit surfaces",
+	"- web/src/pages/categories/**",
+	"",
+	"Spec: odd/tasks/plan.md, T12 (S3)",
+	"",
+	"## Task",
+	"Build the categories page. Then wire the route.",
+].join("\n");
+
+test("a sub-agent's label is the one it was started with, its agent's name before it; the child still gets the whole brief (T195)", () => {
+	const h = rig();
+	const run = h.registry.startAgent(worker, BRIEF, "/repo", "main", { label: "  web: categories\npage  " });
+	assert.equal(run.label, "worker: web: categories page");
+	assert.equal(h.runs[0]!.task, BRIEF, "the label is not part of the task");
+});
+
+test("without a label, it is the brief's first meaningful phrase: headings, boilerplate sections and Spec lines skipped (T195)", () => {
+	const h = rig();
+	assert.equal(h.registry.startAgent(worker, BRIEF, "/repo", "main").label, "worker: Build the categories page");
+	assert.equal(h.registry.startAgent(worker, "# Categories\n\n**Why delegated:** writer rule.\n- Map who calls `parse()`; then report", "/repo", "main").label, "worker: Map who calls `parse()`");
+	const long = "Rewrite the whole billing export so every invoice row carries its tax lines";
+	assert.equal(h.registry.startAgent(worker, `## Goal\n${long}`, "/repo", "main").label, `worker: ${long.slice(0, 39)}…`, "cut to the rail's width");
+	assert.equal(h.registry.startAgent(worker, "## Why delegated\nWriter rule.\n## Allowed edit surfaces\n- a.ts", "/repo", "main").label, "worker", "nothing meaningful: the agent's name alone, never a heading");
+	assert.equal(h.registry.startAgent(worker, "fix the bug", "/repo", "main", { label: "   " }).label, "worker: fix the bug", "a blank label is no label");
+});

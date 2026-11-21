@@ -109,8 +109,8 @@ export type JobStartRequest = Pick<JobRecord, "command" | "cwd" | "ownerSessionI
 	onLine?: (line: string) => void;
 };
 
-/** A background sub-agent's run options: runAgent's, less the two the registry supplies. */
-export type AgentStartOptions = Omit<RunOptions, "signal" | "onEvent">;
+/** A background sub-agent's run options: runAgent's, less the two the registry supplies, and the short label it is named by (T195). */
+export type AgentStartOptions = Omit<RunOptions, "signal" | "onEvent"> & { label?: string };
 
 export interface TaskRegistryDeps {
 	/** Where each job's `<id>.log` goes; asked at every start. */
@@ -298,6 +298,66 @@ export function activityLine(event: ChildEvent): string | undefined {
 	return said === "" ? undefined : `» ${oneLine(said.split("\n")[0]!)}`;
 }
 
+// ---------------------------------------------------------------- sub-agent labels
+
+/**
+ * The characters a sub-agent's label keeps of what it does: the rail's 42
+ * text columns (lib/ui/pane.ts) less its state glyph. The rail cuts it
+ * further beside a long agent name and its time.
+ */
+export const AGENT_LABEL_CHARS = 40;
+
+/** Brief sections and labelled lines that bound the work or route it, never say what it is (T195, L1607). */
+const BOILERPLATE = new Set([
+	"why", "why delegated", "allowed edit surfaces", "edit surfaces", "spec", "specs", "spec lines",
+	"skills", "skills to load before work", "verification", "validation", "checks", "known environmental failures",
+	"decisions on record", "code map", "return", "risk", "owner", "owner verbatim", "worktree", "branch",
+]);
+const sectionKey = (text: string) => text.toLowerCase().replace(/[^a-z]+/g, " ").trim();
+const HEADING = /^#{1,6}\s+(.*)$/;
+const LABELLED = /^([A-Za-z][A-Za-z ,'’/-]{0,40}):(?:\s|$)/;
+
+/**
+ * What a brief says its sub-agent does, in a few words: the first phrase of
+ * its first meaningful line, cut to AGENT_LABEL_CHARS. Markdown headings,
+ * the sections under a boilerplate heading (`## Why delegated`, `## Allowed
+ * edit surfaces`, …) and boilerplate lines (`Spec: …`) are skipped; a list
+ * marker is dropped; the phrase ends at the first `.`, `;`, `!` or `?`
+ * before a space. Empty when nothing is left.
+ */
+export function briefLabel(brief: string): string {
+	let skipping = false;
+	for (const raw of brief.split("\n")) {
+		const line = raw.replace(/\*\*|__/g, "").trim();
+		const heading = HEADING.exec(line);
+		if (heading) {
+			skipping = BOILERPLATE.has(sectionKey(heading[1]!));
+			continue;
+		}
+		if (skipping || line === "") continue;
+		const labelled = LABELLED.exec(line);
+		if (labelled && BOILERPLATE.has(sectionKey(labelled[1]!))) continue;
+		const text = line.replace(/^(?:[-*+>]|\d+[.)])\s+/, "");
+		const phrase = (text.split(/[.;!?](?:\s|$)/)[0] ?? "").trim();
+		if (phrase !== "") return oneLine(phrase, AGENT_LABEL_CHARS);
+	}
+	return "";
+}
+
+/** A sub-agent's label: `<agent>: <what it does>`, the label given or else its brief's (briefLabel); the agent's name alone when neither says anything. */
+export function agentLabel(agent: string, brief: string, label?: string): string {
+	const given = label === undefined ? "" : oneLine(label, AGENT_LABEL_CHARS);
+	const what = given || briefLabel(brief);
+	return what === "" ? agent : `${agent}: ${what}`;
+}
+
+/** What a sub-agent does, as its label says it beside its name; a record whose label does not start with its name says it through its brief. */
+export function agentDoes(run: Pick<AgentRun, "agent" | "label" | "task">): string {
+	const prefix = `${run.agent}: `;
+	if (run.label.startsWith(prefix)) return run.label.slice(prefix.length);
+	return run.label === run.agent ? "" : briefLabel(run.task);
+}
+
 const positive = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0);
 
 /** The tokens an assistant message's usage reports: its totalTokens, else its parts added; 0 for any other event. */
@@ -402,14 +462,15 @@ export function createTaskRegistry(deps: TaskRegistryDeps) {
 		return job;
 	};
 
-	/** Runs a sub-agent in the background: saved in `session`, keeping a continued one's `scope`, stopped past `timeoutSeconds`. */
-	const startAgent = (agent: AgentDef, task: string, cwd: string, ownerSessionId: string, options: AgentStartOptions = {}): AgentRun => {
+	/** Runs a sub-agent in the background: saved in `session`, keeping a continued one's `scope`, stopped past `timeoutSeconds`, named by `label` (agentLabel). */
+	const startAgent = (agent: AgentDef, task: string, cwd: string, ownerSessionId: string, { label, ...options }: AgentStartOptions = {}): AgentRun => {
 		admit();
 		const session = options.session;
 		const run: AgentRun = {
 			id: `agent-${++agents}`,
 			kind: "agent",
-			label: `${agent.name}: ${oneLine(task.trim().split("\n")[0] ?? "", 60)}`,
+			// T195: named by what it does, never by its brief's first line ("## Why delegated").
+			label: agentLabel(agent.name, task, label),
 			agent: agent.name,
 			task,
 			ownerSessionId,
