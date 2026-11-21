@@ -44,15 +44,16 @@ var lddFiles = map[string][][2]string{
 // are made too; git keeps no empty directory, as in a clone of a real project.
 var steadyFiles = [][2]string{{"steady-config.yaml", filepath.Join("ldd", "config.yaml")}}
 
-// writeSteadySetup lays the LDD set-up into repo before its first commit.
-func writeSteadySetup(repo string) error {
+// writeSteadySetup lays t's LDD set-up into repo before its first commit:
+// the task's own config when it has one (Task.LDDConfig), else steadyFiles.
+func writeSteadySetup(t Task, repo string) error {
 	for _, d := range []string{filepath.Join("ldd", "specs"), filepath.Join("ldd", "changes", "archive")} {
 		if err := os.MkdirAll(filepath.Join(repo, d), 0o755); err != nil {
 			return err
 		}
 	}
 	for _, f := range steadyFiles {
-		b, err := os.ReadFile(filepath.Join(source(), "ldd", f[0]))
+		b, err := os.ReadFile(lddSource(t, f[0]))
 		if err != nil {
 			return err
 		}
@@ -61,6 +62,15 @@ func writeSteadySetup(repo string) error {
 		}
 	}
 	return nil
+}
+
+// lddSource is where the bench's LDD file name comes from for t: the
+// task's own config in place of either bench config when it has one.
+func lddSource(t Task, name string) string {
+	if t.LDDConfig != "" && strings.HasSuffix(name, "config.yaml") {
+		return t.LDDConfig
+	}
+	return filepath.Join(source(), "ldd", name)
 }
 
 // isLDD is whether variant v is one of the LDD variants.
@@ -106,7 +116,9 @@ func checkVariant(v string) error {
 // runsVariant is whether cond runs in variant v.
 func runsVariant(cond, v string) bool { return v == "plain" || !isClean(cond) }
 
-// prepareRepo copies t's template into repo, with the variant's ldd files.
+// prepareRepo copies t's template into repo, with the variant's ldd files
+// (the task's own config in place of the bench's, and no pyproject.toml,
+// when it has one).
 func prepareRepo(t Task, variant, repo string) error {
 	if err := checkVariant(variant); err != nil {
 		return err
@@ -115,7 +127,10 @@ func prepareRepo(t Task, variant, repo string) error {
 		return err
 	}
 	for _, f := range lddFiles[variant] {
-		b, err := os.ReadFile(filepath.Join(source(), "ldd", f[0]))
+		if t.LDDConfig != "" && f[0] == "pyproject.toml" {
+			continue // a task with its own config has its own project markers
+		}
+		b, err := os.ReadFile(lddSource(t, f[0]))
 		if err != nil {
 			return err
 		}

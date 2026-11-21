@@ -48,6 +48,12 @@ type Task struct {
 	// TestCommand is the project's test command, as the transcript shows it
 	// run: python3 -m unittest when task.yaml names none.
 	TestCommand string
+	// LDDConfig is the task's own LDD config, tasks/<id>/ldd-config.yaml,
+	// "" when it has none (T192): a task that is not a Python repository
+	// (workspace-budgets, a pnpm workspace) names its own config, which
+	// replaces the bench's Python one (ldd/config.yaml, ldd/steady-config.yaml)
+	// in every variant and the steady state, with no pyproject.toml added.
+	LDDConfig string
 }
 
 // InScope is whether the repository path file matches one of t's Scope.
@@ -191,6 +197,9 @@ func LoadTask(dir string) (Task, error) {
 	}
 	if t.Hidden == "" {
 		t.Hidden = "hidden"
+	}
+	if own := filepath.Join(dir, "ldd-config.yaml"); fileExists(own) {
+		t.LDDConfig = own
 	}
 	t.Tests, t.TestCommand = cmpOr(f["tests"], "test_*.py"), cmpOr(f["test_command"], "python3 -m unittest")
 	for _, line := range strings.Split(f["scope"], "\n") {

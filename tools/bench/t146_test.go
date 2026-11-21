@@ -53,7 +53,7 @@ func TestEveryTaskHasItsSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]string{"pagination-bug": "small", "shipping-rules": "small", "account-import": "small",
-		"search-accents": "large", "contacts-migration": "large", "late-fee": "large", "invoice-slices": "large", "slow-suite": "large", "two-modules": "large"}
+		"search-accents": "large", "contacts-migration": "large", "late-fee": "large", "invoice-slices": "large", "slow-suite": "large", "two-modules": "large", "workspace-budgets": "large"}
 	got := map[string]string{}
 	for _, task := range ts {
 		got[task.ID] = task.Size
@@ -310,7 +310,7 @@ func TestTheSetupRunsOncePerJhonRuntimeOnAFreshRepo(t *testing.T) {
 			t.Fatal(err)
 		}
 		if setUp {
-			if err := writeSteadySetup(repo); err != nil {
+			if err := writeSteadySetup(ts[1], repo); err != nil {
 				t.Fatal(err)
 			}
 		}

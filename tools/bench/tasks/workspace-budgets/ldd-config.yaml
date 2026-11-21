@@ -1,0 +1,11 @@
+# The task's own LDD config (task.go LDDConfig): what Jhon's init writes in
+# this pnpm workspace with the recommended values. Each package's
+# package.json scripts.test makes it testable with npm test, so no
+# test_command_override is needed. It replaces the bench's Python config
+# (ldd/steady-config.yaml, ldd/config.yaml) for this task, and no
+# pyproject.toml is added.
+context: |
+  A personal-finance ledger: a pnpm workspace of TypeScript packages
+  (packages/core, packages/api, apps/cli) that Node runs with no build step
+  and no install. Each package tests with node --test (npm test).
+strict_tdd_policy: require

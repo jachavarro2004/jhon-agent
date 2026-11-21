@@ -140,6 +140,10 @@ type LddLayout struct {
 	TestRecord          bool   `json:"test_record"`
 	RouteRequiresFolder string `json:"route_requires_folder"`
 	Record              *bool  `json:"record"`
+	// LightVerify is the verdict of the change's latest light verify on its
+	// execution record (`jhon executions verify`, `jhon status --json`
+	// tests.light_verify), "" when none is recorded (T192, S6).
+	LightVerify string `json:"light_verify,omitempty"`
 }
 
 // lddLayoutOf is repo's layout and record, status its `jhon status --json`.
@@ -155,6 +159,11 @@ func lddLayoutOf(repo string, status []byte) *LddLayout {
 	var s map[string]any
 	if json.Unmarshal(status, &s) == nil {
 		l.TestRecord = at(s, "tests") != nil
+		lv := at(s, "tests", "light_verify")
+		if all := list(lv); len(all) > 0 {
+			lv = all[len(all)-1]
+		}
+		l.LightVerify = str(at(lv, "verdict"))
 		if needs, ok := at(s, "needs", "tasks").(bool); ok {
 			l.RouteRequiresFolder = strconv.FormatBool(needs)
 		}

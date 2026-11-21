@@ -18,7 +18,8 @@ var longIDs = []string{"invoice-slices", "slow-suite", "two-modules"}
 // toolWords are words a prompt never uses: it never names a tool.
 var toolWords = []string{"background", "subagent", "sub-agent", "agent", "monitor", "bash", "tool", "parallel", "jhon"}
 
-func TestEveryTaskIsTheSixShortOrTheThreeLong(t *testing.T) {
+// Every task is one of the six short, the three long or the workspace ones (T192).
+func TestEveryTaskIsShortLongOrAWorkspace(t *testing.T) {
 	tasks, err := LoadTasks("tasks", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -27,7 +28,7 @@ func TestEveryTaskIsTheSixShortOrTheThreeLong(t *testing.T) {
 	for _, task := range tasks {
 		ids = append(ids, task.ID)
 	}
-	if want := slices.Sorted(slices.Values(slices.Concat(taskIDs, longIDs))); !slices.Equal(ids, want) {
+	if want := slices.Sorted(slices.Values(slices.Concat(taskIDs, longIDs, workspaceIDs))); !slices.Equal(ids, want) {
 		t.Fatalf("tasks %v, want %v", ids, want)
 	}
 }
