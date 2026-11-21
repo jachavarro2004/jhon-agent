@@ -9,7 +9,7 @@
   An agent framework for Claude Code and pi.
 </p>
 
-### ▶ The presentation (3:43)
+### ▶ The presentation (3:27)
 
 https://github.com/user-attachments/assets/16898e03-5aae-4702-9ebb-6b16a648962f
 
