@@ -21,6 +21,8 @@ export interface RoseInk {
   theme: { vars: Record<string, string>; colors: Record<string, string> };
   /** The semantic tokens (`jhon palette --json`), colors only. */
   semantic: Record<string, string>;
+  /** The engine binary built for the build, in the scratch folder. */
+  bin: string;
 }
 
 /** Build the engine into `scratch` and read rose ink's fixed values from it. */
@@ -44,5 +46,5 @@ export function roseInk(scratch: string): RoseInk {
   writeFileSync(themePath, text);
   const raw = JSON.parse(run("--json")) as Record<string, unknown>;
   const semantic = Object.fromEntries(Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === "string"));
-  return { themePath, theme: JSON.parse(text), semantic };
+  return { themePath, theme: JSON.parse(text), semantic, bin };
 }

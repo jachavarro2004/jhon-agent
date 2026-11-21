@@ -180,8 +180,9 @@ shot, the hard lines' "no grant covers").
 | 190.7–200.4 s | Get started | list | Install → the one-line script; Set up → `jhon setup`; Check → `jhon doctor`; Start → `jhon start` | Install with the one-line script, then run jhon setup. jhon doctor runs the health checks. Then jhon start, inside your project. |
 | 200.4–206.7 s | close | | the band; the seal stamps; «Let the agent run. / Deliver only what is *proven.*»; github.com/jachavarro2004/jhon-agent | Jhon. Let the agent run. Deliver only what is proven. (the intro's audio again) |
 
-Every feature capture appears once (nine) and every diagram at least once
-(`guards-tool-call` twice). `jhon doctor` is a list row, not a screen (it
+Every terminal capture but the Prism review appears once (nine) and every
+diagram at least once (`guards-tool-call` twice); the Prism review card and
+the dashboard's audit are the teaser's. `jhon doctor` is a list row, not a screen (it
 cannot pass truthfully in a sandbox: see Known limits).
 
 ## The teaser (T141, a preview)
@@ -189,9 +190,11 @@ cannot pass truthfully in a sandbox: see Known limits).
 `docs/assets/video/jhon-teaser.mp4` (English captions burned in) and
 `jhon-teaser.es.mp4` (Spanish subtitles): 73.3 s, the nine narration lines
 the owner accepted (`odd/proposals/t141-plan.md`, "Teaser narration", L1459)
-verbatim, one shot each, in the presentation's style. It is a preview: only
-screens that exist in `docs/assets` (no shot of the new shell, which does not
-exist yet).
+verbatim, one shot each, in the presentation's style. Its screens are the
+ones `build.ts` makes in `docs/assets` from the current shell, engine and
+dashboard (T190: the Prism review card and the dashboard's audit replaced the
+agents diagram's Prism box and the terminal audit, as the plan's beats 6 and
+7 asked).
 
 `teaser/` holds only its `script.mjs` (the shots, the lines and `FRAME`: the
 intro's two lines, the close's install line, longer holds and one CSS rule), its
@@ -223,8 +226,8 @@ and that it lasts 60 to 90 s.
 | 23.3–31.1 s | proof | `ldd-flow.svg` (its two rows): the slice commit, «Tested tree» → delivery | Only the tree that was tested is delivered. |
 | 31.1–40.2 s | proof (band) | `guard-refusal.png`: the tool card's refusal → the engine's whole reason | Guards stop only what can't be undone: a destructive command, a write outside the project. |
 | 40.2–45.5 s | card | Everything else: Runs free, *inside a sandbox.* | Everything else runs free, inside a sandbox. |
-| 45.5–53.4 s | proof | `agents-launch-context.svg`, close on its Prism review: the box → the four facets → challenger → arbiter | Risky changes get the Prism review: four facets, a challenger, an arbiter. |
-| 53.4–61.2 s | proof | `audit.png`: `(claude-code 2.1.304)` → `jhon audit <session>` → the session | Claude Code or pi. Your model. And an audit of every session. |
+| 45.5–53.4 s | proof | `prism-review.png`, the shell's card: the review and its verdict → the four facets → challenger → arbiter | Risky changes get the Prism review: four facets, a challenger, an arbiter. |
+| 53.4–61.2 s | proof | `dashboard-audit.png`: `claude code 2.1.304` → the session's verdict → what to look at | Claude Code or pi. Your model. And an audit of every session. |
 | 61.2–73.3 s | close (band) | the seal; the tagline; the install line; github.com/jachavarro2004/jhon-agent | Jhon. Let the agent run. Deliver only what is proven. |
 
 Rendered with the presentation's flags (below), from `teaser/`, without
@@ -233,13 +236,17 @@ one as is, the Spanish one with `--variables-file "$T/captions.es.json"
 --strict-variables`. Measured: 2,198 frames, 73.27 s, H.264 High 1920×1080
 30 fps, AAC LC 48 kHz stereo; English 5,297,223 bytes, Spanish 5,307,302
 bytes, the same decoded audio (MD5 `abfb6a1a…`). **Two renders of the English
-teaser are byte-identical** (sha256 `84a84f7f…b0110f7f`).
+teaser are byte-identical** (sha256 `84a84f7f…b0110f7f`). Rendered again with
+the recaptured screens (T190): English 5,111,153 bytes (3m 11s, sha256
+`6314db1b…65fcfa0c`), Spanish 5,123,396 bytes (3m 10s), the same 2,198
+frames, 73.27 s and decoded audio; not rendered twice, so its byte
+identity was not checked again.
 
 Limits: the guards' proof shows a write outside a writer's edit surfaces
 (the one refusal captured), not a destructive command nor a write outside the
 project; the audit's proof shows a Claude Code session only (no pi session is
-captured, and nothing on screen names the model); the sandbox has no capture,
-so it is a card.
+captured, and nothing on the dashboard's Summary names the model: its Usage
+tab does); the sandbox has no capture, so it is a card.
 
 ## Render
 
@@ -327,6 +334,17 @@ build's renders).
   T174-S1), the bench line names the Prism review and its facet agents
   (T177), and the close reads github.com/jachavarro2004/jhon-agent (L1452).
 
+- Rendered again with the recaptured screens (T190, L1579): the shell's own
+  tool cards (T174) with their marks set on the new rows, the agents' and
+  jobs' panel whole (eight rows), route-guard's and the audit's words as the
+  current engine prints them. The composition's `assets/screens` links
+  pointed at `tools/assets/` after the move from `docs/media/` (images
+  missing, `[media_load_failed]`); they point at `docs/assets/` again and a
+  test holds it. 6,201 frames, 206.70 s, the same cuts and decoded audio
+  (MD5 `3298670b…`); English 13,782,043 bytes (13m 17s, sha256
+  `9876ff17…13b9fdd4`), Spanish 14,271,190 bytes (9m 53s); each rendered once,
+  so their byte identity was not checked again.
+
 - The marks' timing follows each phrase's share of its line's characters,
   not measured word times; a mark can land a few tenths of a second before
   or after its word.
@@ -344,8 +362,8 @@ build's renders).
 
 The captures' own limits (from phase A):
 
-- The engine's words in `guard-refusal`, `route-refusal`, `executions-red-green`, `mode-grant` and `audit` were printed by the real `jhon` binary in a sandbox (an invented project, ~/src/lumen) and are kept as text in `captures.ts`, its scratch path written as /home/dev and the grant's times set to the media clock; they do not change by themselves when the engine's wording does (record them again as its comment says). `executions-red-green` leaves out the lint and format checks, the candidate line and the notes (marked `…`); long lines wrap at the panel's width, as a terminal does.
+- The engine's words in `guard-refusal`, `route-refusal`, `executions-red-green`, `mode-grant` and `audit` were printed by the real `jhon` binary in a sandbox (an invented project, ~/src/lumen) and are kept as text in `captures.ts`, its scratch path written as /home/dev and the grant's times set to the media clock; they do not change by themselves when the engine's wording does (record them again as its comment says). All five were recorded again on 2026-11-21 (T190): route-guard's refusal and the audit had changed and were replaced; the scope-guard refusal, the two runs' shown lines and the mode and grant lines were unchanged. The dashboard's audit is not kept as text: `build.ts` audits its session on every build. `executions-red-green` leaves out the lint and format checks, the candidate line and the notes (marked `…`); long lines wrap at the panel's width, as a terminal does.
 - The shell's tool card shows a refusal's reason in one row cut to the width, so the two refusal screens add the same call fed to the hook (`jhon hook … < call.json`) with its whole answer.
 - `jhon doctor` is not captured: in a sandbox it reports rendered-artifact drift and no agents rendered for Claude Code until `jhon sync` runs, and `jhon sync` builds and activates a release (it may push to a mirror), which is not run for the media; with claude, engram and codegraph absent its versions section would not read as a pass either.
 - `ldd-question`'s wording is the agent's in a real session; its choices are init.md's.
-- No capture of a Claude Code session exists (the shell has no render function for it, and the real `claude` is not run for the media): the "two ways in" proof is the runtimes diagram.
+- No capture of a Claude Code session itself exists (the shell has no render function for it, and the real `claude` is not run for the media): the "two ways in" proof is the runtimes diagram. The dashboard's audit of an invented Claude Code transcript is the one view of such a session.
