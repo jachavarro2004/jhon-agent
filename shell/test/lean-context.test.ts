@@ -1,12 +1,12 @@
 import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after } from "node:test";
 import jhon, { CONFIG_FILE } from "../extensions/jhon.ts";
-import { FULL_MESSAGE, contextLevel, fullOnBranch, fullTrigger, leanDeferred } from "../lib/lean-context.ts";
+import { FULL_MESSAGE, changeMoment, contextLevel, fullOnBranch, fullTrigger, leanDeferred } from "../lib/lean-context.ts";
 import { parseSessionBrief } from "../lib/session-brief.ts";
 import { ToolPolicy, toolsMoreTool } from "../lib/tools-deferred.ts";
 import { LDD_REMINDER } from "../lib/ldd-reminder.ts";
@@ -53,6 +53,25 @@ test("the full context is due on the not-small line read through inspect or the 
 	assert.equal(fullTrigger("inspect", { command: "jhon status" }, "  - not small: read /h/full-pi.md before the next edit"), true);
 	assert.equal(fullTrigger("inspect", { command: "jhon status" }, "  - small change (no folder, ...)"), false);
 	assert.equal(fullTrigger("inspect", { command: "git log" }, "not small: read x"), false);
+});
+
+// T192 S7: the moments a change may appear or be selected, where a lean session asks the engine once.
+test("a change may appear on a write or edit under a layout's changes folder, or a bash command that makes or selects one", () => {
+	assert.equal(changeMoment("write", { path: "ldd/changes/c1/tasks.md" }, "/r"), "/r/ldd/changes/c1");
+	assert.equal(changeMoment("edit", { path: "/r/openspec/changes/c1/proposal.md" }, "/elsewhere"), "/r/openspec/changes/c1");
+	assert.equal(changeMoment("write", { file_path: "sub/ldd/changes/c1/tasks.md" }, "/r"), "/r/sub/ldd/changes/c1");
+	for (const command of ["mkdir -p ldd/changes/c1", "git switch -c feat/c1", "cd /r && git checkout feat/c1", "jhon executions run", "jhon risk --json"]) assert.equal(changeMoment("bash", { command }, "/r"), "/r", command);
+	for (const [tool, input] of [
+		["write", { path: "src/a.ts" }], ["edit", { path: "ldd/specs/a/spec.md" }], ["write", { path: "docs/changes/notes.md" }], ["write", { path: "ldd/config.yaml" }],
+		["read", { path: "ldd/changes/c1/tasks.md" }], ["bash", { command: "ls" }], ["bash", { command: "git status" }], ["bash", { command: "jhon status" }],
+		["inspect", { command: "git checkout --help" }], ["subagent", { agent: "worker", task: "ldd/changes/c1" }],
+	] as const) assert.equal(changeMoment(tool, input, "/r"), undefined, `${tool} ${JSON.stringify(input)}`);
+});
+
+// T7 (L5): routes that are no status read of jhon's never switch pi to full.
+test("another server's status, Engram, and Claude Code's plugin name are no pi trigger", () => {
+	const notSmall = JSON.stringify({ ok: true, notes: ["not small: read /h/full-pi.md before the next edit"] });
+	for (const tool of ["mcp__other__status", "mcp__engram__mem_search", "mcp__plugin_jhon_jhon__status", "mcp__plugin_engram_engram__mem_search"]) assert.equal(fullTrigger(tool, {}, notSmall), false, tool);
 });
 
 test("a lean session defers Jhon's own tools but the delegation ones, and keeps todo, ask_user, inspect and codegraph", () => {
@@ -113,6 +132,17 @@ test("tools_more says a tool the session already has is enabled, and on claude-b
 	}
 });
 
+// T7 (L5): a session that started full has every Jhon tool already; tools_more says so, and sets nothing.
+test("tools_more in a session that started full says Jhon's tools are already enabled", async () => {
+	const all = ["read", ...DELEGATION, "jhon_review", "mcp__engram__mem_update"];
+	const h = moreHost(all, all);
+	const more = toolsMoreTool(h.host, new ToolPolicy(true, () => true));
+	const text = (await more.execute("c1", { names: ["jhon_review", "subagent"] }, undefined, undefined, { cwd: "/r", model: { provider: "anthropic" } })).content[0].text;
+	assert.equal(text, "Already enabled: jhon_review, subagent.");
+	assert.deepEqual(h.active(), all);
+	assert.deepEqual(h.entries, []);
+});
+
 test("a session whose branch holds the full message is full", () => {
 	assert.equal(fullOnBranch([{ type: "custom_message", customType: FULL_MESSAGE }]), true);
 	assert.equal(fullOnBranch([{ type: "custom_message", customType: "jhon-route" }]), false);
@@ -141,10 +171,11 @@ function agentDir(context: "lean" | "full" | "none"): string {
 
 const MAIN_TOOLS = ["read", "bash", "todo", "ask_user", "inspect", "subagent", "jhon_review", "mcp__engram__mem_search"];
 
-function load(dir: string, tools: readonly string[] = MAIN_TOOLS) {
+function load(dir: string, tools: readonly string[] = MAIN_TOOLS, child = false) {
 	const saved = { ...process.env };
 	Object.assign(process.env, { PI_CODING_AGENT_DIR: dir, CLAUDE_CONFIG_DIR: join(dir, "claude") });
 	delete process.env.JHON_PI_CHILD;
+	if (child) process.env.JHON_PI_CHILD = "1";
 	const all = new Map<string, Array<(e: any, c: any) => any>>();
 	const sent: Array<{ message: any; options: any }> = [];
 	let active = [...tools];
@@ -229,4 +260,84 @@ test("a change that is not small starts full, as today, and gets no full message
 		await s.emit("tool_result", statusResult("  - not small: read /h/full-pi.md before the next edit"), ctx(cwd));
 		assert.deepEqual(s.sent.filter((m) => m.message.customType === FULL_MESSAGE), [], context);
 	}
+});
+
+// T7 (L5): a sub-agent's session is never lean: its tools and prompt stay as before, and no status switches it.
+test("a child session's tools are untouched by the lean start", async () => {
+	const tools = ["read", "bash", ...DELEGATION, "jhon_review", "mcp__engram__mem_search"];
+	const dir = agentDir("lean"), cwd = temp("jhon-lean-cwd-");
+	const s = load(dir, tools, true);
+	const options = { appendSystemPrompt: "", sections: {} as Record<string, string>, selectedTools: s.active() };
+	await s.emit("before_agent_start", { systemPromptOptions: options }, ctx(cwd));
+	assert.deepEqual(options.selectedTools, tools);
+	assert.doesNotMatch(options.appendSystemPrompt, /LEAN PROMPT|FULL PROMPT/);
+	await s.emit("tool_result", statusResult("  - not small: read /h/full-pi.md before the next edit"), ctx(cwd));
+	assert.deepEqual(s.sent.filter((m) => m.message.customType === FULL_MESSAGE), []);
+});
+
+// ── T192 S7: a change that appears mid-session ──
+
+/** An agent dir whose jhon answers session-brief with the context in its `context` file, and logs each ask. */
+function changingDir(): { dir: string; context: (c: "lean" | "full") => void; asks: () => number } {
+	const dir = agentDir("lean");
+	const fake = join(dir, "jhon");
+	writeFileSync(join(dir, "context"), "lean");
+	writeFileSync(fake, `#!/bin/sh\nif [ "$2" = session-brief ]; then echo x >> '${dir}/asks'; printf '{"lead":"Lead.","brief":"## The project rules","context":"%s"}' "$(cat '${dir}/context')"; exit 0; fi\nif [ "$1" = status ]; then printf '{}'; exit 0; fi\nexit 0\n`);
+	chmodSync(fake, 0o755);
+	const asks = () => { try { return readFileSync(join(dir, "asks"), "utf8").split("\n").filter(Boolean).length; } catch { return 0; } };
+	return { dir, context: (c) => writeFileSync(join(dir, "context"), c), asks };
+}
+
+const writeResult = (path: string) => ({ toolName: "write", input: { path, content: "## 1. Tasks\n" }, content: [{ type: "text", text: `Wrote ${path}` }], isError: false });
+const bashResult = (command: string, text = "") => ({ toolName: "bash", input: { command }, content: [{ type: "text", text }], isError: false });
+
+test("a lean session switches to full once when the agent creates or selects a change that is not small", async () => {
+	for (const [name, moment] of [
+		["tasks.md written", (cwd: string) => writeResult(join(cwd, "ldd/changes/c1/tasks.md"))],
+		["proposal edited", (cwd: string) => ({ toolName: "edit", input: { path: "openspec/changes/c1/proposal.md", edits: [] }, content: [{ type: "text", text: "Edited" }], isError: false })],
+		["branch selected", () => bashResult("git switch feat/c1", "Switched to branch 'feat/c1'")],
+	] as const) {
+		const d = changingDir(), cwd = temp("jhon-lean-cwd-");
+		mkdirSync(join(cwd, "ldd/changes/c1"), { recursive: true });
+		mkdirSync(join(cwd, "openspec/changes/c1"), { recursive: true });
+		const s = load(d.dir);
+		const options = { appendSystemPrompt: "", sections: {} as Record<string, string>, selectedTools: s.active() };
+		await s.emit("before_agent_start", { systemPromptOptions: options }, ctx(cwd));
+		assert.equal(contextLevel(), "lean", name);
+		const prompt = options.appendSystemPrompt;
+		const started = d.asks();
+		// Other tools never ask the engine.
+		await s.emit("tool_result", writeResult(join(cwd, "src/a.ts")), ctx(cwd));
+		await s.emit("tool_result", bashResult("ls"), ctx(cwd));
+		assert.equal(d.asks(), started, `${name}: no ask for other tools`);
+		d.context("full");
+		await s.emit("tool_result", moment(cwd), ctx(cwd));
+		const full = s.sent.filter((m) => m.message.customType === FULL_MESSAGE);
+		assert.equal(full.length, 1, name);
+		assert.match(full[0].message.content, /FULL PROMPT/, name);
+		assert.equal(full[0].options?.deliverAs, "steer", `${name}: before the next request`);
+		assert.equal(options.appendSystemPrompt, prompt, `${name}: the system prompt never changes`);
+		assert.equal(contextLevel(), "full", name);
+		assert.ok(s.active().includes("jhon_review"), `${name}: Jhon's tools are back`);
+		// Once full, nothing asks again or sends a second message.
+		const after = d.asks();
+		await s.emit("tool_result", moment(cwd), ctx(cwd));
+		await s.emit("tool_result", bashResult("jhon executions run"), ctx(cwd));
+		assert.equal(d.asks(), after, `${name}: no ask once full`);
+		assert.equal(s.sent.filter((m) => m.message.customType === FULL_MESSAGE).length, 1, name);
+	}
+});
+
+test("a small change that appears mid-session keeps the session lean", async () => {
+	const d = changingDir(), cwd = temp("jhon-lean-cwd-");
+	const s = load(d.dir);
+	const options = { appendSystemPrompt: "", sections: {} as Record<string, string>, selectedTools: s.active() };
+	await s.emit("before_agent_start", { systemPromptOptions: options }, ctx(cwd));
+	const started = d.asks();
+	await s.emit("tool_result", bashResult("git switch -c fix-typo", "Switched to a new branch 'fix-typo'"), ctx(cwd));
+	await s.emit("tool_result", bashResult("jhon executions run", "RED"), ctx(cwd));
+	assert.equal(d.asks(), started + 2, "each moment asks the engine");
+	assert.deepEqual(s.sent.filter((m) => m.message.customType === FULL_MESSAGE), []);
+	assert.equal(contextLevel(), "lean");
+	assert.ok(!s.active().includes("jhon_review"), "Jhon's own tools still wait");
 });

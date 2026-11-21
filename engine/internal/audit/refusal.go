@@ -119,8 +119,9 @@ func IsGenuineUserMessage(e *Entry) bool {
 var delegationTools = []string{"Agent", "Task"}
 
 var (
-	resultTag     = lazyre.New(`<result>((?s:.)*?)</result>`)
-	asyncLaunched = lazyre.New(`^Async agent launched`)
+	resultTag = lazyre.New(`<result>((?s:.)*?)</result>`)
+	// Claude Code's background launch, and pi's (shell/extensions/jhon.ts): no answer yet.
+	asyncLaunched = lazyre.New(`^(?:Async agent launched|Started background sub-agent )`)
 )
 
 // delivered is the result a main-thread entry, whose note is note, delivers
@@ -131,6 +132,10 @@ func delivered(e *Entry, note, toolUseID string) (out string, ok bool) {
 		if m := resultTag.FindStringSubmatch(note); m != nil {
 			out = m[1]
 		}
+	}
+	// pi's notice that a background sub-agent ended carries its answer (T192 S8).
+	if e.delivers != "" && e.delivers == toolUseID {
+		out, ok = e.delivery, true
 	}
 	for _, r := range e.ToolResults {
 		if r.ID == toolUseID && !asyncLaunched.MatchString(r.Text) {
@@ -170,6 +175,9 @@ func newSession(s *Session) *Session {
 						add(rest[:end], i)
 					}
 				}
+			}
+			if e.delivers != "" {
+				add(e.delivers, i)
 			}
 			for _, r := range e.ToolResults {
 				add(r.ID, i)

@@ -104,13 +104,54 @@ const piAuthorizationEntry = "jhon-owner-authorization"
 // background job ends (shell/lib/background-tasks-tools.ts
 // TASK_NOTICE_TYPE): `<job> exited with code <n> …`, `Command: <command>`,
 // then `Last output:` and the job's last lines; its details carry
-// jhonTasks.exitCode.
+// jhonTasks.exitCode. When a background sub-agent ends it sends the same
+// message, `Background sub-agent <task> (<agent>) <outcome> …` and the
+// agent's answer: the delivery of the subagent call that started that task
+// (T192 S8), read as an inline answer is.
 const piJobNotice = "jhon-tasks.notice"
 
 var (
 	noticeExit    = lazyre.New(`\bexited with code (-?\d+)\b`)
 	noticeCommand = lazyre.New(`(?m)^Command: (.*)$`)
+	// A background sub-agent's launch result names its task (its details
+	// carry it as `task`), and its end notice opens with the same task
+	// (details jhonTasks.id, kind agent), its answer after a blank line
+	// (shell/lib/background-tasks-tools.ts taskText).
+	agentStarted = lazyre.New(`^Started background sub-agent (\S+) \(`)
+	agentEnded   = lazyre.New(`^Background sub-agent (\S+) \(`)
 )
+
+// startedTask is the background task a subagent call's result says it
+// started; "" for an inline run.
+func startedTask(text string, details any) string {
+	if id, _ := strProp(details, "task"); id != "" && agentStarted.MatchString(text) {
+		return id
+	}
+	if m := agentStarted.FindStringSubmatch(text); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// endedAgent is the background sub-agent task a jhon-tasks.notice says ended,
+// and its answer; "" for a job's or a monitor's notice.
+func endedAgent(text string, details any) (task, answer string) {
+	m := agentEnded.FindStringSubmatch(text)
+	if m == nil {
+		return "", ""
+	}
+	task = m[1]
+	if d := prop(details, "jhonTasks"); js.Truthy(d) {
+		if kind, _ := strProp(d, "kind"); kind != "agent" {
+			return "", ""
+		}
+		if id, _ := strProp(d, "id"); id != "" {
+			task = id
+		}
+	}
+	_, answer, _ = strings.Cut(text, "\n\n")
+	return task, answer
+}
 
 // readJobNotice is how a job notice says its job ended; nil when it shows no command.
 func readJobNotice(text string, details any) *jobNotice {
@@ -244,8 +285,9 @@ func readPiSession(file, rel string) piRead {
 	if e != nil {
 		panic(e.Error())
 	}
-	tools := map[string]string{} // call id → pi tool name
-	var pending []string         // call ids with no result yet, in call order
+	tools := map[string]string{}    // call id → pi tool name
+	var pending []string            // call ids with no result yet, in call order
+	launched := map[string]string{} // background sub-agent task id → the subagent call that started it
 	commands := map[string]string{}
 	answered := map[string]bool{}
 	type awaited struct {
@@ -365,6 +407,10 @@ func readPiSession(file, rel string) piRead {
 				e.Role, e.Origin, e.Prompt = "user", optString("extension"), &text
 				if prop(o, "customType") == piJobNotice {
 					e.job = readJobNotice(text, prop(o, "details"))
+					// T192 S8: a background sub-agent's answer delivers its launch.
+					if task, answer := endedAgent(text, prop(o, "details")); launched[task] != "" {
+						e.delivers, e.delivery = launched[task], answer
+					}
 				}
 				r.entries = append(r.entries, &e)
 			}
@@ -459,6 +505,11 @@ func readPiSession(file, rel string) piRead {
 			tool := js.String(prop(msg, "toolName"))
 			if name, ok := tools[id]; ok {
 				tool = name
+			}
+			if tool == "subagent" && !isErr {
+				if task := startedTask(shown, prop(msg, "details")); task != "" {
+					launched[task] = id
+				}
 			}
 			mapped, _ := piInput(tool, nil)
 			blocked := isErr && !has(msg, "durationMs")

@@ -111,11 +111,11 @@ import { openInExternalEditor } from "../lib/ui/jhon-panel-editor.ts";
 import { execFile } from "node:child_process";
 import { recordEvent } from "../lib/telemetry.ts";
 import { lddReminder, reminderAnswer } from "../lib/ldd-reminder.ts";
-import { sessionBriefs } from "../lib/session-brief.ts";
+import { parseSessionBrief, sessionBriefs } from "../lib/session-brief.ts";
 import { codegraphIndexed, withoutCodegraph } from "../lib/codegraph.ts";
 import { ROUTE_MESSAGE, SessionPrompt, compactSkills, memoryIndexPrompt, splitRoute } from "../lib/session-prompt.ts";
 import { ToolPolicy, enabledOnBranch, toolsMoreTool } from "../lib/tools-deferred.ts";
-import { FULL_MESSAGE, fullOnBranch, fullTrigger, setContextLevel } from "../lib/lean-context.ts";
+import { FULL_MESSAGE, changeMoment, fullOnBranch, fullTrigger, setContextLevel } from "../lib/lean-context.ts";
 import { AnnounceSendBack, engineStopRunner } from "../lib/announce-stop.ts";
 
 export { CONFIG_FILE, claudeCall, inspect, judge, loadConfig } from "../lib/guards.ts";
@@ -889,7 +889,8 @@ export default function jhon(pi: any): void {
   });
 
   // T31 D: in a project that uses LDD, the binding lead and the project's rules Claude Code's session gets (lib/session-brief.ts).
-  const briefs = child || !config ? undefined : sessionBriefs((cwd) => new Promise((resolve, reject) => {
+  const briefOf = (cwd: string) => new Promise<string>((resolve, reject) => {
+    if (!config) return reject(new Error("no jhon.json"));
     const run = spawn(config.jhon, ["hook", "session-brief", "jhon-orchestrator"], { cwd, stdio: ["pipe", "pipe", "ignore"] });
     let out = "";
     run.stdout.setEncoding("utf8").on("data", (d: string) => { out += d; });
@@ -897,7 +898,8 @@ export default function jhon(pi: any): void {
     run.once("close", (code: number | null) => (code === 0 ? resolve(out) : reject(new Error(`session-brief exited ${code}`))));
     run.stdin.on("error", () => {});
     run.stdin.end(JSON.stringify({ cwd }));
-  }));
+  });
+  const briefs = child || !config ? undefined : sessionBriefs(briefOf);
 
   pi.on("before_agent_start", async (event: any, ctx: any) => {
     // L926 GAP 2: a run that did not come through the input (another extension's triggerTurn) is
@@ -977,10 +979,10 @@ export default function jhon(pi: any): void {
   // T146h T3: a lean session's full context loads once, when `jhon status` says the change is not
   // small (through bash, inspect or the jhon MCP server's status tool, T192 S5) or a sub-agent is
   // launched: one persisted message, never a system-prompt swap (T115d), and Jhon's deferred tools come back.
-  if (!child && config) pi.on("tool_result", async (event: any, ctx: any) => {
-    if (!lean?.on || lean.loaded) return undefined;
-    const output = (event.content ?? []).map((c: any) => (c?.type === "text" && typeof c.text === "string" ? c.text : "")).join("\n");
-    if (!fullTrigger(event.toolName, event.input, output)) return undefined;
+  // T192 S7: or when the agent makes or selects a change (lib/lean-context.ts changeMoment) and the
+  // engine, asked as at the start (session-brief's context), says it is not small: before its next edit.
+  const loadFull = (ctx: any) => {
+    if (!lean) return;
     lean.loaded = true;
     toolPolicy.setLean(false);
     setContextLevel("full");
@@ -991,6 +993,22 @@ export default function jhon(pi: any): void {
     const all = (pi.getAllTools?.() ?? []).map((t: any) => t.name).filter((n: unknown): n is string => typeof n === "string");
     if (all.length) pi.setActiveTools?.(toolPolicy.filter(all, cwd) ?? all);
     if (text) pi.sendMessage?.({ customType: FULL_MESSAGE, content: `Jhon: this work needs the full context; it binds from now on.\n\n${text}`, display: false }, { deliverAs: "steer" });
+  };
+  let asked: Promise<unknown> = Promise.resolve();
+  if (!child && config) pi.on("tool_result", async (event: any, ctx: any) => {
+    if (!lean?.on || lean.loaded) return undefined;
+    const output = (event.content ?? []).map((c: any) => (c?.type === "text" && typeof c.text === "string" ? c.text : "")).join("\n");
+    if (fullTrigger(event.toolName, event.input, output)) { loadFull(ctx); return undefined; }
+    const where = changeMoment(event.toolName, event.input, ctx?.cwd ?? process.cwd());
+    if (!where) return undefined;
+    // One ask at a time; one that waited finds the session full already and asks nothing.
+    const ask = asked.then(async () => {
+      if (!lean?.on || lean.loaded) return;
+      const brief = parseSessionBrief(await briefOf(where).catch(() => ""));
+      if (brief?.context === "full" && !lean.loaded) loadFull(ctx);
+    });
+    asked = ask.catch(() => {});
+    await asked;
     return undefined;
   });
 

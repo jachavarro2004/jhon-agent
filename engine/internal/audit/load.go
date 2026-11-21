@@ -90,6 +90,9 @@ type Entry struct {
 	ToolResults []ToolResult
 	// job is, for pi's background-job notice (piJobNotice), how the job ended.
 	job *jobNotice
+	// delivers is, for pi's notice that a background sub-agent ended
+	// (piJobNotice), the call that launched it; delivery is its answer.
+	delivers, delivery string
 }
 
 // note is `e.prompt ?? e.texts.join("\n")`.

@@ -566,10 +566,14 @@ function suite(): void {
 		// lives in the tree's build folder, outside the scratch project.
 		mkdirSync(join(REPO, "build"), { recursive: true });
 		const settingsDir = mkdtempSync(join(REPO, "build", "jhon-sbx-settings-"));
-		const settingsWas = process.env.JHON_SETTINGS;
-		t.after(() => { process.env.JHON_SETTINGS = settingsWas; rmSync(settingsDir, { recursive: true, force: true }); });
+		// The state folder too (XDG_STATE_HOME, under tmpdir() in the isolated
+		// env): jhon sandbox run refuses one a sandboxed command could move.
+		const settingsWas = process.env.JHON_SETTINGS, stateWas = process.env.XDG_STATE_HOME;
+		t.after(() => { process.env.JHON_SETTINGS = settingsWas; process.env.XDG_STATE_HOME = stateWas; rmSync(settingsDir, { recursive: true, force: true }); });
 		writeFileSync(join(settingsDir, "settings.toml"), '[sandbox]\nmode = "off"\n');
+		mkdirSync(join(settingsDir, "state"));
 		process.env.JHON_SETTINGS = join(settingsDir, "settings.toml");
+		process.env.XDG_STATE_HOME = join(settingsDir, "state");
 		const pin = await readSandboxStatus({ jhon: bin }, d);
 		if ("unread" in pin || !pin.canRun) { t.skip(`bubblewrap cannot run here, so stopping a sandboxed program is not proven on this machine: ${"unread" in pin ? pin.unread : `${pin.reason}; ${pin.fix}`}`); return; }
 		const operations = sandboxOperations({ jhon: bin, project: d });

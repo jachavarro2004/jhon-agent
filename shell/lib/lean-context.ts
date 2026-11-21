@@ -6,7 +6,8 @@
  * the session starts lean: no change is active, or the active one is small.
  * The full context loads once per session, as one persisted `jhon-full`
  * message, when `jhon status` says the change is not small or a sub-agent is
- * launched (T3); the system prompt never changes, so its cached prefix holds
+ * launched (T3), or when the agent makes or selects a change the engine then
+ * calls not small (T192 S7, changeMoment); the system prompt never changes, so its cached prefix holds
  * (T115d). Until then Jhon's own tools and the skills list wait behind
  * tools_more (L3); todo, ask_user, inspect, codegraph and the delegation
  * tools stay (T192 S3: a lean start never takes delegation away, on any
@@ -14,6 +15,7 @@
  * so a tool held back at the start would miss the rest of that prompt). The
  * todo extension reads the session's level to skip its start rule and nudge (L4).
  */
+import { dirname, isAbsolute, resolve } from "node:path";
 
 /** The custom message that carries the full context into a lean session. */
 export const FULL_MESSAGE = "jhon-full";
@@ -47,6 +49,31 @@ export function fullTrigger(toolName: string, input: Record<string, unknown> | u
 	if (toolName === MCP_STATUS) return true;
 	const command = typeof input?.command === "string" ? input.command : "";
 	return (toolName === "bash" || toolName === "inspect") && STATUS.test(command);
+}
+
+/** A layout's changes folder: openspec/changes/ or ldd/changes/ (engine/internal/ldd/layout). */
+const CHANGES = /(?:^|[\\/])(?:openspec|ldd)[\\/]changes[\\/]/;
+/** A bash command that may make or select a change: a git branch switch, a jhon run or risk read, or one naming the changes folder. */
+const CHANGE_COMMAND = /\bgit\s+(?:switch|checkout)\b|(?:^|[;&|(]\s*|\s)jhon\s+(?:executions|risk)\b|(?:^|[\s'"=/])(?:openspec|ldd)\/changes\//;
+
+/**
+ * T192 S7: where a lean session asks the engine whether a change that is not
+ * small appeared, after a tool result that may have made or selected one: a
+ * write or edit under a layout's changes folder (the directory written in),
+ * or a bash command that switches branch, runs `jhon executions`/`jhon risk`,
+ * or names the changes folder (the session's cwd). undefined for any other
+ * tool result, so the engine is never asked on every tool.
+ */
+export function changeMoment(toolName: string, input: Record<string, unknown> | undefined, cwd: string): string | undefined {
+	if (toolName === "write" || toolName === "edit") {
+		const path = typeof input?.path === "string" ? input.path : typeof input?.file_path === "string" ? input.file_path : "";
+		if (!path) return undefined;
+		const file = isAbsolute(path) ? path : resolve(cwd, path);
+		return CHANGES.test(file) ? dirname(file) : undefined;
+	}
+	if (toolName !== "bash") return undefined;
+	const command = typeof input?.command === "string" ? input.command : "";
+	return CHANGE_COMMAND.test(command) ? cwd : undefined;
 }
 
 /** Whether the session's branch already holds the full message (a resumed session). */

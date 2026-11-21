@@ -40,16 +40,32 @@ Sub-agents keep the full always-on layer in every case.
     The shell appends `~/.pi/jhon/jhon-lean.md` (jhon.json `lean`) or the
     orchestrator (`orchestrator`) to match.
 - **pi, mid-session.** The full context arrives as one persisted
-  `jhon-full` message, once per session. Two calls trigger it: a
+  `jhon-full` message, once per session. Three calls trigger it: a
   `jhon status` whose output carries the not-small line, whatever route
   read it (`bash`, `inspect`, or the jhon MCP server's `mcp__jhon__status`
-  tool), and a `subagent` call. The system prompt is never swapped, so its
-  cached prefix holds.
+  tool); a `subagent` call; and a call that may make or select a change
+  when the engine then says it is not small (below). The system prompt is
+  never swapped, so its cached prefix holds.
 - **Claude Code, mid-session.** PostToolUse adds a pointer to the full
-  file, once per session. It fires on the same two triggers, `jhon status`
+  file, once per session. It fires on the same three triggers: `jhon status`
   (through Bash or the jhon MCP server's status tool,
-  `mcp__plugin_jhon_jhon__status`) and an `Agent` launch. The full text exceeds the 10,000 characters a
-  hook's context shows, so the pointer names the file instead.
+  `mcp__plugin_jhon_jhon__status`), an `Agent` launch, and a call that
+  makes or selects a change that is not small. The full text exceeds the
+  10,000 characters a hook's context shows, so the pointer names the file
+  instead.
+- **A change that appears mid-session, both runtimes.** A fresh
+  repository starts lean: no change exists yet. Once the agent makes or
+  selects one, the session switches before its next edit, with no
+  `jhon status` needed. The moments are a write or edit under the layout's
+  changes folder (`ldd/changes/` or `openspec/changes/`, such as a new
+  `tasks.md`), and a bash command that switches branch
+  (`git switch`, `git checkout`), runs `jhon executions` or `jhon risk`, or
+  names the changes folder. Only at such a moment, and only while the
+  session is still lean, the engine is asked as at the start: pi runs
+  `jhon hook session-brief` and switches on `"context": "full"`; Claude
+  Code's hook reads the same answer (the active change is not small). A
+  small change, or no change, keeps the session lean. Other tools never
+  ask.
 
 ## pi's tools on a lean session
 
