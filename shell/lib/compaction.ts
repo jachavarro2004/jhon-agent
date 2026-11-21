@@ -3,28 +3,28 @@
  * of its window or past shell.behaviour.compact_tokens, whichever is first.
  * Each turn re-reads the whole context, so a lighter one answers sooner.
  *
- * When it compacts (pi 1.5.0, @earendil-works/pi-coding-agent dist/core):
+ * When it compacts (pi 1.5.2, @earendil-works/pi-coding-agent dist/core):
  * - after a reply (agent_settled), as before;
  * - before the first prompt of a session already over budget (a resume, or a
  *   model switch to a smaller window): the `input` handler awaits the
  *   compaction, so the owner's prompt runs right after it on the compacted
  *   context. pi's prompt() runs the input handlers and awaits each
- *   (agent-session.js:1670, extensions/runner.js:1215) before _startRun;
+ *   (agent-session.js:1736, extensions/runner.js:1223) before _startRun;
  *   the stale pre-compaction usage of the last reply no longer recompacts
- *   (agent-session.js:2427-2431);
+ *   (agent-session.js:2505-2509);
  * - between the turns of a long run: pi compacts mid-run only past
- *   window − compaction.reserveTokens (agent-session.js:430-444), so a 1M
+ *   window − compaction.reserveTokens (agent-session.js:472-487), so a 1M
  *   window ran 12 turns past 200K (L762 F1). A turn that ends with tool
  *   results over budget calls ctx.compact(), which aborts the run first and
- *   never continues it (agent-session.js:2238-2249); when it completes, or
+ *   never continues it (agent-session.js:2315-2327); when it completes, or
  *   fails, a custom message with triggerTurn starts the next run that tells
- *   the agent to carry on (agent-session.js:1883-1888, deferred past a
- *   settle at :1884-1886). A reply's last turn (no tool results) is left to
+ *   the agent to carry on (agent-session.js:1967-1972, deferred past a
+ *   settle at :1968-1970). A reply's last turn (no tool results) is left to
  *   agent_settled. A headless run (print/json) is not interrupted: it
  *   returns at its settle and could not be continued.
  *
  * After a compaction pi reports the context as unknown until the next reply
- * (getContextUsage, agent-session.js:3518-3545), so nothing recompacts on the
+ * (getContextUsage, agent-session.js:3607-3634), so nothing recompacts on the
  * stale usage. A child never compacts here (lib/child-budget.ts).
  */
 

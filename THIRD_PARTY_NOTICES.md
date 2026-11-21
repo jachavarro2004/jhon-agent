@@ -77,7 +77,7 @@ background instead of querying it.
 ## pi
 
 pi, the coding agent `jhon start pi` and `jhon-shell` run on:
-`@earendil-works/pi-coding-agent` 1.5.0
+`@earendil-works/pi-coding-agent` 1.5.2
 (https://github.com/earendil-works/pi), MIT, by Mario Zechner, installed as a
 dependency of `shell/package.json`. Its package ships no LICENSE file; its
 `package.json` declares MIT, and the MIT license text above
