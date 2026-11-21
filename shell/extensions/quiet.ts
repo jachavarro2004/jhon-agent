@@ -1,3 +1,21 @@
+/**
+ * shell/extensions/quiet.ts — Jhon's tool cards (T174-S6, design/shell-tui 01).
+ *
+ * read, grep, find, ls, edit and write run as pi's own tools under Jhon's
+ * cards; bash keeps pi's tool and gets the same card through a renderer
+ * resolver; every other tool's call gets its family icon there too
+ * (lib/ui/tool-icons.ts), and memory calls their one line.
+ *
+ * A card (lib/ui/tool-card.ts): the icon and the title, the state at the
+ * right of the header (`◐ running`, `✓ 2.3s`, `+3 −1`, `↳ 61 lines`,
+ * `✗ failed`), then the body: bash's `$ command` and its output tail, the
+ * numbered diff of an edit, a preview of what a read or a search found. A
+ * call a Jhon guard refused is a red band, `✗ refused  <call>  <guard>`, with
+ * the reason and the fix under it. ctrl+o (pi's app.tools.expand) shows all
+ * of it; the key's hint rides the header while expanding shows more.
+ * shell.appearance.density "minimal" keeps bash quiet (`↳ N lines` and a
+ * short preview, no tail or duration).
+ */
 import type { AgentToolResult, ExtensionAPI, ExtensionFactory, ToolDefinition, ToolRenderers } from "@earendil-works/pi-coding-agent";
 import {
 	createEditTool,
@@ -8,741 +26,563 @@ import {
 	createWriteTool,
 	keyHint,
 } from "@earendil-works/pi-coding-agent";
-import { Text, type Component } from "@earendil-works/pi-tui";
+import { visibleWidth, type Component } from "@earendil-works/pi-tui";
 import { homedir } from "node:os";
 import { commandFailure, failureHeadline, runningLine } from "../lib/ui/command-failure.ts";
 import { loadDoubleEscCancelPolicy } from "../lib/ui/double-esc-cancel-policy.ts";
-import {
-	CARD_TONE, cardAwaitingResult, cardInnerWidth, cardStyle, drawCard, markCardResult,
-	type CardRowContext, type CardTheme,
-} from "../lib/ui/primitives/index.ts";
-import { sanitizeTerminalText, stripAnsi } from "../lib/ui/terminal-theme.ts";
+import { CARD_STYLE, asciiText, cardStyle, stateGlyph, stripAnsi } from "../lib/ui/primitives/index.ts";
+import { bodyCells, bodyRows, diffCounts, diffRows, guardRefusal, headRows, paintDiff, titleCells, wrapRows, type CardHead, type CardLook, type GuardRefusal } from "../lib/ui/tool-card.ts";
+import { sanitizeTerminalText } from "../lib/ui/terminal-theme.ts";
 import { shellSettings } from "../lib/settings.ts";
 import { isMemoryTool, memoryToolRenderers, ownsIcon, toolIcon, withToolIcon } from "../lib/ui/tool-icons.ts";
 
-type QuietToolName = "read" | "bash" | "grep" | "find" | "ls" | "edit" | "write";
-type RegisteredToolName = Exclude<QuietToolName, "bash">;
-type ThemeLike = {
-	bold(value: string): string;
-	fg(color: string, value: string): string;
-};
+type CardTool = "read" | "bash" | "grep" | "find" | "ls" | "edit" | "write";
+type PiTool = Exclude<CardTool, "bash">;
+type Paint = { fg(role: string, text: string): string; bold(text: string): string; bg?(role: string, text: string): string };
+type Args = Record<string, unknown>;
 
-const TOOL_CREATORS = {
+/** The context pi hands a tool's renderers; only what the cards read. */
+interface RowContext {
+	args?: unknown;
+	toolCallId?: string;
+	state?: unknown;
+	executionStarted?: boolean;
+	isPartial?: boolean;
+	isError?: boolean;
+	expanded?: boolean;
+	durationMs?: number;
+	cwd?: string;
+}
+
+const PI_TOOLS: Record<PiTool, (cwd: string) => any> = {
 	read: createReadToolDefinition,
 	grep: createGrepTool,
 	find: createFindTool,
 	ls: createLsTool,
 	edit: createEditTool,
 	write: createWriteTool,
-} satisfies Record<RegisteredToolName, (cwd: string) => any>;
-
-const COLLAPSED_COUNT_LABELS: Partial<Record<QuietToolName, string>> = {
-	grep: "matches",
-	find: "files",
-	ls: "entries",
 };
 
-const COLLAPSED_TAIL_LINE_LIMIT = 10;
-const PREVIEW_LINE_LIMIT = 3;
-/** A full bash card's output tail, as the Gentle Shell's (pi's) bash card. */
-const BASH_TAIL_LINE_LIMIT = 5;
+/** Rows a collapsed preview keeps: a read's first, a search's first, bash's last (minimal), a failure's tail. */
+const PREVIEW = 3;
+/** A full bash card's output tail. */
+const BASH_TAIL = 5;
+/** A collapsed git command keeps more of its tail: a status or a diff reads from it. */
+const GIT_TAIL = 10;
+/** A collapsed edit's numbered diff rows; minimal keeps a preview's worth. */
+const DIFF_ROWS = 12;
+/** A call narrower than this is cut in its header, not wrapped under it. */
+const MIN_WRAP = 12;
 
-/**
- * T91 (L650): tool cards are full by default, as the Gentle Shell's: bash shows
- * its whole command, its output tail and how long it took. shell.appearance.density
- * "minimal" keeps the quiet cards (bash collapsed to `↳ ✓ N lines` and a short
- * preview), as G's "Card content: minimal" does.
- */
-export function quietCards(): boolean {
-	try { return shellSettings().density() === "minimal"; } catch { return false; }
-}
+const COUNTED: Partial<Record<CardTool, [string, string]>> = {
+	grep: ["match", "matches"],
+	find: ["file", "files"],
+	ls: ["entry", "entries"],
+};
 
-/** pi's duration wording: `0.4s`, `2m 5s`, `1h 2m 5s`. */
-export function formatDuration(ms: number): string {
-	const seconds = Math.max(0, ms) / 1000;
-	if (seconds < 60) return `${seconds.toFixed(1)}s`;
-	const total = Math.floor(seconds);
-	const minutes = Math.floor(total / 60);
-	if (minutes < 60) return `${minutes}m ${total % 60}s`;
-	return `${Math.floor(minutes / 60)}h ${minutes % 60}m ${total % 60}s`;
-}
-
-const TIMER = Symbol.for("jhon-shell.tool-timer");
-type Timer = { startedAt?: number; endedAt?: number };
-
-function timerOf(state: unknown): Timer | undefined {
-	if (state === null || typeof state !== "object") return undefined;
-	const slot = state as Record<symbol, Timer | undefined>;
-	return (slot[TIMER] ??= {});
-}
-
-/** Starts the row's clock once execution starts; from renderCall. */
-function startTimer(context: ToolRenderContextLike | undefined): void {
-	const timer = timerOf(context?.state);
-	if (timer && context?.executionStarted && timer.startedAt === undefined) timer.startedAt = Date.now();
-}
-
-/** `Took 0.4s` for a finished row: the recorded duration first, else the row's own clock. */
-function tookText(context: ToolRenderContextLike | undefined): string | undefined {
-	if (typeof context?.durationMs === "number") return `Took ${formatDuration(context.durationMs)}`;
-	const timer = timerOf(context?.state);
-	if (timer?.startedAt === undefined) return undefined;
-	timer.endedAt ??= Date.now();
-	return `Took ${formatDuration(timer.endedAt - timer.startedAt)}`;
-}
-
-const EMPTY_RESULT_MESSAGES: Partial<Record<QuietToolName, string[]>> = {
+// The texts pi's tools answer when they found nothing.
+const NOTHING: Partial<Record<CardTool, readonly string[]>> = {
 	grep: ["No matches found"],
 	find: ["No files found matching pattern"],
 	ls: ["Directory is empty", "(empty directory)"],
 	bash: ["(no output)"],
 };
 
-const toolCache = new Map<string, Record<RegisteredToolName, any>>();
-
-function createBuiltInTools(cwd: string): Record<RegisteredToolName, any> {
-	return Object.fromEntries(
-		(Object.entries(TOOL_CREATORS) as [RegisteredToolName, (cwd: string) => any][]).map(
-			([name, createTool]) => [name, createTool(cwd)],
-		),
-	) as Record<RegisteredToolName, any>;
+/** T91 (L650): cards are full; shell.appearance.density "minimal" keeps bash quiet. */
+export function quietCards(): boolean {
+	try { return shellSettings().density() === "minimal"; } catch { return false; }
 }
 
-function getBuiltInTools(cwd: string): Record<RegisteredToolName, any> {
-	let tools = toolCache.get(cwd);
-	if (!tools) {
-		tools = createBuiltInTools(cwd);
-		toolCache.set(cwd, tools);
-	}
-	return tools;
+/** A duration as pi words it: `0.4s`, `2m 5s`, `1h 2m 5s`. */
+export function formatDuration(ms: number): string {
+	const tenths = Math.max(0, ms) / 1000;
+	if (tenths < 60) return `${tenths.toFixed(1)}s`;
+	const all = Math.floor(tenths);
+	const m = Math.floor(all / 60);
+	return m < 60 ? `${m}m ${all % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m ${all % 60}s`;
 }
 
-function shortenPath(path: unknown): string {
-	if (typeof path !== "string" || path.length === 0) return "";
-	const home = homedir();
-	return path.startsWith(home) ? `~${path.slice(home.length)}` : path;
+/** A failed command's first rows: the exit code and counts, the first failure, where it is. */
+export function failureRows(text: string): string[] {
+	const failure = commandFailure(text);
+	const rows = [failureHeadline(failure)];
+	if (failure.first) rows.push(`✗ ${failure.first}`);
+	if (failure.where) rows.push(`at ${failure.where}`);
+	return rows.filter((row) => row.length > 0);
 }
 
-function asString(value: unknown, fallback = ""): string {
-	return typeof value === "string" && value.length > 0 ? value : fallback;
+// --- reading a call and its result ----------------------------------------------------------
+
+const clean = (value: string) => sanitizeTerminalText(value);
+const field = (args: Args, key: string): string => (typeof args[key] === "string" && (args[key] as string).length > 0 ? clean(args[key] as string) : "");
+
+function home(path: string): string {
+	const dir = homedir();
+	return path.startsWith(dir) ? `~${path.slice(dir.length)}` : path;
 }
 
-export function countNonEmptyLines(text: string): number {
-	return text.split("\n").filter((line) => line.trim().length > 0).length;
+function argsOf(value: unknown): Args {
+	return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Args) : {};
 }
 
-export function tailLines(text: string, limit: number): string {
-	const lines = text.split("\n");
-	return lines.slice(Math.max(0, lines.length - limit)).join("\n");
+function textOf(result: AgentToolResult<unknown>): string {
+	return clean(result.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"));
 }
 
-function outputLines(text: string): string[] {
-	const normalized = text.replace(/\r\n/g, "\n").replace(/\n$/, "");
-	return normalized.length > 0 ? normalized.split("\n") : [];
+/** Output lines: CRLF folded, the last newline dropped; none for empty text. */
+function linesOf(text: string): string[] {
+	const body = text.replace(/\r\n/g, "\n").replace(/\n$/, "");
+	return body ? body.split("\n") : [];
 }
 
-function firstLines(text: string, limit: number): string {
-	return outputLines(text).slice(0, limit).join("\n");
+const filled = (lines: readonly string[]) => lines.filter((line) => line.trim().length > 0);
+
+function saysNothing(tool: CardTool, text: string): boolean {
+	return NOTHING[tool]?.includes(text.trim()) ?? false;
 }
 
-function lastOutputLines(text: string, limit: number): string {
-	return outputLines(text).slice(-limit).join("\n");
+function isGit(args: Args): boolean {
+	return /^(?:env\s+\S+=\S+\s+|command\s+|\w+=\S+\s+)*git(?:\s|$)/.test(field(args, "command").trim());
 }
 
-function lastMeaningfulOutputLines(text: string, limit: number): string {
-	return outputLines(text)
-		.filter((line) => line.trim().length > 0)
-		.slice(-limit)
-		.join("\n");
+/** grep with context lines counts its `path:line:` rows only. */
+function grepCount(text: string, args: Args): number {
+	if (typeof args.context === "number" && args.context > 0) return linesOf(text).filter((line) => /^\s*.+:\d+:\s?/.test(line)).length;
+	return filled(linesOf(text)).length;
 }
 
-function semanticJsonPreview(text: string): string | undefined {
+/** Pretty JSON's first lines with only structure left out, for a bash that printed one compact JSON value. */
+function jsonPreview(text: string): string[] | undefined {
 	const trimmed = text.trim();
 	if (!/^[\[{]/.test(trimmed)) return undefined;
-	let parsed: unknown;
 	try {
-		parsed = JSON.parse(trimmed);
+		const pretty = JSON.stringify(JSON.parse(trimmed), null, 2);
+		return pretty === undefined ? undefined : linesOf(pretty).filter((line) => !/^[\s{}\[\],]*$/.test(line)).slice(0, PREVIEW);
 	} catch {
 		return undefined;
 	}
-	const normalized = JSON.stringify(parsed, null, 2);
-	if (normalized === undefined) return undefined;
-	return outputLines(normalized)
-		.filter((line) => !/^[\s{}\[\],]*$/.test(line))
-		.slice(0, PREVIEW_LINE_LIMIT)
-		.join("\n");
 }
 
-export function extractTextContent(result: AgentToolResult<unknown>): string {
-	return result.content
-		.flatMap((content) => (content.type === "text" ? [content.text] : []))
-		.join("\n");
+const plural = (n: number, [one, many]: [string, string]) => `${n} ${n === 1 ? one : many}`;
+
+/** What `Successfully wrote N bytes` says, in a few words. */
+function wrote(text: string): string {
+	const bytes = /(?:Successfully )?wrote\s+(\d+)\s+bytes/i.exec(text)?.[1];
+	return bytes ? `wrote ${bytes} bytes` : "written";
 }
 
-function safeText(value: string): string {
-	return sanitizeTerminalText(value);
-}
+// --- the call's title -------------------------------------------------------------------------
 
-function sanitizeValue(value: unknown): unknown {
-	if (typeof value === "string") return safeText(value);
-	return value;
-}
-
-function sanitizedArgs(args: Record<string, unknown> | undefined): Record<string, unknown> {
-	return (sanitizeValue(args ?? {}) as Record<string, unknown>) ?? {};
-}
-
-function sanitizedResult(result: AgentToolResult<unknown>): AgentToolResult<unknown> {
-	return {
-		...result,
-		content: result.content.map((content) => content.type === "text" ? { ...content, text: safeText(content.text) } : content.type === "image" ? { ...content, mimeType: safeText(content.mimeType) } : content),
-		details: sanitizeValue(result.details),
-	};
-}
-
-function isEmptyResultMessage(toolName: QuietToolName, text: string): boolean {
-	const normalized = text.trim();
-	return EMPTY_RESULT_MESSAGES[toolName]?.some((message) => normalized === message) ?? false;
-}
-
-function grepMatchCount(text: string, args: Record<string, unknown> | undefined): number {
-	const context = args?.context;
-	if (typeof context !== "number" || context <= 0) return countNonEmptyLines(text);
-	return outputLines(text).filter((line) => /^\s*.+:\d+:\s?/.test(line)).length;
-}
-
-function isGitCommand(args: Record<string, unknown> | undefined): boolean {
-	const command = typeof args?.command === "string" ? args.command.trim() : "";
-	return /^(?:env\s+\S+=\S+\s+|command\s+|\w+=\S+\s+)*git(?:\s|$)/.test(command);
-}
-
-interface ToolResultFormatOptions {
-	expanded: boolean;
-	isError?: boolean;
-	args?: Record<string, unknown>;
-}
-
-function detailsRecord(result: AgentToolResult<unknown>): Record<string, unknown> {
-	const details = sanitizeValue(result.details);
-	return details && typeof details === "object" && !Array.isArray(details)
-		? details as Record<string, unknown>
-		: {};
-}
-
-function diffStats(diff: string): { additions: number; removals: number } {
-	let additions = 0;
-	let removals = 0;
-	for (const line of diff.split("\n")) {
-		if (line.startsWith("+") && !line.startsWith("+++")) additions++;
-		if (line.startsWith("-") && !line.startsWith("---")) removals++;
-	}
-	return { additions, removals };
-}
-
-function editSummary(result: AgentToolResult<unknown>): string {
-	const diff = detailsRecord(result).diff;
-	if (typeof diff === "string") {
-		const stats = diffStats(diff);
-		return `✓ +${stats.additions} / -${stats.removals}`;
-	}
-	return "✓ applied";
-}
-
-function writeSummary(text: string): string {
-	const bytes = text.match(/(?:Successfully )?wrote\s+(\d+)\s+bytes/i)?.[1];
-	return `✓ ${bytes ? `wrote ${bytes} bytes` : "written"}`;
-}
-
-function expandedResultText(toolName: QuietToolName, result: AgentToolResult<unknown>, text: string): string {
-	if (toolName === "edit") {
-		const diff = detailsRecord(result).diff;
-		if (typeof diff === "string") return safeText(diff);
-	}
-	return text;
-}
-
-export function formatToolResultOutput(
-	toolName: QuietToolName,
-	result: AgentToolResult<unknown>,
-	{ expanded, isError = false, args }: ToolResultFormatOptions,
-): string {
-	const text = safeText(extractTextContent(result));
-	if (expanded) {
-		// Write results only acknowledge the operation; the body lives in the call args.
-		const detail = toolName === "write" && !isError && typeof args?.content === "string" && args.content.length > 0
-			? safeText(args.content)
-			: expandedResultText(toolName, result, text);
-		return detail ? `\n${detail}` : "";
-	}
-	if (isError) {
-		const tail = lastMeaningfulOutputLines(text, PREVIEW_LINE_LIMIT);
-		return tail ? `\n${tail}` : "";
-	}
-	const summaryLabel = COLLAPSED_COUNT_LABELS[toolName];
-	if (summaryLabel) {
-		if (isEmptyResultMessage(toolName, text)) return "";
-		const count = toolName === "grep" ? grepMatchCount(text, args) : countNonEmptyLines(text);
-		return count > 0 ? ` → ${count} ${summaryLabel}` : "";
-	}
-	if (toolName === "bash" && isGitCommand(args)) {
-		const tail = tailLines(text, COLLAPSED_TAIL_LINE_LIMIT);
-		return tail ? `\n${tail}` : "";
-	}
-	if (toolName === "read") {
-		const head = firstLines(text, PREVIEW_LINE_LIMIT);
-		return head ? `\n${head}` : "";
-	}
-	if (toolName === "bash") {
-		const preview = semanticJsonPreview(text);
-		const tail = preview ?? lastOutputLines(text, PREVIEW_LINE_LIMIT);
-		return tail ? `\n${tail}` : "";
-	}
-	if (toolName === "edit") return `\n${editSummary(result)}`;
-	if (toolName === "write") return `\n${writeSummary(text)}`;
-	return "";
-}
-
-function lineRangeSuffix(args: Record<string, unknown>, theme: ThemeLike): string {
-	if (args.offset === undefined && args.limit === undefined) return "";
-	const startLine = typeof args.offset === "number" ? args.offset : 1;
-	const endLine = typeof args.limit === "number" ? startLine + args.limit - 1 : undefined;
-	return theme.fg("warning", `:${startLine}${endLine === undefined ? "" : `-${endLine}`}`);
-}
-
-interface ToolRenderContextLike {
-	args?: Record<string, unknown>;
-	argsComplete?: boolean;
-	executionStarted?: boolean;
-	isPartial?: boolean;
-	isError?: boolean;
-	lastComponent?: unknown;
-	state?: unknown;
-	cwd?: string;
-	expanded?: boolean;
-	toolCallId?: string;
-	durationMs?: number;
-}
-
-function formatToolCall(toolName: QuietToolName, args: Record<string, unknown>, theme: ThemeLike): string {
-	switch (toolName) {
-		case "read": {
-			const path = safeText(shortenPath(args.path) || "...");
-			return `${theme.fg("toolTitle", theme.bold("read"))} ${theme.fg("accent", path)}${lineRangeSuffix(args, theme)}`;
-		}
+function titleOf(tool: CardTool, args: Args, t: Paint): string {
+	const name = t.fg("toolTitle", t.bold(tool));
+	const path = (key = "path", fallback = "...") => t.fg("mdCode", home(field(args, key)) || fallback);
+	const limit = typeof args.limit === "number" ? t.fg("toolOutput", ` limit ${args.limit}`) : "";
+	switch (tool) {
 		case "bash": {
-			const command = safeText(asString(args.command, "..."));
-			const timeout = typeof args.timeout === "number" ? theme.fg("muted", ` (timeout ${args.timeout}s)`) : "";
-			// The name in bold, then the command (T33).
-			return `${theme.fg("toolTitle", theme.bold("bash"))} ${theme.fg("accent", command)}${timeout}`;
+			const timeout = typeof args.timeout === "number" ? t.fg("muted", ` (timeout ${args.timeout}s)`) : "";
+			return `${t.fg("toolTitle", t.bold(field(args, "command") || "..."))}${timeout}`;
+		}
+		case "read": {
+			if (args.offset === undefined && args.limit === undefined) return `${name}  ${path()}`;
+			const from = typeof args.offset === "number" ? args.offset : 1;
+			const to = typeof args.limit === "number" ? `-${from + args.limit - 1}` : "";
+			return `${name}  ${path()}${t.fg("warning", `:${from}${to}`)}`;
 		}
 		case "grep": {
-			let text = `${theme.fg("toolTitle", theme.bold("grep"))} ${theme.fg("accent", `/${safeText(asString(args.pattern))}/`)} in ${safeText(shortenPath(args.path) || ".")}`;
-			if (typeof args.glob === "string") text += theme.fg("toolOutput", ` (${safeText(args.glob)})`);
-			if (typeof args.limit === "number") text += theme.fg("toolOutput", ` limit ${args.limit}`);
-			return text;
+			const glob = field(args, "glob") ? t.fg("toolOutput", ` (${field(args, "glob")})`) : "";
+			return `${name}  ${t.fg("mdCode", `/${field(args, "pattern")}/`)} in ${home(field(args, "path")) || "."}${glob}${limit}`;
 		}
-		case "find": {
-			let text = `${theme.fg("toolTitle", theme.bold("find"))} ${theme.fg("accent", safeText(asString(args.pattern, "*")))} in ${safeText(shortenPath(args.path) || ".")}`;
-			if (typeof args.limit === "number") text += theme.fg("toolOutput", ` limit ${args.limit}`);
-			return text;
-		}
-		case "ls": {
-			let text = `${theme.fg("toolTitle", theme.bold("ls"))} ${theme.fg("accent", safeText(shortenPath(args.path) || "."))}`;
-			if (typeof args.limit === "number") text += theme.fg("toolOutput", ` limit ${args.limit}`);
-			return text;
-		}
+		case "find":
+			return `${name}  ${t.fg("mdCode", field(args, "pattern") || "*")} in ${home(field(args, "path")) || "."}${limit}`;
+		case "ls":
+			return `${name}  ${path("path", ".")}${limit}`;
 		case "edit":
-			return `${theme.fg("toolTitle", theme.bold("edit"))} ${theme.fg("accent", safeText(shortenPath(args.path) || "..."))}`;
+			return `${name}  ${path()}`;
 		case "write": {
 			const content = typeof args.content === "string" ? args.content : "";
-			const lineInfo = content.length > 0 ? theme.fg("muted", ` (${content.split("\n").length} lines)`) : "";
-			return `${theme.fg("toolTitle", theme.bold("write"))} ${theme.fg("accent", safeText(shortenPath(args.path) || "..."))}${lineInfo}`;
+			return `${name}  ${path()}${content ? t.fg("muted", ` (${content.split("\n").length} lines)`) : ""}`;
 		}
 	}
 }
 
-interface BoundedRowSection {
-	text: string;
-	rows: number;
-	tail?: boolean;
+/** A refused call in a few words: `$ <command>`, or the tool and its target. */
+function refusedCall(tool: CardTool, args: Args, t: Paint): string {
+	if (tool === "bash") return t.fg("toolTitle", `$ ${field(args, "command")}`);
+	const target = field(args, "path") || field(args, "pattern");
+	return t.fg("toolTitle", target ? `${tool} ${home(target)}` : tool);
 }
 
-// Cache the rendered preview slice per stable tool-result object: pi re-renders
-// every visible card each frame, so re-tokenizing the full output text per pass is
-// pure waste. Only the returned preview slice is retained, never the full wrapped
-// text, so an arbitrarily large output cannot pin every wrapped line for the
-// result object's lifetime.
-const boundedRowsLineCache = new WeakMap<object, Array<{ text: string; width: number; rows: number; tail: boolean; lines: string[] } | undefined>>();
+// --- the shared row state -----------------------------------------------------------------------
 
-class BoundedRows implements Component {
-	private readonly sections: readonly BoundedRowSection[];
-	private readonly cacheKey: object | undefined;
-
-	constructor(sections: readonly BoundedRowSection[], cacheKey?: object) {
-		this.sections = sections;
-		this.cacheKey = cacheKey;
-	}
-
-	/** Renders each section through the wrapped-line cache, sliced to the section row budget; cache hits skip re-tokenizing and re-wrapping the section text. */
-	render(width: number): string[] {
-		const cache = this.cacheKey ? boundedRowsLineCache.get(this.cacheKey) : undefined;
-		return this.sections.flatMap(({ text, rows, tail = false }, index) => {
-			if (rows <= 0) return [];
-			const hit = cache?.[index];
-			if (hit && hit.text === text && hit.width === width && hit.rows === rows && hit.tail === tail) {
-				return [...hit.lines];
-			}
-			const rendered = new Text(text, 0, 0).render(width);
-			const sliced = tail ? rendered.slice(-rows) : rendered.slice(0, rows);
-			if (this.cacheKey) {
-				const slot = boundedRowsLineCache.get(this.cacheKey) ?? [];
-				slot[index] = { text, width, rows, tail, lines: sliced };
-				boundedRowsLineCache.set(this.cacheKey, slot);
-			}
-			return [...sliced];
-		});
-	}
-
-	invalidate(): void {}
+/** What the result tells the call's header, in the row state pi shares between them. */
+interface Settled {
+	right: string;
+	tone: "normal" | "error";
+	refused?: GuardRefusal;
+	/** Whether ctrl+o changes the body at this width. */
+	expandable?: (width: number, look: CardLook) => boolean;
+	/** The collapsed body says its own expand key (bash's earlier lines): the header leaves it out. */
+	ownHint?: boolean;
 }
 
-// Tool card: every quiet tool call is a rounded card, so the call and its output read as one block apart from assistant
-// prose. pi does not paint tool backgrounds for renderShell "self", so the
-// frame tone carries the status the painted Box would otherwise show. The call
-// owns the top rule; the result draws the sides and always closes the frame.
-// Until the first result exists, the call closes the frame itself.
-type ToolTone = typeof CARD_TONE.WARNING | typeof CARD_TONE.SUCCESS | typeof CARD_TONE.ERROR;
+interface RowState { body?: true; settled?: () => Settled; startedAt?: number; endedAt?: number }
 
-function toolTone(pending: boolean, failed: boolean): ToolTone {
-	if (failed) return CARD_TONE.ERROR;
-	return pending ? CARD_TONE.WARNING : CARD_TONE.SUCCESS;
+const ROW = Symbol.for("jhon-shell.tool-card-row");
+
+function rowState(state: unknown): RowState {
+	if (state === null || typeof state !== "object") return {};
+	const slot = state as Record<symbol, RowState | undefined>;
+	return (slot[ROW] ??= {});
 }
 
-/** One settled frame per component: bounded memory, including all card chrome. */
-class ToolCardRows {
-	private frame?: { width: number; style: ReturnType<typeof cardStyle>; running: boolean; lines: string[] };
-
-	render(width: number, running: boolean, build: () => string[]): string[] {
-		const style = cardStyle();
-		if (this.frame?.width === width && this.frame.style === style && this.frame.running === running) return this.frame.lines;
-		const lines = build();
-		this.frame = { width, style, running, lines };
-		return lines;
-	}
-
-	invalidate(): void { this.frame = undefined; }
+/** The card's form and glyphs as the settings say now. */
+function lookOf(theme: Paint): CardLook {
+	let ascii = false;
+	try { ascii = shellSettings().ascii(); } catch { /* No settings: Unicode. */ }
+	return { form: cardStyle() === CARD_STYLE.NEON ? "outline" : "tint", ascii, theme };
 }
 
-class ToolCardTop implements Component {
-	private readonly rows = new ToolCardRows();
-	private readonly header: () => string;
-	private readonly glyph: string;
-	private readonly tone: ToolTone;
-	private readonly theme: CardTheme;
-	private readonly hint: string | undefined;
-	private readonly row: CardRowContext | undefined;
+const shellText = (text: string, ascii: boolean) => (ascii ? asciiText(text) : text);
 
-	constructor(header: () => string, tone: ToolTone, theme: CardTheme, glyph: string, hint?: string, row?: CardRowContext) {
-		this.header = header;
-		this.glyph = glyph;
-		this.tone = tone;
-		this.theme = theme;
-		this.hint = hint;
-		this.row = row;
-	}
-
-	/** Renders `╭─ <icon> <call> ── <hint> ╮`, reserving applicable hint space before wrapping the call. A call that does not fit the rule (a long or multi-line command) continues on card rows below it, so every line of the command stays visible. */
-	render(width: number): string[] {
-		const target = Math.max(0, Math.floor(width));
-		if (target === 0) return [];
-		const running = this.row !== undefined && cardAwaitingResult(this.row);
-		return this.rows.render(target, running, () => drawCard(this.tone, this.theme, target, (frame, inner) => ({
-			head: frame.topRows({ title: this.header(), glyph: this.glyph }, inner, this.hint),
-			body: running ? [frame.running(inner)] : undefined,
-			bottom: running ? frame.close(inner) : undefined,
-		})));
-	}
-
-	invalidate(): void { this.rows.invalidate(); }
+function took(context: RowContext, row: RowState): string | undefined {
+	if (typeof context.durationMs === "number") return formatDuration(context.durationMs);
+	if (row.startedAt === undefined) return undefined;
+	row.endedAt ??= Date.now();
+	return formatDuration(row.endedAt - row.startedAt);
 }
 
-class ToolCardBody implements Component {
-	private readonly rows = new ToolCardRows();
-	private readonly inner: () => Component;
-	private readonly tone: ToolTone;
-	private readonly theme: CardTheme;
-
-	private readonly cacheable: boolean;
-
-	constructor(inner: () => Component, tone: ToolTone, theme: CardTheme, cacheable = true) {
-		this.inner = inner;
-		this.tone = tone;
-		this.theme = theme;
-		this.cacheable = cacheable;
-	}
-
-	/** Renders the inner component between the card sides and closes the frame, even when the result has no rows. */
-	render(width: number): string[] {
-		const target = Math.max(0, Math.floor(width));
-		if (target === 0) return [];
-		const build = () => drawCard(this.tone, this.theme, target, (frame, inner) => ({
-			body: this.inner().render(cardInnerWidth(inner)).map((line) => frame.line(line.trimEnd(), inner)),
-			bottom: frame.close(inner),
-			afterHeading: true,
-		}));
-		return this.cacheable ? this.rows.render(target, false, build) : build();
-	}
-
-	invalidate(): void { this.rows.invalidate(); }
-}
-
-function shouldRenderPreviewTail(
-	toolName: QuietToolName,
-	text: string,
-	isError: boolean,
-	args: Record<string, unknown> | undefined,
-): boolean {
-	if (isError) return true;
-	if (toolName !== "bash") return false;
-	return isGitCommand(args) || semanticJsonPreview(text) === undefined;
-}
-
-function partialLabel(toolName: QuietToolName, text: string): string {
-	const lineCount = countNonEmptyLines(text);
-	return lineCount === 0
-		? `… ${toolName}`
-		: `… ${toolName} · ${lineCount} ${lineCount === 1 ? "line" : "lines"}`;
-}
-
-function hasImageContent(result: AgentToolResult<unknown>): boolean {
-	return result.content.some((content) => content.type === "image");
-}
-
-function isRenderArgs(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function sanitizedRenderContext(context: (Omit<ToolRenderContextLike, "args"> & { args?: unknown }) | undefined): ToolRenderContextLike {
-	if (!context) return { args: {} };
-	return {
-		...context,
-		args: sanitizedArgs(isRenderArgs(context.args) ? context.args : undefined),
-		cwd: typeof context.cwd === "string" ? safeText(context.cwd) : context.cwd,
-	};
-}
-
-/** When each running command started, and whether its cancel takes a double Esc, by tool call id. */
+/** When each running bash started and whether its cancel takes a double esc, by call id. */
 const running = new Map<string, { started: number; doubleEsc: boolean }>();
 
-/** A running bash call's label: its lines, how long it has run, and how to stop it. */
-function runningLabel(toolName: QuietToolName, text: string, toolCallId: string | undefined, now = Date.now()): string {
-	const label = partialLabel(toolName, text);
-	if (toolName !== "bash" || !toolCallId) return label;
-	let run = running.get(toolCallId);
+function runningLabel(tool: CardTool, text: string, callId: string | undefined, now = Date.now()): string {
+	const n = filled(linesOf(text)).length;
+	const label = n === 0 ? `… ${tool}` : `… ${tool} · ${n} ${n === 1 ? "line" : "lines"}`;
+	if (tool !== "bash" || !callId) return label;
+	let run = running.get(callId);
 	if (!run) {
 		let doubleEsc = false;
-		try { doubleEsc = loadDoubleEscCancelPolicy() === "on"; } catch { /* a missing preference is off */ }
+		try { doubleEsc = loadDoubleEscCancelPolicy() === "on"; } catch { /* Off when unset. */ }
 		run = { started: now, doubleEsc };
-		running.set(toolCallId, run);
+		running.set(callId, run);
 	}
 	return `${label} · ${runningLine(now - run.started, run.doubleEsc)}`;
 }
 
-/** A failed bash call's first rows: the exit code and counts, the first failure, and where it is. */
-export function failureRows(text: string): string[] {
-	const f = commandFailure(text);
-	return [failureHeadline(f), f.first ? `✗ ${f.first}` : "", f.where ? `at ${f.where}` : ""].filter(Boolean);
-}
+// --- the components ---------------------------------------------------------------------------
 
-const SINGULAR: Record<string, string> = { lines: "line", matches: "match", files: "file", entries: "entry" };
-
-function counted(count: number, label: string): string {
-	return `${count} ${count === 1 ? SINGULAR[label] ?? label : label}`;
-}
-
-/** A finished call's result in a few words, for the sections `↳ ✓` line (T33). */
-function resultSummary(toolName: QuietToolName, result: AgentToolResult<unknown>, text: string, args: Record<string, unknown> | undefined): string {
-	const label = COLLAPSED_COUNT_LABELS[toolName];
-	if (label) {
-		if (isEmptyResultMessage(toolName, text) || countNonEmptyLines(text) === 0) return toolName === "ls" ? "empty" : `no ${label}`;
-		return counted(toolName === "grep" ? grepMatchCount(text, args) : countNonEmptyLines(text), label);
+/** One component's rows, kept while nothing that draws them changed. */
+class Kept {
+	private key?: string;
+	private rows: string[] = [];
+	get(key: string, draw: () => string[]): string[] {
+		if (key !== this.key) { this.rows = draw(); this.key = key; }
+		return this.rows;
 	}
-	if (toolName === "edit") return editSummary(result).replace(/^✓ /, "");
-	if (toolName === "write") return writeSummary(text).replace(/^✓ /, "");
-	if (toolName === "read" && hasImageContent(result)) return "image";
-	if (toolName === "bash" && (isEmptyResultMessage(toolName, text) || outputLines(text).length === 0)) return "no output";
-	return counted(outputLines(text).length, "lines");
+	clear(): void { this.key = undefined; }
 }
 
-/** The rows under a collapsed sections `↳ ✓` line: the preview the float card shows, without its own summary. */
-function sectionsPreview(toolName: QuietToolName, result: AgentToolResult<unknown>, text: string, args: Record<string, unknown> | undefined): string {
-	if (COLLAPSED_COUNT_LABELS[toolName]) return isEmptyResultMessage(toolName, text) ? "" : firstLines(text, PREVIEW_LINE_LIMIT - 1);
-	if (toolName === "edit") {
-		const diff = detailsRecord(result).diff;
-		return typeof diff === "string" ? firstLines(safeText(diff).split("\n").filter((line) => /^[+-]/.test(line)).join("\n"), PREVIEW_LINE_LIMIT - 1) : "";
+/** The call: the header (and the rest of a long command), closing an outline while no result exists. */
+class CallCard implements Component {
+	private readonly kept = new Kept();
+	private readonly tool: CardTool;
+	private readonly args: Args;
+	private readonly theme: Paint;
+	private readonly context: RowContext;
+
+	constructor(tool: CardTool, args: Args, theme: Paint, context: RowContext) {
+		this.tool = tool;
+		this.args = args;
+		this.theme = theme;
+		this.context = context;
 	}
-	if (toolName === "write" || (toolName === "bash" && isEmptyResultMessage(toolName, text))) return "";
-	return formatToolResultOutput(toolName, result, { expanded: false, args }).replace(/^\n/, "");
+
+	render(width: number): string[] {
+		const cells = Math.max(0, Math.floor(width));
+		if (cells === 0) return [];
+		const look = lookOf(this.theme);
+		const row = rowState(this.context.state);
+		const settled = row.settled?.();
+		const t = this.theme;
+		let head: CardHead;
+		let title: string;
+		// The expand key rides the header while ctrl+o would change the body.
+		const expanded = this.context.expanded === true;
+		const hint = settled?.expandable?.(cells, look) && (expanded || !settled.ownHint) ? t.fg("dim", stripAnsi(keyHint("app.tools.expand", expanded ? "to collapse" : "to expand"))) : "";
+		const withHint = (state: string) => (hint ? `${hint}  ${state}` : state);
+		if (settled?.refused) {
+			head = { icon: stateGlyph("failed", look.ascii), title: "", right: withHint(t.fg("text", settled.refused.guard)), tone: "error" };
+			title = `${t.bold(t.fg("text", "refused"))}  ${refusedCall(this.tool, this.args, t)}`;
+		} else {
+			let right: string | undefined;
+			if (settled) {
+				right = withHint(settled.right);
+			} else if (this.context.isPartial !== false) {
+				right = t.fg("warning", `${stateGlyph("working", look.ascii)} running`);
+			}
+			head = { icon: toolIcon(this.tool), title: "", right, tone: settled?.tone ?? (this.context.isError ? "error" : "normal") };
+			title = titleOf(this.tool, this.args, t);
+		}
+		const awaiting = !row.body && this.context.isPartial !== false;
+		const key = JSON.stringify([cells, look.form, look.ascii, title, head.right, head.tone, head.icon, awaiting]);
+		return this.kept.get(key, () => {
+			const [first = "", ...rest] = title.split("\n");
+			const room = titleCells(cells, look, head);
+			// Too narrow to keep the words: the header cuts the call instead of wrapping it a few cells at a time.
+			if (room < MIN_WRAP) return headRows({ ...head, title: first }, [], cells, look, awaiting);
+			const [shown = "", ...wrapped] = wrapRows(first, room);
+			const overflow = [...wrapped, ...rest.flatMap((line) => wrapRows(t.fg("toolTitle", line), bodyCells(cells, look)))];
+			return headRows({ ...head, title: shown }, overflow, cells, look, awaiting);
+		});
+	}
+
+	invalidate(): void { this.kept.clear(); }
+}
+
+/** A result's body: `lines` while collapsed, `full` expanded (wrapped, every word kept). */
+interface Body {
+	lines: string[];
+	full: string[];
+	/** Collapsing hides whole lines. */
+	hides: boolean;
+	/** A component whose own rows are the expanded body (an image read). */
+	own?: Component;
+}
+
+/** The result: its body, painted when first drawn and again after an invalidate (a theme change). */
+class ResultCard implements Component {
+	private readonly kept = new Kept();
+	private readonly body: () => Body;
+	private readonly expanded: boolean;
+	private readonly tone: () => CardHead["tone"];
+	private readonly theme: Paint;
+	private readonly forget: () => void;
+
+	constructor(body: () => Body, expanded: boolean, tone: () => CardHead["tone"], theme: Paint, forget: () => void) {
+		this.body = body;
+		this.expanded = expanded;
+		this.tone = tone;
+		this.theme = theme;
+		this.forget = forget;
+	}
+
+	render(width: number): string[] {
+		const cells = Math.max(0, Math.floor(width));
+		if (cells === 0) return [];
+		const look = lookOf(this.theme);
+		return this.kept.get(JSON.stringify([cells, look.form, look.ascii]), () => {
+			const body = this.body();
+			const room = bodyCells(cells, look);
+			const rows = body.own && this.expanded
+				? body.own.render(room).map((line) => line.trimEnd())
+				: this.expanded ? body.full.flatMap((line) => wrapRows(line, room)) : body.lines;
+			return bodyRows(rows, cells, look, this.tone());
+		});
+	}
+
+	invalidate(): void { this.body().own?.invalidate(); this.kept.clear(); this.forget(); }
+}
+
+/** Whether a collapsed body hides anything at width: whole lines, or a line cut at the card's edge. */
+function hidesAt(body: Body): (width: number, look: CardLook) => boolean {
+	return (width, look) => body.hides || body.lines.some((line) => visibleWidth(line) > bodyCells(width, look));
+}
+
+// --- each result's body -------------------------------------------------------------------------
+
+/** A partial result: the running label, then the newest lines. */
+function partialBody(tool: CardTool, text: string, callId: string | undefined, t: Paint, ascii: boolean): Body {
+	const label = t.fg("warning", shellText(runningLabel(tool, text, callId), ascii));
+	const lines = linesOf(text);
+	return { lines: [label, ...lines.slice(-PREVIEW).map((line) => t.fg("muted", line))], full: [label, ...lines.map((line) => t.fg("muted", line))], hides: lines.length > PREVIEW };
+}
+
+function refusalBody(refused: GuardRefusal, t: Paint): Body {
+	const said = [refused.reason, ...(refused.fix ? [refused.fix] : [])].map((line) => t.fg("muted", line));
+	return { lines: said, full: [...said, ...refused.more.map((line) => t.fg("dim", line))], hides: refused.more.length > 0 };
+}
+
+/** A failure: why first (bash: Jhon's headline, the first failure, its place), then the output once. */
+function failureBody(tool: CardTool, text: string, full: boolean, t: Paint, ascii: boolean): Body {
+	const lines = linesOf(text);
+	const why = tool === "bash" ? failureRows(text) : [];
+	const tail = full ? BASH_TAIL : why.length ? PREVIEW : PREVIEW - 1;
+	const headline = why[0] ?? filled(lines)[0]?.trim() ?? "failed";
+	const head = [t.fg("error", why.length ? shellText(headline, ascii) : headline), ...why.slice(1).map((row) => t.fg(row.startsWith("at ") ? "accent" : "error", shellText(row, ascii)))];
+	// Say it once: the rows the why already says leave the output.
+	const said = why.slice(1).map((row) => row.replace(/^(✗ |at )/, "").trim());
+	let rest: string[];
+	if (why.length) rest = linesOf(text.replace(/\n?\n?[ \t]*Command exited with code \d+[ \t]*$/, ""));
+	else {
+		const at = lines.findIndex((line) => line.trim() === headline);
+		rest = at >= 0 ? [...lines.slice(0, at), ...lines.slice(at + 1)] : lines;
+	}
+	const fresh = filled(rest).filter((line) => !said.some((row) => row && line.includes(row)));
+	const shown = fresh.slice(-tail);
+	const earlier = fresh.length - shown.length;
+	return {
+		lines: [...head, ...shown.map((line) => t.fg("muted", line))],
+		full: [...head, ...rest.map((line) => t.fg("toolOutput", line))],
+		hides: earlier > 0 || filled(rest).length > fresh.length,
+	};
+}
+
+/** A full bash card's body: the output tail under `... (N earlier lines, <key> to expand)`. */
+function bashBody(text: string, t: Paint): Body {
+	const lines = saysNothing("bash", text) ? [] : linesOf(text.replace(/^\n+/, "").replace(/\s+$/, ""));
+	const hidden = lines.length - BASH_TAIL;
+	const earlier = hidden > 0 ? [`${t.fg("muted", `... (${hidden} earlier ${hidden === 1 ? "line" : "lines"},`)} ${stripAnsi(keyHint("app.tools.expand", "to expand"))}${t.fg("muted", ")")}`] : [];
+	return { lines: [...earlier, ...lines.slice(-BASH_TAIL).map((line) => t.fg("toolOutput", line))], full: lines.map((line) => t.fg("toolOutput", line)), hides: hidden > 0 };
+}
+
+/** A collapsed preview: `count` lines from the head or the tail; all of them expanded. */
+function previewBody(lines: readonly string[], count: number, from: "head" | "tail", t: Paint, shown?: readonly string[]): Body {
+	const kept = shown ?? (from === "head" ? lines.slice(0, count) : lines.slice(-count));
+	return { lines: kept.map((line) => t.fg("muted", line)), full: lines.map((line) => t.fg("toolOutput", line)), hides: lines.length > kept.length || shown !== undefined };
 }
 
 /**
- * A finished result in the sections style (T33, T34): `↳ ✓ <summary>`, or
- * `↳ ✗ <why>` in the bad color, then the preview (or the whole output when
- * expanded). Minimal cards keep only the `↳` line while collapsed.
+ * The card for one result: the header's state and the body. Pure: the time
+ * and the running label come in through `context` and `row`.
  */
-function sectionsResult(
-	toolName: QuietToolName, result: AgentToolResult<unknown>, text: string, isError: boolean, expanded: boolean,
-	args: Record<string, unknown> | undefined, theme: ThemeLike, cacheKey: object | undefined,
-): Component {
+function settle(tool: CardTool, result: AgentToolResult<unknown>, text: string, isError: boolean, context: RowContext, row: RowState, t: Paint, ascii: boolean): { settled: Settled; body: Body } {
+	const args = argsOf(context.args);
+	const sign = (name: "done" | "failed") => stateGlyph(name, ascii);
+	const arrow = ascii ? ">" : "↳";
 	if (isError) {
-		const why = toolName === "bash" ? failureRows(text) : [];
-		const meaningful = outputLines(text).filter((line) => line.trim().length > 0);
-		const headline = why[0] ?? meaningful[0] ?? "failed";
-		const reasons = why.slice(1).map((row) => ({ text: theme.fg(row.startsWith("at ") ? "accent" : "error", row), rows: 1 }));
-		// Say it once (B2): a tail row that repeats a why row (its failure, its place) is dropped.
-		const said = why.slice(1).map((row) => row.replace(/^(✗ |at )/, "").trim()).filter(Boolean);
-		const fresh = (tail: string) => tail.split("\n").filter((line) => { const plain = stripAnsi(line).trim(); return !said.some((row) => plain.includes(row)); }).join("\n");
-		// Expanded, the whole output follows, without the line the headline already says.
-		const lines = text.split("\n");
-		const saidAt = why.length ? -1 : lines.findIndex((line) => line.trim() === headline.trim());
-		const rest = expanded
-			? (saidAt >= 0 ? [...lines.slice(0, saidAt), ...lines.slice(saidAt + 1)].join("\n").replace(/^\n+/, "") : text)
-			: (why.length ? fresh(lastMeaningfulOutputLines(text.replace(/\n?[ \t]*Command exited with code \d+[ \t]*$/, ""), PREVIEW_LINE_LIMIT)) : meaningful.slice(1).slice(-(PREVIEW_LINE_LIMIT - 1)).join("\n"));
-		return new BoundedRows([
-			{ text: theme.fg("error", `↳ ✗ ${headline}`), rows: 1 },
-			...reasons,
-			...(rest ? [{ text: theme.fg("muted", rest), rows: expanded ? Number.MAX_SAFE_INTEGER : PREVIEW_LINE_LIMIT, tail: true }] : []),
-		], expanded ? undefined : cacheKey);
+		const refused = guardRefusal(text);
+		if (refused) {
+			const body = refusalBody(refused, t);
+			return { settled: { right: refused.guard, tone: "error", refused, expandable: hidesAt(body) }, body };
+		}
+		const full = tool === "bash" && !quietCards();
+		const body = failureBody(tool, text, full, t, ascii);
+		const time = full ? took(context, row) : undefined;
+		return { settled: { right: t.fg("error", `${sign("failed")} ${time ?? "failed"}`), tone: "error", expandable: hidesAt(body) }, body };
 	}
-	const head = `${theme.fg("dim", "↳")} ${theme.fg("success", "✓")} ${theme.fg("muted", resultSummary(toolName, result, text, args))}`;
-	if (expanded) {
-		const detail = formatToolResultOutput(toolName, result, { expanded: true, args }).replace(/^\n/, "");
-		return new Text(detail ? `${head}\n${theme.fg("toolOutput", detail)}` : head, 0, 0);
-	}
-	const preview = sectionsPreview(toolName, result, text, args);
-	return new BoundedRows([
-		{ text: head, rows: 1 },
-		...(preview ? [{ text: theme.fg("muted", preview), rows: PREVIEW_LINE_LIMIT, tail: shouldRenderPreviewTail(toolName, text, false, args) }] : []),
-	], cacheKey);
-}
-
-/**
- * A full bash card's result (T91), the Gentle Shell's: a failure's `↳ ✗` why
- * first (Jhon's headline, first failure and place), then the output tail with
- * `... (N earlier lines, <expand key>)` above it, or all of it expanded, then
- * `Took <duration>`.
- */
-function bashCardResult(text: string, isError: boolean, expanded: boolean, took: string | undefined, theme: ThemeLike, cacheKey: object | undefined): Component {
-	const sections: BoundedRowSection[] = [];
-	let output = text;
-	if (isError) {
-		const why = failureRows(text);
-		const lines = outputLines(text);
-		const headline = why[0] ?? lines.find((line) => line.trim().length > 0) ?? "failed";
-		sections.push({ text: theme.fg("error", `↳ ✗ ${headline}`), rows: 1 });
-		for (const row of why.slice(1)) sections.push({ text: theme.fg(row.startsWith("at ") ? "accent" : "error", row), rows: 1 });
-		if (why.length) output = text.replace(/\n?\n?[ \t]*Command exited with code \d+[ \t]*$/, "");
-		else {
-			const at = lines.findIndex((line) => line.trim() === headline.trim());
-			output = at >= 0 ? [...lines.slice(0, at), ...lines.slice(at + 1)].join("\n") : text;
+	const summary = (words: string) => t.fg("muted", `${arrow} ${words}`);
+	const lines = linesOf(text);
+	switch (tool) {
+		case "bash": {
+			if (!quietCards()) {
+				const body = bashBody(text, t);
+				const time = took(context, row);
+				return { settled: { right: `${t.fg("success", sign("done"))}${time ? ` ${t.fg("muted", time)}` : ""}`, tone: "normal", expandable: hidesAt(body), ownHint: body.hides }, body };
+			}
+			const empty = saysNothing("bash", text) || lines.length === 0;
+			const output = empty ? [] : lines;
+			const shown = empty ? [] : isGit(args) ? lines.slice(-GIT_TAIL) : jsonPreview(text) ?? lines.slice(-PREVIEW);
+			const body = previewBody(output, PREVIEW, "tail", t, shown.length === output.length && shown.every((line, i) => line === output[i]) ? undefined : shown);
+			return { settled: { right: summary(empty ? "no output" : plural(lines.length, ["line", "lines"])), tone: "normal", expandable: hidesAt(body) }, body };
+		}
+		case "read": {
+			if (result.content.some((part) => part.type === "image")) {
+				return { settled: { right: summary("image"), tone: "normal" }, body: { lines: [], full: [], hides: false } };
+			}
+			const body = previewBody(lines, PREVIEW, "head", t);
+			return { settled: { right: summary(plural(lines.length, ["line", "lines"])), tone: "normal", expandable: hidesAt(body) }, body };
+		}
+		case "grep":
+		case "find":
+		case "ls": {
+			const words = COUNTED[tool]!;
+			const empty = saysNothing(tool, text) || filled(lines).length === 0;
+			const count = tool === "grep" ? grepCount(text, args) : filled(lines).length;
+			const body = previewBody(empty ? [] : lines, PREVIEW, "head", t);
+			return { settled: { right: summary(empty ? (tool === "ls" ? "empty" : `no ${words[1]}`) : plural(count, words)), tone: "normal", expandable: hidesAt(body) }, body };
+		}
+		case "edit": {
+			const diff = argsOf(result.details).diff;
+			if (typeof diff !== "string") {
+				const body = previewBody(lines, 0, "head", t);
+				return { settled: { right: summary("applied"), tone: "normal", expandable: hidesAt(body) }, body };
+			}
+			const rows = paintDiff(diffRows(clean(diff)), t, ascii);
+			const { added, removed } = diffCounts(clean(diff));
+			const kept = rows.slice(0, quietCards() ? PREVIEW : DIFF_ROWS);
+			const body = { lines: kept, full: rows, hides: rows.length > kept.length };
+			const minus = ascii ? "-" : "−";
+			return { settled: { right: `${t.fg("success", `+${added}`)} ${t.fg("error", `${minus}${removed}`)}`, tone: "normal", expandable: hidesAt(body) }, body };
+		}
+		case "write": {
+			// The result only says it wrote; what it wrote is the call's content.
+			const content = typeof args.content === "string" && args.content.length > 0 ? clean(args.content) : text;
+			const body = { lines: [], full: linesOf(content).map((line) => t.fg("toolOutput", line)), hides: content.length > 0 };
+			return { settled: { right: summary(wrote(text)), tone: "normal", expandable: hidesAt(body) }, body };
 		}
 	}
-	if (isEmptyResultMessage("bash", output)) output = "";
-	const lines = outputLines(output.replace(/^\n+/, "").replace(/\s+$/, ""));
-	if (lines.length > 0) {
-		if (expanded) sections.push({ text: theme.fg("toolOutput", lines.join("\n")), rows: Number.MAX_SAFE_INTEGER });
-		else {
-			const hidden = lines.length - BASH_TAIL_LINE_LIMIT;
-			if (hidden > 0) sections.push({ text: `${theme.fg("muted", `... (${hidden} earlier ${hidden === 1 ? "line" : "lines"},`)} ${stripAnsi(keyHint("app.tools.expand", "to expand"))}${theme.fg("muted", ")")}`, rows: 1 });
-			sections.push({ text: theme.fg("toolOutput", lines.slice(-BASH_TAIL_LINE_LIMIT).join("\n")), rows: BASH_TAIL_LINE_LIMIT, tail: true });
-		}
-	}
-	if (took) sections.push({ text: theme.fg("muted", took), rows: 1 });
-	return new BoundedRows(sections, expanded ? undefined : cacheKey);
 }
 
-/** Rendering-only factory; the default export attaches the Bash renderers to native Bash through pi.registerToolRenderer, so execution and schema stay pi's. */
+/** The card renderers for one tool; bash's attach to pi's own bash through the resolver below. */
 export function createQuietToolRenderer(
-	toolName: QuietToolName,
+	tool: CardTool,
 	officialRenderResult?: ToolDefinition["renderResult"],
 ): Pick<ToolDefinition, "renderShell" | "renderCall" | "renderResult"> {
-
 	return {
 		renderShell: "self",
 		renderCall: ownsIcon((args, theme, context) => {
-			const callArgs = args as Record<string, unknown>;
-			const renderContext = sanitizedRenderContext(context);
-			startTimer(renderContext);
-			const tone = toolTone(renderContext.isPartial !== false, renderContext.isError === true);
-			// The expand key rides the top rule once the call finished.
-			const finished = renderContext.isPartial === false && (renderContext.executionStarted === true || renderContext.isError === true);
-			const hint = finished ? stripAnsi(keyHint("app.tools.expand", renderContext.expanded === true ? "to collapse" : "to expand")) : undefined;
-			return new ToolCardTop(() => formatToolCall(toolName, callArgs, theme), tone, theme, toolIcon(toolName), hint, renderContext);
+			const row = rowState(context?.state);
+			if (context?.executionStarted && row.startedAt === undefined) row.startedAt = Date.now();
+			return new CallCard(tool, argsOf(args), theme as unknown as Paint, (context ?? {}) as RowContext);
 		}),
-		/** Builds the card component for this render pass; collapsed cards delegate to the wrapped-line cache keyed by the tool result object. */
 		renderResult(result, options, theme, context) {
-			const renderContext = context ? sanitizedRenderContext(context) : undefined;
-			markCardResult(renderContext?.state);
-			const cacheKey = typeof result === "object" && result !== null ? result : undefined;
-			const safeResult = sanitizedResult(result);
-			const text = safeText(extractTextContent(safeResult));
-			// Current Pi carries errors on the context. Older renderer callers
-			// supplied them on options; keep that structural fallback for those hosts.
-			const legacyError = "isError" in options && options.isError === true;
-			const isError = renderContext?.isError ?? legacyError;
-			const resultTone = toolTone(options.isPartial === true, isError);
-			const carded = (component: () => Component, cacheable = options.isPartial !== true): Component => new ToolCardBody(component, resultTone, theme, cacheable);
+			const t = theme as unknown as Paint;
+			const ctx = (context ?? {}) as RowContext;
+			const row = rowState(ctx.state);
+			row.body = true;
+			const text = textOf(result);
+			// pi says an error on the context; older hosts said it on the options.
+			const isError = ctx.isError ?? ("isError" in options && (options as { isError?: boolean }).isError === true);
+			const tone = isError ? "error" : "normal";
 			if (options.isPartial) {
-				const label = runningLabel(toolName, text, renderContext?.toolCallId);
-				if (options.expanded) return carded(() => new Text(`${theme.fg("warning", label)}\n${theme.fg("muted", text)}`, 0, 0));
-				const visible = lastOutputLines(text, PREVIEW_LINE_LIMIT);
-				return carded(() => new BoundedRows([
-					{ text: theme.fg("warning", label), rows: 1 },
-					...(visible ? [{ text: theme.fg("muted", visible), rows: PREVIEW_LINE_LIMIT, tail: true }] : []),
-				], cacheKey));
+				row.settled = undefined;
+				let partial: Body | undefined;
+				return new ResultCard(() => (partial ??= partialBody(tool, text, ctx.toolCallId, t, lookOf(t).ascii)), options.expanded, () => tone, t, () => { partial = undefined; });
 			}
-			if (renderContext?.toolCallId) running.delete(renderContext.toolCallId);
-			if (options.expanded && toolName === "read" && hasImageContent(safeResult) && officialRenderResult) {
-				return carded(() => officialRenderResult(
-					safeResult,
-					options,
-					theme,
-					sanitizedRenderContext(renderContext) as any,
-				), false);
-			}
-			if (toolName === "bash" && !quietCards()) {
-				const took = tookText(renderContext);
-				return carded(() => bashCardResult(text, isError, options.expanded, took, theme, cacheKey), !options.expanded);
-			}
-			return carded(() => sectionsResult(toolName, safeResult, text, isError, options.expanded, renderContext?.args, theme, cacheKey), !options.expanded);
+			if (ctx.toolCallId) running.delete(ctx.toolCallId);
+			let card: { settled: Settled; body: Body } | undefined;
+			const made = () => {
+				if (card) return card;
+				card = settle(tool, result, text, isError === true, ctx, row, t, lookOf(t).ascii);
+				if (tool === "read" && options.expanded && officialRenderResult && result.content.some((part) => part.type === "image")) {
+					const safe = { ...result, content: result.content.map((part) => (part.type === "image" ? { ...part, mimeType: clean(part.mimeType) } : part.type === "text" ? { ...part, text: clean(part.text) } : part)) };
+					card.body.own = officialRenderResult(safe, options, theme, { ...(context as object), args: argsOf(ctx.args), cwd: typeof ctx.cwd === "string" ? clean(ctx.cwd) : ctx.cwd } as any);
+				}
+				return card;
+			};
+			row.settled = () => made().settled;
+			return new ResultCard(() => made().body, options.expanded, () => made().settled.tone, t, () => { card = undefined; });
 		},
 	};
 }
 
-function registerQuietTool(pi: ExtensionAPI, toolName: RegisteredToolName): void {
-	const registrationTool = getBuiltInTools(process.cwd())[toolName];
+/** Registers one of pi's tools under Jhon's card, running it in the session's working folder. */
+function register(pi: ExtensionAPI, tool: PiTool): void {
+	const made = new Map<string, any>();
+	const toolAt = (cwd: string) => {
+		let found = made.get(cwd);
+		if (!found) { found = PI_TOOLS[tool](cwd); made.set(cwd, found); }
+		return found;
+	};
+	const definition = toolAt(process.cwd());
 	pi.registerTool({
-		...registrationTool,
+		...definition,
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
-			return getBuiltInTools(ctx.cwd)[toolName].execute(toolCallId, params, signal, onUpdate, ctx);
+			return toolAt(ctx.cwd).execute(toolCallId, params, signal, onUpdate, ctx);
 		},
-		...createQuietToolRenderer(toolName, registrationTool.renderResult),
+		...createQuietToolRenderer(tool, definition.renderResult),
 	});
 }
 
-/** Jhon's tool cards, always (L76: shell.behaviour.quiet_tools and its pi-pretty fallback are gone). */
+/** Jhon's tool cards, always (L76). */
 export default function quietTools(pi: ExtensionAPI): ReturnType<ExtensionFactory> {
-	for (const toolName of Object.keys(TOOL_CREATORS) as RegisteredToolName[]) registerQuietTool(pi, toolName);
+	for (const tool of Object.keys(PI_TOOLS) as PiTool[]) register(pi, tool);
 	const host = pi as typeof pi & { registerToolRenderer?: (resolver: (toolName: string, next: () => unknown) => unknown) => void };
 	if (typeof host.registerToolRenderer !== "function") return;
-	// T33 (L97): every call starts with its family's icon. Registered first, so
-	// it wraps what the resolvers after it and the tool itself would draw;
-	// memory calls read as one line with a `↳ ✓` result.
-	// T91 (L650): bash is a Jhon card too, its full command, output tail and
-	// duration; pi keeps its execution and schema.
-	const bashCard = createQuietToolRenderer("bash") as ToolRenderers;
+	// T91 (L650): bash is a Jhon card over pi's own tool; T33 (L97): every
+	// other call starts with its family's icon, memory calls are one line.
+	const bash = createQuietToolRenderer("bash") as ToolRenderers;
 	host.registerToolRenderer((toolName, next) => {
-		if (toolName === "bash") return { ...(next() as ToolRenderers | undefined), ...bashCard };
+		if (toolName === "bash") return { ...(next() as ToolRenderers | undefined), ...bash };
 		const renderers = next() as ToolRenderers | undefined;
 		if (isMemoryTool(toolName) && renderers) return { ...renderers, renderShell: "default", ...memoryToolRenderers(toolName) };
 		return withToolIcon(toolName, renderers);

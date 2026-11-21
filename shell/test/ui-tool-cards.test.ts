@@ -1,7 +1,8 @@
-// T91 (L650): every tool call is a visible card, as in the Gentle Shell: bash
-// shows its full command, its output tail and how long it took; todo and other
-// tools show their result line; read shows its path. shell.appearance.density
-// "minimal" keeps the collapsed (quiet) cards, as G's "Card content: minimal".
+// T91 (L650): every tool call is a visible card: bash shows its full command,
+// its output tail and how long it took; todo and other tools show their result
+// line; read shows its path. shell.appearance.density "minimal" keeps the
+// collapsed (quiet) cards. T174-S6: the look is design/shell-tui 01's
+// (ui-tool-card-rows.test.ts pins the rows).
 import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -41,38 +42,38 @@ function withDensity(t: any, density: string) {
 	t.after(() => { installShellSettings(previous); });
 }
 
-test("full (default): a bash card shows the full multi-line command, the output tail with the expand hint, and Took", () => {
+test("full (default): a bash card shows the full multi-line command, the output tail under the expand hint, and its duration at the right", () => {
 	const bash = resolver().resolve("bash", { marker: "native" });
 	assert.equal(typeof bash.renderCall, "function", "Jhon draws bash as a card");
 	const command = "cat <<'EOF' > notes.txt\nfirst\nEOF\nwc -l notes.txt";
 	const output = Array.from({ length: 8 }, (_, i) => `out ${i + 1}`).join("\n");
 	const card = row(bash, { command }, output, { durationMs: 400 });
 	for (const line of ["cat <<'EOF' > notes.txt", "first", "EOF", "wc -l notes.txt"]) assert.match(card, new RegExp(line.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-	assert.match(card, /out 4[\s│]*\n.*out 5/s);
+	assert.match(card.split("\n")[0]!, /^  \$ cat <<'EOF' > notes\.txt +✓ 0\.4s  $/, "the duration at the header's right (T174-S6: was a `Took 0.4s` row)");
+	assert.match(card, /out 4 *\n +out 5/);
 	assert.match(card, /out 8/);
 	assert.doesNotMatch(card, /out 3\b/, "the tail keeps the last five lines");
 	assert.match(card, new RegExp(`\\.\\.\\. \\(3 earlier lines, ${stripAnsi(keyHint("app.tools.expand", "to expand"))}\\)`));
-	assert.match(card, /Took 0\.4s/);
-	assert.doesNotMatch(card, /↳ ✓ \d+ lines/, "not collapsed to a count");
+	assert.doesNotMatch(card, /↳ \d+ lines/, "not collapsed to a count");
 	const expanded = row(bash, { command }, output, { durationMs: 400, expanded: true });
 	assert.match(expanded, /out 1\b/);
 	assert.doesNotMatch(expanded, /earlier lines/);
 });
 
-test("full: a failed bash card keeps Jhon's failure headline above the output and Took", () => {
+test("full: a failed bash card keeps Jhon's failure headline above the output, its duration at the right", () => {
 	const bash = resolver().resolve("bash", undefined);
 	const text = "FAILED test_a.py::test_x - assert 1 == 2\n1 failed, 3 passed\n\nCommand exited with code 1";
 	const card = row(bash, { command: "pytest" }, text, { isError: true, durationMs: 1200 });
-	assert.match(card, /↳ ✗ exited 1 · 1 failed · 3 passed/);
+	assert.match(card.split("\n")[0]!, /✗ 1\.2s  $/);
+	assert.match(card, /exited 1 · 1 failed · 3 passed/);
 	assert.match(card, /✗ test_a\.py::test_x — assert 1 == 2/);
-	assert.match(card, /Took 1\.2s/);
 });
 
 test("full: a read card shows its path and a short result", () => {
 	const read = resolver().tools.get("read");
 	const card = row(read, { path: "src/app.ts" }, "line one\nline two");
-	assert.match(card, /read src\/app\.ts/);
-	assert.match(card, /↳ ✓ 2 lines/);
+	assert.match(card, /read  src\/app\.ts/);
+	assert.match(card.split("\n")[0]!, /↳ 2 lines  $/);
 	assert.match(card, /line one/);
 });
 
@@ -88,13 +89,13 @@ test("full: a todo card keeps `todo · add` and its result line", () => {
 	assert.match(card, /Added #3736 write the tests/);
 });
 
-test("quiet (density minimal): bash collapses to the ↳ line and a short preview, without Took", (t) => {
+test("quiet (density minimal): bash says `↳ N lines` and a short preview, without its duration", (t) => {
 	withDensity(t, "minimal");
 	const bash = resolver().resolve("bash", undefined);
 	const output = Array.from({ length: 8 }, (_, i) => `out ${i + 1}`).join("\n");
 	const card = row(bash, { command: "ls" }, output, { durationMs: 400 });
-	assert.match(card, /↳ ✓ 8 lines/);
-	assert.doesNotMatch(card, /out 5|Took|earlier lines/);
+	assert.match(card.split("\n")[0]!, /↳ 8 lines  $/);
+	assert.doesNotMatch(card, /out 5|0\.4s|earlier lines/);
 	const expanded = row(bash, { command: "ls" }, output, { expanded: true });
 	assert.match(expanded, /out 1\b[\s\S]*out 8/, "the expand key still shows everything");
 });
