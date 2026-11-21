@@ -36,13 +36,22 @@ tools:
 Look around.
 `;
 
-/** A fake pi child that streams pi's JSON events (--mode json) and answers after FAKE_PI_DELAY milliseconds. */
+/**
+ * A fake pi child that streams pi's JSON events (--mode json) and answers
+ * after FAKE_PI_DELAY milliseconds, or, with FAKE_PI_GATE, once that file
+ * exists: a test that must see the children still running opens the gate
+ * itself, whatever the machine's load.
+ */
 function fakePiBin(): string {
 	const bin = join(tempDir("jhon-bg-fake-"), "pi");
 	writeFileSync(bin, `#!/usr/bin/env node
+const { existsSync } = require("node:fs");
 const out = (event) => process.stdout.write(JSON.stringify(event) + "\\n");
 out({ type: "tool_execution_start", toolName: "grep", args: { pattern: "parse(" } });
-setTimeout(() => out({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "found 3 callers" }] } }), Number(process.env.FAKE_PI_DELAY || 0));
+const answer = () => out({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "found 3 callers" }] } });
+const gate = process.env.FAKE_PI_GATE;
+if (gate) { const poll = setInterval(() => { if (existsSync(gate)) { clearInterval(poll); answer(); } }, 10); }
+else setTimeout(answer, Number(process.env.FAKE_PI_DELAY || 0));
 `);
 	chmodSync(bin, 0o755);
 	return bin;
@@ -157,7 +166,11 @@ test("subagent_continue takes a background sub-agent's task id: not while it run
 test("several sub-agents launched in one turn each get a background task, all on the agents rail at once, each answer its own message", async () => {
 	const s = setup();
 	await s.fire("session_start");
-	await within({ ...s.vars, FAKE_PI_DELAY: "150" }, async () => {
+	// Each launch first gathers its context (child processes), which takes
+	// longer under load than any fixed delay: the children answer only once
+	// the gate opens, after the rail showed all three running.
+	const gate = join(tempDir("jhon-bg-gate-"), "open");
+	await within({ ...s.vars, FAKE_PI_GATE: gate }, async () => {
 		const started = await Promise.all([1, 2, 3].map((n) => s.tools.get("subagent").execute(`call-${n}`, { agent: "explore", task: `look ${n}` }, undefined, undefined, s.ctx)));
 		const ids = started.map((r: any) => /Started background sub-agent (agent-\d+)/.exec(r.content[0].text)?.[1]);
 		assert.equal(new Set(ids).size, 3, JSON.stringify(ids));
@@ -168,6 +181,8 @@ test("several sub-agents launched in one turn each get a background task, all on
 		const drawn = renderAgentsSection(rail, plain as any, 60, { now: Date.now() }).join("\n");
 		assert.match(drawn, /^Agents {2}3 running/);
 		for (const n of [1, 2, 3]) assert.match(drawn, new RegExp(`◐ explore {2}look ${n} +\\d+s`));
+		assert.equal(s.sent.length, 0, "no answer before the gate opens");
+		writeFileSync(gate, "");
 		await until(() => s.sent.length === 3);
 		for (const id of ids) assert.ok(s.sent.some((m) => new RegExp(`${id}.*explore.*completed`).test(m.message.content)), id);
 	});
