@@ -18,7 +18,7 @@
  */
 import type { Component, TUI } from "@earendil-works/pi-tui";
 
-/** The pi-tui layout symbol (layout-node.ts in pi-tui 1.5.0), not exported by the package. */
+/** The pi-tui layout symbol (layout-node.ts in pi-tui 1.5.2), not exported by the package. */
 export const PI_LAYOUT_NODE: unique symbol = Symbol.for("@earendil-works/pi-tui/layout-node") as never;
 
 /** The note the hook gives, once per process, when the internal is missing. */
@@ -30,7 +30,7 @@ type Host = TUI & { mode?: string; layoutRoot?: Rooted };
 /**
  * What the TUI offers: `regular` (not full-screen: no layout root by design),
  * `pending` (full-screen, pi has not set its root yet), `ready`, or `missing`
- * (full-screen, and the internal is not where pi-tui 1.5.0 keeps it).
+ * (full-screen, and the internal is not where pi-tui 1.5.2 keeps it).
  */
 export type LayoutHookState = "regular" | "pending" | "ready" | "missing";
 

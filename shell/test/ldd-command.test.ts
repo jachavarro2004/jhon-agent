@@ -32,7 +32,9 @@ test("/jhon-ldd sends byte for byte what pi made of the template, for every argu
 	writeFileSync(join(dir, "prompts", "jhon-ldd.md"), renderedTemplate(skill));
 	const { templates } = loadPromptTemplates({ cwd: dir, agentDir: dir, promptPaths: [], includeDefaults: true });
 	assert.deepEqual(templates.map((tpl: { name: string }) => tpl.name), ["jhon-ldd"]);
-	for (const args of ["", "new abc-process", "  apply   abc-process  ", 'init "npm test" --x', "continue $1 ${@:2}"]) {
+	// pi 1.5.1 (#11861): a quote opens only at the start of a word, an unclosed one is text, \" and \' inside quotes are literal.
+	const quoting = ["explore why it doesn't run", 'new "unclosed words', "new 'it's here", 'init "say \\"hi\\"" next', "init 'a \\'b\\'' c", 'apply a"b c', "init '' x"];
+	for (const args of ["", "new abc-process", "  apply   abc-process  ", 'init "npm test" --x', "continue $1 ${@:2}", ...quoting]) {
 		const typed = args ? `/jhon-ldd ${args}` : "/jhon-ldd";
 		assert.equal(lddPrompt(skill, args), expandPromptTemplate(typed, templates), JSON.stringify(args));
 	}

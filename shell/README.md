@@ -334,7 +334,7 @@ nor migrated since v0.2. The desktop palette's paths are
 names are no longer read. `JHON_SHELL=off` turns the UI off; a sub-agent's
 child process never loads it. The prompt has no vim mode since v0.2;
 `shell.editor.vim` is retired, read with a note and dropped by
-`jhon settings migrate`. The shell is built and tested against pi 1.5.0 (the
+`jhon settings migrate`. The shell is built and tested against pi 1.5.2 (the
 `@earendil-works/pi-*` dev dependencies in `package.json`), the release it
 runs on; a new pi release is audited and pinned here before it is supported.
 
