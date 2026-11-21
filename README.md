@@ -167,9 +167,9 @@ update) working inside the project, or gh, runs outside the sandbox, still
 judged by the guards: git over SSH and gh cannot run inside it. The line may
 open with `cd <folder> &&` into the project and name gh's `{owner}` and
 `{repo}`; anything else on it (a pipe, `$(…)`, another command) keeps it in
-the sandbox, and when such a line fails it ends with a note saying so. So does a
-line of docker or docker-compose, the owner's deployment tool, with the
-owner's environment (`DOCKER_HOST`, the docker context) and its volume
+the sandbox, and when such a line fails it ends with a note saying so. A line
+of docker or docker-compose, the owner's deployment tool, also runs outside
+the sandbox, with the owner's environment (`DOCKER_HOST`, the docker context) and its volume
 mounts not judged; `docker login`, `docker logout` and a change of docker
 contexts keep the sandbox. That git
 runs with the repository's hooks (configured hooks included), ssh command,

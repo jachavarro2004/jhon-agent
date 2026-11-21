@@ -76,7 +76,10 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 //     own (G3);
 //   - a failure, not a signal's, ends with failNote on a line of its own
 //     when it is not "": sandbox.DeliveryNote for a work line that holds
-//     git over SSH or gh (T181, L1503);
+//     git over SSH or gh (T181, L1503). bubblewrap reports a shell a
+//     signal killed as an exit above 128 (143 for SIGTERM), so such an
+//     exit gets no note either; git's own fatal errors exit 128 and keep
+//     it;
 //   - a jhon.sandbox event records the profile, the exit code and the
 //     refused path, through telemetry when it is on (G4);
 //   - its exit code is the program's, and a program killed by a signal
@@ -132,7 +135,7 @@ func sandboxSupervised(path string, argv, env []string, profile, failNote string
 	if said && code != 0 {
 		notes = append(notes, sandbox.RefusalNote(refused))
 	}
-	if failNote != "" && code != 0 && killedBy == 0 {
+	if failNote != "" && code != 0 && code <= 128 && killedBy == 0 {
 		notes = append(notes, failNote)
 	}
 	if len(notes) > 0 {
