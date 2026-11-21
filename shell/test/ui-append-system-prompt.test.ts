@@ -3,57 +3,60 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SESSION_SECTION, appendSessionOnce, appendSystemPromptOnce } from "../lib/ui/append-system-prompt.ts";
 
-// pi-claude-bridge forwards only the structured
-// systemPromptOptions parts of before_agent_start, so extensions must mutate
-// options.appendSystemPrompt instead of returning a replacement systemPrompt.
+// The extensions write their blocks into systemPromptOptions; a provider
+// bridge forwards only those parts, never a returned replacement prompt.
 
-test("appends to an empty appendSystemPrompt, stripped of a leading blank line", () => {
+test("the first block lands without its leading newlines", () => {
 	const options = { appendSystemPrompt: "" };
-	appendSystemPromptOnce(options, "\n\nHarness block");
-	assert.equal(options.appendSystemPrompt, "Harness block");
+	appendSystemPromptOnce(options, "\n\n\nJhon rules");
+	assert.equal(options.appendSystemPrompt, "Jhon rules");
 });
 
-test("appends after existing content with a blank-line separator", () => {
-	const options = { appendSystemPrompt: "user APPEND_SYSTEM.md content" };
-	appendSystemPromptOnce(options, "\n\nHarness block");
-	assert.equal(options.appendSystemPrompt, "user APPEND_SYSTEM.md content\n\nHarness block");
+test("a block follows what the owner appended, after one blank line", () => {
+	const options = { appendSystemPrompt: "owner's APPEND_SYSTEM.md" };
+	appendSystemPromptOnce(options, "\nJhon rules");
+	assert.equal(options.appendSystemPrompt, "owner's APPEND_SYSTEM.md\n\nJhon rules");
 });
 
-test("is idempotent: the same text is never appended twice to the same options object", () => {
+test("a handler that runs twice adds its block once", () => {
 	const options = { appendSystemPrompt: "" };
-	appendSystemPromptOnce(options, "\n\nHarness block");
-	appendSystemPromptOnce(options, "\n\nHarness block");
-	assert.equal(options.appendSystemPrompt, "Harness block");
-	assert.equal(options.appendSystemPrompt.split("Harness block").length - 1, 1);
+	for (let run = 0; run < 3; run++) appendSystemPromptOnce(options, "\n\nJhon rules");
+	assert.equal(options.appendSystemPrompt, "Jhon rules");
 });
 
-test("two different callers accumulate without erasing each other", () => {
+test("blocks from two extensions both stay, in the order they came", () => {
 	const options = { appendSystemPrompt: "" };
-	appendSystemPromptOnce(options, "\n\nJhon harness");
-	appendSystemPromptOnce(options, "\n\nTodo list block");
-	assert.equal(options.appendSystemPrompt, "Jhon harness\n\nTodo list block");
+	appendSystemPromptOnce(options, "Jhon rules");
+	appendSystemPromptOnce(options, "\n\nMemory");
+	assert.equal(options.appendSystemPrompt, "Jhon rules\n\nMemory");
 });
 
-test("empty or blank text is a no-op", () => {
-	const options = { appendSystemPrompt: "kept" };
-	appendSystemPromptOnce(options, "");
-	appendSystemPromptOnce(options, "\n\n");
-	assert.equal(options.appendSystemPrompt, "kept");
+test("nothing, or only newlines, changes nothing; no options is not an error", () => {
+	const options = { appendSystemPrompt: "as it was" };
+	for (const text of ["", "\n", "\n\n\n"]) appendSystemPromptOnce(options, text);
+	assert.equal(options.appendSystemPrompt, "as it was");
+	for (const missing of [undefined, null]) {
+		assert.doesNotThrow(() => appendSystemPromptOnce(missing, "Jhon rules"));
+		assert.doesNotThrow(() => appendSessionOnce(missing, "Jhon rules"));
+	}
 });
 
-test("a missing options object never throws", () => {
-	assert.doesNotThrow(() => appendSystemPromptOnce(undefined, "\n\nHarness block"));
-	assert.doesNotThrow(() => appendSystemPromptOnce(null, "\n\nHarness block"));
-});
-
-// T45b: what changes per run or per owner message goes to one custom section,
-// which pi and pi-claude-bridge render after the appended prompt.
-test("session text goes to the session section, once, after what is there", () => {
-	const options: { appendSystemPrompt: string; sections?: Record<string, string> } = { appendSystemPrompt: "static" };
-	appendSessionOnce(options, "\n\nMemory");
+// T45b: what varies per run goes to the session section, drawn after the appended prompt.
+test("the session section takes varying text the same way, and leaves the appended prompt alone", () => {
+	const options: { appendSystemPrompt: string; sections?: Record<string, string> } = { appendSystemPrompt: "fixed" };
+	appendSessionOnce(options, "\n\nRun 1");
 	appendSessionOnce(options, "Todo");
-	appendSessionOnce(options, "Todo");
-	assert.equal(options.appendSystemPrompt, "static");
-	assert.deepEqual(options.sections, { [SESSION_SECTION]: "Memory\n\nTodo" });
-	assert.doesNotThrow(() => appendSessionOnce(undefined, "Memory"));
+	appendSessionOnce(options, "\nTodo");
+	assert.equal(options.appendSystemPrompt, "fixed");
+	assert.deepEqual(options.sections, { [SESSION_SECTION]: "Run 1\n\nTodo" });
+	assert.equal(SESSION_SECTION, "jhon_session");
+});
+
+test("other sections are kept, and only newlines open no section", () => {
+	const options: { sections?: Record<string, string> } = {};
+	appendSessionOnce(options, "\n\n");
+	assert.equal(options.sections, undefined);
+	options.sections = { other: "theirs" };
+	appendSessionOnce(options, "mine");
+	assert.deepEqual(options.sections, { other: "theirs", [SESSION_SECTION]: "mine" });
 });

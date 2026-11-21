@@ -1,3 +1,11 @@
+/**
+ * Records what the session's own write and edit calls changed: a copy of the
+ * target before the call, one after it, kept as a session entry once the
+ * call ended well (session-changes.ts reads them). Only the call's own
+ * outcome counts, never Git status or what a shell printed. The roots in the
+ * evidence are the ones the LDD selection follows. A sub-agent records
+ * nothing: the worktree it runs in is one of its parent's roots (T132).
+ */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { generateUnifiedPatch } from "@earendil-works/pi-coding-agent";
 import { lstat, realpath } from "node:fs/promises";
@@ -7,73 +15,123 @@ import { resolveSessionWorktree, type WorktreeResolver } from "./session-worktre
 import { SessionChanges, readChangeSnapshot, sameSnapshot, textSnapshot,
 	SESSION_CHANGE_ENTRY, type SessionChangeEvidence, type ChangeSnapshot } from "./session-changes.ts";
 
-interface Pending { sessionId: string; inputPath: string; path: string; root: string; relativePath: string; before: ChangeSnapshot; toolName: string; evidence?: SessionChangeEvidence }
-const normalized = (text: string) => text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
-const unknown = (): ChangeSnapshot => ({ kind: "unavailable", reason: "No diff: the file's state before and after the tool could not be checked." });
+/** A write or edit in flight: where it writes, and the copy from before it. */
+interface InFlight { sessionId: string; inputPath: string; path: string; root: string; relativePath: string; before: ChangeSnapshot; toolName: string; evidence?: SessionChangeEvidence }
 
-/**
- * Observe the session's own write/edit outcomes, never infer ownership from Git status or shell text.
- * The evidence names the roots the LDD selection follows.
- * A sub-agent records nothing: the worktree it runs in is one of its parent's roots (T132).
- */
+/** At most this many calls are followed at once, and a missing folder is looked for this many levels up. */
+const MAX_IN_FLIGHT = 32;
+const MAX_LEVELS_UP = 32;
+
+const unverified = (): ChangeSnapshot => ({ kind: "unavailable", reason: "No diff: the file's state before and after the tool could not be checked." });
+/** Text as the edit tool compares it: no BOM, LF line ends. */
+const asEdited = (text: string) => text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+
+/** A tool's path as pi spells it (a leading @, odd spaces, ~), absolute from the session's folder. */
+function targetPath(cwd: string, spelled: string): string {
+	let path = spelled.replace(/^@/, "").replace(/[\u00a0\u2000-\u200a\u202f\u205f\u3000]/g, " ");
+	if (path === "~" || path.startsWith("~/")) path = homedir() + path.slice(1);
+	return resolve(cwd, path);
+}
+
+/** The nearest folder above `path` that exists, or undefined when none does up to the filesystem root. */
+async function existingFolderAbove(path: string): Promise<string | undefined> {
+	let folder = dirname(path);
+	for (let level = 0; level < MAX_LEVELS_UP; level++) {
+		try {
+			await lstat(folder);
+			return folder;
+		} catch {
+			if (dirname(folder) === folder) return undefined;
+			folder = dirname(folder);
+		}
+	}
+	return folder;
+}
+
+/** Whether `path` is a symlink, or cannot be checked; a missing file is neither. */
+async function refusedTarget(path: string): Promise<boolean> {
+	try {
+		return (await lstat(path)).isSymbolicLink();
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code !== "ENOENT";
+	}
+}
+
 export function installSessionChangeCapture(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, resolver: WorktreeResolver = resolveSessionWorktree): void {
 	if (env.JHON_PI_CHILD === "1") return;
-	const pending = new Map<string, Pending>();
-	let current: ExtensionContext | undefined;
-	let store: SessionChanges | undefined;
-	const publish = (evidence: SessionChangeEvidence) => {
-		if (!current || !store || current.sessionManager.getSessionId() !== store.sessionId) return;
-		if (store.record(evidence)) pi.appendEntry(SESSION_CHANGE_ENTRY, { sessionId: store.sessionId, evidence });
+	const inFlight = new Map<string, InFlight>();
+	let session: ExtensionContext | undefined;
+	let changes: SessionChanges | undefined;
+	const idOf = (ctx: ExtensionContext) => ctx.sessionManager.getSessionId();
+
+	const keep = (evidence: SessionChangeEvidence) => {
+		if (!session || !changes || idOf(session) !== changes.sessionId) return;
+		if (changes.record(evidence)) pi.appendEntry(SESSION_CHANGE_ENTRY, { sessionId: changes.sessionId, evidence });
 	};
+
 	pi.on("session_start", (_event, ctx) => {
-		pending.clear(); current = ctx;
-		store = new SessionChanges(ctx.sessionManager.getSessionId(), ctx.sessionManager.getEntries());
+		inFlight.clear();
+		session = ctx;
+		changes = new SessionChanges(idOf(ctx), ctx.sessionManager.getEntries());
 	});
+
+	// Before the call: the target, in the session's own clone, and its copy.
 	pi.on("tool_call", async (event, ctx) => {
-		const input = event.input as Record<string, unknown>;
-		if (!["write", "edit"].includes(event.toolName) || typeof input.path !== "string" || pending.size >= 32) return;
-		const sessionId = ctx.sessionManager.getSessionId();
+		const spelled = (event.input as Record<string, unknown>).path;
+		if ((event.toolName !== "write" && event.toolName !== "edit") || typeof spelled !== "string" || inFlight.size >= MAX_IN_FLIGHT) return;
+		const sessionId = idOf(ctx);
 		try {
-			let spelling = input.path.replace(/^@/, "").replace(/[\u00a0\u2000-\u200a\u202f\u205f\u3000]/g, " ");
-			if (spelling === "~" || spelling.startsWith("~/")) spelling = homedir() + spelling.slice(1);
-			const path = resolve(ctx.cwd, spelling);
-			try { if ((await lstat(path)).isSymbolicLink()) return; } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") return; }
-			let ancestor = dirname(path);
-			for (let depth = 0; depth < 32; depth++) {
-				try { await lstat(ancestor); break; } catch { if (dirname(ancestor) === ancestor) return; ancestor = dirname(ancestor); }
-			}
-			const canonicalAncestor = await realpath(ancestor);
-			const canonicalPath = resolve(canonicalAncestor, relative(ancestor, path));
-			const own = resolver(ctx.cwd, ctx.cwd), target = resolver(canonicalAncestor, ctx.cwd);
+			const path = targetPath(ctx.cwd, spelled);
+			if (await refusedTarget(path)) return;
+			const folder = await existingFolderAbove(path);
+			if (folder === undefined) return;
+			const realFolder = await realpath(folder);
+			const realPath = resolve(realFolder, relative(folder, path));
+			const own = resolver(ctx.cwd, ctx.cwd);
+			const target = resolver(realFolder, ctx.cwd);
 			if (!own || !target || own.commonDir !== target.commonDir) return;
-			const before = await readChangeSnapshot(canonicalPath);
-			if (ctx.sessionManager.getSessionId() !== sessionId || current?.sessionManager.getSessionId() !== sessionId) return;
-			pending.set(event.toolCallId, { sessionId, inputPath: input.path, path: canonicalPath, root: target.root, relativePath: relative(target.root, canonicalPath), before, toolName: event.toolName });
-		} catch { /* No bookkeeping error blocks an edit. */ }
+			const before = await readChangeSnapshot(realPath);
+			if (idOf(ctx) !== sessionId || (session && idOf(session)) !== sessionId) return;
+			inFlight.set(event.toolCallId, { sessionId, inputPath: spelled, path: realPath, root: target.root, relativePath: relative(target.root, realPath), before, toolName: event.toolName });
+		} catch { /* Bookkeeping never stops an edit. */ }
 	});
+
+	// After it: the copy from after, checked against what the call says it did.
 	pi.on("tool_result", async (event, ctx) => {
-		const item = pending.get(event.toolCallId);
-		if (!item || item.sessionId !== ctx.sessionManager.getSessionId() || item.toolName !== event.toolName || event.input.path !== item.inputPath || event.isError !== false) { pending.delete(event.toolCallId); return; }
+		const call = inFlight.get(event.toolCallId);
+		const same = call && call.sessionId === idOf(ctx) && call.toolName === event.toolName && event.input.path === call.inputPath && event.isError === false;
+		if (!call || !same) { inFlight.delete(event.toolCallId); return; }
 		try {
-			const after = await readChangeSnapshot(item.path);
-			let before = item.before;
-			let verified = after;
-			if (event.toolName === "write" && after.kind === "text" && (typeof event.input.content !== "string" || !sameSnapshot(after, textSnapshot(event.input.content)))) {
-				before = unknown(); verified = unknown();
+			const after = await readChangeSnapshot(call.path);
+			let before = call.before;
+			let kept = after;
+			if (event.toolName === "write" && after.kind === "text") {
+				const content = event.input.content;
+				if (typeof content !== "string" || !sameSnapshot(after, textSnapshot(content))) { before = unverified(); kept = unverified(); }
 			}
 			if (event.toolName === "edit" && before.kind === "text" && after.kind === "text") {
 				const patch = (event.details as { patch?: unknown } | undefined)?.patch;
-				if (typeof event.input.path !== "string" || patch !== generateUnifiedPatch(event.input.path, normalized(before.text), normalized(after.text))) { before = unknown(); verified = unknown(); }
+				const input = event.input.path;
+				if (typeof input !== "string" || patch !== generateUnifiedPatch(input, asEdited(before.text), asEdited(after.text))) { before = unverified(); kept = unverified(); }
 			}
-			if (item.sessionId !== ctx.sessionManager.getSessionId() || pending.get(event.toolCallId) !== item) return;
-			item.evidence = { id: event.toolCallId, root: item.root, path: item.relativePath, before, after: verified };
-		} catch { pending.delete(event.toolCallId); }
-	});
-	pi.on("tool_execution_end", (event, ctx) => {
-		const item = pending.get(event.toolCallId); pending.delete(event.toolCallId);
-		if (event.isError === false && item?.evidence && item.sessionId === ctx.sessionManager.getSessionId()) {
-			try { publish(item.evidence); } catch { /* Preserve the tool's outcome. */ }
+			if (call.sessionId !== idOf(ctx) || inFlight.get(event.toolCallId) !== call) return;
+			call.evidence = { id: event.toolCallId, root: call.root, path: call.relativePath, before, after: kept };
+		} catch {
+			inFlight.delete(event.toolCallId);
 		}
 	});
-	pi.on("session_shutdown", () => { pending.clear(); current = undefined; store = undefined; });
+
+	// Kept only once the call ended well, in the session it began in.
+	pi.on("tool_execution_end", (event, ctx) => {
+		const call = inFlight.get(event.toolCallId);
+		inFlight.delete(event.toolCallId);
+		if (event.isError !== false || !call?.evidence || call.sessionId !== idOf(ctx)) return;
+		try { keep(call.evidence); } catch { /* The tool's outcome stands. */ }
+	});
+
+	pi.on("session_shutdown", () => {
+		inFlight.clear();
+		session = undefined;
+		changes = undefined;
+	});
 }

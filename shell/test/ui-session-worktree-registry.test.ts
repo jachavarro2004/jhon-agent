@@ -7,292 +7,317 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { SessionWorktreeRegistry, clearSessionWorktreeMemo, memoizeWorktreeResolver, resolveSessionWorktree, resolveSessionWorktreeWithGit, SESSION_WORKTREE_ENTRY, worktreeGitEnvironment } from "../lib/ui/session-worktree-registry.ts";
+import {
+	SessionWorktreeRegistry, clearSessionWorktreeMemo, memoizeWorktreeResolver, registerSubagentWorktree, resolveSessionWorktree,
+	resolveSessionWorktreeWithGit, resolveWorktreeHeadWithGit, SESSION_WORKTREE_CHANGED, SESSION_WORKTREE_ENTRY, SUBAGENT_WORKTREE_EVIDENCE, worktreeGitEnvironment,
+} from "../lib/ui/session-worktree-registry.ts";
 
-// All Git and session writes belong to unique fixtures, never the live clone.
-function fixture(t: test.TestContext) {
-	const dir = realpathSync(mkdtempSync(join(tmpdir(), "session-worktrees-")));
+// The session's worktree list, against real Git repositories made for each
+// test in a temporary folder (never the clone the suite runs in).
+
+const REFUSED = {
+	foreign: "Name a worktree that exists in this session's own Git clone; a folder of another repository cannot be one of its worktrees.",
+	inactive: "This session is no longer the active one: it takes no new worktree.",
+	moved: "The session's repository is not the one it started in; the worktree is not registered.",
+};
+
+function scratch(t: test.TestContext, prefix: string) {
+	const dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
 	t.after(() => rmSync(dir, { recursive: true, force: true }));
-	const main = join(dir, "main");
-	const linked = join(dir, "linked");
-	const other = join(dir, "other");
-	const empty = join(dir, "empty");
-	mkdirSync(empty);
-	const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-	Object.assign(env, { GIT_CONFIG_GLOBAL: join(empty, "config"), GIT_CONFIG_NOSYSTEM: "1", GIT_ATTR_NOSYSTEM: "1" });
-	writeFileSync(join(empty, "config"), "");
-	const git = (cwd: string, args: string[]) => execFileSync("git", ["-C", cwd, "-c", `core.hooksPath=${empty}`, "-c", "commit.gpgsign=false", ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
-	git(dir, ["init", "--initial-branch=main", `--template=${empty}`, main]);
-	git(main, ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "Fixture"]);
-	git(main, ["worktree", "add", "-b", "linked", linked]);
-	git(dir, ["init", `--template=${empty}`, other]);
+	const blank = join(dir, "blank");
+	mkdirSync(blank);
+	writeFileSync(join(blank, "config"), "");
+	const env = { ...worktreeGitEnvironment(), GIT_CONFIG_GLOBAL: join(blank, "config"), GIT_CONFIG_NOSYSTEM: "1", GIT_ATTR_NOSYSTEM: "1" };
+	const git = (cwd: string, ...args: string[]) => String(execFileSync("git", ["-C", cwd, "-c", `core.hooksPath=${blank}`, "-c", "commit.gpgsign=false", ...args], { env, stdio: ["ignore", "pipe", "pipe"] }));
+	const commit = (cwd: string) => git(cwd, "-c", "user.name=T", "-c", "user.email=t@example.invalid", "commit", "--allow-empty", "-qm", "c");
+	return { dir, blank, git, commit };
+}
+
+/** A clone `main` with a linked worktree `linked` (a file in it, a symlink `alias` to it) and an unrelated repository `other`. */
+function clones(t: test.TestContext) {
+	const s = scratch(t, "jhon-worktrees-");
+	const [main, linked, other, alias] = ["main", "linked", "other", "alias"].map((name) => join(s.dir, name));
+	s.git(s.dir, "init", "-q", "--initial-branch=main", `--template=${s.blank}`, main);
+	s.commit(main);
+	s.git(main, "worktree", "add", "-q", "-b", "linked", linked);
+	s.git(s.dir, "init", "-q", `--template=${s.blank}`, other);
 	mkdirSync(join(linked, "src"));
-	writeFileSync(join(linked, "src", "file.ts"), "preexisting\n");
-	const alias = join(dir, "alias");
+	writeFileSync(join(linked, "src", "file.ts"), "x\n");
 	symlinkSync(linked, alias, "dir");
-	return { dir, main, linked, other, alias };
+	return { ...s, main, linked, other, alias };
 }
 
-function host(cwd: string, session = SessionManager.inMemory(cwd)) {
-	const emitted: unknown[] = [];
-	const pi = { appendEntry: (type: string, data: unknown) => { session.appendCustomEntry(type, data); }, events: { emit: (_name: string, data: unknown) => emitted.push(data) } };
-	return { pi, session, emitted, registry: () => new SessionWorktreeRegistry(pi, session, cwd) };
+function session(cwd: string, manager = SessionManager.inMemory(cwd)) {
+	const emitted: Array<[string, unknown]> = [];
+	const host = { appendEntry: (type: string, data: unknown) => { manager.appendCustomEntry(type, data); }, events: { emit: (name: string, data: unknown) => { emitted.push([name, data]); } } };
+	const recorded = () => manager.getEntries().filter((e) => e.type === "custom" && e.customType === SESSION_WORKTREE_ENTRY);
+	return { host, manager, emitted, recorded, registry: () => new SessionWorktreeRegistry(host, manager, cwd) };
 }
 
-test("canonical roots include cwd, dedupe aliases immediately and reject unrelated clones", (t) => {
-	const f = fixture(t);
-	const h = host(f.main);
-	const registry = h.registry();
-	registry.start();
-	assert.deepEqual(registry.roots(), [f.main]);
-	assert.equal(registry.register(join(f.alias, "src", "file.ts"), "tool:read"), f.linked);
-	registry.register(f.linked, "explicit");
-	assert.deepEqual(registry.roots(), [f.main, f.linked]);
-	assert.equal(h.session.getEntries().length, 2);
-	assert.throws(() => registry.register(f.other, "explicit"), /own Git clone/);
-	// The refusal names the runnable exit for an independent repository (#1915).
-	assert.throws(() => registry.register(f.other, "explicit"), /another repository cannot be one of its worktrees/);
-	assert.throws(() => registry.register(join(f.dir, "missing"), "explicit"), /worktree/);
-	assert.equal(resolveSessionWorktree(f.alias, f.main)?.root, f.linked);
+test("the session's folder is its first root; a worktree joins once, by any spelling; another repository is refused", (t) => {
+	const c = clones(t);
+	const s = session(c.main);
+	const list = s.registry();
+	list.start();
+	assert.deepEqual(list.roots(), [c.main]);
+	assert.equal(list.register(join(c.alias, "src", "file.ts"), "tool:read"), c.linked, "a file through a symlink names its worktree");
+	assert.equal(list.register(c.linked, "explicit"), c.linked);
+	assert.equal(list.register(`@${c.linked}`, "explicit"), c.linked, "pi's @ spelling");
+	assert.deepEqual(list.roots(), [c.main, c.linked]);
+	assert.equal(s.recorded().length, 2);
+	assert.deepEqual(s.emitted.map(([name]) => name), [SESSION_WORKTREE_CHANGED, SESSION_WORKTREE_CHANGED]);
+	assert.deepEqual(s.emitted[0]![1], { sessionId: s.manager.getSessionId() });
+	assert.throws(() => list.register(c.other, "explicit"), { message: REFUSED.foreign });
+	assert.throws(() => list.register(join(c.dir, "nowhere"), "explicit"), { message: REFUSED.foreign });
+	assert.equal(resolveSessionWorktree(c.alias, c.main)?.root, c.linked);
 });
 
-test("a registry constructed before Git init adopts only its original cwd in the same session", (t) => {
-	const f = fixture(t);
-	const cwd = join(f.dir, "bootstrap");
+test("a root's entry keeps the commit its HEAD was at when first recorded, and only a commit id", (t) => {
+	const c = clones(t);
+	const head = c.git(c.main, "rev-parse", "HEAD").trim();
+	assert.equal(resolveWorktreeHeadWithGit(c.main), head);
+	assert.equal(resolveWorktreeHeadWithGit(c.other), undefined, "no commit yet");
+	const s = session(c.main);
+	s.registry().start();
+	assert.deepEqual(s.recorded()[0]!.data, { sessionId: s.manager.getSessionId(), root: c.main, evidence: "session:cwd", base: head });
+	let asked = 0;
+	for (const base of ["main", () => { throw new Error("no git"); }]) {
+		const manager = SessionManager.inMemory(c.main);
+		const list = new SessionWorktreeRegistry({ appendEntry: (type, data) => { manager.appendCustomEntry(type, data); }, events: { emit() {} } }, manager, c.main, resolveSessionWorktree,
+			() => { asked++; return typeof base === "function" ? base() : base; });
+		list.start();
+		list.start();
+		assert.equal(manager.getEntries().length, 1);
+		assert.deepEqual(Object.keys((manager.getEntries()[0] as unknown as { data: object }).data), ["sessionId", "root", "evidence"], "no base field");
+	}
+	assert.equal(asked, 2, "the base is read once per root, at its first record");
+});
+
+test("a folder that becomes a repository later is taken, but only the session's own folder", (t) => {
+	const c = clones(t);
+	const cwd = join(c.dir, "later");
 	mkdirSync(cwd);
-	const h = host(cwd);
-	const registry = h.registry();
-	const id = h.session.getSessionId();
-	registry.start();
-	assert.deepEqual(registry.roots(), []);
-	assert.throws(() => registry.register(f.other, "explicit"), /own Git clone/);
-	assert.throws(() => registry.register(cwd, "explicit"), /own Git clone/);
-	execFileSync("git", ["init", "--quiet", `--template=${join(f.dir, "empty")}`, cwd], {
-		env: { ...worktreeGitEnvironment(), GIT_CONFIG_GLOBAL: join(f.dir, "empty", "config"), GIT_CONFIG_NOSYSTEM: "1" }, stdio: "pipe",
-	});
-	const poisoned = { GIT_DIR: join(f.other, ".git"), GIT_WORK_TREE: f.other, GIT_COMMON_DIR: join(f.other, ".git") };
-	const previous = Object.fromEntries(Object.keys(poisoned).map(key => [key, process.env[key]]));
+	const s = session(cwd);
+	const list = s.registry();
+	list.start();
+	assert.deepEqual(list.roots(), []);
+	assert.throws(() => list.register(c.other, "explicit"), { message: REFUSED.foreign });
+	assert.throws(() => list.register(cwd, "explicit"), { message: REFUSED.foreign });
+	c.git(c.dir, "init", "-q", `--template=${c.blank}`, cwd);
+	const routing = { GIT_DIR: join(c.other, ".git"), GIT_WORK_TREE: c.other, GIT_COMMON_DIR: join(c.other, ".git") };
+	const saved = Object.fromEntries(Object.keys(routing).map((name) => [name, process.env[name]]));
 	try {
-		Object.assign(process.env, poisoned);
-		assert.equal(registry.register(cwd, "explicit"), cwd, "ambient Git routing cannot select authority");
+		Object.assign(process.env, routing);
+		assert.equal(list.register(cwd, "explicit"), cwd, "the ambient GIT_* variables pick nothing");
 	} finally {
-		for (const [key, value] of Object.entries(previous)) {
-			if (value === undefined) delete process.env[key]; else process.env[key] = value;
-		}
+		for (const [name, value] of Object.entries(saved)) if (value === undefined) delete process.env[name]; else process.env[name] = value;
 	}
-	registry.register(cwd, "subagent:spawn");
-	assert.deepEqual(registry.roots(), [cwd]);
-	assert.equal(h.session.getSessionId(), id);
-	assert.equal(h.session.getEntries().length, 1, "adoption does not double append");
-	assert.throws(() => registry.register(f.other, "explicit"), /own Git clone/);
+	list.register(cwd, SUBAGENT_WORKTREE_EVIDENCE);
+	assert.deepEqual(list.roots(), [cwd]);
+	assert.equal(s.manager.getEntries().length, 1, "taken once");
+	assert.throws(() => list.register(c.other, "explicit"), { message: REFUSED.foreign });
 });
 
-test("malformed local metadata cannot adopt a foreign registration target", (t) => {
-	const f = fixture(t);
-	const cwd = join(f.dir, "broken-bootstrap");
+test("a .git file that points nowhere makes no repository, and records nothing", (t) => {
+	const c = clones(t);
+	const cwd = join(c.dir, "broken");
 	mkdirSync(cwd);
-	writeFileSync(join(cwd, ".git"), "gitdir: absent-metadata\n");
-	const h = host(cwd);
-	const registry = h.registry();
-	registry.start();
-	assert.throws(() => registry.register(f.other, "explicit"), /own Git clone/);
-	assert.throws(() => registry.register(cwd, "explicit"), /own Git clone/);
-	assert.deepEqual(registry.roots(), []);
-	assert.deepEqual(h.session.getEntries(), []);
+	writeFileSync(join(cwd, ".git"), "gitdir: nowhere\n");
+	const s = session(cwd);
+	const list = s.registry();
+	list.start();
+	assert.throws(() => list.register(c.other, "explicit"), { message: REFUSED.foreign });
+	assert.throws(() => list.register(cwd, "explicit"), { message: REFUSED.foreign });
+	assert.deepEqual(list.roots(), []);
+	assert.deepEqual(s.manager.getEntries(), []);
 });
 
-for (const drift of ["root", "commonDir", "missing"] as const) {
-	test(`established session authority rejects ${drift} drift without adopting it`, () => {
-		const original = { root: "/session", commonDir: "/clone/git" };
-		let current: typeof original | undefined = original;
-		const entries: unknown[] = [];
-		const registry = new SessionWorktreeRegistry({ appendEntry: (_type, data) => { entries.push(data); }, events: { emit() {} } },
-			{ getSessionId: () => "bound", getEntries: () => [] }, "/session/subdir", (path) => path === "/session/subdir" ? current : original);
-		registry.start();
-		current = drift === "missing" ? undefined : { ...original, [drift]: "/foreign" };
-		assert.throws(() => registry.register(original.root, "explicit"), /not the one it started in/);
-		assert.deepEqual(registry.roots(), []);
-		assert.equal(entries.length, 1);
-		current = original;
-		assert.equal(registry.validate(original.root), original.root, "a rejected refresh never overwrites authority");
+for (const change of ["root", "commonDir", "gone"] as const) {
+	test(`a session whose clone changed (${change}) is refused and keeps the clone it started with`, () => {
+		const started = { root: "/work", commonDir: "/work/.git" };
+		let now: typeof started | undefined = started;
+		const appended: unknown[] = [];
+		const list = new SessionWorktreeRegistry({ appendEntry: (_type, data) => { appended.push(data); }, events: { emit() {} } },
+			{ getSessionId: () => "s", getEntries: () => [] }, "/work/sub", (path) => (path === "/work/sub" ? now : started));
+		list.start();
+		now = change === "gone" ? undefined : { ...started, [change]: "/elsewhere" };
+		assert.throws(() => list.register(started.root, "explicit"), { message: REFUSED.moved });
+		assert.deepEqual(list.roots(), []);
+		assert.equal(appended.length, 1);
+		now = started;
+		assert.equal(list.validate(started.root), started.root);
 	});
 }
 
-test("closed and replaced sessions cannot adopt bootstrap identity", () => {
-	for (const closed of [false, true]) {
-		let id = "original";
+test("a closed or replaced session takes nothing and asks Git nothing more", () => {
+	for (const how of ["closed", "replaced"]) {
+		let id = "first";
+		let asked = 0;
 		let identity: { root: string; commonDir: string } | undefined;
-		let resolutions = 0;
-		const registry = new SessionWorktreeRegistry({ appendEntry() { assert.fail("inactive append"); }, events: { emit() {} } },
-			{ getSessionId: () => id, getEntries: () => [] }, "/bound", () => { resolutions++; return identity; });
-		identity = { root: "/bound", commonDir: "/bound/.git" };
-		if (closed) registry.close(); else id = "replacement";
-		assert.throws(() => registry.register("/bound", "explicit"), /no longer the active one/);
-		assert.deepEqual(registry.roots(), []);
-		assert.equal(resolutions, 1, "the inactive guard precedes refresh");
+		const list = new SessionWorktreeRegistry({ appendEntry: () => assert.fail("appended"), events: { emit() {} } },
+			{ getSessionId: () => id, getEntries: () => [] }, "/w", () => { asked++; return identity; });
+		identity = { root: "/w", commonDir: "/w/.git" };
+		if (how === "closed") list.close(); else id = "second";
+		assert.throws(() => list.register("/w", "explicit"), { message: REFUSED.inactive });
+		assert.deepEqual(list.roots(), []);
+		assert.equal(asked, 1, "only the constructor asked");
 	}
+	let reads = 0;
+	const failing = new SessionWorktreeRegistry({ appendEntry() {}, events: { emit() {} } }, { getSessionId: () => { if (reads++) throw new Error("gone"); return "s"; }, getEntries: () => [] }, "/w", () => undefined);
+	assert.deepEqual(failing.roots(), [], "a session that cannot say its id is not the active one");
 });
 
-test("restore reads the whole session tree, resumes the same id, and ignores new/fork/clone ids", (t) => {
-	const f = fixture(t);
-	const session = SessionManager.create(f.main, join(f.dir, "sessions"));
-	const first = session.appendMessage({ role: "user", content: "start", timestamp: 1 });
-	// Pi persists entries after the first assistant message.
-	session.appendMessage({ role: "assistant", content: [], api: "openai-responses", provider: "test", model: "test", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: 2 });
-	const h = host(f.main, session);
-	h.registry().start();
-	h.registry().register(f.linked, "explicit");
-	session.branch(first);
-	assert.deepEqual(h.registry().roots(), [f.main, f.linked], "off-branch registrations remain session-wide");
-	const resumed = host(f.main, SessionManager.open(session.getSessionFile()!));
-	assert.deepEqual(resumed.registry().roots(), [f.main, f.linked]);
-	const forkPath = session.createBranchedSession(session.getEntries().at(-1)!.id)!;
-	const fork = host(f.main, SessionManager.open(forkPath));
+test("the record is the session file: a resumed session keeps its roots; a fork or copied entries under a new id do not", (t) => {
+	const c = clones(t);
+	const manager = SessionManager.create(c.main, join(c.dir, "sessions"));
+	const first = manager.appendMessage({ role: "user", content: "go", timestamp: 1 });
+	// pi writes the file after the first assistant message.
+	manager.appendMessage({ role: "assistant", content: [], api: "openai-responses", provider: "t", model: "t", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: 2 });
+	const s = session(c.main, manager);
+	s.registry().start();
+	s.registry().register(c.linked, "explicit");
+	manager.branch(first);
+	assert.deepEqual(s.registry().roots(), [c.main, c.linked], "a root recorded on another branch still counts");
+	assert.deepEqual(session(c.main, SessionManager.open(manager.getSessionFile()!)).registry().roots(), [c.main, c.linked]);
+	const fork = session(c.main, SessionManager.open(manager.createBranchedSession(manager.getEntries().at(-1)!.id)!));
 	fork.registry().start();
-	assert.deepEqual(fork.registry().roots(), [f.main], "inherited custom entries carry the old id");
-	const fresh = host(f.main);
-	for (const entry of resumed.session.getEntries()) {
-		if (entry.type === "custom") fresh.session.appendCustomEntry(entry.customType, entry.data);
-	}
-	fresh.registry().start();
-	assert.deepEqual(fresh.registry().roots(), [f.main], "cloned entries cannot expand a new session registry");
+	assert.deepEqual(fork.registry().roots(), [c.main], "the fork's inherited entries carry the old id");
+	const copy = session(c.main);
+	for (const entry of manager.getEntries()) if (entry.type === "custom") copy.manager.appendCustomEntry(entry.customType, entry.data);
+	copy.registry().start();
+	assert.deepEqual(copy.registry().roots(), [c.main]);
 });
 
-test("durable append works without a shell listener and independent registries do not double append", (t) => {
-	const f = fixture(t);
-	const h = host(f.main);
-	const shell = h.registry();
+test("two registries on one session append each root once; a closed one refuses", (t) => {
+	const c = clones(t);
+	const s = session(c.main);
+	const shell = s.registry();
 	shell.start();
-	const agents = h.registry();
-	agents.register(f.linked, "subagent:spawn");
-	assert.deepEqual(shell.roots(), [f.main, f.linked]);
-	shell.register(f.alias, "explicit");
-	assert.equal(h.session.getEntries().filter((e) => e.type === "custom" && e.customType === SESSION_WORKTREE_ENTRY).length, 2);
+	const agents = s.registry();
+	agents.register(c.linked, SUBAGENT_WORKTREE_EVIDENCE);
+	assert.deepEqual(shell.roots(), [c.main, c.linked]);
+	shell.register(c.alias, "explicit");
+	assert.equal(s.recorded().length, 2);
 	agents.close();
-	assert.throws(() => agents.register(f.main, "explicit"), /no longer the active one/);
+	assert.throws(() => agents.register(c.main, "explicit"), { message: REFUSED.inactive });
 });
 
-test("restoration validates entries and hides missing roots without deleting their registrations", (t) => {
-	const f = fixture(t);
-	const h = host(f.main);
-	const registry = h.registry();
-	registry.start();
-	registry.register(f.linked, "explicit");
-	h.session.appendCustomEntry(SESSION_WORKTREE_ENTRY, { sessionId: h.session.getSessionId(), root: f.other, evidence: "explicit" });
-	h.session.appendCustomEntry(SESSION_WORKTREE_ENTRY, { sessionId: h.session.getSessionId(), root: 42 });
-	rmSync(f.linked, { recursive: true });
-	assert.deepEqual(registry.roots(), [f.main]);
-	assert.ok(h.session.getEntries().some((entry) => entry.type === "custom" && (entry.data as { root?: string })?.root === f.linked));
+test("a removed worktree leaves the list but keeps its entry; malformed and foreign entries are ignored", (t) => {
+	const c = clones(t);
+	const s = session(c.main);
+	const list = s.registry();
+	list.start();
+	list.register(c.linked, "explicit");
+	s.manager.appendCustomEntry(SESSION_WORKTREE_ENTRY, { sessionId: s.manager.getSessionId(), root: c.other, evidence: "explicit" });
+	s.manager.appendCustomEntry(SESSION_WORKTREE_ENTRY, { sessionId: s.manager.getSessionId(), root: 42 });
+	s.manager.appendCustomEntry(SESSION_WORKTREE_ENTRY, null);
+	rmSync(c.linked, { recursive: true });
+	assert.deepEqual(list.roots(), [c.main]);
+	assert.ok(s.recorded().some((e) => (e as { data?: { root?: string } }).data?.root === c.linked));
 });
 
-test("Git child environment removes routing and config overrides without mutating its source", () => {
-	const env = { PATH: "/tools", HOME: "/fixture", GIT_DIR: "/foreign/.git", GIT_WORK_TREE: "/foreign", GIT_INDEX_FILE: "/foreign/index", GIT_COMMON_DIR: "/foreign/common", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.worktree", GIT_CONFIG_VALUE_0: "/foreign", git_dir: "/windows-case-alias" };
-	const before = { ...env };
-	assert.deepEqual(worktreeGitEnvironment(env), { PATH: "/tools", HOME: "/fixture" });
-	assert.deepEqual(env, before);
+test("a sub-agent's worktree joins the session's roots; its own root adds nothing; a failure records nothing and never throws", (t) => {
+	const c = clones(t);
+	const s = session(c.main);
+	s.registry().start();
+	assert.equal(registerSubagentWorktree(s.host, s.manager, c.main, c.main), undefined);
+	assert.equal(registerSubagentWorktree(s.host, s.manager, c.main, join(c.linked, "src")), c.linked);
+	assert.equal((s.recorded()[1] as { data: { evidence: string } }).data.evidence, SUBAGENT_WORKTREE_EVIDENCE);
+	assert.equal(registerSubagentWorktree(s.host, s.manager, c.main, c.other), undefined);
+	assert.equal(registerSubagentWorktree({}, s.manager, c.main, c.linked), undefined);
+	assert.equal(registerSubagentWorktree(s.host, undefined, c.main, c.linked), undefined);
+	assert.equal(registerSubagentWorktree(undefined as never, s.manager, c.main, c.linked), undefined);
+	assert.equal(s.recorded().length, 2);
 });
 
-test("session startup identity lookup hides its direct Git children", (t) => {
-	const f = fixture(t);
+test("a Git child gets an environment without any GIT_ variable, and the source stays as it was", () => {
+	const env = { PATH: "/bin", HOME: "/h", GIT_DIR: "/x/.git", GIT_WORK_TREE: "/x", GIT_INDEX_FILE: "/x/i", GIT_COMMON_DIR: "/x/c", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.worktree", GIT_CONFIG_VALUE_0: "/x", git_dir: "/lower" };
+	const copy = { ...env };
+	assert.deepEqual(worktreeGitEnvironment(env), { PATH: "/bin", HOME: "/h" });
+	assert.deepEqual(env, copy);
+});
+
+test("Git is asked twice per path, hidden, with no shell", (t) => {
+	const c = clones(t);
 	const calls: Array<{ command: string; args: readonly string[]; options: Record<string, unknown> }> = [];
 	const run = ((command: string, args: readonly string[], options: Record<string, unknown>) => {
 		calls.push({ command, args, options });
-		return args.at(-1) === "--show-toplevel" ? `${f.main}\n` : `${join(f.main, ".git")}\n`;
-	}) as typeof import("node:child_process").execFileSync;
-	assert.equal(resolveSessionWorktreeWithGit(f.main, f.main, run)?.root, f.main);
-	assert.equal(calls.length, 2);
+		return args.at(-1) === "--show-toplevel" ? `${c.main}\n` : `${join(c.main, ".git")}\r\n`;
+	}) as typeof execFileSync;
+	assert.deepEqual(resolveSessionWorktreeWithGit(c.main, c.main, run), { root: c.main, commonDir: join(c.main, ".git") });
+	assert.deepEqual(calls.map((call) => call.args.at(-1)), ["--show-toplevel", "--git-common-dir"]);
 	for (const call of calls) {
 		assert.equal(call.command, "git");
+		assert.deepEqual(call.args.slice(0, 5), ["--no-optional-locks", "-C", c.main, "rev-parse", "--path-format=absolute"]);
 		assert.equal(call.options.shell, false);
 		assert.equal(call.options.windowsHide, true);
+		assert.equal(call.options.timeout, 5000);
 	}
+	assert.equal(resolveSessionWorktreeWithGit(c.main, c.main, (() => { throw new Error("no git"); }) as never), undefined);
 });
 
-// C2 (odd/tasks/usage-click-and-changes-attribution.md): a repo nested inside
-// another repo (the live session's ~/work/NaN-builders inside ~/work) must
-// resolve to the INNER repo, never the outer one, because Git itself walks
-// up from the file's own directory and stops at the first .git it finds.
-function nestedFixture(t: test.TestContext) {
-	const dir = realpathSync(mkdtempSync(join(tmpdir(), "session-worktrees-nested-")));
-	t.after(() => rmSync(dir, { recursive: true, force: true }));
-	const outer = join(dir, "work");
-	const inner = join(outer, "NaN-builders");
-	const empty = join(dir, "empty");
-	mkdirSync(empty);
-	const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-	Object.assign(env, { GIT_CONFIG_GLOBAL: join(empty, "config"), GIT_CONFIG_NOSYSTEM: "1", GIT_ATTR_NOSYSTEM: "1" });
-	writeFileSync(join(empty, "config"), "");
-	const git = (cwd: string, args: string[]) => execFileSync("git", ["-C", cwd, "-c", `core.hooksPath=${empty}`, "-c", "commit.gpgsign=false", ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
-	// Outer repo: no commits, matching the live evidence's `~/work` exactly.
-	git(dir, ["init", "--initial-branch=main", `--template=${empty}`, outer]);
-	// Inner repo: its own .git, a real branch and a commit.
-	git(dir, ["init", "--initial-branch=feature", `--template=${empty}`, inner]);
-	git(inner, ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "Fixture"]);
+// C2: a repository inside another resolves to the inner one, as Git walks up from the file's folder.
+test("a file of a repository nested in another belongs to the nearest one", (t) => {
+	const s = scratch(t, "jhon-worktrees-nested-");
+	const outer = join(s.dir, "work");
+	const inner = join(outer, "app");
+	s.git(s.dir, "init", "-q", "--initial-branch=main", `--template=${s.blank}`, outer);
+	s.git(s.dir, "init", "-q", "--initial-branch=feature", `--template=${s.blank}`, inner);
+	s.commit(inner);
 	mkdirSync(join(inner, "odd", "tasks"), { recursive: true });
-	writeFileSync(join(inner, "odd", "tasks", "jpg-png-converter.md"), "converted\n");
-	return { dir, outer, inner };
-}
-
-test("nearest-repository resolution: an inner repo's files never resolve to an outer ancestor repo", (t) => {
-	const f = nestedFixture(t);
-	const forFile = resolveSessionWorktree(join("NaN-builders", "odd", "tasks", "jpg-png-converter.md"), f.outer);
-	assert.equal(forFile?.root, f.inner, "the file's own nearest repository must win, not the outer ~/work repo");
-	// The inner repo's own root and files resolve to itself too, whether
-	// addressed from the outer cwd or the inner cwd directly.
-	const forRoot = resolveSessionWorktree("NaN-builders", f.outer);
-	assert.equal(forRoot?.root, f.inner);
-	const fromInnerCwd = resolveSessionWorktree(join("odd", "tasks", "jpg-png-converter.md"), f.inner);
-	assert.equal(fromInnerCwd?.root, f.inner);
-	// The outer repo is still resolvable for its own files.
-	const outerFile = join(f.outer, "README.md");
-	writeFileSync(outerFile, "outer\n");
-	assert.equal(resolveSessionWorktree("README.md", f.outer)?.root, f.outer);
+	writeFileSync(join(inner, "odd", "tasks", "t.md"), "x\n");
+	writeFileSync(join(outer, "README.md"), "x\n");
+	assert.equal(resolveSessionWorktree(join("app", "odd", "tasks", "t.md"), outer)?.root, inner);
+	assert.equal(resolveSessionWorktree("app", outer)?.root, inner);
+	assert.equal(resolveSessionWorktree(join("odd", "tasks", "t.md"), inner)?.root, inner);
+	assert.equal(resolveSessionWorktree("README.md", outer)?.root, outer);
 });
 
-// S4 (odd/tasks/startup-home-repo-and-changes.md): every extension resolves the
-// same (cwd, cwd) identity during startup. Count the real Git children through
-// the public resolver, not through an injected seam.
-function countGitSpawns(t: test.TestContext): () => number {
-	let spawns = 0;
-	const original = childProcess.execFileSync;
-	childProcess.execFileSync = ((...args: Parameters<typeof original>) => { if (args[0] === "git") spawns++; return original(...args); }) as typeof original;
+function gitChildren(t: test.TestContext): () => number {
+	let count = 0;
+	const real = childProcess.execFileSync;
+	childProcess.execFileSync = ((...args: Parameters<typeof real>) => { if (args[0] === "git") count++; return real(...args); }) as typeof real;
 	syncBuiltinESMExports();
-	t.after(() => { childProcess.execFileSync = original; syncBuiltinESMExports(); });
-	return () => spawns;
+	t.after(() => { childProcess.execFileSync = real; syncBuiltinESMExports(); });
+	return () => count;
 }
 
-test("repeated startup resolutions of one cwd share a single Git resolution", (t) => {
-	const f = fixture(t);
+// S4: at startup every extension asks about the same folder; Git answers once.
+test("the same question asked again is answered from memory until the memory is cleared", (t) => {
+	const c = clones(t);
 	clearSessionWorktreeMemo();
-	const spawns = countGitSpawns(t);
-	const first = resolveSessionWorktree(f.main, f.main);
-	for (let i = 0; i < 5; i++) assert.deepEqual(resolveSessionWorktree(f.main, f.main), first);
-	assert.equal(spawns(), 2, "one resolution is two rev-parse children");
+	const children = gitChildren(t);
+	const answer = resolveSessionWorktree(c.main, c.main);
+	for (let i = 0; i < 4; i++) assert.deepEqual(resolveSessionWorktree(c.main, c.main), answer);
+	assert.equal(children(), 2, "one answer is two rev-parse calls");
 	clearSessionWorktreeMemo();
-	resolveSessionWorktree(f.main, f.main);
-	assert.equal(spawns(), 4, "explicit invalidation forces a fresh resolution");
+	resolveSessionWorktree(c.main, c.main);
+	assert.equal(children(), 4);
 });
 
-test("memoized identity still observes removal, nested repositories and expiry", (t) => {
-	const f = fixture(t);
-	let now = 0;
-	const resolver = memoizeWorktreeResolver(resolveSessionWorktreeWithGit, { ttlMs: 1000, now: () => now });
-	const nested = join(f.main, "nested");
+test("a remembered answer gives way to a new nested repository, a removed clone, and time", (t) => {
+	const c = clones(t);
+	let clock = 0;
+	const remember = memoizeWorktreeResolver(resolveSessionWorktreeWithGit, { ttlMs: 1000, now: () => clock });
+	const nested = join(c.main, "nested");
 	mkdirSync(nested);
-	assert.equal(resolver(nested, f.main)?.root, f.main);
-	execFileSync("git", ["init", "--quiet", nested], { env: worktreeGitEnvironment(), stdio: "pipe" });
-	assert.equal(resolver(nested, f.main)?.root, realpathSync(nested), "a new nested .git below the cached root is observed");
-	rmSync(join(f.main, ".git"), { recursive: true, force: true });
-	assert.equal(resolver(f.main, f.main), undefined, "a removed clone is never served from the memo");
-	let calls = 0;
-	const counted = memoizeWorktreeResolver((path, cwd) => { calls++; return resolveSessionWorktreeWithGit(path, cwd); }, { ttlMs: 1000, now: () => now });
-	counted(f.other, f.other);
-	counted(f.other, f.other);
-	assert.equal(calls, 1);
-	now = 1001;
-	counted(f.other, f.other);
-	assert.equal(calls, 2, "expired entries resolve again");
-	counted(join(f.dir, "empty"), f.dir);
-	counted(join(f.dir, "empty"), f.dir);
-	assert.equal(calls, 4, "a missing repository is never memoized, so bootstrap is observed at once");
+	assert.equal(remember(nested, c.main)?.root, c.main);
+	c.git(c.dir, "init", "-q", nested);
+	assert.equal(remember(nested, c.main)?.root, realpathSync(nested));
+	rmSync(join(c.main, ".git"), { recursive: true, force: true });
+	assert.equal(remember(c.main, c.main), undefined);
+	let asked = 0;
+	const counting = memoizeWorktreeResolver((path, cwd) => { asked++; return resolveSessionWorktreeWithGit(path, cwd); }, { ttlMs: 1000, now: () => clock });
+	counting(c.other, c.other);
+	counting(c.other, c.other);
+	assert.equal(asked, 1);
+	clock = 1001;
+	counting(c.other, c.other);
+	assert.equal(asked, 2, "an expired answer is asked again");
+	counting(c.blank, c.dir);
+	counting(c.blank, c.dir);
+	assert.equal(asked, 4, "no repository is never remembered");
+	const copy = counting(c.other, c.other)!;
+	copy.root = "/changed";
+	assert.equal(counting(c.other, c.other)?.root, realpathSync(c.other), "the caller gets a copy");
 });

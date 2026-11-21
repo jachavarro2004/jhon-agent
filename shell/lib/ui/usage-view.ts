@@ -1,14 +1,16 @@
 /**
  * shell/lib/ui/usage-view.ts — the usage overlay (/jhon:usage, alt+u;
- * T174-S5b, L1493-L1495): the overlay box with `Subscriptions` (and
- * `· refreshing…` while a refresh runs), each provider's windows
- * (usage.ts usageRows), and the key line `r refresh  esc close`. Its hints
+ * T174-S5b, L1493-L1495) in the shell's card (overlay.ts, as Customize and
+ * the grants): `Subscriptions` and `esc` on its title row, a row that says
+ * `refreshing…` while a refresh runs, each provider's windows (usage.ts
+ * usageRows), and the key line `r refresh  esc close`. Its hints
  * are controls too: the pointer over one paints it in the hover role, a click
  * does what its key does. It reads the tracker on every render, so a settled
  * refresh only has to repaint.
  */
 import { Key, matchesKey, visibleWidth, type TuiMouseEvent } from "@earendil-works/pi-tui";
-import { BOX_PADDING, fitHints, HOVER_ROLE, renderBox, themePainter, type ThemeLike } from "./primitives/index.ts";
+import { fitHints, HOVER_ROLE, themePainter, type ThemeLike } from "./primitives/index.ts";
+import { CARD_BODY_PADDING, renderOverlayCard } from "./overlay.ts";
 import { usageRows, type UsageTracker } from "./usage.ts";
 
 export interface UsageOverlayDeps {
@@ -30,7 +32,7 @@ const HINTS = [["r", "refresh"], ["esc", "close"]] as const;
 /** Cells between two hints. */
 const HINT_GAP = 2;
 
-/** Where each fitted hint sits on its row, counted from the first cell inside the box. */
+/** Where each fitted hint sits on its row, counted from the card body's first cell. */
 function hintSpans(hints: Array<[string, string]>): Array<{ hint: string; from: number; to: number }> {
 	let at = 0;
 	return hints.map(([hint, action]) => {
@@ -66,7 +68,7 @@ export class UsageOverlay {
 	/** The key hint under the pointer: a move paints it, a left click does what its key does. */
 	handleMouse(event: TuiMouseEvent): { handled: true; render?: boolean } | undefined {
 		const drawn = this.#drawn;
-		const x = event.x - BOX_PADDING / 2;
+		const x = event.x - CARD_BODY_PADDING / 2;
 		const hit = drawn && event.y === drawn.row ? hintSpans(drawn.hints).find((span) => x >= span.from && x < span.to)?.hint : undefined;
 		if (event.type === "move") {
 			if (hit === this.#hover) return undefined;
@@ -94,8 +96,8 @@ export class UsageOverlay {
 	render(width: number): string[] {
 		const paint = themePainter(this.#deps.theme);
 		const ascii = this.#deps.ascii ?? false;
-		const room = Math.max(1, width - BOX_PADDING);
-		const title = paint.bold(paint.fg("accent", "Subscriptions")) + (this.#refreshing ? paint.fg("dim", ascii ? " - refreshing..." : " · refreshing…") : "");
+		const room = Math.max(1, width - CARD_BODY_PADDING);
+		const status = this.#refreshing ? paint.fg("dim", ascii ? "refreshing..." : "refreshing…") : "";
 		const body = usageRows({ scope: this.#deps.scope(), active: this.#deps.active(), tracker: this.#deps.tracker, now: this.#deps.now(), ascii }, this.#deps.theme, room);
 		const hints = fitHints(HINTS, room);
 		const theme = this.#deps.theme;
@@ -104,7 +106,7 @@ export class UsageOverlay {
 			const role = hint === this.#hover ? HOVER_ROLE : "dim";
 			return `${theme.bold(theme.fg(role, hint))} ${theme.fg(role, action)}`;
 		}).join(" ".repeat(HINT_GAP));
-		const rows = renderBox([title, "", ...body, "", line], width, theme, ascii);
+		const rows = renderOverlayCard({ title: "Subscriptions", body: [status, ...body, "", line], width, theme, ascii });
 		this.#drawn = { row: rows.length - 2, hints };
 		return rows;
 	}

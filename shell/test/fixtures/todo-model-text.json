@@ -1,0 +1,2253 @@
+{
+	"definitions": [
+		{
+			"script": "a list's life",
+			"name": "todo",
+			"label": "Todo",
+			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
+			"promptSnippet": "Track multi-step work",
+			"promptGuidelines": [
+				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
+				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+			],
+			"parameters": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [
+					"action"
+				],
+				"properties": {
+					"action": {
+						"type": "string",
+						"enum": [
+							"write",
+							"add",
+							"update",
+							"clear",
+							"list"
+						],
+						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+					},
+					"tasks": {
+						"type": "array",
+						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"items": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": [
+								"title"
+							],
+							"properties": {
+								"id": {
+									"type": "integer",
+									"description": "Existing task id to keep."
+								},
+								"title": {
+									"type": "string",
+									"description": "Short imperative title, e.g. 'Write the parser'."
+								},
+								"status": {
+									"type": "string",
+									"enum": [
+										"pending",
+										"in_progress",
+										"blocked",
+										"done",
+										"dropped"
+									],
+									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+								},
+								"note": {
+									"type": "string",
+									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+								}
+							}
+						}
+					},
+					"id": {
+						"type": "integer",
+						"description": "Task id for update."
+					},
+					"title": {
+						"type": "string",
+						"description": "Title for add, or a new title for update."
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"pending",
+							"in_progress",
+							"blocked",
+							"done",
+							"dropped"
+						],
+						"description": "Status for add or update."
+					},
+					"note": {
+						"type": "string",
+						"description": "Note for add or update; required for blocked."
+					}
+				}
+			},
+			"executionMode": "sequential",
+			"renderShell": "self",
+			"shortcuts": 3
+		},
+		{
+			"script": "every refusal",
+			"name": "todo",
+			"label": "Todo",
+			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
+			"promptSnippet": "Track multi-step work",
+			"promptGuidelines": [
+				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
+				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+			],
+			"parameters": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [
+					"action"
+				],
+				"properties": {
+					"action": {
+						"type": "string",
+						"enum": [
+							"write",
+							"add",
+							"update",
+							"clear",
+							"list"
+						],
+						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+					},
+					"tasks": {
+						"type": "array",
+						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"items": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": [
+								"title"
+							],
+							"properties": {
+								"id": {
+									"type": "integer",
+									"description": "Existing task id to keep."
+								},
+								"title": {
+									"type": "string",
+									"description": "Short imperative title, e.g. 'Write the parser'."
+								},
+								"status": {
+									"type": "string",
+									"enum": [
+										"pending",
+										"in_progress",
+										"blocked",
+										"done",
+										"dropped"
+									],
+									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+								},
+								"note": {
+									"type": "string",
+									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+								}
+							}
+						}
+					},
+					"id": {
+						"type": "integer",
+						"description": "Task id for update."
+					},
+					"title": {
+						"type": "string",
+						"description": "Title for add, or a new title for update."
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"pending",
+							"in_progress",
+							"blocked",
+							"done",
+							"dropped"
+						],
+						"description": "Status for add or update."
+					},
+					"note": {
+						"type": "string",
+						"description": "Note for add or update; required for blocked."
+					}
+				}
+			},
+			"executionMode": "sequential",
+			"renderShell": "self",
+			"shortcuts": 3
+		},
+		{
+			"script": "start nudge",
+			"name": "todo",
+			"label": "Todo",
+			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
+			"promptSnippet": "Track multi-step work",
+			"promptGuidelines": [
+				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
+				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+			],
+			"parameters": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [
+					"action"
+				],
+				"properties": {
+					"action": {
+						"type": "string",
+						"enum": [
+							"write",
+							"add",
+							"update",
+							"clear",
+							"list"
+						],
+						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+					},
+					"tasks": {
+						"type": "array",
+						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"items": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": [
+								"title"
+							],
+							"properties": {
+								"id": {
+									"type": "integer",
+									"description": "Existing task id to keep."
+								},
+								"title": {
+									"type": "string",
+									"description": "Short imperative title, e.g. 'Write the parser'."
+								},
+								"status": {
+									"type": "string",
+									"enum": [
+										"pending",
+										"in_progress",
+										"blocked",
+										"done",
+										"dropped"
+									],
+									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+								},
+								"note": {
+									"type": "string",
+									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+								}
+							}
+						}
+					},
+					"id": {
+						"type": "integer",
+						"description": "Task id for update."
+					},
+					"title": {
+						"type": "string",
+						"description": "Title for add, or a new title for update."
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"pending",
+							"in_progress",
+							"blocked",
+							"done",
+							"dropped"
+						],
+						"description": "Status for add or update."
+					},
+					"note": {
+						"type": "string",
+						"description": "Note for add or update; required for blocked."
+					}
+				}
+			},
+			"executionMode": "sequential",
+			"renderShell": "self",
+			"shortcuts": 3
+		},
+		{
+			"script": "lean",
+			"name": "todo",
+			"label": "Todo",
+			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
+			"promptSnippet": "Track multi-step work",
+			"promptGuidelines": [
+				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
+				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+			],
+			"parameters": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [
+					"action"
+				],
+				"properties": {
+					"action": {
+						"type": "string",
+						"enum": [
+							"write",
+							"add",
+							"update",
+							"clear",
+							"list"
+						],
+						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+					},
+					"tasks": {
+						"type": "array",
+						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"items": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": [
+								"title"
+							],
+							"properties": {
+								"id": {
+									"type": "integer",
+									"description": "Existing task id to keep."
+								},
+								"title": {
+									"type": "string",
+									"description": "Short imperative title, e.g. 'Write the parser'."
+								},
+								"status": {
+									"type": "string",
+									"enum": [
+										"pending",
+										"in_progress",
+										"blocked",
+										"done",
+										"dropped"
+									],
+									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+								},
+								"note": {
+									"type": "string",
+									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+								}
+							}
+						}
+					},
+					"id": {
+						"type": "integer",
+						"description": "Task id for update."
+					},
+					"title": {
+						"type": "string",
+						"description": "Title for add, or a new title for update."
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"pending",
+							"in_progress",
+							"blocked",
+							"done",
+							"dropped"
+						],
+						"description": "Status for add or update."
+					},
+					"note": {
+						"type": "string",
+						"description": "Note for add or update; required for blocked."
+					}
+				}
+			},
+			"executionMode": "sequential",
+			"renderShell": "self",
+			"shortcuts": 3
+		},
+		{
+			"script": "child",
+			"name": "todo",
+			"label": "Todo",
+			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
+			"promptSnippet": "Track multi-step work",
+			"promptGuidelines": [
+				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
+				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+			],
+			"parameters": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [
+					"action"
+				],
+				"properties": {
+					"action": {
+						"type": "string",
+						"enum": [
+							"write",
+							"add",
+							"update",
+							"clear",
+							"list"
+						],
+						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+					},
+					"tasks": {
+						"type": "array",
+						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"items": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": [
+								"title"
+							],
+							"properties": {
+								"id": {
+									"type": "integer",
+									"description": "Existing task id to keep."
+								},
+								"title": {
+									"type": "string",
+									"description": "Short imperative title, e.g. 'Write the parser'."
+								},
+								"status": {
+									"type": "string",
+									"enum": [
+										"pending",
+										"in_progress",
+										"blocked",
+										"done",
+										"dropped"
+									],
+									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+								},
+								"note": {
+									"type": "string",
+									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+								}
+							}
+						}
+					},
+					"id": {
+						"type": "integer",
+						"description": "Task id for update."
+					},
+					"title": {
+						"type": "string",
+						"description": "Title for add, or a new title for update."
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"pending",
+							"in_progress",
+							"blocked",
+							"done",
+							"dropped"
+						],
+						"description": "Status for add or update."
+					},
+					"note": {
+						"type": "string",
+						"description": "Note for add or update; required for blocked."
+					}
+				}
+			},
+			"executionMode": "sequential",
+			"renderShell": "self",
+			"shortcuts": 0
+		},
+		{
+			"script": "resumed",
+			"name": "todo",
+			"label": "Todo",
+			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
+			"promptSnippet": "Track multi-step work",
+			"promptGuidelines": [
+				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
+				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+			],
+			"parameters": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [
+					"action"
+				],
+				"properties": {
+					"action": {
+						"type": "string",
+						"enum": [
+							"write",
+							"add",
+							"update",
+							"clear",
+							"list"
+						],
+						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+					},
+					"tasks": {
+						"type": "array",
+						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"items": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": [
+								"title"
+							],
+							"properties": {
+								"id": {
+									"type": "integer",
+									"description": "Existing task id to keep."
+								},
+								"title": {
+									"type": "string",
+									"description": "Short imperative title, e.g. 'Write the parser'."
+								},
+								"status": {
+									"type": "string",
+									"enum": [
+										"pending",
+										"in_progress",
+										"blocked",
+										"done",
+										"dropped"
+									],
+									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+								},
+								"note": {
+									"type": "string",
+									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+								}
+							}
+						}
+					},
+					"id": {
+						"type": "integer",
+						"description": "Task id for update."
+					},
+					"title": {
+						"type": "string",
+						"description": "Title for add, or a new title for update."
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"pending",
+							"in_progress",
+							"blocked",
+							"done",
+							"dropped"
+						],
+						"description": "Status for add or update."
+					},
+					"note": {
+						"type": "string",
+						"description": "Note for add or update; required for blocked."
+					}
+				}
+			},
+			"executionMode": "sequential",
+			"renderShell": "self",
+			"shortcuts": 3
+		}
+	],
+	"scripts": [
+		{
+			"name": "a list's life",
+			"log": [
+				{
+					"start": null
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
+							"display": false
+						}
+					}
+				},
+				{
+					"call": {
+						"action": "list"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "No tasks."
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 1,
+								"updatedTurn": null
+							}
+						}
+					},
+					"card": [
+						"力 todo · list                                                                                                                                                                                          "
+					],
+					"folded": [
+						"No tasks.                                                                                                                                                                                               "
+					],
+					"open": [
+						"No tasks.                                                                                                                                                                                               "
+					]
+				},
+				{
+					"call": {
+						"action": "write",
+						"tasks": [
+							{
+								"title": "Read the spec",
+								"status": "done"
+							},
+							{
+								"title": "Write  the\nparser",
+								"status": "in-progress",
+								"note": "writing tests"
+							},
+							{
+								"title": "Ship it"
+							}
+						]
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Todo list written: 3 tasks · 1 done · 1 in progress"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "Read the spec",
+										"status": "done"
+									},
+									{
+										"id": 2,
+										"title": "Write the parser",
+										"status": "in_progress",
+										"note": "writing tests"
+									},
+									{
+										"id": 3,
+										"title": "Ship it",
+										"status": "pending"
+									}
+								],
+								"nextId": 4,
+								"updatedTurn": 1
+							}
+						}
+					},
+					"card": [
+						"力 todo · write                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Todo list written: 3 tasks · 1 done · 1 in progress                                                                                                                                                     "
+					],
+					"open": [
+						"Todo list written: 3 tasks · 1 done · 1 in progress                                                                                                                                                     "
+					]
+				},
+				{
+					"turn": "todo",
+					"end": null
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Read the spec\n2. [in_progress] Write the parser — writing tests\n3. [pending] Ship it",
+							"display": false
+						}
+					}
+				},
+				{
+					"call": {
+						"action": "add",
+						"title": "Wait for review",
+						"status": "blocked",
+						"note": "an admin"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Added #4 Wait for review (blocked)"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "Read the spec",
+										"status": "done"
+									},
+									{
+										"id": 2,
+										"title": "Write the parser",
+										"status": "in_progress",
+										"note": "writing tests"
+									},
+									{
+										"id": 3,
+										"title": "Ship it",
+										"status": "pending"
+									},
+									{
+										"id": 4,
+										"title": "Wait for review",
+										"status": "blocked",
+										"note": "an admin"
+									}
+								],
+								"nextId": 5,
+								"updatedTurn": 2
+							}
+						}
+					},
+					"card": [
+						"力 todo · add                                                                                                                                                                                           "
+					],
+					"folded": [
+						"Added #4 Wait for review (blocked)                                                                                                                                                                      "
+					],
+					"open": [
+						"Added #4 Wait for review (blocked)                                                                                                                                                                      "
+					]
+				},
+				{
+					"call": {
+						"action": "add",
+						"title": "Docs",
+						"status": "Completed"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Added #5 Docs (done)"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "Read the spec",
+										"status": "done"
+									},
+									{
+										"id": 2,
+										"title": "Write the parser",
+										"status": "in_progress",
+										"note": "writing tests"
+									},
+									{
+										"id": 3,
+										"title": "Ship it",
+										"status": "pending"
+									},
+									{
+										"id": 4,
+										"title": "Wait for review",
+										"status": "blocked",
+										"note": "an admin"
+									},
+									{
+										"id": 5,
+										"title": "Docs",
+										"status": "done"
+									}
+								],
+								"nextId": 6,
+								"updatedTurn": 2
+							}
+						}
+					},
+					"card": [
+						"力 todo · add                                                                                                                                                                                           "
+					],
+					"folded": [
+						"Added #5 Docs (done)                                                                                                                                                                                    "
+					],
+					"open": [
+						"Added #5 Docs (done)                                                                                                                                                                                    "
+					]
+				},
+				{
+					"call": {
+						"action": "update",
+						"id": 2,
+						"status": "done"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "#2 Write the parser → done"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "Read the spec",
+										"status": "done"
+									},
+									{
+										"id": 2,
+										"title": "Write the parser",
+										"status": "done",
+										"note": "writing tests"
+									},
+									{
+										"id": 3,
+										"title": "Ship it",
+										"status": "pending"
+									},
+									{
+										"id": 4,
+										"title": "Wait for review",
+										"status": "blocked",
+										"note": "an admin"
+									},
+									{
+										"id": 5,
+										"title": "Docs",
+										"status": "done"
+									}
+								],
+								"nextId": 6,
+								"updatedTurn": 2
+							}
+						}
+					},
+					"card": [
+						"力 todo · update                                                                                                                                                                                        "
+					],
+					"folded": [
+						"#2 Write the parser → done                                                                                                                                                                              "
+					],
+					"open": [
+						"#2 Write the parser → done                                                                                                                                                                              "
+					]
+				},
+				{
+					"call": {
+						"action": "update",
+						"id": 3,
+						"title": "Ship the parser"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "#3 Ship the parser updated"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "Read the spec",
+										"status": "done"
+									},
+									{
+										"id": 2,
+										"title": "Write the parser",
+										"status": "done",
+										"note": "writing tests"
+									},
+									{
+										"id": 3,
+										"title": "Ship the parser",
+										"status": "pending"
+									},
+									{
+										"id": 4,
+										"title": "Wait for review",
+										"status": "blocked",
+										"note": "an admin"
+									},
+									{
+										"id": 5,
+										"title": "Docs",
+										"status": "done"
+									}
+								],
+								"nextId": 6,
+								"updatedTurn": 2
+							}
+						}
+					},
+					"card": [
+						"力 todo · update                                                                                                                                                                                        "
+					],
+					"folded": [
+						"#3 Ship the parser updated                                                                                                                                                                              "
+					],
+					"open": [
+						"#3 Ship the parser updated                                                                                                                                                                              "
+					]
+				},
+				{
+					"call": {
+						"action": "update",
+						"id": 3,
+						"note": "tagging"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "#3 Ship the parser updated"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "Read the spec",
+										"status": "done"
+									},
+									{
+										"id": 2,
+										"title": "Write the parser",
+										"status": "done",
+										"note": "writing tests"
+									},
+									{
+										"id": 3,
+										"title": "Ship the parser",
+										"status": "pending",
+										"note": "tagging"
+									},
+									{
+										"id": 4,
+										"title": "Wait for review",
+										"status": "blocked",
+										"note": "an admin"
+									},
+									{
+										"id": 5,
+										"title": "Docs",
+										"status": "done"
+									}
+								],
+								"nextId": 6,
+								"updatedTurn": 2
+							}
+						}
+					},
+					"card": [
+						"力 todo · update                                                                                                                                                                                        "
+					],
+					"folded": [
+						"#3 Ship the parser updated                                                                                                                                                                              "
+					],
+					"open": [
+						"#3 Ship the parser updated                                                                                                                                                                              "
+					]
+				},
+				{
+					"call": {
+						"action": "list"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "[done] #1 Read the spec\n[done] #2 Write the parser — writing tests\n[pending] #3 Ship the parser — tagging\n[blocked] #4 Wait for review — an admin\n[done] #5 Docs"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "Read the spec",
+										"status": "done"
+									},
+									{
+										"id": 2,
+										"title": "Write the parser",
+										"status": "done",
+										"note": "writing tests"
+									},
+									{
+										"id": 3,
+										"title": "Ship the parser",
+										"status": "pending",
+										"note": "tagging"
+									},
+									{
+										"id": 4,
+										"title": "Wait for review",
+										"status": "blocked",
+										"note": "an admin"
+									},
+									{
+										"id": 5,
+										"title": "Docs",
+										"status": "done"
+									}
+								],
+								"nextId": 6,
+								"updatedTurn": 2
+							}
+						}
+					},
+					"card": [
+						"力 todo · list                                                                                                                                                                                          "
+					],
+					"folded": [
+						"[done] #1 Read the spec                                                                                                                                                                                 "
+					],
+					"open": [
+						"[done] #1 Read the spec                                                                                                                                                                                 ",
+						"[done] #2 Write the parser — writing tests                                                                                                                                                              ",
+						"[pending] #3 Ship the parser — tagging                                                                                                                                                                  ",
+						"[blocked] #4 Wait for review — an admin                                                                                                                                                                 ",
+						"[done] #5 Docs                                                                                                                                                                                          "
+					]
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs",
+							"display": false
+						}
+					}
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"sent": {
+						"customType": "jhon-todo-reminder",
+						"content": "[Harness reminder from the Jhon shell, not a message from the owner] The todo plan has not been reviewed during several tool-use turns. Check whether it still matches the work performed and update tasks where needed. Do not mark work done without verification.",
+						"display": false
+					},
+					"options": {
+						"deliverAs": "steer"
+					}
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"quiet": null
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: 2 turns without an update — bring the list up to date now)",
+							"display": false
+						}
+					}
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: 3 turns without an update — bring the list up to date now)",
+							"display": false
+						}
+					}
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: 4 turns without an update — bring the list up to date now)",
+							"display": false
+						}
+					}
+				},
+				{
+					"call": {
+						"action": "write",
+						"tasks": [
+							{
+								"id": 3,
+								"title": "Ship the parser",
+								"status": "done"
+							},
+							{
+								"id": 3,
+								"title": "dup id"
+							},
+							{
+								"id": 0,
+								"title": "zero id",
+								"status": "cancelled"
+							},
+							{
+								"title": "later",
+								"status": "dropped"
+							}
+						]
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Todo list written: 4 tasks · 1 done · 0 in progress · 2 dropped"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 3,
+										"title": "Ship the parser",
+										"status": "done"
+									},
+									{
+										"id": 6,
+										"title": "dup id",
+										"status": "pending"
+									},
+									{
+										"id": 7,
+										"title": "zero id",
+										"status": "dropped"
+									},
+									{
+										"id": 8,
+										"title": "later",
+										"status": "dropped"
+									}
+								],
+								"nextId": 9,
+								"updatedTurn": 6
+							}
+						}
+					},
+					"card": [
+						"力 todo · write                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Todo list written: 4 tasks · 1 done · 0 in progress · 2 dropped                                                                                                                                         "
+					],
+					"open": [
+						"Todo list written: 4 tasks · 1 done · 0 in progress · 2 dropped                                                                                                                                         "
+					]
+				},
+				{
+					"agentEnd": null
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Ship the parser\n2. [pending] dup id\n3. [dropped] zero id\n4. [dropped] later",
+							"display": false
+						}
+					}
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Ship the parser\n2. [pending] dup id\n3. [dropped] zero id\n4. [dropped] later\n(stale: 2 turns without an update — bring the list up to date now)",
+							"display": false
+						}
+					}
+				},
+				{
+					"call": {
+						"action": "clear"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Cleared 4 tasks"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 1,
+								"updatedTurn": 8
+							}
+						}
+					},
+					"card": [
+						"力 todo · clear                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Cleared 4 tasks                                                                                                                                                                                         "
+					],
+					"open": [
+						"Cleared 4 tasks                                                                                                                                                                                         "
+					]
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
+							"display": false
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "every refusal",
+			"log": [
+				{
+					"start": null
+				},
+				{
+					"call": {
+						"action": "write",
+						"tasks": [
+							{
+								"title": "  "
+							}
+						]
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Error: title is required"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 1,
+								"updatedTurn": null
+							},
+							"error": "title is required"
+						}
+					},
+					"card": [
+						"力 todo · write                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Error: title is required                                                                                                                                                                                "
+					],
+					"open": [
+						"Error: title is required                                                                                                                                                                                "
+					]
+				},
+				{
+					"call": {
+						"action": "write",
+						"tasks": [
+							{
+								"title": "x",
+								"status": "soon"
+							}
+						]
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Error: unknown status \"soon\" (use pending, in_progress, blocked, done, or dropped)"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 1,
+								"updatedTurn": null
+							},
+							"error": "unknown status \"soon\" (use pending, in_progress, blocked, done, or dropped)"
+						}
+					},
+					"card": [
+						"力 todo · write                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Error: unknown status \"soon\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                      "
+					],
+					"open": [
+						"Error: unknown status \"soon\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                      "
+					]
+				},
+				{
+					"call": {
+						"action": "write",
+						"tasks": [
+							{
+								"title": "x",
+								"status": "blocked"
+							}
+						]
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Error: blocked needs a note naming what it waits for"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 1,
+								"updatedTurn": null
+							},
+							"error": "blocked needs a note naming what it waits for"
+						}
+					},
+					"card": [
+						"力 todo · write                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Error: blocked needs a note naming what it waits for                                                                                                                                                    "
+					],
+					"open": [
+						"Error: blocked needs a note naming what it waits for                                                                                                                                                    "
+					]
+				},
+				{
+					"call": {
+						"action": "add"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Error: title is required"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 1,
+								"updatedTurn": null
+							},
+							"error": "title is required"
+						}
+					},
+					"card": [
+						"力 todo · add                                                                                                                                                                                           "
+					],
+					"folded": [
+						"Error: title is required                                                                                                                                                                                "
+					],
+					"open": [
+						"Error: title is required                                                                                                                                                                                "
+					]
+				},
+				{
+					"call": {
+						"action": "add",
+						"title": "x",
+						"status": 7
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Error: unknown status \"7\" (use pending, in_progress, blocked, done, or dropped)"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 1,
+								"updatedTurn": null
+							},
+							"error": "unknown status \"7\" (use pending, in_progress, blocked, done, or dropped)"
+						}
+					},
+					"card": [
+						"力 todo · add                                                                                                                                                                                           "
+					],
+					"folded": [
+						"Error: unknown status \"7\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                         "
+					],
+					"open": [
+						"Error: unknown status \"7\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                         "
+					]
+				},
+				{
+					"call": {
+						"action": "update",
+						"id": 9,
+						"status": "done"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Error: no task #9"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 1,
+								"updatedTurn": null
+							},
+							"error": "no task #9"
+						}
+					},
+					"card": [
+						"力 todo · update                                                                                                                                                                                        "
+					],
+					"folded": [
+						"Error: no task #9                                                                                                                                                                                       "
+					],
+					"open": [
+						"Error: no task #9                                                                                                                                                                                       "
+					]
+				},
+				{
+					"call": {
+						"action": "write",
+						"tasks": [
+							{
+								"title": "one"
+							}
+						]
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Todo list written: 1 task · 0 done · 0 in progress"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "one",
+										"status": "pending"
+									}
+								],
+								"nextId": 2,
+								"updatedTurn": 0
+							}
+						}
+					},
+					"card": [
+						"力 todo · write                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Todo list written: 1 task · 0 done · 0 in progress                                                                                                                                                      "
+					],
+					"open": [
+						"Todo list written: 1 task · 0 done · 0 in progress                                                                                                                                                      "
+					]
+				},
+				{
+					"call": {
+						"action": "update",
+						"id": 1
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Error: nothing to update: pass status, title, or note"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "one",
+										"status": "pending"
+									}
+								],
+								"nextId": 2,
+								"updatedTurn": 0
+							},
+							"error": "nothing to update: pass status, title, or note"
+						}
+					},
+					"card": [
+						"力 todo · update                                                                                                                                                                                        "
+					],
+					"folded": [
+						"Error: nothing to update: pass status, title, or note                                                                                                                                                   "
+					],
+					"open": [
+						"Error: nothing to update: pass status, title, or note                                                                                                                                                   "
+					]
+				},
+				{
+					"call": {
+						"action": "update",
+						"id": 1,
+						"status": "blocked"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Error: blocked needs a note naming what it waits for"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "one",
+										"status": "pending"
+									}
+								],
+								"nextId": 2,
+								"updatedTurn": 0
+							},
+							"error": "blocked needs a note naming what it waits for"
+						}
+					},
+					"card": [
+						"力 todo · update                                                                                                                                                                                        "
+					],
+					"folded": [
+						"Error: blocked needs a note naming what it waits for                                                                                                                                                    "
+					],
+					"open": [
+						"Error: blocked needs a note naming what it waits for                                                                                                                                                    "
+					]
+				},
+				{
+					"call": {
+						"action": "update",
+						"id": 1,
+						"status": "nope"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Error: unknown status \"nope\" (use pending, in_progress, blocked, done, or dropped)"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "one",
+										"status": "pending"
+									}
+								],
+								"nextId": 2,
+								"updatedTurn": 0
+							},
+							"error": "unknown status \"nope\" (use pending, in_progress, blocked, done, or dropped)"
+						}
+					},
+					"card": [
+						"力 todo · update                                                                                                                                                                                        "
+					],
+					"folded": [
+						"Error: unknown status \"nope\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                      "
+					],
+					"open": [
+						"Error: unknown status \"nope\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                      "
+					]
+				},
+				{
+					"call": {
+						"action": "rename"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Error: unknown action \"rename\" (use write, add, update, clear, or list)"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "one",
+										"status": "pending"
+									}
+								],
+								"nextId": 2,
+								"updatedTurn": 0
+							},
+							"error": "unknown action \"rename\" (use write, add, update, clear, or list)"
+						}
+					},
+					"card": [
+						"力 todo · rename                                                                                                                                                                                        "
+					],
+					"folded": [
+						"Error: unknown action \"rename\" (use write, add, update, clear, or list)                                                                                                                                 "
+					],
+					"open": [
+						"Error: unknown action \"rename\" (use write, add, update, clear, or list)                                                                                                                                 "
+					]
+				},
+				{
+					"call": {
+						"action": "write"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Todo list written: 0 tasks · 0 done · 0 in progress"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 2,
+								"updatedTurn": 0
+							}
+						}
+					},
+					"card": [
+						"力 todo · write                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Todo list written: 0 tasks · 0 done · 0 in progress                                                                                                                                                     "
+					],
+					"open": [
+						"Todo list written: 0 tasks · 0 done · 0 in progress                                                                                                                                                     "
+					]
+				},
+				{
+					"call": {
+						"action": "clear"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Cleared 0 tasks"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 1,
+								"updatedTurn": 0
+							}
+						}
+					},
+					"card": [
+						"力 todo · clear                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Cleared 0 tasks                                                                                                                                                                                         "
+					],
+					"open": [
+						"Cleared 0 tasks                                                                                                                                                                                         "
+					]
+				},
+				{
+					"call": {
+						"action": "add",
+						"title": "solo"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Added #1 solo (pending)"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "solo",
+										"status": "pending"
+									}
+								],
+								"nextId": 2,
+								"updatedTurn": 0
+							}
+						}
+					},
+					"card": [
+						"力 todo · add                                                                                                                                                                                           "
+					],
+					"folded": [
+						"Added #1 solo (pending)                                                                                                                                                                                 "
+					],
+					"open": [
+						"Added #1 solo (pending)                                                                                                                                                                                 "
+					]
+				},
+				{
+					"call": {
+						"action": "clear"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Cleared 1 task"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [],
+								"nextId": 1,
+								"updatedTurn": 0
+							}
+						}
+					},
+					"card": [
+						"力 todo · clear                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Cleared 1 task                                                                                                                                                                                          "
+					],
+					"open": [
+						"Cleared 1 task                                                                                                                                                                                          "
+					]
+				}
+			]
+		},
+		{
+			"name": "start nudge",
+			"log": [
+				{
+					"start": null
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
+							"display": false
+						}
+					}
+				},
+				{
+					"turn": "edit",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"sent": {
+						"customType": "jhon-todo-start",
+						"content": "[Harness reminder from the Jhon shell, not a message from the owner] This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in `jhon status`.",
+						"display": false
+					},
+					"options": {
+						"deliverAs": "steer"
+					}
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"run": null
+				},
+				{
+					"turn": "bash",
+					"end": null
+				},
+				{
+					"turn": "bash",
+					"end": null
+				},
+				{
+					"turn": "bash",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"run": null
+				},
+				{
+					"turn": "bash",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"sent": {
+						"customType": "jhon-todo-start",
+						"content": "[Harness reminder from the Jhon shell, not a message from the owner] This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in `jhon status`.",
+						"display": false
+					},
+					"options": {
+						"deliverAs": "steer"
+					}
+				},
+				{
+					"turn": "read",
+					"end": null
+				}
+			]
+		},
+		{
+			"name": "lean",
+			"log": [
+				{
+					"start": null
+				},
+				{
+					"run": null
+				},
+				{
+					"turn": "write",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"call": {
+						"action": "write",
+						"tasks": [
+							{
+								"title": "Fix the bug"
+							}
+						]
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Todo list written: 1 task · 0 done · 0 in progress"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "Fix the bug",
+										"status": "pending"
+									}
+								],
+								"nextId": 2,
+								"updatedTurn": 1
+							}
+						}
+					},
+					"card": [
+						"力 todo · write                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Todo list written: 1 task · 0 done · 0 in progress                                                                                                                                                      "
+					],
+					"open": [
+						"Todo list written: 1 task · 0 done · 0 in progress                                                                                                                                                      "
+					]
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [pending] Fix the bug",
+							"display": false
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "child",
+			"log": [
+				{
+					"start": null
+				},
+				{
+					"run": null
+				},
+				{
+					"turn": "edit",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"call": {
+						"action": "write",
+						"tasks": [
+							{
+								"title": "Scout",
+								"status": "in_progress",
+								"note": "reading"
+							}
+						]
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Todo list written: 1 task · 0 done · 1 in progress"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 1,
+										"title": "Scout",
+										"status": "in_progress",
+										"note": "reading"
+									}
+								],
+								"nextId": 2,
+								"updatedTurn": 1
+							}
+						}
+					},
+					"card": [
+						"力 todo · write                                                                                                                                                                                         "
+					],
+					"folded": [
+						"Todo list written: 1 task · 0 done · 1 in progress                                                                                                                                                      "
+					],
+					"open": [
+						"Todo list written: 1 task · 0 done · 1 in progress                                                                                                                                                      "
+					]
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [in_progress] Scout — reading",
+							"display": false
+						}
+					}
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"turn": "read",
+					"end": null
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [in_progress] Scout — reading\n(stale: 2 turns without an update — bring the list up to date now)",
+							"display": false
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "resumed",
+			"log": [
+				{
+					"start": null
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [in_progress] old rpiv — porting",
+							"display": false
+						}
+					}
+				},
+				{
+					"run": null
+				},
+				{
+					"call": {
+						"action": "add",
+						"title": "next"
+					},
+					"result": {
+						"content": [
+							{
+								"type": "text",
+								"text": "Added #6 next (pending)"
+							}
+						],
+						"details": {
+							"jhonTodo": {
+								"tasks": [
+									{
+										"id": 4,
+										"title": "old rpiv",
+										"status": "in_progress",
+										"note": "porting"
+									},
+									{
+										"id": 6,
+										"title": "next",
+										"status": "pending"
+									}
+								],
+								"nextId": 7,
+								"updatedTurn": 4
+							}
+						}
+					},
+					"card": [
+						"力 todo · add                                                                                                                                                                                           "
+					],
+					"folded": [
+						"Added #6 next (pending)                                                                                                                                                                                 "
+					],
+					"open": [
+						"Added #6 next (pending)                                                                                                                                                                                 "
+					]
+				},
+				{
+					"run": {
+						"message": {
+							"customType": "jhon-todo-list",
+							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [in_progress] old rpiv — porting\n2. [pending] next",
+							"display": false
+						}
+					}
+				}
+			]
+		}
+	],
+	"pure": {
+		"states": [
+			{
+				"summary": {
+					"done": 0,
+					"total": 0,
+					"open": 0
+				},
+				"stale": [
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"block": [
+					null,
+					null,
+					null,
+					null
+				],
+				"start": "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
+				"list": "No tasks."
+			},
+			{
+				"summary": {
+					"done": 1,
+					"total": 4,
+					"open": 2
+				},
+				"stale": [
+					0,
+					0,
+					1,
+					2,
+					8
+				],
+				"block": [
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d",
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d",
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d\n(stale: 2 turns without an update — bring the list up to date now)",
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d\n(stale: 5 turns without an update — bring the list up to date now)"
+				],
+				"start": null,
+				"list": "[done] #1 a\n[in_progress] #2 b — doing b\n[blocked] #3 c — a person\n[dropped] #4 d"
+			},
+			{
+				"summary": {
+					"done": 0,
+					"total": 1,
+					"open": 1
+				},
+				"stale": [
+					0,
+					1,
+					2,
+					3,
+					9
+				],
+				"block": [
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [pending] only",
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [pending] only",
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [pending] only\n(stale: 2 turns without an update — bring the list up to date now)",
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [pending] only\n(stale: 5 turns without an update — bring the list up to date now)"
+				],
+				"start": null,
+				"list": "[pending] #1 only"
+			},
+			{
+				"summary": {
+					"done": 0,
+					"total": 1,
+					"open": 1
+				},
+				"stale": [
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"block": [
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [blocked] wait — x",
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [blocked] wait — x",
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [blocked] wait — x\n(stale: 2 turns without an update — bring the list up to date now)",
+					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [blocked] wait — x\n(stale: 5 turns without an update — bring the list up to date now)"
+				],
+				"start": null,
+				"list": "[blocked] #1 wait — x"
+			},
+			{
+				"summary": {
+					"done": 1,
+					"total": 1,
+					"open": 0
+				},
+				"stale": [
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"block": [
+					null,
+					null,
+					null,
+					null
+				],
+				"start": "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
+				"list": "[done] #1 fin"
+			}
+		],
+		"replay": {
+			"tasks": [
+				{
+					"id": 1,
+					"title": "only",
+					"status": "pending"
+				}
+			],
+			"nextId": 2,
+			"updatedTurn": 0
+		}
+	},
+	"appended": [
+		{
+			"appendSystemPrompt": "Harness\n\nTodo",
+			"sections": {
+				"jhon_session": "Harness\n\nTodo"
+			}
+		},
+		{
+			"appendSystemPrompt": "user text\n\nBlock",
+			"sections": {
+				"jhon_session": "Block"
+			}
+		}
+	]
+}

@@ -1,6 +1,5 @@
 import { CustomEditor, type ExtensionAPI, type ExtensionContext, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
-import { isHomeOrBroadUserDirectory } from "../lib/ui/user-directories.ts";
-import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import { truncateToWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import { execFile } from "node:child_process";
 import { existsSync, realpathSync, statSync, watch } from "node:fs";
 import { join } from "node:path";
@@ -16,7 +15,7 @@ import { backgroundTasksKey } from "../lib/background-tasks-tools.ts";
 import { changeMode, type ModeData } from "../lib/ui/jhon-panel-grants.ts";
 import { laneReads, lddLanes, lddOfSession, lddWatchTargets, permissionMode, readLddStatus, selectChange, shareSelection, type LddStatus } from "../lib/ui/ldd-status.ts";
 import { SessionWorktreeRegistry, resolveSessionWorktree, type WorktreeResolver } from "../lib/ui/session-worktree-registry.ts";
-import { glyph, renderCard, setCardStyle, type Card, type CardTheme } from "../lib/ui/primitives/index.ts";
+import { glyph, setCardStyle } from "../lib/ui/primitives/index.ts";
 import { resolveAnimationPolicy, resolveVisualSettings, type AnimationPolicy } from "../lib/ui/appearance-policy.ts";
 import { CARD_OVERLAY, closeWithRepaint } from "../lib/ui/overlay.ts";
 import { createWorkingActivity, DOUBLE_ESC_CANCEL_HINT, framePrompt, IDLE_ESC_CLEAR_HINT, PROMPT_HINT, PROMPT_INDENT, PROMPT_STATE, renderWorkingLine, SHELL_PULSE_MS, withPlaceholder } from "../lib/ui/shell-prompt.ts";
@@ -41,14 +40,8 @@ import { installUsage } from "../lib/ui/usage-shell.ts";
 // jhon-shell's UI: the visual layer Jhon puts on top of pi. It installs the
 // status bar, the right pane, the prompt and customization.
 
-export interface ShellFooterData {
-	getGitBranch(): string | null;
-	getExtensionStatuses(): ReadonlyMap<string, string>;
-	getAvailableProviderCount(): number;
-	onBranchChange(callback: () => void): () => void;
-}
-
-interface ShellRenderHost {
+/** The screen the footer was drawn on, once pi has drawn it: what a change outside a frame asks to repaint. */
+interface Repaint {
 	requestRender(): void;
 	invalidatePane?(): void;
 }
@@ -320,9 +313,15 @@ export class JhonPromptEditor extends CustomEditor {
 	}
 }
 
-// Stable across extension module reloads; never infer ownership from a name.
-const PROMPT_OWNER = Symbol.for("jhon-shell.prompt-owner");
-type PromptFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>> & { [PROMPT_OWNER]?: boolean };
+/**
+ * Whether an editor factory is the shell's. The mark is a global symbol, so
+ * a factory made by an earlier load of this module (pi reloads extensions)
+ * still counts as the shell's; no name or class is trusted for it.
+ */
+const SHELL_PROMPT = Symbol.for("jhon-shell.prompt-owner");
+type EditorFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>>;
+type ShellPromptFactory = EditorFactory & { [SHELL_PROMPT]?: boolean };
+const isShellPrompt = (factory: unknown): boolean => typeof factory === "function" && (factory as ShellPromptFactory)[SHELL_PROMPT] === true;
 
 /**
  * The narrow form of a full-screen terminal (04): no right pane (under 140
@@ -334,33 +333,47 @@ function narrowChrome(tui: TUI): boolean {
 	return !paneState(tui).wide?.();
 }
 
-function installPrompt(
-	ctx: ExtensionContext,
-	onCreated: (prompt: JhonPromptEditor) => void,
-	promptDeps: { now: () => number; doubleEscCancelEnabled: () => boolean; dispatchQueuedText: (text: string) => void; workingLabel?: () => string | undefined; activity?: () => string | undefined; topRows?: (tui: TUI, width: number, hovered?: number) => string[]; onTopRowClick?: (tui: TUI, index: number) => void },
-): boolean {
-	const previous = ctx.ui.getEditorComponent() as PromptFactory | undefined;
-	if (previous && !previous[PROMPT_OWNER]) return false;
-	const factory: PromptFactory = (tui, theme, keybindings) => {
+/** What the shell's prompt needs from the session, beyond pi's theme and the context. */
+interface PromptWiring {
+	now: () => number;
+	doubleEscCancelEnabled: () => boolean;
+	dispatchQueuedText: (text: string) => void;
+	workingLabel?: () => string | undefined;
+	activity?: () => string | undefined;
+	topRows?: (tui: TUI, width: number, hovered?: number) => string[];
+	onTopRowClick?: (tui: TUI, index: number) => void;
+}
+
+/**
+ * Makes the shell's prompt pi's editor, unless another extension's editor is
+ * there: that one stays and the shell draws no prompt. A factory of the
+ * shell's own (this load's or an earlier one's) is replaced, so the new
+ * session's handlers own the prompt. `created` gets each editor pi builds.
+ */
+function claimPrompt(ctx: ExtensionContext, created: (prompt: JhonPromptEditor) => void, wiring: PromptWiring): boolean {
+	const current = ctx.ui.getEditorComponent();
+	if (current && !isShellPrompt(current)) return false;
+	const ui = ctx.ui;
+	const build = ((tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager) => {
 		const prompt = new JhonPromptEditor(tui, theme, keybindings, {
-			fg: (color, text) => ctx.ui.theme.fg(color as Parameters<typeof ctx.ui.theme.fg>[0], text),
-			bold: (text) => ctx.ui.theme.bold(text),
-			italic: (text) => typeof ctx.ui.theme.italic === "function" ? ctx.ui.theme.italic(text) : text,
+			fg: (color, text) => ui.theme.fg(color as Parameters<typeof ui.theme.fg>[0], text),
+			bold: (text) => ui.theme.bold(text),
+			italic: (text) => (typeof ui.theme.italic === "function" ? ui.theme.italic(text) : text),
 			requestRender: () => tui.requestRender(),
 			pending: () => ctx.hasPendingMessages(),
-			now: promptDeps.now,
-			doubleEscCancelEnabled: promptDeps.doubleEscCancelEnabled,
-			dispatchQueuedText: promptDeps.dispatchQueuedText,
-			workingLabel: promptDeps.workingLabel,
-			activity: promptDeps.activity,
-			topRows: promptDeps.topRows ? (width, hovered) => promptDeps.topRows!(tui, width, hovered) : undefined,
-			onTopRowClick: promptDeps.onTopRowClick ? (index) => promptDeps.onTopRowClick!(tui, index) : undefined,
+			now: wiring.now,
+			doubleEscCancelEnabled: wiring.doubleEscCancelEnabled,
+			dispatchQueuedText: wiring.dispatchQueuedText,
+			workingLabel: wiring.workingLabel,
+			activity: wiring.activity,
+			topRows: wiring.topRows ? (width, hovered) => wiring.topRows!(tui, width, hovered) : undefined,
+			onTopRowClick: wiring.onTopRowClick ? (index) => wiring.onTopRowClick!(tui, index) : undefined,
 		});
-		onCreated(prompt);
+		created(prompt);
 		return prompt;
-	};
-	factory[PROMPT_OWNER] = true;
-	ctx.ui.setEditorComponent(factory);
+	}) as ShellPromptFactory;
+	build[SHELL_PROMPT] = true;
+	ui.setEditorComponent(build);
 	return true;
 }
 
@@ -376,32 +389,6 @@ const SETTINGS_MOVED: Record<string, string> = {
 	palette: "The palette, Rose Ink or Desktop, is set in `jhon setup` (or `jhon settings set integrations.theme.palette`).",
 	profile: "The model profile is chosen in /jhon:profile.",
 };
-
-interface CardComponentOptions {
-	expanded: boolean;
-	previewRows?: number;
-	hint?: string;
-}
-
-function cardComponent(card: Card, theme: CardTheme, options: CardComponentOptions) {
-	return {
-		render(width: number) {
-			return renderCard(card, theme, width, options);
-		},
-		invalidate() {},
-	};
-}
-
-// Widgets above the editor sit flush against the prompt frame; a blank line
-// after the card keeps the two frames apart.
-function spaced(component: { render(width: number): string[]; invalidate(): void }) {
-	return {
-		render(width: number) {
-			return [...component.render(width), ""];
-		},
-		invalidate() {},
-	};
-}
 
 export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, overrides: Partial<ShellDeps> = {}): void {
 	// Its commands and shortcuts are counted (lib/ui-use.ts).
@@ -419,7 +406,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		profilePoll = undefined;
 		profileReader.reset();
 	};
-	let renderHost: ShellRenderHost | undefined;
+	let renderHost: Repaint | undefined;
 	// The agent dir `jhon start pi` sets: Customize's Rose ink theme is written there.
 	const agentDir = env.PI_CODING_AGENT_DIR;
 	// A host announced late (jhon:host) may drop the top row's path: redraw.
@@ -448,48 +435,45 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		renderHost?.requestRender();
 	});
 	let prompt: JhonPromptEditor | undefined;
-	// Set by abortAndDispatchQueued via dispatchQueuedText when an Esc aborts
-	// a turn with a non-empty queue; sent exactly once, from agent_settled,
-	// once the aborted run has fully settled. Several aborts
-	// before that settle append in order, joined the way Pi joins its own
-	// queue, so nothing is overwritten. It belongs to the current session and
-	// is dropped on session_shutdown.
-	let pendingQueuedText: string | undefined;
-	// The owner's settings (lib/settings.ts), loaded once for the process
-	// and again at each later session start; every preference below reads
-	// them, and every write goes through `jhon settings set`, which loads
-	// them again. The Esc gate keeps its policy in memory so the editor never
-	// asks per keypress; the /jhon:double-esc-cancel command re-syncs it on
-	// every invocation, so status, the no-argument toggle direction, and the
-	// gate always describe the same effective policy.
+	// What waits to be sent once the run an Esc (or the stall recovery) stopped
+	// has settled: the messages pi had queued, given back by the prompt, and
+	// the stall's continue. Sent once, as one message, from agent_settled;
+	// texts that arrive before it are kept in order, one blank line apart, as
+	// pi joins its own queue. A session's text never reaches the next one.
+	const afterStop = {
+		text: undefined as string | undefined,
+		add(next: string) { this.text = this.text === undefined ? next : `${this.text}\n\n${next}`; },
+		take(): string | undefined { const text = this.text; this.text = undefined; return text; },
+	};
+	// The owner's settings (lib/settings.ts): read once here and again at each
+	// later session start and each Customize open; every write is a `jhon
+	// settings set`. The preferences below come from them.
 	const settings = shellSettings(env);
 	let settingsLoadedOnce = false;
-	const animationOptions = { settings };
-	let animationPolicy = resolveAnimationPolicy(animationOptions).policy;
-	// Conversation cards read the style from a process-wide slot; the saved
-	// preference fills it at startup and again on every session start.
-	// The Card content preference rides the same kind of slot: the quiet tool
-	// renderers read it live, so the saved level applies from the first render.
-	let visualSettings = resolveVisualSettings(animationOptions).settings;
-	// The Gentle Shell's card style and chrome surface (L153 answers 1-2) live in
-	// process-wide slots every extension's cards and the rail read.
+	const fromSettings = { settings };
+	let animationPolicy = resolveAnimationPolicy(fromSettings).policy;
+	let visualSettings = resolveVisualSettings(fromSettings).settings;
+	// The card style and the chrome surface (L153 answers 1-2) sit in
+	// process-wide slots that every extension's cards and the pane read; the
+	// saved values fill them at each session start and on each change.
 	const applyAppearance = () => {
 		setCardStyle(settings.cards());
 		setChromeSurface(visualSettings.surface);
 	};
 	const refreshVisual = () => {
-		visualSettings = resolveVisualSettings(animationOptions).settings;
+		visualSettings = resolveVisualSettings(fromSettings).settings;
 		applyAppearance();
 		renderHost?.invalidatePane?.();
 		renderHost?.requestRender();
 	};
+	// The Esc gate's policy is kept here, not read on every key; Customize's row sets it again.
 	let doubleEscCancelPolicy: DoubleEscCancelPolicy = loadDoubleEscCancelPolicy({ settings });
 	const apiWait = createApiWait(() => deps.now());
 	const activity = createWorkingActivity();
 	// Stall recovery (lib/ui/stall-recovery.ts): past the threshold the turn is
 	// aborted as Esc does, and the continue rides the queued-text path above,
 	// sent once the aborted run settles.
-	const queueAfterSettle = (text: string) => { pendingQueuedText = pendingQueuedText === undefined ? text : `${pendingQueuedText}\n\n${text}`; };
+	const queueAfterSettle = (text: string) => afterStop.add(text);
 	// A thinking model or the claude-bridge provider waits thinking_stall_seconds (T38, L382).
 	const stallSecs = { stall: stallSeconds(env, settings), thinking: settings.thinkingStallSeconds() };
 	// The continue texts the shell sent: a follow-up carrying one is not an owner message.
@@ -552,16 +536,23 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		renderHost?.invalidatePane?.();
 		renderHost?.requestRender();
 	});
-	pi.registerTool({
+	// A worktree added by hand: the LDD section reads its change too. The
+	// registry is the current session's (made at its start), never another's.
+	const WORKTREE_TOOL = {
 		name: "session_worktree_register",
-		renderShell: "self",
 		label: "Add a session worktree",
 		description: "Add a worktree of this Git clone to the session: the LDD section reads the change there too.",
-		parameters: { type: "object", required: ["path"], additionalProperties: false, properties: { path: { type: "string", description: "Worktree path to include in this session." } } } as never,
+		parameters: { type: "object", required: ["path"], additionalProperties: false, properties: { path: { type: "string", description: "Worktree path to include in this session." } } },
+	};
+	pi.registerTool({
+		...WORKTREE_TOOL,
+		renderShell: "self",
+		parameters: WORKTREE_TOOL.parameters as never,
 		async execute(_id, params, _signal, _onUpdate, ctx) {
-			if (!registry || registry.sessionId !== ctx.sessionManager.getSessionId()) throw new Error("This session has no worktree list yet.");
-			const root = registry.register((params as { path: string }).path, "explicit");
-			return { content: [{ type: "text", text: `${root} is now one of this session's worktrees.` }], details: { root, sessionId: registry.sessionId } };
+			const list = registry;
+			if (list === undefined || list.sessionId !== ctx.sessionManager.getSessionId()) throw new Error("This session has no worktree list yet.");
+			const root = list.register((params as { path: string }).path, "explicit");
+			return { content: [{ type: "text", text: `${root} is now one of this session's worktrees.` }], details: { root, sessionId: list.sessionId } };
 		},
 	});
 	// The Status card's LDD change: read at the start and after each turn,
@@ -707,7 +698,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			if (result.ok) { if (retired.some((r) => !r.silent)) ctx.ui.notify(retiredNotice(retired, result.lines), "warning"); }
 			else ctx.ui.notify(`Settings: the retired keys could not be dropped: ${result.error}. \`jhon settings migrate\` drops them.`, "warning");
 		}
-		visualSettings = resolveVisualSettings(animationOptions).settings;
+		visualSettings = resolveVisualSettings(fromSettings).settings;
 		applyAppearance();
 		if (!overrides.activeProfile) {
 			try { sessionProfile = sessionProfileOnBranch((ctx.sessionManager as { getBranch?(): unknown[] }).getBranch?.()); } catch { sessionProfile = undefined; }
@@ -727,7 +718,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		void refreshLdd(ctx);
 		if (ctx.hasUI) watchLddSources(ctx);
 		ctx.ui.setFooter((tui, theme, footerData) => {
-			const host: ShellRenderHost = { requestRender: () => tui.requestRender(), invalidatePane: () => invalidatePane(tui) };
+			const host: Repaint = { requestRender: () => tui.requestRender(), invalidatePane: () => invalidatePane(tui) };
 			renderHost = host;
 			const unsubscribeBranch = footerData.onBranchChange(() => {
 				host.invalidatePane?.();
@@ -821,25 +812,32 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			},
 			invalidate() {},
 		}));
-		const ownsPrompt = installPrompt(
-			ctx,
-			(created) => {
-				prompt?.dispose();
-				prompt = created;
-				prompt.setAnimationPolicy(animationPolicy);
+		// Each editor pi builds replaces the last one, with the session's animation policy.
+		const adopt = (built: JhonPromptEditor) => {
+			prompt?.dispose();
+			prompt = built;
+			built.setAnimationPolicy(animationPolicy);
+		};
+		const wiring: PromptWiring = {
+			now: () => deps.now(),
+			doubleEscCancelEnabled: () => doubleEscCancelPolicy === "on",
+			dispatchQueuedText: queueAfterSettle,
+			workingLabel: () => apiWait.label(),
+			activity: () => activity.current(),
+			// The narrow form's Running block (04): the agents and jobs while they run.
+			topRows: (tui, width, hovered) => {
+				if (!narrowChrome(tui)) return [];
+				return renderRunningBlock(runningJobs, ctx.ui.theme, width, { now: deps.now(), ascii: shellSettings().ascii(), ...(hovered !== undefined ? { hover: hovered } : {}) }).rows;
 			},
-			{ now: () => deps.now(), doubleEscCancelEnabled: () => doubleEscCancelPolicy === "on", dispatchQueuedText: queueAfterSettle, workingLabel: () => apiWait.label(), activity: () => activity.current(),
-				// The narrow form's Running block (04): the agents and jobs while they run.
-				topRows: (tui, width, hovered) => narrowChrome(tui) ? renderRunningBlock(runningJobs, ctx.ui.theme, width, { now: deps.now(), ascii: shellSettings().ascii(), ...(hovered !== undefined ? { hover: hovered } : {}) }).rows : [],
-				// A click on one of its rows opens the agents view or the jobs view.
-				onTopRowClick: (tui, index) => {
-					if (!narrowChrome(tui)) return;
-					const view = renderRunningBlock(runningJobs, ctx.ui.theme, tui.terminal?.columns ?? 0, { now: deps.now() }).opens[index];
-					if (view) openTasks(ctx, view);
-				} },
-		);
-		// The working line says what pi's Working row would; the thinking blocks stay pi's.
-		if (ownsPrompt) ctx.ui.setWorkingVisible(false);
+			// A click on one of its rows opens the agents view or the jobs view.
+			onTopRowClick: (tui, index) => {
+				if (!narrowChrome(tui)) return;
+				const view = renderRunningBlock(runningJobs, ctx.ui.theme, tui.terminal?.columns ?? 0, { now: deps.now() }).opens[index];
+				if (view) openTasks(ctx, view);
+			},
+		};
+		// The working line says what pi's Working row would, so that row hides; the thinking blocks stay pi's.
+		if (claimPrompt(ctx, adopt, wiring)) ctx.ui.setWorkingVisible(false);
 	});
 	pi.on("session_shutdown", (_event, ctx) => {
 		closeSettings?.();
@@ -849,10 +847,11 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		releaseSelection?.();
 		releaseSelection = undefined;
 		stopProfilePoll();
-		pendingQueuedText = undefined;
+		afterStop.take();
 		prompt?.dispose();
 		prompt = undefined;
-		if ((ctx.ui.getEditorComponent() as PromptFactory | undefined)?.[PROMPT_OWNER]) {
+		// pi's own editor and Working row come back, unless the editor is another extension's.
+		if (isShellPrompt(ctx.ui.getEditorComponent())) {
 			ctx.ui.setEditorComponent(undefined);
 			ctx.ui.setWorkingVisible(true);
 		}
@@ -863,122 +862,154 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		openPrompts = 0;
 		stall.sync();
 	});
-	// One Customize overlay (T15.3; Settings until L174), G's Customization view:
-	// every kept setting, grouped; /jhon:customize <group> opens it on that group.
-	// Its categories, words and rows come from lib/ui/customize/registry.ts (T15.15).
-	// It replaces /jhon:animations and /jhon:double-esc-cancel.
+	// Customize (T15.3; called Settings until L174): one overlay with every
+	// setting the shell keeps, by group; `/jhon:customize <group>` opens it on
+	// that group. Its groups, words and rows are lib/ui/customize/registry.ts's
+	// (T15.15). It took the place of /jhon:animations and /jhon:double-esc-cancel.
+	/** The jhon binary, as the environment names it when Customize runs. */
+	const jhonBin = () => env.JHON_BIN || "jhon";
+
+	/** `jhon mode <args>` in the folder `cwd`: its output, or its error text (L175). */
+	const jhonMode = (args: string[], cwd: string) => new Promise<string>((resolve, reject) => {
+		execFile(jhonBin(), ["mode", ...args], { cwd, encoding: "utf8" }, (error, stdout, stderr) => {
+			if (error) reject(new Error(`${stderr || stdout || error.message}`.trim()));
+			else resolve(stdout);
+		});
+	});
+
+	/**
+	 * The Permission mode row (L214, its only place): read with `jhon mode
+	 * --json`, set through changeMode, which keeps its rules and asks Yes or No
+	 * before super-yolo. The grants are in /jhon:grants.
+	 */
+	const modeRow = (ctx: ExtensionContext) => {
+		let known: ModeData | undefined;
+		const read = async () => { known = JSON.parse(await jhonMode(["--json"], ctx.cwd)) as ModeData; return known; };
+		read().then(() => renderHost?.requestRender(), () => undefined);
+		const setMode = async (next: string, root: string) => { await jhonMode([next, "--root", root], ctx.cwd); };
+		const confirmMode = async (question: string) => (await ctx.ui.select?.(question, ["Yes", "No"])) === "Yes";
+		return {
+			value: () => known?.mode ?? deps.permissionMode?.(ctx.cwd) ?? "normal",
+			set: async (next: string) => {
+				try {
+					const outcome = await changeMode(next, { setMode, confirmMode }, known ?? await read());
+					if (outcome === "declined") ctx.ui.notify("Cancelled: nothing changed.", "info");
+					if (outcome === "set") { await read(); void refreshLdd(ctx); }
+					return undefined;
+				} catch (error) {
+					return `could not set ${next}: ${error instanceof Error ? error.message : String(error)}`;
+				}
+			},
+		};
+	};
+
+	/**
+	 * The Themes row (L197): pi lists the themes, applies one and saves it.
+	 * Rose ink is written again with `jhon palette` first, as followPalette
+	 * does, so switching back to it never applies an old file.
+	 */
+	const themeRow = (ctx: ExtensionContext) => {
+		const apply = (name: string) => {
+			const result = ctx.ui.setTheme(name);
+			return result.success ? undefined : result.error ?? `could not apply ${name}`;
+		};
+		return {
+			list: () => ctx.ui.getAllThemes(),
+			current: () => ctx.ui.theme.name,
+			set: (name: string) => {
+				if (name !== ROSE_INK || !agentDir) return apply(name);
+				switchToRoseInk({
+					jhon: jhonBin(), agentDir, colors: PALETTE_PATH(env),
+					apply: () => { const refused = apply(name); renderHost?.requestRender(); return refused; },
+					notify: (message) => ctx.ui.notify(`Customize: ${message}`, "error"),
+				});
+				return undefined;
+			},
+		};
+	};
+
+	const repaintPane = () => { renderHost?.invalidatePane?.(); renderHost?.requestRender(); };
+	const visualChanged = () => { refreshVisual(); pi.events.emit(VISUAL_SETTINGS_CHANGED, { settings: settings.path }); };
+
+	type CommandContext = Parameters<Parameters<ExtensionAPI["registerCommand"]>[1]["handler"]>[1];
+	const openCustomize = async (args: string | undefined, ctx: CommandContext) => {
+		if (ctx.mode !== "tui" || !ctx.hasUI) {
+			if (ctx.hasUI) ctx.ui.notify("Customize needs an interactive terminal; `jhon settings` lists and sets them.", "warning");
+			return;
+		}
+		// A group that left Customize says where it lives now; any other unknown word lists the groups (T15.9).
+		const group = String(args ?? "").trim();
+		const word = group.toLowerCase();
+		if (word && !CUSTOMIZE_WORDS.includes(word)) {
+			ctx.ui.notify(SETTINGS_MOVED[word] ?? unknownCategoryNotice(word), "warning");
+			return;
+		}
+		closeSettings?.();
+		// Opening reads the settings again: another session or a hand edit may have changed them.
+		settings.refresh();
+		let shut: (() => void) | undefined;
+		let closed = false;
+		const close = () => {
+			if (closed) return;
+			closed = true;
+			shut?.();
+			if (closeSettings === close) closeSettings = undefined;
+		};
+		closeSettings = close;
+		const rows = customizeRows({
+			mode: modeRow(ctx),
+			settings,
+			animations: (policy) => { animationPolicy = policy; prompt?.setAnimationPolicy(policy); },
+			doubleEsc: () => { doubleEscCancelPolicy = loadDoubleEscCancelPolicy({ settings }); },
+			status: visualChanged,
+			appearance: visualChanged,
+			redraw: repaintPane,
+			// "Reload now" (L198): Customize closes first, then pi reloads, so the changed keys apply.
+			reload: () => {
+				close();
+				setTimeout(() => {
+					ctx.reload().catch((error: unknown) => ctx.ui.notify(`Reload failed: ${error instanceof Error ? error.message : String(error)}`, "error"));
+				}, 0);
+			},
+			themes: themeRow(ctx),
+		});
+		try {
+			await ctx.ui.custom<null>((tui, theme, _keys, done) => {
+				// Closing writes every cell again, as every overlay does (overlay.ts).
+				const end = closeWithRepaint(tui, done);
+				shut = () => end(null);
+				if (closed) done(null);
+				const view = new SettingsView({
+					rows, theme, group: group || undefined, ascii: () => settings.ascii(),
+					// 85% of the terminal's rows, less the card's two borders.
+					height: () => Math.max(0, Math.floor((tui.terminal?.rows ?? 24) * 0.85) - 2),
+					// A value that is refused is a notice: `Customize: <why>`.
+					onError: (message) => { if (!closed) ctx.ui.notify(`Customize: ${message}`, "error"); },
+					onClose: close,
+					requestRender: () => { if (!closed) tui.requestRender(); },
+				});
+				return {
+					render: (width) => (closed ? [] : view.render(width)),
+					handleInput: (data) => { if (!closed) view.handleInput(data); },
+					handleMouse: (event) => (closed ? undefined : view.handleMouse(event)),
+					invalidate: () => view.invalidate(),
+					dispose: close,
+				};
+			}, CARD_OVERLAY);
+		} finally {
+			close();
+		}
+	};
+
 	pi.registerCommand(SETTINGS_COMMAND_NAME, {
 		description: customizeDescription(),
 		getArgumentCompletions: (prefix) => completeWord(customizeCompletions(), prefix),
-		handler: async (args, ctx) => {
-			if (ctx.mode !== "tui" || !ctx.hasUI) {
-				if (ctx.hasUI) ctx.ui.notify("Customize needs an interactive terminal; `jhon settings` lists and sets them.", "warning");
-				return;
-			}
-			// A group that moved says where it lives; an unknown word lists the groups (T15.9).
-			const word = String(args ?? "").trim().toLowerCase();
-			if (word && !CUSTOMIZE_WORDS.includes(word)) {
-				const moved = SETTINGS_MOVED[word];
-				ctx.ui.notify(moved ?? unknownCategoryNotice(word), "warning");
-				return;
-			}
-			closeSettings?.();
-			// An explicit open reads the settings again: another session or a hand edit may have changed them.
-			settings.refresh();
-			let finish: (() => void) | undefined;
-			let closed = false;
-			const close = () => {
-				if (closed) return;
-				closed = true;
-				finish?.();
-				if (closeSettings === close) closeSettings = undefined;
-			};
-			closeSettings = close;
-			// The permission mode, read and set with `jhon mode` (L175), only here (L214): changeMode
-			// keeps its rule, super-yolo only after the owner's Yes; the grants are in /jhon:grants.
-			const bin = env.JHON_BIN || "jhon";
-			const jhonMode = (args: string[]) => new Promise<string>((resolve, reject) =>
-				execFile(bin, ["mode", ...args], { cwd: ctx.cwd, encoding: "utf8" }, (error, stdout, stderr) => error ? reject(new Error(`${stderr || stdout || error.message}`.trim())) : resolve(stdout)));
-			let modeData: ModeData | undefined;
-			const readMode = () => jhonMode(["--json"]).then((text) => { modeData = JSON.parse(text) as ModeData; return modeData; });
-			void readMode().then(() => renderHost?.requestRender(), () => undefined);
-			const mode = {
-				value: () => modeData?.mode ?? deps.permissionMode?.(ctx.cwd) ?? "normal",
-				set: async (next: string) => {
-					try {
-						const current = modeData ?? await readMode();
-						const outcome = await changeMode(next, { setMode: async (m, root) => { await jhonMode([m, "--root", root]); }, confirmMode: async (question) => (await ctx.ui.select?.(question, ["Yes", "No"])) === "Yes" }, current);
-						if (outcome === "declined") { ctx.ui.notify("Cancelled: nothing changed.", "info"); return undefined; }
-						if (outcome === "set") { await readMode(); void refreshLdd(ctx); }
-						return undefined;
-					} catch (error) {
-						return `could not set ${next}: ${error instanceof Error ? error.message : String(error)}`;
-					}
-				},
-			};
-			const rows = customizeRows({
-				mode,
-				settings,
-				animations: (policy) => { animationPolicy = policy; prompt?.setAnimationPolicy(policy); },
-				doubleEsc: () => { doubleEscCancelPolicy = loadDoubleEscCancelPolicy({ settings }); },
-				status: () => { refreshVisual(); pi.events.emit(VISUAL_SETTINGS_CHANGED, { settings: settings.path }); },
-				appearance: () => { refreshVisual(); pi.events.emit(VISUAL_SETTINGS_CHANGED, { settings: settings.path }); },
-				redraw: () => { renderHost?.invalidatePane?.(); renderHost?.requestRender(); },
-				// G's "Reload now" (L198): Customize closes, then pi reloads, so changed keys apply.
-				reload: () => {
-					close();
-					setTimeout(() => { ctx.reload().catch((error: unknown) => ctx.ui.notify(`Reload failed: ${error instanceof Error ? error.message : String(error)}`, "error")); }, 0);
-				},
-				// G's Themes (L197): pi lists them, applies one and saves it. Rose ink
-				// is rewritten with `jhon palette` first, as followPalette does, so a
-				// switch back never applies a stale file.
-				themes: {
-					list: () => ctx.ui.getAllThemes(),
-					current: () => ctx.ui.theme.name,
-					set: (name) => {
-						const apply = () => { const result = ctx.ui.setTheme(name); return result.success ? undefined : result.error ?? `could not apply ${name}`; };
-						if (name !== ROSE_INK || !agentDir) return apply();
-						switchToRoseInk({
-							jhon: bin, agentDir, colors: PALETTE_PATH(env),
-							apply: () => { const refused = apply(); renderHost?.requestRender(); return refused; },
-							notify: (message) => ctx.ui.notify(`Customize: ${message}`, "error"),
-						});
-						return undefined;
-					},
-				},
-			});
-			try {
-				await ctx.ui.custom<null>((tui, theme, _keys, done) => {
-					// Closing writes every cell again, as every overlay's close does (overlay.ts).
-					const shut = closeWithRepaint(tui, done);
-					finish = () => shut(null);
-					if (closed) done(null);
-					const view = new SettingsView({
-						rows, theme, group: String(args ?? "").trim() || undefined, ascii: () => settings.ascii(),
-						// G's Customization: 85% of the rows less the card's border, the card itself at most 24.
-						height: () => Math.max(0, Math.floor((tui.terminal?.rows ?? 24) * 0.85) - 2),
-						// As G's Customization: a refused value is a notice, `<title>: <why>`.
-						onError: (message) => { if (!closed) ctx.ui.notify(`Customize: ${message}`, "error"); },
-						onClose: close,
-						requestRender: () => { if (!closed) tui.requestRender(); },
-					});
-					return {
-						render: (width) => closed ? [] : view.render(width),
-						handleInput: (data) => { if (!closed) view.handleInput(data); },
-						handleMouse: (event) => closed ? undefined : view.handleMouse(event),
-						invalidate: () => view.invalidate(),
-						dispose: close,
-					};
-				}, CARD_OVERLAY);
-			} finally { close(); }
-		},
+		handler: openCustomize,
 	});
 	pi.on("agent_start", (_event, ctx) => {
-		// A turn can start any other way (the user sending the draft, an
-		// extension, a shortcut) before the aborted run's own agent_settled
-		// below has delivered the pending text. Nothing is sent from here: Pi
-		// is mid-turn, so the text simply waits and goes out, once, when that
-		// turn settles. It is never dropped.
+		// A run can start before the stopped one settled (the owner sent the
+		// draft, an extension or a key started one): what waits after a stop is
+		// not sent here, mid-run; it goes out once, when this run settles.
 		prompt?.setWorking(true);
 		activity.start();
 		apiWait.start();
@@ -1001,26 +1032,22 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		return undefined;
 	});
 	pi.on("agent_settled", (_event, ctx) => {
-		// Pi clears its own run-active flag before emitting agent_settled, so
-		// this is normally idle; if a run is somehow still in flight the prompt
-		// stays working and the pending text waits for the next settle.
+		// pi is idle by the time it settles; a run still going keeps the prompt
+		// working, and what waits goes out at the settle after it.
 		if (!ctx.isIdle()) return;
 		prompt?.setWorking(false);
-		if (pendingQueuedText === undefined) return;
-		const queued = pendingQueuedText;
-		pendingQueuedText = undefined;
+		const waiting = afterStop.take();
+		if (waiting === undefined) return;
 		try {
-			pi.sendUserMessage(queued);
+			pi.sendUserMessage(waiting);
 		} catch (error) {
-			// Never drop the user's words: put them back in front of the draft,
-			// exactly the shape Pi's own restore would have left, and say why.
-			if (prompt) {
-				const current = prompt.getText();
-				prompt.setText([queued, current].filter((text) => text.trim() !== "").join("\n\n"));
-			} else {
-				pendingQueuedText = queued;
-			}
-			if (ctx.hasUI) ctx.ui.notify(`Could not send the queued message after cancelling; it went back to the editor: ${error instanceof Error ? error.message : String(error)}`, "error");
+			// The owner's words are never lost: they go back ahead of the draft, as
+			// pi's own restore would have put them, or wait for the next settle
+			// when there is no prompt; and the owner is told why.
+			if (prompt) prompt.setText([waiting, prompt.getText()].filter((text) => text.trim() !== "").join("\n\n"));
+			else afterStop.add(waiting);
+			const why = error instanceof Error ? error.message : String(error);
+			if (ctx.hasUI) ctx.ui.notify(`Could not send the queued message after cancelling; it went back to the editor: ${why}`, "error");
 		}
 	});
 	pi.on("agent_end", async (_event, ctx) => {

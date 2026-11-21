@@ -374,8 +374,10 @@ Adding a theme is one file, `themes/<name>.json`, a pi theme whose `name` is
 
 ## Where it came from
 
-The UI and its companions (pretty, todo) are adapted from
-gentle-pi 4.1.0 (the tool cards, quiet, are Jhon's own since T174-S6) (the question view's layout from 4.6.0), which the render
-loaded as a filtered bridge until each had its own place here (docket AY,
-B0); gentle-pi is no longer loaded. `THIRD_PARTY_NOTICES.md`, at the repository's root, lists
-each adapted file and carries gentle-pi's MIT license.
+The shell started as an adaptation of gentle-pi 4.1.0's Gentle Shell, which
+the render loaded as a filtered bridge until each part had its own place here
+(docket AY, B0). T174 rewrote every adapted file in Jhon's own code, to the
+chosen designs, with the text the model reads kept byte for byte; gentle-pi
+is no longer loaded, and its Gentle Shell remains the design reference.
+`THIRD_PARTY_NOTICES.md`, at the repository's root, records it and the one
+line still adapted (the memory line, from gentle-engram).

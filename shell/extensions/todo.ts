@@ -23,59 +23,76 @@ import {
 import { counted } from "../lib/ui-use.ts";
 import { shellSettings } from "../lib/settings.ts";
 
-// Jhon's todo: the task list the model keeps while it works, drawn in the
-// right pane's TODOS section, or above the prompt in a regular terminal and
-// the narrow form (lib/ui/todo-section.ts), while no LDD change is active
-// (T174, L1469: with one, the LDD section rules and the list is hidden);
-// alt+t (shell.keys.todos) folds it, alt+PgUp/PgDn scroll it (T174-S5b,
-// L1495). Three things keep it current that a
-// static tool description cannot: `write` replaces the whole list in one
-// call, each run's system prompt carries the open tasks and the rules, and
-// a list that goes untouched while tasks stay open is marked stale for both
-// the human and the model. Long runs also receive one request-local reminder
-// after several tool-use turns, without waking the agent or changing tasks.
-// With no list, the prompt says when to start one, and work that changes
-// something without a list gets one nudge per owner message (S34). The list
-// is the agent's own next steps, never the change's tasks, which stay in
-// `jhon status` (L1019): so the start rule and the nudge hold inside an LDD
-// change too (T134; T49 had silenced them there). jhon-builder, jhon-scout and jhon-checker
-// keep one too (T134), private to their child process, with no section, no
-// start rule and no nudge, since a child's task is bounded.
+/*
+ * The agent's todo list: the `todo` tool and where the list shows.
+ *
+ * On screen it is the right pane's TODOS section, or, where the pane is not
+ * beside the conversation (a regular terminal, the narrow form), a block
+ * above the prompt (lib/ui/todo-section.ts). Either shows only while the list
+ * has tasks and no LDD change is selected: with one, the LDD section shows
+ * the change's tasks and this list hides (T174, L1469). alt+t
+ * (shell.keys.todos) folds it and alt+PgUp/PgDn scroll it (T174-S5b, L1495).
+ *
+ * For the model, what a tool description alone cannot do: `write` replaces
+ * the whole list in one call; each run starts with the open list and its
+ * rules, or, with none open, the rule for when to start one; a list left
+ * without an update while work is open is stale, for the owner and for the
+ * model; after several tool-use turns with no update the model gets one
+ * reminder, and work that changes something without a list gets one nudge
+ * per owner message (S34). The list is the agent's own next steps, never the
+ * change's tasks, which stay in `jhon status` (L1019), so the start rule and
+ * the nudge hold inside a change too (T134).
+ *
+ * jhon-builder, jhon-scout and jhon-checker keep a list of their own (T134),
+ * private to the child process: no section, no keys, no start rule, no nudge.
+ */
 
 const WIDGET_KEY = "jhon-todo";
-const STATUS_ENUM = ["pending", "in_progress", "blocked", "done", "dropped"];
-const REMIND_AFTER_TOOL_TURNS = 4;
-// pi turns a custom message into user text, so a nudge would read as the
-// owner's: each opens with the harness's frame (T42d).
-const HARNESS_FRAME = "[Harness reminder from the Jhon shell, not a message from the owner] ";
-const TODO_REMINDER = HARNESS_FRAME + "The todo plan has not been reviewed during several tool-use turns. Check whether it still matches the work performed and update tasks where needed. Do not mark work done without verification.";
-const START_AFTER_TOOL_TURNS = 3;
+
 // T115d (L707, L708): the list block, the start rule and the nudges reach the
 // model as persisted custom messages, never in the system prompt and never
-// request-local, so the cached prefix holds on every turn.
+// for one request only, so the cached prefix holds on every turn.
 export const TODO_LIST_MESSAGE = "jhon-todo-list";
 export const TODO_REMINDER_MESSAGE = "jhon-todo-reminder";
 export const TODO_START_MESSAGE = "jhon-todo-start";
-const START_NUDGE = HARNESS_FRAME + "This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in `jhon status`.";
-// A bash call that changes something: a writing command where a command
-// starts, sed -i, a git or package command that writes, or a redirect to a
-// file. Reads, searches and test runs do not count.
-const COMMAND_START = String.raw`(?:^|[;&|(]\s*|\b(?:sudo|xargs)\s+)`;
-const CHANGING_BASH = new RegExp([
-	String.raw`${COMMAND_START}(?:rm|rmdir|mv|cp|mkdir|touch|tee|chmod|chown|ln|truncate|patch|install)\b`,
-	String.raw`\bsed\s+(?:-\w*\s+)*-i`,
-	String.raw`\bgit\s+(?:add|commit|checkout|switch|reset|restore|merge|rebase|apply|stash|mv|rm|cherry-pick|revert|tag|push|pull)\b`,
-	String.raw`\b(?:npm|pnpm|yarn|bun)\s+(?:i|install|add|remove|uninstall|update)\b`,
-	String.raw`(?:^|[^0-9&>=])>>?\s*(?!&|/dev/null)[^\s>]`,
-].join("|"));
 
-function changesSomething(name: string, args: unknown): boolean {
-	const tool = name.toLowerCase();
-	if (tool === "edit" || tool === "write") return true;
+/** Tool-use turns without an update before the reminder; tool-use turns that change something before the start nudge. */
+const REMINDER_AFTER = 4;
+const START_NUDGE_AFTER = 3;
+
+// pi hands a custom message to the model as user text, so every nudge says
+// who speaks first (T42d).
+const FROM_THE_HARNESS = "[Harness reminder from the Jhon shell, not a message from the owner] ";
+const REMINDER_TEXT = `${FROM_THE_HARNESS}The todo plan has not been reviewed during several tool-use turns. Check whether it still matches the work performed and update tasks where needed. Do not mark work done without verification.`;
+const START_TEXT = `${FROM_THE_HARNESS}This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in \`jhon status\`.`;
+
+/*
+ * A bash command that changes something: a writing command where a command
+ * starts (also after sudo or xargs), sed -i, a git or package-manager command
+ * that writes, or output redirected to a file other than /dev/null. Reads,
+ * searches and test runs do not count.
+ */
+const AT_COMMAND = String.raw`(?:^|[;&|(]\s*|\b(?:sudo|xargs)\s+)`;
+const WRITING_COMMAND = String.raw`${AT_COMMAND}(?:rm|rmdir|mv|cp|mkdir|touch|tee|chmod|chown|ln|truncate|patch|install)\b`;
+const SED_IN_PLACE = String.raw`\bsed\s+(?:-\w*\s+)*-i`;
+const GIT_WRITE = String.raw`\bgit\s+(?:add|commit|checkout|switch|reset|restore|merge|rebase|apply|stash|mv|rm|cherry-pick|revert|tag|push|pull)\b`;
+const PACKAGE_WRITE = String.raw`\b(?:npm|pnpm|yarn|bun)\s+(?:i|install|add|remove|uninstall|update)\b`;
+const REDIRECT_TO_FILE = String.raw`(?:^|[^0-9&>=])>>?\s*(?!&|/dev/null)[^\s>]`;
+const CHANGING_COMMAND = new RegExp([WRITING_COMMAND, SED_IN_PLACE, GIT_WRITE, PACKAGE_WRITE, REDIRECT_TO_FILE].join("|"));
+
+/** Whether a tool call changes something: an edit, a write, or a changing bash command. */
+function changes(toolName: string, args: unknown): boolean {
+	const name = toolName.toLowerCase();
+	if (name === "edit" || name === "write") return true;
+	if (name !== "bash") return false;
 	const command = (args as { command?: unknown } | undefined)?.command;
-	return tool === "bash" && typeof command === "string" && CHANGING_BASH.test(command);
+	return typeof command === "string" && CHANGING_COMMAND.test(command);
 }
-const TOOL_PARAMETERS = {
+
+const STATUSES = ["pending", "in_progress", "blocked", "done", "dropped"];
+
+/** The tool's schema, as the model reads it. */
+const PARAMETERS = {
 	type: "object",
 	additionalProperties: false,
 	required: ["action"],
@@ -91,169 +108,185 @@ const TOOL_PARAMETERS = {
 				properties: {
 					id: { type: "integer", description: "Existing task id to keep." },
 					title: { type: "string", description: "Short imperative title, e.g. 'Write the parser'." },
-					status: { type: "string", enum: STATUS_ENUM, description: "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose." },
+					status: { type: "string", enum: STATUSES, description: "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose." },
 					note: { type: "string", description: "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'." },
 				},
 			},
 		},
 		id: { type: "integer", description: "Task id for update." },
 		title: { type: "string", description: "Title for add, or a new title for update." },
-		status: { type: "string", enum: STATUS_ENUM, description: "Status for add or update." },
+		status: { type: "string", enum: STATUSES, description: "Status for add or update." },
 		note: { type: "string", description: "Note for add or update; required for blocked." },
 	},
 } as const;
 
-/** A child (sub-agent) process: it has the tool only when its tools, its rendered `tools:`, name it. */
-const inChild = (env: NodeJS.ProcessEnv): boolean => env.JHON_PI_CHILD === "1";
+const DESCRIPTION = "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.";
+const GUIDELINES = [
+	"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
+	"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+	"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
+	"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds.",
+];
+
+/** A sub-agent's process: it has the tool only when its tools (its rendered `tools:`) name it. */
+const isChild = (env: NodeJS.ProcessEnv): boolean => env.JHON_PI_CHILD === "1";
 
 export function todoEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	return !inChild(env) || (env.JHON_PI_TOOLS ?? "").split(",").includes(TODO_TOOL_NAME);
+	if (!isChild(env)) return true;
+	return (env.JHON_PI_TOOLS ?? "").split(",").includes(TODO_TOOL_NAME);
 }
 
-/**
- * The right pane's TODOS section open, with no key and every task
- * (lib/ui/todo-section.ts draws it). Nothing without tasks.
- */
+/** The right pane's TODOS section unfolded, with no key and every task (lib/ui/todo-section.ts); nothing without tasks. */
 export function renderTodoRail(state: TodoState, theme: PanelTheme, width: number, ascii = false): string[] {
 	return plainTodoRows(state, theme, width, ascii);
 }
 
-interface TodoSession {
+/** One session's list and what the nudges count. */
+interface ListSession {
+	id: string;
 	state: TodoState;
+	/** Runs started in the session (owner messages). */
 	turn: number;
-	/** Separate from the existing run-based card freshness. */
-	toolTurnsSinceWrite: number;
+	/** For the reminder: tool-use turns since the list last changed, and whether it was sent. */
+	turnsWithoutUpdate: number;
 	reminded: boolean;
-	wroteThisTurn: boolean;
-	/** Since the owner's last message: tool-use turns, whether one changed something, the start nudge, a list cleared on purpose. */
-	ownerToolTurns: number;
+	updatedThisTurn: boolean;
+	/** For the start nudge, since the owner's last message: tool-use turns, whether one changed something, whether it was sent, whether the list was emptied on purpose. */
+	ownerTurns: number;
 	ownerChanged: boolean;
-	startNudged: boolean;
-	clearedByOwnerTurn: boolean;
-	/** A finished list stays on screen for the turn it finished in, then clears. */
-	clearOnNextTurn: boolean;
-	/** The owner folded it (alt+t); the first task row shown (alt+PgUp/PgDn). */
-	collapsed: boolean;
+	startSent: boolean;
+	emptiedThisMessage: boolean;
+	/** A finished list stays for the turn it finished in and goes at the next. */
+	clearAtNextRun: boolean;
+	/** Folded by the owner (alt+t), and the first task row shown (alt+PgUp/PgDn). */
+	folded: boolean;
 	top: number;
 	ui: ExtensionContext["ui"] | undefined;
 	tui: TUI | undefined;
-	/** The session's id, for the LDD section's selection of its change. */
-	id: string;
-	/** The last list block sent to the model, so an unchanged one is not sent again. */
+	/** The last list block the model got: an unchanged one is not sent again. */
 	lastBlock?: string;
 }
 
-/** The last list block a branch already carries. */
+function newSession(id: string): ListSession {
+	return { id, state: emptyTodo(), turn: 0, turnsWithoutUpdate: 0, reminded: false, updatedThisTurn: false, ownerTurns: 0, ownerChanged: false, startSent: false, emptiedThisMessage: false, clearAtNextRun: false, folded: false, top: 0, ui: undefined, tui: undefined };
+}
+
+/** The last list block a branch carries already. */
 function lastBlockOn(branch: readonly unknown[]): string | undefined {
 	let last: string | undefined;
-	for (const e of branch) {
-		const entry = e as { type?: string; customType?: string; content?: unknown };
+	for (const item of branch) {
+		const entry = item as { type?: string; customType?: string; content?: unknown };
 		if (entry?.type === "custom_message" && entry.customType === TODO_LIST_MESSAGE && typeof entry.content === "string") last = entry.content;
 	}
 	return last;
 }
 
-function sessionKey(ctx: ExtensionContext): string {
-	return ctx.sessionManager.getSessionId() ?? "";
-}
+/** Owner messages on a branch: the session's turn count. */
+const ownerMessages = (branch: readonly unknown[]) => branch.filter((entry) => {
+	const item = entry as { type?: string; message?: { role?: string } };
+	return item.type === "message" && item.message?.role === "user";
+}).length;
+
+const hasActionable = (state: TodoState) => state.tasks.some((task) => task.status === "pending" || task.status === "in_progress");
+
+type MouseEvent = Parameters<NonNullable<Component["handleMouse"]>>[0];
 
 export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env): void {
 	// Its commands and shortcuts are counted (lib/ui-use.ts).
 	pi = counted(pi);
 	if (!todoEnabled(env)) return;
-	const child = inChild(env);
-	const sessions = new Map<string, TodoSession>();
-	// A child's list has no screen, so no keys.
-	const collapseKey = child ? undefined : shellSettings().key("todos");
+	const child = isChild(env);
+	const sessions = new Map<string, ListSession>();
+	// A child's list is never on a screen: no keys.
+	const foldKey = child ? undefined : shellSettings().key("todos");
 
-	const session = (ctx: ExtensionContext): TodoSession => {
-		const key = sessionKey(ctx);
-		let current = sessions.get(key);
-		if (!current) {
-			current = { state: emptyTodo(), turn: 0, toolTurnsSinceWrite: 0, reminded: false, wroteThisTurn: false, ownerToolTurns: 0, ownerChanged: false, startNudged: false, clearedByOwnerTurn: false, clearOnNextTurn: false, collapsed: false, top: 0, ui: undefined, tui: undefined, id: key };
-			sessions.set(key, current);
-		}
-		return current;
+	const sessionOf = (ctx: ExtensionContext): ListSession => {
+		const id = ctx.sessionManager.getSessionId() ?? "";
+		let found = sessions.get(id);
+		if (!found) { found = newSession(id); sessions.set(id, found); }
+		return found;
 	};
 
-	const redraw = (current: TodoSession) => {
-		if (!current.tui) return;
-		invalidatePane(current.tui);
-		current.tui.requestRender();
+	const repaint = (list: ListSession) => {
+		if (!list.tui) return;
+		invalidatePane(list.tui);
+		list.tui.requestRender();
 	};
-	const toggle = (current: TodoSession) => {
-		current.collapsed = !current.collapsed;
-		current.top = 0;
-		redraw(current);
+	const fold = (list: ListSession) => {
+		list.folded = !list.folded;
+		list.top = 0;
+		repaint(list);
 	};
-	const scroll = (current: TodoSession, rows: number) => {
-		if (current.collapsed) return;
-		current.top = Math.max(0, current.top + rows);
-		redraw(current);
+	const scrollBy = (list: ListSession, rows: number) => {
+		if (list.folded) return;
+		list.top = Math.max(0, list.top + rows);
+		repaint(list);
 	};
 
-	// The right pane's TODOS section; where the pane is not beside the
-	// conversation (a regular terminal, the narrow form) the Todos block above
-	// the prompt. Either only while it has tasks and no LDD change shows (T174,
-	// L1469, L1495).
-	const show = (current: TodoSession) => {
-		if (current.tui) invalidatePane(current.tui);
-		// A child's list is its own: no section (T134).
-		if (!current.ui || child) return;
-		const snapshot = current;
-		current.ui.setWidget(WIDGET_KEY, (tui, theme) => {
-			snapshot.tui = tui;
-			const hidden = () => snapshot.state.tasks.length === 0 || selectedChange(snapshot.id) !== undefined;
-			// The pane's title row under the pointer, and how far the list scrolls as last drawn.
-			let hover = false;
+	/** The pane's TODOS section, and the block above the prompt where the pane is not beside the conversation. */
+	const draw = (list: ListSession) => {
+		if (list.tui) invalidatePane(list.tui);
+		if (!list.ui || child) return;
+		list.ui.setWidget(WIDGET_KEY, (tui, theme) => {
+			list.tui = tui;
+			const hidden = () => list.state.tasks.length === 0 || selectedChange(list.id) !== undefined;
+			// Whether the pointer is on the section's title row, and how far the list scrolled as last drawn.
+			let hovered = false;
 			let maxTop = 0;
 			const view = (): TodoView => ({
-				collapsed: snapshot.collapsed, top: snapshot.top, staleTurns: staleTurns(snapshot.state, snapshot.turn),
-				...(collapseKey ? { key: collapseKey } : {}), height: todoHeight(tui.terminal?.rows ?? 48), ascii: shellSettings().ascii(),
+				collapsed: list.folded, top: list.top, staleTurns: staleTurns(list.state, list.turn),
+				...(foldKey ? { key: foldKey } : {}), height: todoHeight(tui.terminal?.rows ?? 48), ascii: shellSettings().ascii(),
 			});
-			const part = {
-				digest: () => JSON.stringify([snapshot.state.tasks, hidden(), view(), hover]),
+			const unhover = () => { hovered = false; repaint(list); };
+			const section = {
+				digest: () => JSON.stringify([list.state.tasks, hidden(), view(), hovered]),
 				render: (width: number) => {
 					if (hidden()) return [];
-					const drawn = renderTodoPane(snapshot.state, theme, width, { ...view(), hover });
-					snapshot.top = drawn.top;
+					const drawn = renderTodoPane(list.state, theme, width, { ...view(), hover: hovered });
+					list.top = drawn.top;
 					maxTop = drawn.maxTop ?? 0;
 					return drawn.rows;
 				},
-				// A click on the title row folds or unfolds it; the pointer over it
-				// paints it; the wheel scrolls the list, and past its ends leaves the
-				// wheel to the pane.
-				handleMouse(event: Parameters<NonNullable<Component["handleMouse"]>>[0]) {
-					if (event.type === "wheel") {
-						if (snapshot.collapsed) return undefined;
-						const next = Math.max(0, Math.min(maxTop, snapshot.top + Math.trunc(event.wheelDelta ?? 0)));
-						if (next === snapshot.top) return undefined;
-						snapshot.top = next;
-						redraw(snapshot);
-						return { handled: true, render: true };
+				// The title row folds on a click and lights under the pointer; the
+				// wheel scrolls the list and, past either end, is left to the pane.
+				handleMouse(event: MouseEvent) {
+					switch (event.type) {
+						case "wheel": {
+							if (list.folded) return undefined;
+							const top = Math.max(0, Math.min(maxTop, list.top + Math.trunc(event.wheelDelta ?? 0)));
+							if (top === list.top) return undefined;
+							list.top = top;
+							repaint(list);
+							return { handled: true, render: true };
+						}
+						case "move": {
+							if (event.button !== "none") return undefined;
+							if (event.y !== 0) { setPaneHover(tui); return undefined; }
+							if (hovered) return undefined;
+							hovered = true;
+							setPaneHover(tui, section, unhover);
+							repaint(list);
+							return { handled: true, render: true };
+						}
+						// pi sends a click only to the component that took its press.
+						case "press":
+							return event.button === "left" && event.y === 0 ? { handled: true } : undefined;
+						case "click":
+							if (event.button !== "left" || event.y !== 0) return undefined;
+							fold(list);
+							return { handled: true, render: true };
+						default:
+							return undefined;
 					}
-					if (event.type === "move" && event.button === "none") {
-						if (event.y !== 0) { setPaneHover(tui); return undefined; }
-						if (hover) return undefined;
-						hover = true;
-						setPaneHover(tui, part, () => { hover = false; redraw(snapshot); });
-						redraw(snapshot);
-						return { handled: true, render: true };
-					}
-					// pi makes a click only for the component that took its press.
-					if (event.type === "press" && event.button === "left") return event.y === 0 ? { handled: true } : undefined;
-					if (event.type !== "click" || event.button !== "left" || event.y !== 0) return undefined;
-					toggle(snapshot);
-					return { handled: true, render: true };
 				},
 				invalidate() {},
 			};
-			const dispose = paneSlot(tui, "todo", part);
+			const dispose = paneSlot(tui, "todo", section);
 			return {
 				render: (width: number) => {
 					if (hidden() || paneState(tui).wide?.()) return [];
-					const drawn = renderTodoBlock(snapshot.state, theme, width, view());
-					snapshot.top = drawn.top;
+					const drawn = renderTodoBlock(list.state, theme, width, view());
+					list.top = drawn.top;
 					return drawn.rows;
 				},
 				invalidate() {},
@@ -262,28 +295,25 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		});
 	};
 
-	if (collapseKey) pi.registerShortcut(collapseKey as Parameters<ExtensionAPI["registerShortcut"]>[0], { description: "Folds or unfolds the todo list", handler: async (ctx) => { toggle(session(ctx)); } });
-	for (const [key, rows] of child ? [] : [[TODO_SCROLL_KEYS.up, -TODO_SCROLL_ROWS], [TODO_SCROLL_KEYS.down, TODO_SCROLL_ROWS]] as const) {
-		pi.registerShortcut(key, { description: `Scrolls the todo list ${rows < 0 ? "up" : "down"}`, handler: async (ctx) => { scroll(session(ctx), rows); } });
+	if (foldKey) {
+		pi.registerShortcut(foldKey as Parameters<ExtensionAPI["registerShortcut"]>[0], { description: "Folds or unfolds the todo list", handler: async (ctx) => { fold(sessionOf(ctx)); } });
+	}
+	if (!child) {
+		pi.registerShortcut(TODO_SCROLL_KEYS.up, { description: "Scrolls the todo list up", handler: async (ctx) => { scrollBy(sessionOf(ctx), -TODO_SCROLL_ROWS); } });
+		pi.registerShortcut(TODO_SCROLL_KEYS.down, { description: "Scrolls the todo list down", handler: async (ctx) => { scrollBy(sessionOf(ctx), TODO_SCROLL_ROWS); } });
 	}
 
 	pi.registerTool({
 		name: TODO_TOOL_NAME,
 		renderShell: "self",
 		label: "Todo",
-		description: "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
+		description: DESCRIPTION,
 		promptSnippet: "Track multi-step work",
-		promptGuidelines: [
-			"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
-			"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
-			"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
-			"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds.",
-		],
-		parameters: TOOL_PARAMETERS,
+		promptGuidelines: GUIDELINES,
+		parameters: PARAMETERS,
 		executionMode: "sequential",
 		renderCall(args, theme) {
-			const params = args as TodoParams;
-			const title = `${TODO_GLYPH} todo · ${params.action}`;
+			const title = `${TODO_GLYPH} todo · ${(args as TodoParams).action}`;
 			return new Text(theme.fg("toolTitle", shellSettings().ascii() ? asciiText(title) : title), 0, 0);
 		},
 		renderResult(result, options, theme) {
@@ -291,108 +321,105 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 			return new Text(options.expanded ? text : theme.fg("muted", text.split("\n")[0] ?? ""), 0, 0);
 		},
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const current = session(ctx);
-			const result = applyTodo(current.state, params as TodoParams, current.turn);
+			const list = sessionOf(ctx);
+			const result = applyTodo(list.state, params as TodoParams, list.turn);
 			if (!result.error) {
-				current.state = result.state;
-				current.clearOnNextTurn = false;
+				list.state = result.state;
+				list.clearAtNextRun = false;
+				// Listing reads the list: it does not count as keeping it current.
 				if (params.action !== "list") {
-					current.toolTurnsSinceWrite = 0;
-					current.reminded = false;
-					current.wroteThisTurn = true;
-					if (result.state.tasks.length === 0) current.clearedByOwnerTurn = true;
+					list.turnsWithoutUpdate = 0;
+					list.reminded = false;
+					list.updatedThisTurn = true;
+					if (result.state.tasks.length === 0) list.emptiedThisMessage = true;
 				}
-				if (current.tui) invalidatePane(current.tui);
+				if (list.tui) invalidatePane(list.tui);
 			}
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: { [TODO_DETAILS_KEY]: result.state, ...(result.error ? { error: result.error } : {}) },
-			};
+			const details = { [TODO_DETAILS_KEY]: result.state, ...(result.error ? { error: result.error } : {}) };
+			return { content: [{ type: "text", text: result.text }], details };
 		},
 	});
 
 	pi.on("session_start", (_event, ctx) => {
-		const current = session(ctx);
-		// A list that was already finished when the session was left is history,
-		// not work: it would otherwise sit on screen until two more turns pass.
-		const replayed = replayTodo(ctx.sessionManager.getBranch());
-		current.state = replayed.tasks.length > 0 && todoSummary(replayed).open === 0 ? { ...replayed, tasks: [] } : replayed;
-		current.turn = ctx.sessionManager.getBranch().filter((entry) => (entry as { type?: string }).type === "message" && (entry as { message?: { role?: string } }).message?.role === "user").length;
-		current.toolTurnsSinceWrite = 0;
-		current.reminded = false;
-		current.wroteThisTurn = false;
-		current.ownerToolTurns = 0;
-		current.ownerChanged = false;
-		current.startNudged = false;
-		current.clearedByOwnerTurn = false;
-		current.lastBlock = lastBlockOn(ctx.sessionManager.getBranch());
-		current.ui = ctx.hasUI ? ctx.ui : undefined;
-		show(current);
+		const list = sessionOf(ctx);
+		const branch = ctx.sessionManager.getBranch();
+		// A list already finished when the session was left is history, not work.
+		const replayed = replayTodo(branch);
+		const finished = replayed.tasks.length > 0 && todoSummary(replayed).open === 0;
+		list.state = finished ? { ...replayed, tasks: [] } : replayed;
+		list.turn = ownerMessages(ctx.sessionManager.getBranch());
+		list.turnsWithoutUpdate = 0;
+		list.reminded = false;
+		list.updatedThisTurn = false;
+		list.ownerTurns = 0;
+		list.ownerChanged = false;
+		list.startSent = false;
+		list.emptiedThisMessage = false;
+		list.lastBlock = lastBlockOn(ctx.sessionManager.getBranch());
+		list.ui = ctx.hasUI ? ctx.ui : undefined;
+		draw(list);
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
-		sessions.delete(sessionKey(ctx));
+		sessions.delete(ctx.sessionManager.getSessionId() ?? "");
 	});
 
 	pi.on("before_agent_start", (_event, ctx) => {
-		const current = session(ctx);
-		current.turn += 1;
-		if (current.tui) invalidatePane(current.tui);
-		if (current.clearOnNextTurn) {
-			current.state = { ...current.state, tasks: [] };
-			current.clearOnNextTurn = false;
-			show(current);
+		const list = sessionOf(ctx);
+		list.turn += 1;
+		if (list.tui) invalidatePane(list.tui);
+		if (list.clearAtNextRun) {
+			list.state = { ...list.state, tasks: [] };
+			list.clearAtNextRun = false;
+			draw(list);
 		}
-		// A new owner message: the start nudge counts again from here.
-		current.ownerToolTurns = 0;
-		current.ownerChanged = false;
-		current.startNudged = false;
-		current.clearedByOwnerTurn = false;
-		// A child gets its open list back on a continued run, never the start rule.
-		// T146h L4: a lean session (no change, or a small one) gets no start rule.
-		const block = todoPromptBlock(current.state, staleTurns(current.state, current.turn)) ?? (child || contextLevel() === "lean" ? undefined : todoStartBlock(current.state));
-		// T115d: a persisted message, sent when the block changed; the system prompt never carries it.
-		if (!block || block === current.lastBlock) return undefined;
-		current.lastBlock = block;
+		// A new owner message: the start nudge counts from here.
+		list.ownerTurns = 0;
+		list.ownerChanged = false;
+		list.startSent = false;
+		list.emptiedThisMessage = false;
+		// The open list; with none, the start rule, which neither a child nor a
+		// lean session (T146h L4) gets.
+		const open = todoPromptBlock(list.state, staleTurns(list.state, list.turn));
+		const block = open ?? (child || contextLevel() === "lean" ? undefined : todoStartBlock(list.state));
+		// T115d: sent as a persisted message when it changed; never in the system prompt.
+		if (!block || block === list.lastBlock) return undefined;
+		list.lastBlock = block;
 		return { message: { customType: TODO_LIST_MESSAGE, content: block, display: false } };
 	});
 
 	pi.on("turn_end", (event, ctx) => {
-		const current = session(ctx);
-		// A turn containing a valid todo write is already reconciled. Failed
-		// writes and list reads deliberately do not refresh this counter.
+		const list = sessionOf(ctx);
 		const calls = event.message.role === "assistant" ? event.message.content.filter((part) => part.type === "toolCall") : [];
-		if (!current.wroteThisTurn && calls.length > 0) {
-			current.toolTurnsSinceWrite += 1;
-		}
+		// A turn with a todo change is up to date; a failed change or a list read is not.
+		if (calls.length > 0 && !list.updatedThisTurn) list.turnsWithoutUpdate += 1;
 		if (calls.length > 0) {
-			current.ownerToolTurns += 1;
-			if (calls.some((call) => changesSomething(call.name, call.arguments))) current.ownerChanged = true;
+			list.ownerTurns += 1;
+			if (calls.some((call) => changes(call.name, call.arguments))) list.ownerChanged = true;
 		}
-		current.wroteThisTurn = false;
-		// The nudges go out after a tool-use turn, persisted, before the next request; a child gets none.
+		list.updatedThisTurn = false;
+		// The nudges follow a tool-use turn, persisted, ahead of the next request; a child gets none.
 		if (calls.length === 0 || child) return;
-		const remind = (customType: string, content: string) => pi.sendMessage({ customType, content, display: false }, { deliverAs: "steer" });
-		if (current.state.tasks.length === 0) {
-			if (contextLevel() === "lean" || current.startNudged || current.clearedByOwnerTurn || !current.ownerChanged || current.ownerToolTurns < START_AFTER_TOOL_TURNS) return;
-			current.startNudged = true;
-			remind(TODO_START_MESSAGE, START_NUDGE);
+		const nudge = (customType: string, content: string) => pi.sendMessage({ customType, content, display: false }, { deliverAs: "steer" });
+		if (list.state.tasks.length === 0) {
+			const due = !list.startSent && !list.emptiedThisMessage && list.ownerChanged && list.ownerTurns >= START_NUDGE_AFTER;
+			if (contextLevel() === "lean" || !due) return;
+			list.startSent = true;
+			nudge(TODO_START_MESSAGE, START_TEXT);
 			return;
 		}
-		if (current.reminded || current.toolTurnsSinceWrite < REMIND_AFTER_TOOL_TURNS) return;
-		if (!current.state.tasks.some((task) => task.status === "pending" || task.status === "in_progress")) return;
-		current.reminded = true;
-		remind(TODO_REMINDER_MESSAGE, TODO_REMINDER);
+		if (list.reminded || list.turnsWithoutUpdate < REMINDER_AFTER || !hasActionable(list.state)) return;
+		list.reminded = true;
+		nudge(TODO_REMINDER_MESSAGE, REMINDER_TEXT);
 	});
 
 	pi.on("tool_execution_end", (event, ctx) => {
-		if (event.toolName !== TODO_TOOL_NAME) return;
-		show(session(ctx));
+		if (event.toolName === TODO_TOOL_NAME) draw(sessionOf(ctx));
 	});
 
 	pi.on("agent_end", (_event, ctx) => {
-		const current = session(ctx);
-		if (current.state.tasks.length > 0 && todoSummary(current.state).open === 0) current.clearOnNextTurn = true;
-		show(current);
+		const list = sessionOf(ctx);
+		if (list.state.tasks.length > 0 && todoSummary(list.state).open === 0) list.clearAtNextRun = true;
+		draw(list);
 	});
 }
