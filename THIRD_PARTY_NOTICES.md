@@ -19,9 +19,7 @@ Sources:
 - `shell/extensions/todo.ts`: `extensions/gentle-todo.ts` (gentle-pi 4.1.0)
 - `shell/extensions/ui.ts`: `extensions/ui.ts` (gentle-pi 4.1.0)
 - `shell/lib/background-tasks-tools.ts`: `lib/background-jobs-tools.ts` and `extensions/gentle-agents.ts` (its background jobs) (gentle-pi 4.1.0)
-- `shell/lib/background-tasks-view.ts`: `lib/jobs-view.ts` (gentle-pi 4.1.0)
 - `shell/lib/background-tasks.ts`: `lib/background-jobs.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/agents-view-layout.ts`: `lib/agents-view-layout.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/animation-policy.ts`: `lib/animation-policy.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/append-system-prompt.ts`: `lib/append-system-prompt.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/ask-view.ts`: the layout of `lib/questionnaire/questionnaire-view.ts` (gentle-pi 4.6.0)
@@ -40,7 +38,6 @@ Sources:
 
 Tests:
 
-- `shell/test/background-tasks-view.test.ts`: `tests/jobs-view.test.ts` (gentle-pi 4.1.0)
 - `shell/test/card-text.ts`: `tests/gentle-card-text.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-animation-policy.test.ts`: `tests/animation-policy.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-append-system-prompt.test.ts`: `tests/append-system-prompt.test.ts` (gentle-pi 4.1.0)

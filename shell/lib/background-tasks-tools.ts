@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { runAgent, type AgentDef } from "./agents.ts";
 import { shellSettings, type ShellSettings } from "./settings.ts";
 import { createTaskRegistry, MAX_RUNNING_TASKS, type AgentRun, type AgentStartOptions, type JobRecord, type TaskRecord, type TaskRegistryDeps } from "./background-tasks.ts";
-import { TasksView } from "./background-tasks-view.ts";
+import { TasksView } from "./ui/tasks-view.ts";
 import { openInExternalEditor } from "./ui/jhon-panel-editor.ts";
 import { OPEN_TASKS_EVENT, TASKS_EVENT } from "./events.ts";
 import { recordUse } from "./ui-use.ts";
@@ -523,6 +523,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 				onClose: () => close(null),
 				requestRender: () => tui.requestRender(),
 				ascii: shellSettings().ascii(),
+				icons: shellSettings().icons(),
 			});
 			return view;
 		}, { overlay: true, overlayOptions: { width: "100%", maxHeight: "100%", margin: 0, anchor: "center" } }).finally(() => { repaint = undefined; view?.dispose(); });
