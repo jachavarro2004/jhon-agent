@@ -144,9 +144,9 @@ function terminal(theme: MediaTheme, cols: number, command: string, output: read
 
 /**
  * A tool call the guards refused, as the shell draws it: its tool card
- * (shell/extensions/quiet.ts, the call row and the error result, expanded
- * with ctrl+o so the whole reason shows), on pi's default keybindings and
- * this theme as pi's global one.
+ * (shell/extensions/quiet.ts: the red `✗ refused  <call>  <guard>` band, then
+ * the reason and the fix, expanded with ctrl+o so the whole reason shows), on
+ * pi's default keybindings and this theme as pi's global one.
  */
 async function refusedCard(theme: MediaTheme, tool: "edit" | "bash", args: Record<string, unknown>, reason: string, width: number): Promise<string[]> {
   const pi = join(SHELL, "node_modules/@earendil-works");
@@ -161,10 +161,10 @@ async function refusedCard(theme: MediaTheme, tool: "edit" | "bash", args: Recor
     renderResult(result: unknown, options: unknown, theme: unknown, ctx: unknown): { render(w: number): string[] };
   };
   const ctx = { toolCallId: `media-${tool}`, args, isPartial: false, isError: true, executionStarted: false, expanded: true, state: {} };
-  return [
-    ...r.renderCall(args, theme, ctx).render(width),
-    ...r.renderResult({ content: [{ type: "text", text: reason }] }, { isPartial: false, expanded: true }, theme, ctx).render(width),
-  ];
+  // As pi does: both components first, then their rows, so the call's header knows the guard refused it.
+  const call = r.renderCall(args, theme, ctx);
+  const result = r.renderResult({ content: [{ type: "text", text: reason }] }, { isPartial: false, expanded: true }, theme, ctx);
+  return [...call.render(width), ...result.render(width)];
 }
 
 /** Every feature capture, rendered through the shell's own functions. */
@@ -209,9 +209,9 @@ export async function captures(theme: MediaTheme): Promise<Capture[]> {
   });
   out.push({ name: "ldd-question", title: "the first code change", cols: pw, lines: ask.render(pw) });
 
-  // The guards' refusals: the shell's tool card, whose result row shows the
-  // engine's reason cut to the width, then the same call fed to the hook, its
-  // whole answer as the engine prints it.
+  // The guards' refusals: the shell's tool card, the guard's band with the
+  // engine's reason and fix, then the same call fed to the hook, its whole
+  // answer as the engine prints it.
   out.push({
     name: "guard-refusal", title: "a refused tool call", cols: wide,
     lines: [...await refusedCard(theme, "edit", { path: `${HOME}/src/lumen/api/invoices.go`, edits: [{ oldText: "h.store.All()", newText: "h.store.Each(ctx)" }] }, SCOPE_REFUSAL.join("\n"), wide),

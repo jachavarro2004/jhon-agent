@@ -1,3 +1,8 @@
+// extensions/quiet.ts (T174-S6): what each tool card says and keeps, read
+// through the public renderers. The exact rows of design/shell-tui 01 are in
+// ui-tool-card-rows.test.ts; the default (full) bash card in
+// ui-tool-cards.test.ts. Most cases here run under shell.appearance.density
+// "minimal", where bash is quiet too.
 import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -6,976 +11,479 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initTheme, keyHint } from "@earendil-works/pi-coding-agent";
 import { imageFallback, visibleWidth } from "@earendil-works/pi-tui";
-import { cardBody, cardHint, cardTitle } from "./card-text.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import piPretty from "../extensions/pretty.ts";
-import productionQuietTools, {
-	createQuietToolRenderer,
-	countNonEmptyLines,
-	extractTextContent,
-	formatToolResultOutput,
-	tailLines,
-} from "../extensions/quiet.ts";
+import productionQuietTools, { createQuietToolRenderer } from "../extensions/quiet.ts";
 import { installShellSettings, type ShellSettings } from "../lib/settings.ts";
 import { envOverrides, memorySettings } from "./fake-jhon-settings.ts";
 
-const passthroughTheme = {
-	bold(value: string) {
-		return value;
-	},
-	fg(_color: string, value: string) {
-		return value;
-	},
-};
-
 initTheme("dark");
 
-// These tests pin the quiet cards, which shell.appearance.density "minimal"
-// selects since T91 (L650); the full default bash card is ui-tool-cards.test.ts.
-const QUIET = { "shell.appearance.density": "minimal" } as const;
-installShellSettings(memorySettings(QUIET));
+const MINIMAL = { "shell.appearance.density": "minimal" } as const;
+installShellSettings(memorySettings(MINIMAL));
 
-const statusTheme = {
-	bold(value: string) {
-		return value;
-	},
-	fg(color: string, value: string) {
-		return `<${color}>${value}</${color}>`;
-	},
-};
+const plain = { bold: (s: string) => s, fg: (_role: string, s: string) => s };
+// The key's hint as pi words it; with no keybindings loaded the key itself is empty.
+const EXPAND = stripAnsi(keyHint("app.tools.expand", "to expand")).trim();
+const COLLAPSE = stripAnsi(keyHint("app.tools.expand", "to collapse")).trim();
 
-function routineRenderContext(overrides: Record<string, unknown> = {}) {
+function context(overrides: Record<string, unknown> = {}) {
 	return {
-		args: {},
-		toolCallId: "tool-call",
-		invalidate() {},
-		lastComponent: undefined,
-		cwd: "/repo",
-		executionStarted: false,
-		argsComplete: true,
-		isPartial: true,
-		expanded: false,
-		showImages: false,
-		isError: false,
+		args: {}, toolCallId: "call-1", invalidate() {}, lastComponent: undefined, cwd: "/repo", state: {},
+		executionStarted: true, argsComplete: true, isPartial: false, expanded: false, showImages: false, isError: false,
 		...overrides,
 	};
 }
 
-// Content assertions read the quiet tool card content, as the Gentle Shell's
-// tests do: a theme without backgrounds draws the outlined card (neon), so
-// the top rule becomes its call text (icon, fill and hint dropped), the sides
-// are stripped and the closing rule is dropped. A pending call's `running…`
-// row is frame chrome too, asserted separately. The result's `↳ ✓ <summary>`
-// reads as its summary row, a failure's `↳ ✗ <why>` as its headline. Legacy
-// bash argument assertions drop its identity prefix here; distinct tool
-// identity is asserted separately against the actual unmodified frame.
-const TAG = "(?:</?[a-zA-Z]+>)*";
-const ICONS = "(?:▤|⌕|◍|\\$|✎|▢|◇|\\?|·|📄|🔎|🌐|🧠|🤖|❓)";
-const CARD_TOP = new RegExp(`^${TAG}╭─ ${TAG}${ICONS}${TAG} (.*?) ${TAG}─+${TAG}(?: .*? )?${TAG}╮${TAG}$`);
-const CARD_SIDE = new RegExp(`^${TAG}│${TAG} (.*) ${TAG}│${TAG}$`);
-const CARD_BOTTOM = new RegExp(`^${TAG}╰${TAG}─*${TAG}╯${TAG}$`);
+const result = (text: string, details?: unknown) => ({ content: [{ type: "text", text }], details });
 
-function frameLines(component: { render(width: number): string[] }, width = 120): string[] {
-	return component.render(width).map((line) => line.trimEnd());
+interface Drawn { header: string; state: string; body: string[]; rows: string[] }
+
+/**
+ * One tool row as pi draws it (the call, then the result, one row state),
+ * at width, with a plain theme: the header row, the state at its right
+ * (after the last two-space gap), and the body rows without their lead.
+ */
+function draw(tool: any, args: Record<string, unknown>, value: unknown, extra: Record<string, unknown> = {}, width = 120, theme: object = plain): Drawn {
+	const ctx = context({ args, ...extra });
+	const call = tool.renderCall(args, theme, ctx);
+	const body = value === undefined ? undefined : tool.renderResult(value, { expanded: ctx.expanded === true, isPartial: ctx.isPartial === true }, theme, ctx);
+	const rows = [...call.render(width), ...(body?.render(width) ?? [])].map(stripAnsi);
+	const header = rows[0]?.trimEnd() ?? "";
+	// The state: the header's last part after a two-space gap, with the expand key's hint before it when it shows.
+	const hint = [EXPAND, COLLAPSE].map((h) => header.lastIndexOf(` ${h}  `)).find((at) => at >= 0);
+	const parts = header.trim().split(/ {2,}/);
+	const state = hint !== undefined ? header.slice(hint + 1) : parts.length > 1 ? parts.at(-1)! : "";
+	return { header, state, body: rows.slice(1).map((row) => row.replace(/^ {4}/, "").trimEnd()), rows };
 }
 
-const QUIET_CARD_COMPONENTS = new Set(["ToolCardTop", "ToolCardBody"]);
+const bodyOf = (d: Drawn) => d.body.join("\n");
 
-function renderLines(component: { render(width: number): string[] }, width = 120): string[] {
-	if (!QUIET_CARD_COMPONENTS.has(component.constructor.name)) return component.render(width).map((line) => line.trimEnd());
-	const call = component.constructor.name === "ToolCardTop";
-	return component.render(width).map((line) => line.replace(/\x1b\[[0-9;]*m/g, "")).flatMap((line) => {
-		if (CARD_BOTTOM.test(line)) return [];
-		const top = CARD_TOP.exec(line);
-		if (top) return [top[1]!.replace(/^(?:<[^>]+>)*bash(?:<[^>]+>)* /, "").trimEnd()];
-		const side = CARD_SIDE.exec(line);
-		const text = (side ? side[1]! : line).trimEnd();
-		if (call) return side && text.replace(/<\/?[a-zA-Z]+>/g, "") === "running…" ? [] : [text];
-		// The result's `↳ ✓ <summary>` reads as its summary, a failure's `↳ ✗ <why>` as its headline.
-		return [text.replace(/^((?:<[^>]+>)*)↳(?:<\/?[a-zA-Z]+>)* (?:<[^>]+>)*[✓✗](?:<\/?[a-zA-Z]+>)* /, "$1")];
-	});
-}
-
-function renderToString(component: { render(width: number): string[] }, width = 120): string {
-	return renderLines(component, width).join("\n");
-}
-
-function textResult(text: string, details?: unknown) {
-	return {
-		content: [{ type: "text", text }],
-		details,
-	};
-}
-
-function createPi(options: { throwOnToolConflict?: boolean } = {}) {
+function fakePi(options: { throwOnConflict?: boolean } = {}) {
 	const tools = new Map<string, any>();
-	const commands = new Map<string, any>();
 	const hooks = new Map<string, any[]>();
-	return {
-		tools,
-		hooks,
-		pi: {
-			registerTool(tool: any) {
-				if (options.throwOnToolConflict && tools.has(tool.name)) {
-					throw new Error(`Tool ${tool.name} already registered`);
-				}
-				tools.set(tool.name, tool);
-			},
-			registerCommand(name: string, command: any) {
-				commands.set(name, command);
-			},
-			on(name: string, handler: any) {
-				hooks.set(name, [...(hooks.get(name) ?? []), handler]);
-			},
+	const pi = {
+		registerTool(tool: any) {
+			if (options.throwOnConflict && tools.has(tool.name)) throw new Error(`Tool ${tool.name} already registered`);
+			tools.set(tool.name, tool);
 		},
+		registerCommand() {},
+		on(name: string, handler: any) { hooks.set(name, [...(hooks.get(name) ?? []), handler]); },
 	};
+	return { pi, tools, hooks };
 }
 
-function createSdkTool(name: string) {
-	return {
-		name,
-		label: name,
-		description: `${name} tool`,
-		parameters: { type: "object", properties: {} },
-		execute: async () => textResult(`${name} result`),
+/** The six cards and bash's card registered as a tool, for rendering only (no executor). */
+function cards(): Map<string, any> {
+	const { pi, tools } = fakePi();
+	productionQuietTools(pi as any);
+	pi.registerTool({ name: "bash", ...createQuietToolRenderer("bash") });
+	return tools;
+}
+
+const sdkTool = (name: string) => ({ name, label: name, description: `${name} tool`, parameters: { type: "object", properties: {} }, execute: async () => result(`${name} result`) });
+
+// pi-pretty registers each of its tools unless PRETTY_DISABLE_TOOLS names it; so does this stand-in.
+const fakePretty = async (api: any) => {
+	const off = new Set((process.env.PRETTY_DISABLE_TOOLS ?? "").split(",").filter(Boolean));
+	for (const name of ["read", "bash", "ls", "find", "grep"]) if (!off.has(name)) api.registerTool(sdkTool(name));
+};
+const fakePrettyDeps = { sdk: Object.fromEntries(["Read", "Bash", "Ls", "Find", "Grep"].map((n) => [`create${n}Tool`, () => sdkTool(n.toLowerCase())])) };
+
+/** Runs with these environment variables set and the settings `jhon settings` would give under them. */
+async function withEnv<T>(updates: Record<string, string | undefined>, run: () => Promise<T> | T): Promise<T> {
+	const before = Object.fromEntries(Object.keys(updates).map((key) => [key, process.env[key]]));
+	let previous: ShellSettings | undefined;
+	const restore = (values: Record<string, string | undefined>) => {
+		for (const [key, value] of Object.entries(values)) {
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
 	};
-}
-
-// Upstream pi-pretty registers its tools unless PRETTY_DISABLE_TOOLS names them; this fake does the same.
-const fakePiPretty = async (api: any) => {
-	const disabled = new Set((process.env.PRETTY_DISABLE_TOOLS ?? "").split(",").filter(Boolean));
-	for (const name of ["read", "bash", "ls", "find", "grep"]) if (!disabled.has(name)) api.registerTool(createSdkTool(name));
-};
-
-const fakePiPrettyDeps = {
-	sdk: {
-		createReadTool: () => createSdkTool("read"),
-		createBashTool: () => createSdkTool("bash"),
-		createLsTool: () => createSdkTool("ls"),
-		createFindTool: () => createSdkTool("find"),
-		createGrepTool: () => createSdkTool("grep"),
-	},
-};
-
-// While it runs, the process's settings are what `jhon settings` would give
-// the shell under the updated environment (S38).
-function withEnv<T>(updates: Record<string, string | undefined>, run: () => T): T {
-	const previous = Object.fromEntries(Object.keys(updates).map((key) => [key, process.env[key]]));
-	let settings: ShellSettings | undefined;
-	let installed = false;
 	try {
-		for (const [key, value] of Object.entries(updates)) {
-			if (value === undefined) delete process.env[key];
-			else process.env[key] = value;
-		}
-		settings = installShellSettings(memorySettings({ ...QUIET }, undefined, envOverrides(process.env)));
-		installed = true;
-		return run();
-	} finally {
-		if (installed) installShellSettings(settings);
-		for (const [key, value] of Object.entries(previous)) {
-			if (value === undefined) delete process.env[key];
-			else process.env[key] = value;
-		}
-	}
-}
-
-async function withEnvAsync<T>(updates: Record<string, string | undefined>, run: () => Promise<T>): Promise<T> {
-	const previous = Object.fromEntries(Object.keys(updates).map((key) => [key, process.env[key]]));
-	let settings: ShellSettings | undefined;
-	let installed = false;
-	try {
-		for (const [key, value] of Object.entries(updates)) {
-			if (value === undefined) delete process.env[key];
-			else process.env[key] = value;
-		}
-		settings = installShellSettings(memorySettings({ ...QUIET }, undefined, envOverrides(process.env)));
-		installed = true;
+		restore(updates);
+		previous = installShellSettings(memorySettings({ ...MINIMAL }, undefined, envOverrides(process.env)));
 		return await run();
 	} finally {
-		if (installed) installShellSettings(settings);
-		for (const [key, value] of Object.entries(previous)) {
-			if (value === undefined) delete process.env[key];
-			else process.env[key] = value;
-		}
+		if (previous) installShellSettings(previous);
+		restore(before);
 	}
 }
 
-// Standalone rendering-only fixture for historical Bash formatting contracts.
-// No executor, shellPath, or claim of production native-Bash UI parity.
-function quietTools(pi: any, resolveOverride?: any) {
-	productionQuietTools(pi);
-	pi.registerTool({ name: "bash", ...createQuietToolRenderer("bash", resolveOverride) });
-}
+// --- registration -------------------------------------------------------------------------------
 
-function registeredQuietTools() {
-	const { pi, tools } = createPi();
-	quietTools(pi as any);
-	return tools;
-}
+test("the cards register six of pi's tools, never bash or codemode, each delegating its execution", () => {
+	const { pi, tools } = fakePi();
+	productionQuietTools(pi as any);
+	assert.equal(tools.has("bash"), false);
+	assert.equal(tools.has("codemode"), false, "Jhon turns codemode off; MCP tools are exposed directly");
+	for (const name of ["read", "grep", "find", "ls", "edit", "write"]) {
+		const tool = tools.get(name);
+		assert.ok(tool, name);
+		assert.equal(tool.renderShell, "self", `${name} draws its own card`);
+		assert.equal(typeof tool.execute, "function");
+		assert.ok(tool.parameters, `${name} keeps pi's parameters`);
+	}
+});
 
-function registeredQuietToolsWithResolver(resolveOverride: () => unknown) {
-	const { pi, tools } = createPi();
-	quietTools(pi as any, resolveOverride as any);
-	return tools;
-}
+test("the cards never replace a native bash tool already registered", () => {
+	const { pi, tools } = fakePi({ throwOnConflict: true });
+	const native = sdkTool("bash");
+	pi.registerTool(native);
+	productionQuietTools(pi as any);
+	assert.strictEqual(tools.get("bash"), native);
+});
 
-function renderToolResult(tool: any, result: any, options: any, context: Record<string, unknown> = {}): string {
-	return renderToString(tool.renderResult(result, options, passthroughTheme, context));
-}
+test("bash's card draws the same whatever shellPath the context carries", () => {
+	const bash = cards().get("bash");
+	const header = (extra: Record<string, unknown>) => draw(bash, { command: "printf output" }, undefined, extra).header;
+	assert.equal(header({ shellPath: "/configured/bash" }), header({}));
+	assert.doesNotMatch(header({ shellPath: "/configured/bash" }), /configured/);
+});
 
-function assertGenericBash(tool: any, command: string): void {
-	const call = renderToString(tool.renderCall({ command }, passthroughTheme, { args: { command } }));
-	const output = renderToolResult(tool, textResult("original command output"), { expanded: true, isPartial: false }, { args: { command } });
-	assert.equal(call.trimEnd(), `$ ${command}`, command);
-	assert.doesNotMatch(call, /🌹/);
-	assert.match(output, /original command output/);
-}
-
-test("quiet tools register six overrides, never Bash or codemode", () => {
-	{
-		const { pi, tools } = createPi();
-
+test("pi-pretty leaves the overlapping tools to the cards, and keeps a read's model-visible text byte for byte", async () => {
+	await withEnv({ JHON_PI_CHILD: undefined, PRETTY_DISABLE_TOOLS: "multi_grep" }, async () => {
+		const { pi, tools } = fakePi({ throwOnConflict: true });
+		await piPretty(pi as any, fakePrettyDeps as any, fakePretty as any, process.env);
 		productionQuietTools(pi as any);
-
 		assert.equal(tools.has("bash"), false);
-		assert.equal(tools.has("codemode"), false, "Jhon turns codemode off; MCP tools are exposed directly");
-		for (const toolName of ["read", "grep", "find", "ls", "edit", "write"]) {
-			const tool = tools.get(toolName);
-			assert.ok(tool, `missing quiet renderer for ${toolName}`);
-			assert.equal(tool.renderShell, "self", `${toolName} must opt out of Pi's painted Box`);
-			assert.equal(typeof tool.execute, "function", `${toolName} must delegate execution`);
-			assert.ok(tool.parameters, `${toolName} must preserve built-in parameters`);
+		for (const name of ["read", "grep", "find", "ls", "edit", "write"]) assert.ok(tools.has(name), name);
+		assert.equal(process.env.PRETTY_DISABLE_TOOLS, "multi_grep,read,bash,ls,find,grep");
+	});
+	await withEnv({ JHON_PI_CHILD: undefined, PRETTY_DISABLE_TOOLS: undefined }, async () => {
+		const { pi, hooks } = fakePi();
+		await piPretty(pi as any, fakePrettyDeps as any, fakePretty as any, process.env);
+		const original = "[alpha]\ntarget=old\n\n[beta]\ntarget=old\n";
+		let event: any = { toolName: "read", content: [{ type: "text", text: original }] };
+		for (const handler of hooks.get("tool_result") ?? []) {
+			const replaced = await handler(event, {});
+			if (replaced) event = { ...event, ...replaced };
 		}
-	}
-});
-
-test("quiet tools never replace an existing native Bash tool", () => {
-	{
-		const { pi, tools } = createPi({ throwOnToolConflict: true });
-		const native = createSdkTool("bash");
-		pi.registerTool(native);
-		productionQuietTools(pi as any);
-		assert.strictEqual(tools.get("bash"), native);
-	}
-});
-
-// Actual configured Bash execution is covered in quiet-bash-runtime.test.ts.
-
-test("standalone Bash rendering fixture does not interpret shellPath", () => {
-	const tool = registeredQuietTools().get("bash");
-	const render = (context: Record<string, unknown> = {}) => renderToString(tool.renderCall({ command: "printf output" }, passthroughTheme, routineRenderContext(context)));
-	const configured = render({ shellPath: "/configured/bash" });
-	assert.equal(configured, render());
-	assert.doesNotMatch(configured, /shellPath|configured\/bash/);
-});
-
-test("pi-pretty suppresses overlapping tools before quiet tools register", async () => {
-	await withEnvAsync(
-		{ JHON_PI_CHILD: undefined, PRETTY_DISABLE_TOOLS: "multi_grep" },
-		async () => {
-			const { pi, tools } = createPi({ throwOnToolConflict: true });
-
-			await piPretty(pi as any, fakePiPrettyDeps as any, fakePiPretty as any, process.env);
-			productionQuietTools(pi as any);
-
-			assert.equal(tools.has("bash"), false);
-			for (const toolName of ["read", "grep", "find", "ls", "edit", "write"]) {
-				assert.ok(tools.has(toolName), `missing quiet tool ${toolName}`);
-			}
-			assert.equal(process.env.PRETTY_DISABLE_TOOLS, "multi_grep,read,bash,ls,find,grep");
-		},
-	);
-});
-
-test("pi-pretty preserves byte-exact model-visible read results when quiet tools suppress its renderer", async () => {
-	await withEnvAsync(
-		{ JHON_PI_CHILD: undefined, PRETTY_DISABLE_TOOLS: undefined },
-		async () => {
-			const { pi, hooks } = createPi();
-			await piPretty(pi as any, fakePiPrettyDeps as any, fakePiPretty as any, process.env);
-
-			const original = "[alpha]\ntarget=old\n\n[beta]\ntarget=old\n";
-			let event: any = {
-				toolName: "read",
-				content: [{ type: "text", text: original }],
-			};
-			for (const handler of hooks.get("tool_result") ?? []) {
-				const replacement = await handler(event, {});
-				if (replacement) event = { ...event, ...replacement };
-			}
-
-			assert.equal(event.content[0]?.text, original);
-		},
-	);
-});
-
-test("quiet tool rendering uses bounded previews while preserving search summaries", () => {
-	const { pi, tools } = createPi();
-	quietTools(pi as any);
-
-	const read = renderToString(
-		tools.get("read").renderResult(textResult("first line\nsecond line"), { expanded: false, isPartial: false }, passthroughTheme, {}),
-	);
-	const bash = renderToString(
-		tools.get("bash").renderResult(textResult("stdout line\nstderr line"), { expanded: false, isPartial: false }, passthroughTheme, { args: { command: "printf output" } }),
-	);
-	assert.match(read, /first line\nsecond line/);
-	assert.match(bash, /stdout line\nstderr line/);
-	// The expand key rides the call card's top rule, never the result body.
-	const configuredHint = keyHint("app.tools.expand", "to expand");
-	assert.ok(!read.includes(configuredHint));
-	assert.ok(!bash.includes(configuredHint));
-
-	for (const [tool, text, label] of [
-		["grep", "src/a.ts:1:match\nsrc/b.ts:2:match", "2 matches"],
-		["find", "src/a.ts\nsrc/b.ts", "2 files"],
-		["ls", "file-a.ts\nfile-b.ts", "2 entries"],
-	] as const) {
-		const collapsed = renderToString(
-			tools.get(tool).renderResult(textResult(text), { expanded: false, isPartial: false }, passthroughTheme, {}),
-		);
-		const expanded = renderToString(
-			tools.get(tool).renderResult(textResult(text), { expanded: true, isPartial: false }, passthroughTheme, {}),
-		);
-		assert.match(collapsed, new RegExp(label));
-		assert.match(collapsed, /src\/a\.ts|file-a\.ts/);
-		assert.match(expanded, new RegExp(text.split("\n")[1]!));
-	}
-});
-
-test("quiet tool rendering keeps compact collapsed summaries for search and listing tools", () => {
-	assert.equal(countNonEmptyLines("a\n\n b \n"), 2);
-	assert.equal(extractTextContent(textResult("alpha\nbeta") as any), "alpha\nbeta");
-	assert.equal(formatToolResultOutput("grep", textResult("a\nb\n") as any, { expanded: false }), " → 2 matches");
-	assert.equal(formatToolResultOutput("find", textResult("a\nb\n") as any, { expanded: false }), " → 2 files");
-	assert.equal(formatToolResultOutput("ls", textResult("a\nb\n") as any, { expanded: false }), " → 2 entries");
-	assert.equal(formatToolResultOutput("grep", textResult("No matches found") as any, { expanded: false }), "");
-	assert.equal(formatToolResultOutput("find", textResult("No files found matching pattern") as any, { expanded: false }), "");
-	assert.equal(formatToolResultOutput("ls", textResult("Directory is empty") as any, { expanded: false }), "");
-	assert.equal(formatToolResultOutput("read", textResult("a\nb\n") as any, { expanded: false }), "\na\nb");
-	assert.equal(formatToolResultOutput("bash", textResult("a\nb\n") as any, { expanded: false }), "\na\nb");
-	assert.equal(formatToolResultOutput("bash", textResult("a\nb\n") as any, { expanded: false, args: { command: "git diff" } }), "\na\nb\n");
-	assert.equal(formatToolResultOutput("bash", textResult("a\nb\n") as any, { expanded: false, args: { command: "git -C repo status" } }), "\na\nb\n");
-	assert.equal(formatToolResultOutput("bash", textResult("a\nb\n") as any, { expanded: false, args: { command: "echo git diff" } }), "\na\nb");
-	assert.equal(formatToolResultOutput("edit", textResult("updated") as any, { expanded: false }), "\n✓ applied");
-	assert.equal(formatToolResultOutput("write", textResult("wrote") as any, { expanded: false }), "\n✓ written");
-	assert.equal(formatToolResultOutput("grep", textResult("a\nb\n") as any, { expanded: true }), "\na\nb\n");
-	assert.equal(formatToolResultOutput("read", textResult("ENOENT: missing file") as any, { expanded: false, isError: true }), "\nENOENT: missing file");
-});
-
-test("quiet search and placeholder summaries preserve exact-result behavior", async (t) => {
-	const grepRows = [["one", 12, "first"], ["two", 20, "second"], ["three", 28, "third"], ["four", 36, "fourth"], ["five", 44, "fifth"]] as const;
-	const contextText = grepRows.flatMap(([file, line, ordinal]) => [
-		`src/${file}.ts:${line}: ${ordinal} match`,
-		`src/${file}.ts-${line - 1}- context before`,
-		`src/${file}.ts-${line + 1}- context after`,
-	]).join("\n");
-	assert.deepEqual([grepRows.length, contextText.split("\n").length, contextText.split("\n").filter((line) => /:\d+:/.test(line)).length, contextText.split("\n").filter((line) => /-\d+-/.test(line)).length], [5, 15, 5, 10]);
-
-	const lsCollisionText = "(empty directory)\nreal-entry.txt";
-	const bashCollisionText = "(no output)\nreal output";
-	const tools = registeredQuietTools();
-	const hint = keyHint("app.tools.expand", "to expand");
-	const cases = [
-		["grep", "context rows count only match rows", "grep", contextText, { context: 1 }, " → 5 matches", undefined, /5 matches[\s\S]*first match/, /15 matches/, 1],
-		["grep", "no-context output counts every non-empty row", "grep", "src/a.ts:1:match\nsrc/b.ts:2:match", {}, " → 2 matches", undefined, /2 matches/, undefined, 1],
-		["exact", "current empty-directory marker", "ls", "(empty directory)", {}, "", undefined, /^empty$/, /entries|to expand/, 0],
-		["exact", "legacy empty-directory marker", "ls", "Directory is empty", {}, "", undefined, /^empty$/, /entries|to expand/, 0],
-		["exact", "no-output marker", "bash", "(no output)", { command: "true" }, "\n(no output)", undefined, /^no output$/, /to expand/, 0],
-		["collision", "empty-directory marker with a real entry", "ls", lsCollisionText, {}, " → 2 entries", `\n${lsCollisionText}`, /2 entries[\s\S]*real-entry\.txt/, undefined, 1],
-		["collision", "no-output marker with real output", "bash", bashCollisionText, { command: "printf output" }, `\n${bashCollisionText}`, `\n${bashCollisionText}`, /\(no output\)\nreal output/, undefined, 1],
-	] as const;
-	assert.equal(cases.length, 7);
-
-	const assertSummaryCase = (current: (typeof cases)[number]) => {
-		const [, name, toolName, text, args, collapsed, expanded, rendered, forbidden] = current;
-		const result = textResult(text) as any;
-		const tool = tools.get(toolName);
-		assert.ok(tool, `${name}: missing ${toolName} renderer`);
-		assert.equal(formatToolResultOutput(toolName, result, { expanded: false, args }), collapsed, name);
-		if (expanded !== undefined) assert.equal(formatToolResultOutput(toolName, result, { expanded: true, args }), expanded, `${name} expanded output`);
-		const output = renderToolResult(tool, result, { expanded: false, isPartial: false }, { args });
-		assert.match(output, rendered, name);
-		if (forbidden) assert.doesNotMatch(output, forbidden, name);
-		assert.equal(output.split(hint).length - 1, 0, `${name}: the expand key rides the call card, not the result`);
-	};
-
-	for (const [section, count] of [["grep", 2], ["exact", 3], ["collision", 2]] as const) await t.test(section, () => {
-		const selected = cases.filter(([currentSection]) => currentSection === section);
-		assert.equal(selected.length, count, `${section}: case count`);
-		for (const current of selected) assertSummaryCase(current);
+		assert.equal(event.content[0]?.text, original);
 	});
 });
 
-test("quiet Bash errors preserve meaningful rows for both public output orderings", () => {
-	const tool = registeredQuietTools().get("bash");
-	const hint = keyHint("app.tools.expand", "to expand");
-	const stripAnsi = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
-	const cases = [
-		["Pi session event", [
-			["    B3 stdout before failure", []],
-			["    B3 stderr detail that should require expansion", ["    ", "    "]],
-			["    Command exited with code 7", []],
-		]],
-		["registered execution probe", [
-			["probe stdout before failure", ["", ""]],
-			["probe stderr detail \x1b[31mwith terminal color\x1b[0m", ["", ""]],
-			["probe exit status: 7", []],
-		]],
-	] satisfies ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, readonly string[]]>]>;
-	assert.equal(cases.length, 2);
-	const args = { command: "false" };
-	const renderResult = (result: any, expanded: boolean) => tool.renderResult(result, { expanded, isPartial: false, isError: true }, passthroughTheme, { args, isError: true });
+// --- what each card says -----------------------------------------------------------------------------
 
-	for (const [name, rows] of cases) {
-		assert.equal(rows.length, 3, `${name}: three meaningful source rows`);
-		const text = rows.flatMap(([row, gaps]) => [row, ...gaps]).join("\n");
-		const previewRows = rows.map(([row]) => stripAnsi(row));
-		assert.ok(previewRows.every((row) => row.trim().length > 0), `${name}: preview rows are meaningful`);
-		const expandedText = stripAnsi(text);
-		const renderedExpandedText = expandedText.split("\n").map((line) => line.trimEnd()).join("\n");
-		const result = textResult(text) as any;
-		assert.equal(formatToolResultOutput("bash", result, { expanded: false, isError: true, args }), `\n${previewRows.join("\n")}`, name);
-		assert.equal(formatToolResultOutput("bash", result, { expanded: true, isError: true, args }), `\n${expandedText}`, `${name} expanded output`);
+test("each card says its call: the tool, its target, a read's range, a search's glob and limit, bash's timeout", () => {
+	const t = cards();
+	assert.match(draw(t.get("read"), { path: "/tmp/example.ts", offset: 2, limit: 3 }, undefined).header, /^ {2}▤ read {2}\/tmp\/example\.ts:2-4/);
+	assert.match(draw(t.get("bash"), { command: "printf noisy", timeout: 5 }, undefined).header, /^ {2}\$ printf noisy \(timeout 5s\)/);
+	assert.match(draw(t.get("grep"), { pattern: "needle", path: "src", glob: "*.ts", limit: 9 }, undefined).header, /^ {2}⌕ grep {2}\/needle\/ in src \(\*\.ts\) limit 9/);
+	assert.match(draw(t.get("find"), { pattern: "*.md" }, undefined).header, /^ {2}⌕ find {2}\*\.md in \./);
+	assert.match(draw(t.get("ls"), {}, undefined).header, /^ {2}· ls {2}\./);
+	assert.match(draw(t.get("write"), { path: "a.ts", content: "x\ny" }, undefined).header, /^ {2}✎ write {2}a\.ts \(2 lines\)/);
+	assert.equal(draw(t.get("read"), { path: "a.ts" }, undefined, { isPartial: true }).state, "◐ running", "no result yet");
+});
 
-		const collapsedLines = renderLines(renderResult(result, false), 120);
-		assert.ok(collapsedLines.length <= 4, `${name}: expected at most 4 visual rows, got ${collapsedLines.length}`);
-		// pi's own status line becomes the red card's headline, which says the exit code first.
-		const shown = /Command exited with code 7/.test(text) ? ["exited 7", ...previewRows.slice(0, 2)] : previewRows;
-		assert.deepEqual(collapsedLines.slice(0, 3), shown, `${name}: preview rows`);
-		assert.equal(collapsedLines.filter((line) => line.trim().length === 0).length, 0, `${name}: no blank preview rows`);
-		assert.equal(collapsedLines.filter((line) => line.includes(hint)).length, 0, `${name}: the expand key rides the call card`);
-		const expanded = renderToString(renderResult(result, true), 1000);
-		assert.equal(expanded.split("\n")[0], collapsedLines[0], `${name}: the headline first`);
-		for (const line of renderedExpandedText.split("\n").filter((row) => row.trim() !== "")) {
-			assert.equal(expanded.split("\n").filter((row) => row === line).length, 1, `${name}: «${line}» once in the complete expanded sanitized text`);
-		}
-		assert.doesNotMatch(expanded, /\x1b\[/, `${name}: expanded output is ANSI-free`);
+test("each card says its result in a few words at the header's right", () => {
+	const t = cards();
+	const state = (name: string, args: Record<string, unknown>, value: unknown) => draw(t.get(name), args, value).state;
+	assert.equal(state("grep", { pattern: "x" }, result("a.ts:1:x\nb.ts:2:x\nc.ts:3:x")), "↳ 3 matches");
+	assert.equal(state("grep", { pattern: "x" }, result("a.ts:1:x")), "↳ 1 match");
+	assert.equal(state("grep", { pattern: "x" }, result("No matches found")), "↳ no matches");
+	assert.equal(state("find", { pattern: "*.ts" }, result("a.ts\nb.ts")), "↳ 2 files");
+	assert.equal(state("find", { pattern: "*.ts" }, result("No files found matching pattern")), "↳ no files");
+	assert.equal(state("ls", { path: "." }, result("a\nb")), "↳ 2 entries");
+	assert.equal(state("ls", { path: "." }, result("(empty directory)")), "↳ empty");
+	assert.equal(state("ls", { path: "." }, result("Directory is empty")), "↳ empty");
+	assert.equal(state("read", { path: "a.ts" }, result("one\ntwo")), "↳ 2 lines");
+	assert.equal(state("edit", { path: "a.ts" }, result("Applied", { diff: "-before\n+after\n+more" })), "+2 −1");
+	assert.equal(state("edit", { path: "a.ts" }, result("Applied")), `${EXPAND}  ↳ applied`, "no diff: expanded, the result's words");
+	assert.equal(state("write", { path: "a.ts", content: "body" }, result("Successfully wrote 4 bytes")), `${EXPAND}  ↳ wrote 4 bytes`, "expanded, the content");
+	assert.equal(state("write", { path: "a.ts", content: "x" }, result("done")), `${EXPAND}  ↳ written`);
+	assert.equal(state("bash", { command: "printf hi" }, result("hi\nthere")), "↳ 2 lines");
+	assert.equal(state("bash", { command: "true" }, result("(no output)")), "↳ no output");
+});
+
+test("grep with context lines counts its match rows only; a marker beside real output is output", () => {
+	const t = cards();
+	const rows = [["one", 12], ["two", 20], ["three", 28], ["four", 36], ["five", 44]] as const;
+	const text = rows.flatMap(([f, n]) => [`src/${f}.ts:${n}: match`, `src/${f}.ts-${n - 1}- before`, `src/${f}.ts-${n + 1}- after`]).join("\n");
+	assert.equal(draw(t.get("grep"), { pattern: "m", context: 1 }, result(text)).state, `${EXPAND}  ↳ 5 matches`);
+	const listed = draw(t.get("ls"), { path: "." }, result("(empty directory)\nreal-entry.txt"));
+	assert.equal(listed.state, "↳ 2 entries");
+	assert.match(bodyOf(listed), /real-entry\.txt/);
+	const said = draw(t.get("bash"), { command: "printf x" }, result("(no output)\nreal output"));
+	assert.equal(said.state, "↳ 2 lines");
+	assert.equal(bodyOf(said), "(no output)\nreal output");
+});
+
+test("previews: a read and a search keep their first lines, bash its last; expanded, all of it", () => {
+	const t = cards();
+	const read = draw(t.get("read"), { path: "a.ts" }, result("read one\nread two\nread three\nread four"));
+	assert.deepEqual(read.body, ["read one", "read two", "read three"]);
+	assert.equal(read.state, `${EXPAND}  ↳ 4 lines`, "the expand key while lines are hidden");
+	assert.deepEqual(draw(t.get("bash"), { command: "printf x" }, result("bash one\nbash two\nbash three\nbash four")).body, ["bash two", "bash three", "bash four"]);
+	for (const [name, text] of [["grep", "src/a.ts:1:m\nsrc/b.ts:2:m\nsrc/c.ts:3:m\nsrc/d.ts:4:m"], ["find", "a\nb\nc\nd"], ["ls", "a\nb\nc\nd"]] as const) {
+		assert.equal(draw(t.get(name), {}, result(text)).body.length, 3, `${name} collapsed`);
+		const all = draw(t.get(name), {}, result(text), { expanded: true });
+		assert.deepEqual(all.body, text.split("\n"), `${name} expanded`);
+		assert.ok(all.state.startsWith(COLLAPSE), `${name}: the key to collapse`);
 	}
+	const short = draw(t.get("read"), { path: "a.ts" }, result("one"));
+	assert.equal(short.state, "↳ 1 line", "nothing hidden: no key");
 });
 
-test("quiet Bash normalizes compact JSON for bounded previews while keeping expanded text complete", () => {
-	const compactJson = JSON.stringify({
-		schema: "review",
-		contract: "compact",
-		nested: { longTail: "this must stay out of the collapsed preview", deeper: { value: true } },
-	});
-	const result = textResult(compactJson) as any;
-	const commandArgs = { command: "printf json" };
-	const previewRows = [
-		'  "schema": "review",',
-		'  "contract": "compact",',
-		'  "nested": {',
-	];
-	const expectedPreview = `\n${previewRows.join("\n")}`;
-	const tool = registeredQuietTools().get("bash");
-
-	assert.equal(formatToolResultOutput("bash", result, { expanded: false, args: commandArgs }), expectedPreview);
-	assert.equal(formatToolResultOutput("bash", result, { expanded: true, args: commandArgs }), `\n${compactJson}`);
-
-	const collapsedLines = renderLines(tool.renderResult(result, { expanded: false, isPartial: false }, passthroughTheme, { args: commandArgs }), 120);
-	const collapsed = collapsedLines.join("\n");
-	assert.equal(previewRows.length, 3);
-	assert.ok(collapsedLines.length <= 4, `expected at most 4 visual rows, got ${collapsedLines.length}`);
-	assert.deepEqual(collapsedLines.slice(0, 3), ["1 line", ...previewRows.slice(0, 2)], "the summary, then the preview");
-	assert.equal(collapsedLines.filter((line) => line.includes(keyHint("app.tools.expand", "to expand"))).length, 0);
-	assert.doesNotMatch(collapsed, /longTail|this must stay out of the collapsed preview|deeper/);
-
-	const expanded = renderToString(tool.renderResult(result, { expanded: true, isPartial: false }, passthroughTheme, { args: commandArgs }), 1000);
-	assert.equal(expanded, `1 line\n${compactJson}`);
+test("a git command keeps ten lines of its tail; a compact JSON line previews as its first fields", () => {
+	const t = cards();
+	const text = Array.from({ length: 12 }, (_, i) => `git line ${i + 1}`).join("\n");
+	for (const command of ["git diff", "git status --short", "git -C repo status"]) {
+		assert.deepEqual(draw(t.get("bash"), { command }, result(text)).body, text.split("\n").slice(2), command);
+	}
+	assert.deepEqual(draw(t.get("bash"), { command: "echo git diff" }, result(text)).body, text.split("\n").slice(-3), "not a git command");
+	const json = JSON.stringify({ schema: "review", contract: "compact", nested: { longTail: "stays out of the preview", deeper: { value: true } } });
+	const collapsed = draw(t.get("bash"), { command: "printf json" }, result(json));
+	assert.deepEqual(collapsed.body, ['  "schema": "review",', '  "contract": "compact",', '  "nested": {']);
+	assert.equal(collapsed.state, `${EXPAND}  ↳ 1 line`);
+	assert.deepEqual(draw(t.get("bash"), { command: "printf json" }, result(json), { expanded: true }, 1000).body, [json]);
 });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-test("quiet tool rendering keeps collapsed git bash result tails", () => {
-	const text = Array.from({ length: 12 }, (_, index) => `git line ${index + 1}`).join("\n");
-
-	assert.equal(formatToolResultOutput("bash", textResult(text) as any, { expanded: false, args: { command: "git diff" } }), `\n${tailLines(text, 10)}`);
-	assert.equal(formatToolResultOutput("bash", textResult(text) as any, { expanded: false, args: { command: "git status --short" } }), `\n${tailLines(text, 10)}`);
-});
-
-test("quiet tool rendering keeps concise collapsed edit and write summaries", () => {
-	const text = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join("\n");
-
-	assert.equal(tailLines(text, 10), Array.from({ length: 10 }, (_, index) => `line ${index + 3}`).join("\n"));
-	assert.equal(formatToolResultOutput("edit", textResult(text, { diff: "@@\n-old\n+new" }) as any, { expanded: false }), "\n✓ +1 / -1");
-	assert.equal(formatToolResultOutput("write", textResult("Successfully wrote 12 bytes\n" + text) as any, { expanded: false }), "\n✓ wrote 12 bytes");
-});
-
-test("quiet write expansion shows the complete written content without changing the compact summary", () => {
-	const tool = registeredQuietTools().get("write");
-	const content = Array.from({ length: 12 }, (_, index) => `written line ${index + 1}`).join("\n");
-	const result = textResult("Successfully wrote 182 bytes to file.ts");
-	const context = { args: { path: "file.ts", content } };
-
-	assert.equal(renderToolResult(tool, result, { expanded: true, isPartial: false }, context), `wrote 182 bytes\n${content}`);
-	assert.equal(renderToolResult(tool, result, { expanded: false, isPartial: false }, context), "wrote 182 bytes");
-});
-
-test("quiet write expansion renders content after a real built-in write", async () => {
-	const cwd = await mkdtemp(join(tmpdir(), "jhon-write-expanded-"));
+test("an edit's numbered diff: pi's numbers, − and + rows, a skipped run as `...`; expanded, every row", () => {
+	const edit = cards().get("edit");
+	const diff = [" 1 a", "-2 old", "+2 new", " 3 c", "   ...", "-9 gone"].join("\n");
+	const many = Array.from({ length: 20 }, (_, i) => `+${String(i + 1).padStart(2, " ")} line ${i + 1}`).join("\n");
+	installShellSettings(memorySettings({}));
 	try {
-		const tool = registeredQuietTools().get("write");
-		const args = { path: "example.ts", content: "export const answer = 42;\n" };
-		const result = await tool.execute("write-expanded", args, undefined, undefined, { cwd });
+		const drawn = draw(edit, { path: "a.ts" }, result("Applied", { diff }));
+		assert.equal(drawn.state, "+1 −2");
+		assert.deepEqual(drawn.body, [" 1   a", " 2 − old", " 2 + new", " 3   c", "     ...", " 9 − gone"]);
+		const full = draw(edit, { path: "a.ts" }, result("Applied", { diff: many }));
+		assert.equal(full.body.length, 12, "twelve rows collapsed");
+		assert.equal(full.state, `${EXPAND}  +20 −0`);
+		assert.equal(draw(edit, { path: "a.ts" }, result("Applied", { diff: many }), { expanded: true }).body.length, 20);
+	} finally {
+		installShellSettings(memorySettings(MINIMAL));
+	}
+	assert.equal(draw(edit, { path: "a.ts" }, result("Applied", { diff: many })).body.length, 3, "minimal: a preview's worth");
+	assert.deepEqual(draw(edit, { path: "a.ts" }, result("Applied", { diff: "@@\n-old\n+new" })).body, ["@@", "  − old", "  + new"], "a diff without numbers");
+});
 
+test("a write's card says it wrote; expanded, it shows what the call wrote", () => {
+	const write = cards().get("write");
+	const content = Array.from({ length: 12 }, (_, i) => `written line ${i + 1}`).join("\n");
+	const args = { path: "file.ts", content };
+	const collapsed = draw(write, args, result("Successfully wrote 182 bytes to file.ts"));
+	assert.deepEqual(collapsed.body, []);
+	assert.equal(collapsed.state, `${EXPAND}  ↳ wrote 182 bytes`);
+	assert.deepEqual(draw(write, args, result("Successfully wrote 182 bytes to file.ts"), { expanded: true }).body, content.split("\n"));
+	for (const fallback of [{}, { content: 42 }, { content: "" }]) {
+		assert.deepEqual(draw(write, fallback, result("Successfully wrote 0 bytes to file.ts"), { expanded: true }).body, ["Successfully wrote 0 bytes to file.ts"], "no content: the result's own words");
+	}
+	const failed = draw(write, args, result("EACCES: permission denied"), { isError: true, expanded: true });
+	assert.equal(failed.body.join("\n"), "EACCES: permission denied");
+	assert.doesNotMatch(bodyOf(failed), /written line/);
+	const partial = draw(write, args, result("writing…"), { isPartial: true, expanded: true });
+	assert.match(bodyOf(partial), /writing…/);
+	assert.doesNotMatch(bodyOf(partial), /written line/);
+});
+
+test("a write after pi's real write tool: the file is written and the card shows the content", async () => {
+	const cwd = await mkdtemp(join(tmpdir(), "jhon-write-card-"));
+	try {
+		const write = cards().get("write");
+		const args = { path: "example.ts", content: "export const answer = 42;\n" };
+		const done = await write.execute("write-1", args, undefined, undefined, { cwd });
 		assert.equal(await readFile(join(cwd, args.path), "utf8"), args.content);
-		assert.match(extractTextContent(result), /Successfully wrote/);
-		assert.doesNotMatch(extractTextContent(result), /export const answer/);
-		assert.equal(renderToolResult(tool, result, { expanded: true, isPartial: false }, { args }), `written\n${args.content}`);
+		assert.deepEqual(draw(write, args, done, { expanded: true }).body, ["export const answer = 42;"]);
 	} finally {
 		await rm(cwd, { recursive: true, force: true });
 	}
 });
 
-test("quiet write expansion sanitizes content and respects narrow card widths", () => {
-	const tool = registeredQuietTools().get("write");
-	const content = "first\n\nsafe\x1b]52;c;Y2xpcGJvYXJk\x07\x1b[2Jdone\n界e\u0301😀";
-	const result = textResult("Successfully wrote to file.ts");
-	const context = { args: { path: "file.ts", content } };
-	const options = { expanded: true, isPartial: false };
+// --- failures -------------------------------------------------------------------------------------------
 
-	assert.equal(renderToolResult(tool, result, options, context), "written\nfirst\n\nsafedone\n界e\u0301😀");
-	const lines = frameLines(tool.renderResult(result, options, passthroughTheme, context), 16);
-	assert.ok(lines.every((line) => visibleWidth(line) <= 16));
-	assert.doesNotMatch(lines.join("\n"), /\x1b/);
-});
-
-test("quiet write expansion preserves failures, partial results and fallback confirmations", () => {
-	const tool = registeredQuietTools().get("write");
-	const context = { args: { path: "file.ts", content: "not written" } };
-	const options = { expanded: true, isPartial: false };
-	for (const errorContext of [context, { ...context, isError: true }]) {
-		const rendered = renderToolResult(tool, textResult("EACCES: permission denied"), { ...options, isError: true }, errorContext);
-		assert.equal(rendered, "EACCES: permission denied");
+test("a failure: `✗ failed` at the right, the cause once, then the tail without it; the error tone", () => {
+	const t = cards();
+	for (const name of ["read", "bash", "grep", "find", "ls", "edit", "write"]) {
+		const drawn = draw(t.get(name), name === "bash" ? { command: "false" } : {}, result("error one\nerror two\nerror three\nerror four"), { isError: true });
+		assert.deepEqual(drawn.body, ["error one", "error three", "error four"], name);
+		assert.equal(drawn.state, `${EXPAND}  ✗ failed`, name);
 	}
-	const partial = renderToolResult(tool, textResult("writing…"), { expanded: true, isPartial: true }, context);
-	assert.match(partial, /writing…/);
-	assert.doesNotMatch(partial, /not written/);
-	const confirmation = "Successfully wrote 0 bytes to file.ts";
-	for (const fallbackContext of [{}, { args: {} }, { args: { content: 42 } }, { args: { content: "" } }]) {
-		assert.equal(renderToolResult(tool, textResult(confirmation), options, fallbackContext), `wrote 0 bytes\n${confirmation}`);
-	}
+	const tinted = { ...plain, bg: (role: string, s: string) => `\x1b[48;5;${role === "toolErrorBg" ? 52 : 22}m${s}\x1b[49m` };
+	const ctx = context({ args: { path: "gone.md" }, isError: true });
+	const header = cards().get("read").renderCall({ path: "gone.md" }, tinted, ctx);
+	cards().get("read").renderResult(result("ENOENT"), { expanded: false, isPartial: false }, tinted, ctx);
+	assert.ok(header.render(60)[0]!.startsWith(" \x1b[48;5;52m"), "the header on errorContainer");
 });
 
-test("quiet tool rendering sanitizes collapsed output and call rows", () => {
-	const { pi, tools } = createPi();
-	quietTools(pi as any);
-
-	const collapsed = renderToString(
-		tools.get("bash").renderResult(textResult("safe\x1b[31mred\x1b[0m"), { expanded: false, isPartial: false }, passthroughTheme, { args: { command: "printf output" } }),
-	);
-	const call = renderToString(tools.get("bash").renderCall({ command: "echo \x1b[31mred\x1b[0m" }, passthroughTheme, {}));
-
-	const carriageReturn = renderToolResult(tools.get("bash"), textResult("prefix\rSECRET\r\nnext"), { expanded: false, isPartial: false }, { args: { command: "printf output" } });
-	assert.match(collapsed, /safered/);
-	assert.doesNotMatch(cardBody(collapsed), /\x1b\[31m|\x1b\[0m/);
-	assert.equal(call.trimEnd(), "echo red", "the bash name and the command, the icon its `$`");
-	assert.match(carriageReturn, /prefixSECRET\nnext/);
-	assert.doesNotMatch(carriageReturn, /\r/);
+test("a failed bash says why: the exit code first, the first failure and its place, each once", () => {
+	const bash = cards().get("bash");
+	const output = "▶ ask view\n✖ the question view (2.1ms)\n  at test/ui-ask-view.test.ts:42:9\nℹ tests 5\nℹ fail 1\nCommand exited with code 1";
+	const drawn = draw(bash, { command: "node --test" }, result(output), { isError: true });
+	assert.equal(drawn.body[0], "exited 1 · 1 failed");
+	assert.equal(drawn.body.filter((row) => row.includes("the question view")).length, 1, drawn.body.join("\n"));
+	assert.equal(drawn.body.filter((row) => row.includes("ui-ask-view.test.ts:42")).length, 1, drawn.body.join("\n"));
+	assert.ok(drawn.body.some((row) => row.includes("ℹ fail 1")), "the rest of the tail stays");
 });
 
-test("quiet tool rendering sanitizes only rendered fields", () => {
-	let argsReads = 0, detailReads = 0;
-	const counted = (record: Record<string, unknown>, increment: () => void) => Object.defineProperties(record, Object.fromEntries(Array.from({ length: 1000 }, (_, index) => [`unused${index}`, { enumerable: true, get() { increment(); return "ignored"; } }])));
-	const args = counted({ command: "printf output" }, () => argsReads++);
-	const details = counted({}, () => detailReads++);
-	renderToolResult(registeredQuietTools().get("bash"), textResult("first\nsecond", details), { expanded: false, isPartial: false }, { args });
-	assert.equal(argsReads, 0);
-	assert.equal(detailReads, 0);
-});
-
-test("quiet tool rendering call rows show tool calls without result output", () => {
-	const { pi, tools } = createPi();
-	quietTools(pi as any);
-
-	const readCall = renderToString(tools.get("read").renderCall({ path: "/tmp/example.ts", offset: 2, limit: 3 }, passthroughTheme, {}));
-	const bashCall = renderToString(tools.get("bash").renderCall({ command: "printf noisy", timeout: 5 }, passthroughTheme, {}));
-	const grepCall = renderToString(tools.get("grep").renderCall({ pattern: "needle", path: "src", glob: "*.ts" }, passthroughTheme, {}));
-
-	assert.match(readCall, /read .*example\.ts:2-4/);
-	assert.match(bashCall, /^printf noisy \(timeout 5s\)$/);
-	assert.match(grepCall, /grep \/needle\/ in src \(\*\.ts\)/);
-    });
-
-test("quiet tool rendering limits collapsed visual rows at the actual width", () => {
-	const tools = registeredQuietTools();
-	const bash = tools.get("bash");
-	const hint = keyHint("app.tools.expand", "to expand");
-	// Twelve content columns inside the band's two-column lead and two-column end.
-	const narrowWidth = 16;
-	const cases = [
-		// The label or ↳ line, the preview rows, and the band's closing row.
-		[textResult("x".repeat(80)), { expanded: false, isPartial: true }, { args: { command: "printf output" } }, 5],
-		[textResult("界".repeat(40)), { expanded: false, isPartial: false }, { args: { command: "printf output" } }, 5],
-		[textResult("e\u0301".repeat(40)), { expanded: false, isPartial: false, isError: true }, { args: { command: "false" }, isError: true }, 5],
-	] as const;
-	for (const [result, options, context, maxRows] of cases) {
-		const lines = frameLines(bash.renderResult(result, options, passthroughTheme, context), narrowWidth);
-		assert.ok(lines.length <= maxRows, `expected at most ${maxRows} rows, got ${lines.length}`);
-		assert.ok(lines.every((line) => visibleWidth(line) <= narrowWidth));
-	}
-	const completed = frameLines(bash.renderResult(textResult("😀".repeat(40)), { expanded: false, isPartial: false }, passthroughTheme, { args: { command: "printf output" } }), narrowWidth);
-	assert.equal(completed.filter((line) => line.includes(hint)).length, 0);
-	assert.ok(completed.every((line) => visibleWidth(line) <= narrowWidth));
-});
-
-
-
-
-test("quiet tool rendering bounds and sanitizes partial text without a completion hint", () => {
-	const tool = registeredQuietTools().get("bash");
-	const result = textResult("first\nsecond\nthird\nfourth");
-	const collapsed = renderToolResult(tool, result, { expanded: false, isPartial: true }, { args: { command: "printf output" } });
-	const expanded = renderToolResult(tool, result, { expanded: true, isPartial: true }, { args: { command: "printf output" } });
-
-	assert.match(collapsed, /… bash · 4 lines/);
-	assert.doesNotMatch(collapsed, /first/);
-	assert.match(collapsed, /second\nthird\nfourth/);
-	assert.doesNotMatch(collapsed, /to expand|Ctrl\+O/);
-	assert.match(expanded, /first\nsecond\nthird\nfourth/);
-	assert.doesNotMatch(expanded, /to expand|Ctrl\+O/);
-	assert.match(renderToolResult(tool, textResult("first\n\nsecond\n\n"), { expanded: false, isPartial: true }, { args: { command: "printf output" } }), /… bash · 2 lines/);
-
-	const sanitized = renderToolResult(tool, textResult("safe\x1b]52;c;Y2xpcGJvYXJk\x07\x1b[2Jdone"), { expanded: true, isPartial: true }, { args: { command: "echo safe" } });
-	assert.match(sanitized, /safedone/);
-	assert.doesNotMatch(sanitized, /\x1b/);
-
-	for (const [value, options] of [
-		[textResult(""), { expanded: false, isPartial: true }],
-		[{ content: [{ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" }] }, { expanded: true, isPartial: true }],
-	] as const) {
-		assert.equal(renderToolResult(tool, value, options, { args: { command: "true" } }).trimEnd(), "… bash");
+test("bash errors in both orders pi reports them: collapsed bounded, expanded every line once, without ANSI", () => {
+	const bash = cards().get("bash");
+	for (const text of [
+		"    B3 stdout before failure\n    B3 stderr detail\n        \n    Command exited with code 7",
+		"probe stdout before failure\n\nprobe stderr detail \x1b[31mwith colour\x1b[0m\n\nprobe exit status: 7",
+	]) {
+		const collapsed = draw(bash, { command: "false" }, result(text), { isError: true });
+		assert.ok(collapsed.body.length <= 4, collapsed.body.join("\n"));
+		assert.equal(collapsed.body.filter((row) => row.trim() === "").length, 0, "no blank preview rows");
+		if (/exited with code 7/.test(text)) assert.equal(collapsed.body[0], "exited 7");
+		const expanded = draw(bash, { command: "false" }, result(text), { isError: true, expanded: true }, 1000);
+		for (const line of stripAnsi(text).split("\n").map((l) => l.trimEnd()).filter((l) => l.trim() && !/Command exited/.test(l))) {
+			assert.equal(expanded.body.filter((row) => row.trim() === line.trim()).length, 1, `«${line}» once`);
+		}
+		assert.doesNotMatch(expanded.rows.join("\n"), /\x1b\[/);
 	}
 });
 
-test("quiet tool rendering bounds completed previews, errors, and edit/write summaries", () => {
-	const tools = registeredQuietTools();
-	for (const [toolName, text, hidden, visible, context] of [
-		["read", "read one\nread two\nread three\nread four", "read four", "read one\nread two\nread three", {}],
-		["bash", "bash one\nbash two\nbash three\nbash four", "bash one", "bash two\nbash three\nbash four", { args: { command: "printf output" } }],
-	] as const) {
-		const rendered = renderToolResult(tools.get(toolName), textResult(text), { expanded: false, isPartial: false }, context);
-		assert.doesNotMatch(rendered, new RegExp(hidden));
-		assert.match(rendered, new RegExp(visible));
-		assert.doesNotMatch(rendered, /to expand/);
+test("a refused call is the guard's band: the reason and the fix, every guard's wording recognised", () => {
+	const bash = cards().get("bash");
+	const refusal = (text: string) => draw(bash, { command: "git push" }, result(text), { isError: true });
+	const cases: Array<[string, string, string]> = [
+		["safety-guard: refused: git push --force: it rewrites history. This is destructive or irreversible.", "safety guard", "git push --force: it rewrites history."],
+		["vcs-guard: a commit outside the session's worktree", "vcs guard", "a commit outside the session's worktree"],
+		["jhon hook route-guard did not answer in 10s; the call is refused; try again or check `jhon doctor`", "route guard", "jhon hook route-guard did not answer in 10s; the call is refused; try again or check `jhon doctor`"],
+		["jhon: writer mode: this edit changes 30 lines of a.ts more than the 20 the orchestrator writes inline per request. Hand the rest to a jhon-builder.", "writer guard", "this edit changes 30 lines of a.ts more than the 20 the orchestrator writes inline per request."],
+		["jhon: sandbox.mode is on and the sandbox cannot run here: no bwrap; the command is refused, never run unsandboxed in silence. Fix: install bubblewrap", "sandbox", "sandbox.mode is on and the sandbox cannot run here: no bwrap; the command is refused, never run unsandboxed in silence."],
+		["push: git push origin main: the owner did not authorize it", "permission", "push: git push origin main: the owner did not authorize it"],
+	];
+	for (const [text, guard, reason] of cases) {
+		const drawn = refusal(text);
+		assert.match(drawn.header, /^ {2}✗ refused {2}\$ git push/, text);
+		assert.ok(drawn.state.endsWith(guard), `${text}: ${drawn.state}`);
+		assert.equal(draw(bash, { command: "git push" }, result(text), { isError: true, expanded: true }, 1000).body[0], reason, text);
 	}
-
-	for (const toolName of ["read", "bash", "grep", "find", "ls", "edit", "write"] as const) {
-		const rendered = renderToolResult(tools.get(toolName), textResult("error one\nerror two\nerror three\nerror four"), { expanded: false, isPartial: false, isError: true }, { args: toolName === "bash" ? { command: "false" } : {} });
-		assert.equal(rendered, "error one\nerror three\nerror four", "the cause once, then the tail without it");
-		assert.doesNotMatch(rendered, /to expand/);
-	}
-
-	const edit = renderToolResult(tools.get("edit"), textResult("Applied", { diff: "@@\n-old\n+new" }), { expanded: false, isPartial: false }, { args: { path: "file.ts", edits: [] } });
-	const write = renderToolResult(tools.get("write"), textResult("Successfully wrote 4 bytes\nbody"), { expanded: false, isPartial: false }, { args: { path: "file.ts", content: "body" } });
-	assert.match(edit, /\+1 \/ -1/);
-	assert.match(edit, /-old[\s\S]*\+new/);
-	assert.match(write, /wrote 4 bytes/);
-	assert.doesNotMatch(write, /body/);
+	assert.equal(draw(bash, { command: "git push" }, result(cases[4]![0]), { isError: true, expanded: true }, 1000).body[1], "install bubblewrap", "the fix after `Fix:`");
+	const plainFailure = refusal("fatal: not a git repository");
+	assert.doesNotMatch(plainFailure.header, /refused/, "another failure is no refusal");
+	const noted = draw(bash, { command: "git push" }, result("safety-guard: refused: x\nthe session is stale: start a new one"), { isError: true });
+	assert.deepEqual(noted.body, ["x"], "collapsed: the reason");
+	assert.deepEqual(draw(bash, { command: "git push" }, result("safety-guard: refused: x\nthe session is stale: start a new one"), { isError: true, expanded: true }).body, ["x", "the session is stale: start a new one"], "expanded: the note too");
 });
 
-test("quiet tool rendering preserves complete expanded text and delegates sanitized image reads", () => {
-	const tools = registeredQuietTools();
-	const expanded = renderToolResult(tools.get("bash"), textResult("first\nsecond\nthird\nfourth\nsafe\x1b]52;c;Y2xpcGJvYXJk\x07done"), { expanded: true, isPartial: false }, { args: { command: "printf safe" } });
-	assert.match(expanded, /first\nsecond\nthird\nfourth\nsafedone/);
-	assert.doesNotMatch(expanded, /\x1b/);
+// --- running, bounds, sanitizing ------------------------------------------------------------------------
 
-	const edit = renderToolResult(tools.get("edit"), textResult("Applied", { diff: "@@\n-old\x1b]52;c;Y2xpcGJvYXJk\x07\n+new" }), { expanded: true, isPartial: false }, { args: { path: "file\x1b[2J.ts", edits: [{ oldText: "old\x1b[31m", newText: "new" }] } });
-	assert.match(edit, /-old\n\+new/);
-	assert.doesNotMatch(edit, /\x1b/);
-
-	const image = renderToolResult(
-		tools.get("read"),
-		{ content: [{ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" }], details: { path: "image\x1b[2J.png", note: "safe\x1b]2;title\x07" } },
-		{ expanded: true, isPartial: false },
-		{ args: { path: "image\x1b[2J.png", offset: 1, limit: 2 }, cwd: "/repo\x1b[2J", showImages: false, isError: false },
-	);
-	assert.ok(image.includes(imageFallback("image/png")));
-	assert.doesNotMatch(image, /\x1b/);
+test("a partial result: the running label and the newest lines; no expand key until it ends", () => {
+	const bash = cards().get("bash");
+	const args = { command: "printf output" };
+	const collapsed = draw(bash, args, result("first\nsecond\nthird\nfourth"), { isPartial: true, toolCallId: "p-1" });
+	assert.match(collapsed.body[0]!, /^… bash · 4 lines · running · \d+s · esc to cancel$/);
+	assert.deepEqual(collapsed.body.slice(1), ["second", "third", "fourth"]);
+	assert.equal(collapsed.state, "◐ running");
+	assert.deepEqual(draw(bash, args, result("first\nsecond\nthird\nfourth"), { isPartial: true, expanded: true }).body.slice(1), ["first", "second", "third", "fourth"]);
+	assert.match(draw(bash, args, result("first\n\nsecond\n\n"), { isPartial: true }).body[0]!, /^… bash · 2 lines/);
+	assert.match(draw(cards().get("read"), { path: "a" }, result(""), { isPartial: true }).body[0]!, /^… read$/);
+	const sanitized = draw(bash, args, result("safe\x1b]52;c;Y2xpcGJvYXJk\x07\x1b[2Jdone"), { isPartial: true, expanded: true });
+	assert.match(bodyOf(sanitized), /safedone/);
 });
 
-test("quiet tool rendering preserves directional visual preview rows at narrow widths", () => {
-	const tools = registeredQuietTools();
-	const bash = tools.get("bash");
-	const readTool = tools.get("read");
-	// Twelve content columns inside the band's two-column lead and two-column end.
-	const narrowWidth = 16;
-	const renderCollapsed = (
-		text: string,
-		options: { expanded: false; isPartial: boolean; isError?: boolean },
-		context: Record<string, unknown>,
-	) => renderLines(bash.renderResult(textResult(text), options, passthroughTheme, context), narrowWidth);
-	const renderRead = (text: string) => renderLines(
-		readTool.renderResult(textResult(text), { expanded: false, isPartial: false }, passthroughTheme, {}),
-		narrowWidth,
-	);
-	const oldText = "older wrapped text ".repeat(16);
-
-	const partial = renderCollapsed(`${oldText}\nPARTIAL-NEW`, { expanded: false, isPartial: true }, { args: { command: "printf output" } });
-	const growingPartial = renderCollapsed(`${oldText}GROW-SUFFIX`, { expanded: false, isPartial: true }, { args: { command: "printf output" } });
-	const completedBash = renderCollapsed(`${oldText}\nBASH-NEW`, { expanded: false, isPartial: false }, { args: { command: "printf output" } });
-	const error = renderCollapsed(`${oldText}\nERROR-NEW`, { expanded: false, isPartial: false, isError: true }, { args: { command: "false" }, isError: true });
-	const git = renderCollapsed(`${oldText}\nGIT-NEW`, { expanded: false, isPartial: false }, { args: { command: "git diff" } });
-
-	for (const [lines, marker] of [
-		[partial, "PARTIAL-NEW"],
-		[growingPartial, "GROW-SUFFIX"],
-		[completedBash, "BASH-NEW"],
-		[error, "ERROR-NEW"],
-		[git, "GIT-NEW"],
-	] as const) {
-		assert.ok(lines.length <= 4, `expected fixed preview budget, got ${lines.length}`);
-		assert.match(lines.join("\n"), new RegExp(marker));
-	}
-	assert.match(partial[0] ?? "", /… bash/);
-	assert.doesNotMatch(completedBash.join("\n"), /to expand/);
-
-	const read = renderRead(`READ-FIRST\n${oldText}\nREAD-NEW`);
-	const semanticJson = renderCollapsed(
-		JSON.stringify({ first: "x".repeat(80), newest: "JSON-NEW" }, null, 2),
-		{ expanded: false, isPartial: false },
-		{ args: { command: "printf output" } },
-	);
-	assert.match(read.join("\n"), /READ-FIRST/);
-	assert.doesNotMatch(read.join("\n"), /READ-NEW/);
-	assert.match(semanticJson.join("\n"), /first/);
-	assert.doesNotMatch(semanticJson.join("\n"), /JSON-NEW/);
-	assert.match(
-		renderToolResult(bash, textResult(`${oldText}\nBASH-NEW`), { expanded: true, isPartial: false }, { args: { command: "printf output" } }),
-		/BASH-NEW/,
-	);
-});
-
-
-
-
-
-
-test("long finished quiet headings retain the applicable expansion hint and complete command", () => {
-	const tool = registeredQuietTools().get("bash");
-	const command = "printf alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango";
-	const args = { command };
-	for (const expanded of [false, true]) {
-		const hint = keyHint("app.tools.expand", expanded ? "to collapse" : "to expand").replace(/\x1b\[[\d;]*m/g, "");
-		const ctx = routineRenderContext({ args, executionStarted: true, isPartial: false, expanded });
-		for (const width of [80, 120]) {
-			const rows = frameLines(tool.renderCall(args, passthroughTheme, ctx), width);
-			assert.ok(rows[0]!.endsWith(` ${hint} ╮`), `width ${width}: applicable hint must survive heading wrapping`);
-			assert.ok(rows.length > 1);
-			assert.ok(rows.every((row) => visibleWidth(row) <= width));
-			const first = rows[0]!.slice("╭─ $ ".length).split(" ─")[0];
-			const rest = rows.slice(1).map((row) => row.replace(/^│ /, "").replace(/ +│$/, ""));
-			assert.equal([first, ...rest].join(" ").replace(/\s+/g, " ").trim(), `bash ${command}`);
+test("every card stays inside its width, collapsed within its budget, at any width", () => {
+	const t = cards();
+	for (const [name, glyph] of [["read", "▤"], ["bash", "$"], ["grep", "⌕"], ["find", "⌕"], ["ls", "·"], ["edit", "✎"], ["write", "✎"]] as const) {
+		const args = { command: "printf hello", path: "src/example.ts", pattern: "needle" };
+		assert.ok(draw(t.get(name), args, result("x")).header.startsWith(`  ${glyph} `), `${name} carries its family icon`);
+		for (const width of [0, 1, 2, 3, 4, 5, 6, 7, 8, 16, 24]) {
+			for (const extra of [{}, { isError: true }, { isPartial: true }]) {
+				const drawn = draw(t.get(name), { ...args, command: "printf x" }, result("界é🌹".repeat(80) + "\nnext\nmore\nlast"), extra, width);
+				assert.ok(drawn.rows.every((row) => visibleWidth(row) === width), `${name} at ${width}: ${JSON.stringify(drawn.rows)}`);
+				if (width === 0) assert.deepEqual(drawn.rows, []);
+				else assert.ok(drawn.body.length <= 5, `${name} at ${width}: ${drawn.body.length} body rows`);
+				const long = draw(t.get(name), { ...args, command: `printf ${"x".repeat(80)}`, path: "p".repeat(80) }, undefined, extra, width);
+				assert.ok(long.rows.every((row) => visibleWidth(row) === width), `${name}'s long call at ${width}`);
+			}
 		}
 	}
 });
 
-test("quiet components repaint after theme invalidation", () => {
-	const bash = registeredQuietTools().get("bash");
+test("a long line is cut at the card's edge while collapsed and whole when expanded", () => {
+	const bash = cards().get("bash");
+	const long = `${"older text ".repeat(16)}NEWEST-END`;
+	const collapsed = draw(bash, { command: "printf x" }, result(`first\n${long}`), {}, 40);
+	assert.match(collapsed.rows.at(-1)!, /…/);
+	assert.doesNotMatch(collapsed.rows.join("\n"), /NEWEST-END/);
+	assert.ok(collapsed.state.includes(EXPAND), "a cut line is hidden text: the expand key shows");
+	assert.match(draw(bash, { command: "printf x" }, result(`first\n${long}`), { expanded: true }, 40).rows.join("\n"), /NEWEST-END/);
+	const read = draw(cards().get("read"), { path: "a" }, result(`READ-FIRST\n${long}\nmiddle\nREAD-NEW`), {}, 40);
+	assert.match(read.rows.join("\n"), /READ-FIRST/);
+	assert.doesNotMatch(read.rows.join("\n"), /READ-NEW/);
+});
+
+test("a long command wraps under the header with every word kept, the state and the key at the right", () => {
+	const bash = cards().get("bash");
+	const command = "printf alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango";
+	for (const width of [80, 120]) {
+		const drawn = draw(bash, { command }, result("a\nb\nc\nd"), {}, width);
+		assert.ok(drawn.header.endsWith(`${EXPAND}  ↳ 4 lines`), drawn.header);
+		const words = [drawn.header.replace(/^ {2}\$ /, "").replace(/ {2,}.*$/, ""), ...drawn.body.slice(0, drawn.body.length - 3)].join(" ").replace(/\s+/g, " ").trim();
+		assert.equal(words, command, `width ${width}`);
+	}
+});
+
+test("the cards sanitize what they draw and read only the fields they draw", () => {
+	const t = cards();
+	const collapsed = draw(t.get("bash"), { command: "echo \x1b[31mred\x1b[0m" }, result("safe\x1b[31mred\x1b[0m\nprefix\rSECRET\r\nnext"));
+	assert.match(collapsed.header, /\$ echo red/);
+	assert.match(bodyOf(collapsed), /safered/);
+	assert.match(bodyOf(collapsed), /prefixSECRET\nnext/);
+	const write = draw(t.get("write"), { path: "file.ts", content: "first\n\nsafe\x1b]52;c;Y2xpcGJvYXJk\x07\x1b[2Jdone\n界é😀" }, result("Successfully wrote to file.ts"), { expanded: true }, 16);
+	assert.ok(write.rows.every((row) => visibleWidth(row) === 16));
+	assert.doesNotMatch(write.rows.join("\n"), /\x1b/);
+	const edit = draw(t.get("edit"), { path: "file\x1b[2J.ts" }, result("Applied", { diff: "-1 old\x1b]52;c;Y2xpcGJvYXJk\x07\n+1 new" }), { expanded: true });
+	assert.deepEqual(edit.body, [" 1 − old", " 1 + new"]);
+	assert.doesNotMatch(edit.rows.join("\n"), /\x1b/);
+	let reads = 0;
+	const watched = (record: Record<string, unknown>) => Object.defineProperties(record, Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`unused${i}`, { enumerable: true, get() { reads++; return "x"; } }])));
+	draw(t.get("bash"), watched({ command: "printf output" }), result("first\nsecond", watched({})));
+	assert.equal(reads, 0);
+});
+
+test("an image read expanded is drawn by pi's own read renderer, sanitized", () => {
+	const drawn = draw(cards().get("read"), { path: "image\x1b[2J.png" }, { content: [{ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" }], details: { path: "image\x1b[2J.png" } }, { expanded: true, cwd: "/repo\x1b[2J", showImages: false });
+	assert.ok(drawn.rows.join("\n").includes(imageFallback("image/png")));
+	assert.doesNotMatch(drawn.rows.join("\n"), /\x1b/);
+	assert.equal(draw(cards().get("read"), { path: "a.png" }, { content: [{ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" }] }).state, "↳ image");
+});
+
+test("a theme change repaints: after an invalidate the cards draw in the new colours, the same text", () => {
+	const bash = cards().get("bash");
 	let paint = "\x1b[31m";
-	const theme = { bold: (text: string) => text, fg: (_role: string, text: string) => `${paint}${text}\x1b[0m`, bg: (_role: string, text: string) => `\x1b[44m${text}\x1b[49m` };
+	const theme = { bold: (s: string) => s, fg: (_r: string, s: string) => `${paint}${s}\x1b[0m`, bg: (_r: string, s: string) => `\x1b[44m${s}\x1b[49m` };
 	const args = { command: "printf failure" };
-	const context = routineRenderContext({ args, isError: true, isPartial: false });
-	const components = [bash.renderCall(args, theme, context), bash.renderResult(textResult("denied\nreason"), { expanded: false, isPartial: false }, theme, context)];
-	const first = components.flatMap((component) => component.render(80)).join("\n");
+	const ctx = context({ args, isError: true });
+	const parts = [bash.renderCall(args, theme, ctx), bash.renderResult(result("denied\nreason"), { expanded: false, isPartial: false }, theme, ctx)];
+	const first = parts.flatMap((p) => p.render(80)).join("\n");
 	paint = "\x1b[35m";
-	for (const component of components) component.invalidate();
-	const changed = components.flatMap((component) => component.render(80)).join("\n");
+	for (const p of parts) p.invalidate();
+	const changed = parts.flatMap((p) => p.render(80)).join("\n");
 	assert.match(first, /\x1b\[31m/);
 	assert.doesNotMatch(changed, /\x1b\[31m/);
 	assert.match(changed, /\x1b\[35m/);
-	assert.equal(first.replace(/\x1b\[[\d;]*m/g, ""), changed.replace(/\x1b\[[\d;]*m/g, ""));
+	assert.equal(stripAnsi(first), stripAnsi(changed));
 });
 
-test("six quiet cards and standalone Bash fixture carry their family icon (T33) and bounded results", () => {
-	const tools = registeredQuietTools();
-	for (const [name, glyph] of [["read", "▤"], ["bash", "$"], ["grep", "⌕"], ["find", "⌕"], ["ls", "·"], ["edit", "✎"], ["write", "✎"]] as const) {
-		const tool = tools.get(name);
-		const args = { command: "printf hello", path: "src/example.ts", pattern: "needle" };
-		const ctx = routineRenderContext({ args, isPartial: false, executionStarted: true });
-		const header = frameLines(tool.renderCall(args, passthroughTheme, ctx), 120).join("\n");
-		assert.ok(header.split("\n")[0]!.startsWith(`╭─ ${glyph} ${name} `), `${name} carries its family icon and actual identity`);
-		assert.match(header, /to expand/);
-		const value = textResult("useful row\nsecond row", name === "edit" ? { diff: "-before\n+after" } : undefined);
-		const body = frameLines(tool.renderResult(value, { expanded: false, isPartial: false }, passthroughTheme, ctx), 120).join("\n");
-		if (name !== "write") assert.match(body, name === "edit" ? /before|after/ : /useful row/);
-		for (const width of [0, 1, 2, 3, 4, 5, 6, 7, 8, 24]) {
-			const rows = frameLines(tool.renderResult(textResult("界e\u0301🌹".repeat(80)), { expanded: false, isPartial: false }, passthroughTheme, ctx), width);
-			assert.ok(rows.length <= 5, "the ↳ line, three preview rows, the closing rule");
-			assert.ok(rows.every((row) => visibleWidth(row) <= width));
-			if (width >= 2) assert.match(rows.at(-1)!, /^╰─*╯$/, "the closing rule");
-			else if (!width) assert.deepEqual(rows, []);
-			const call = frameLines(tool.renderCall({ ...args, command: "printf " + "x".repeat(80) }, passthroughTheme, ctx), width);
-			assert.ok(call.every((row) => visibleWidth(row) <= width), `${name} call at ${width}`);
-		}
-	}
-});
+// --- the resolver ---------------------------------------------------------------------------------------
 
-// Pi builds the call component, then the result component once a result
-// exists, and only then renders them; both share one row state.
-function piToolRow(tool: any, args: Record<string, unknown>, value: unknown, context: Record<string, unknown>, width: number, theme: object = passthroughTheme): string[] {
-	const call = tool.renderCall(args, theme, context);
-	const body = value ? tool.renderResult(value, { expanded: context.expanded === true, isPartial: context.isPartial === true }, theme, context) : undefined;
-	return [...call.render(width), ...(body?.render(width) ?? [])];
+function resolverOf(register: (pi: any) => void) {
+	const { pi } = fakePi();
+	const resolvers: Array<(name: string, next: () => unknown) => unknown> = [];
+	(pi as any).registerToolRenderer = (r: (name: string, next: () => unknown) => unknown) => { resolvers.push(r); };
+	register(pi);
+	return (name: string, next: () => unknown) => resolvers.reduceRight<() => unknown>((n, r) => () => r(name, n), next)() as any;
 }
 
-// A theme that paints the bands' tone backgrounds.
-const floatToolTheme = {
-	bold(value: string) {
-		return value;
-	},
-	fg(_color: string, value: string) {
-		return `\x1b[38;5;114m${value}\x1b[39m`;
-	},
-	bg(color: string, value: string) {
-		return `\x1b[48;5;${color === "toolErrorBg" ? 52 : color === "toolPendingBg" ? 58 : 22}m${value}\x1b[49m`;
-	},
-};
-
-
-
-test("the production factory draws bash as a Jhon card over pi's native tool and keeps the previews", () => {
-	const tools = registeredQuietTools();
-	const read = tools.get("read");
-	const context = routineRenderContext({ args: { path: "a.ts" }, executionStarted: true, isPartial: false });
-	const collapsed = renderToString(read.renderResult(textResult("first line\nsecond line"), { expanded: false, isPartial: false }, passthroughTheme, context));
-	assert.match(collapsed, /first line\nsecond line/, "the read preview");
-	const write = renderToString(tools.get("write").renderResult(textResult("Successfully wrote 4 bytes"), { expanded: false, isPartial: false }, passthroughTheme, routineRenderContext({ args: { path: "b.ts", content: "body" }, executionStarted: true, isPartial: false })));
-	assert.match(write, /wrote 4 bytes/, "the write summary");
-
-	const { pi } = createPi();
-	const resolvers: Array<(toolName: string, next: () => unknown) => unknown> = [];
-	(pi as any).registerToolRenderer = (resolver: (toolName: string, next: () => unknown) => unknown) => {
-		resolvers.push(resolver);
-	};
-	productionQuietTools(pi as any);
-	const native = { marker: "native" };
-	const chain = (toolName: string) => resolvers.reduceRight<() => unknown>((next, resolver) => () => resolver(toolName, next), () => native)();
-	// T91 (L650): bash is a Jhon card; pi's own fields stay, its drawing is Jhon's.
-	const bash = chain("bash") as Record<string, unknown>;
-	assert.equal(bash.marker, "native", "pi's own fields stay");
+test("bash is a Jhon card over pi's native tool: pi's fields stay, the drawing is Jhon's", () => {
+	const bash = resolverOf((pi) => productionQuietTools(pi))("bash", () => ({ marker: "native" }));
+	assert.equal(bash.marker, "native");
 	assert.equal(bash.renderShell, "self");
 	assert.equal(typeof bash.renderCall, "function");
 	assert.equal(typeof bash.renderResult, "function");
 });
 
-// T33 (L97): every other tool's call gets its family icon from one resolver
-// the production factory registers; quiet tools draw their own.
-test("the production factory gives every other tool's call its family icon and leaves quiet tools alone", () => {
-	const { pi } = createPi();
-	const resolvers: Array<(toolName: string, next: () => unknown) => unknown> = [];
-	(pi as any).registerToolRenderer = (resolver: (toolName: string, next: () => unknown) => unknown) => {
-		resolvers.push(resolver);
-	};
-	quietTools(pi as any);
-	const resolve = (toolName: string, next: () => unknown) => {
-		const chain = (index: number): unknown => index < resolvers.length ? resolvers[index]!(toolName, () => chain(index + 1)) : next();
-		return chain(0) as any;
-	};
+test("every other tool's call gets its family icon (T33); a card's own icon is left alone", () => {
+	const resolve = resolverOf((pi) => productionQuietTools(pi));
 	const own = { render: () => ["web_search pi themes"], invalidate() {} };
-	const web = resolve("web_search", () => ({ renderCall: () => own }));
-	assert.equal(stripAnsi(web.renderCall({}, passthroughTheme, routineRenderContext()).render(80)[0]), "◍ web_search pi themes");
-	const memory = resolve("mcp__engram__mem_save", () => ({ renderCall: () => own }));
-	assert.match(stripAnsi(memory.renderCall({ title: "a fact" }, passthroughTheme, routineRenderContext()).render(80)[0]), /^▢ save “a fact”/);
-	const read = registeredQuietTools().get("read");
-	assert.equal(resolve("read", () => read).renderCall, read.renderCall, "a quiet card already carries its icon");
+	assert.equal(stripAnsi(resolve("web_search", () => ({ renderCall: () => own })).renderCall({}, plain, context()).render(80)[0]), "◍ web_search pi themes");
+	assert.match(stripAnsi(resolve("mcp__engram__mem_save", () => ({ renderCall: () => own })).renderCall({ title: "a fact" }, plain, context()).render(80)[0]), /^▢ save “a fact”/);
+	const read = cards().get("read");
+	assert.equal(resolve("read", () => read).renderCall, read.renderCall);
 	assert.equal(resolve("unknown_tool", () => undefined), undefined);
 });
-
-// The Gentle Shell's float tool card (L153 answer 1, its quiet-tools): a
-// tinted panel in its tone inside a one-column margin, the `▎` bar on every
-// row, a blank row above the call and between it and the result: the icon,
-// the bold name and the arguments, then `↳ ✓ <summary>` (or `↳ ✗` in the
-// bad color) and the preview. Neon draws the outline (the tests above).
-
-function sectionsRow(tool: any, args: Record<string, unknown>, value: unknown, overrides: Record<string, unknown> = {}, width = 60, theme: object = floatToolTheme): string[] {
-	const context = routineRenderContext({ args, isPartial: false, executionStarted: true, state: {}, ...overrides });
-	return piToolRow(tool, args, value, context, width, theme);
-}
-
-test("float: a quiet card is a tinted panel with a margin, the ▎ bar, a blank row above the call and before ↳ ✓ and the preview", () => {
-	const read = registeredQuietTools().get("read");
-	const rows = sectionsRow(read, { path: "package.json" }, textResult("{\n  \"name\": \"jhon-demo\""));
-	const plain = rows.map(stripAnsi);
-	for (const line of rows) {
-		assert.equal(visibleWidth(line), 60, JSON.stringify(line));
-		assert.ok(line.startsWith(" \x1b[48;5;22m"), `a one-column margin, then the panel: ${JSON.stringify(line)}`);
-		assert.ok(line.endsWith("\x1b[49m "), JSON.stringify(line));
-	}
-	assert.doesNotMatch(plain.join("\n"), /[╭╮╰╯│─]/);
-	assert.deepEqual(plain.map((row) => row.trimEnd()), [
-		" ▎",
-		plain[1]!.trimEnd(),
-		" ▎",
-		" ▎ ↳ ✓ 2 lines",
-		" ▎ {",
-		' ▎   "name": "jhon-demo"',
-		" ▎",
-	]);
-	assert.match(plain[1]!, /^ ▎ ▤ read package\.json +.*to expand {4}$/);
-	// Tagged roles count as columns, so they are read at a width they fit in.
-	const painted = sectionsRow(read, { path: "package.json" }, textResult("one"), {}, 200, { ...floatToolTheme, fg: (c: string, t: string) => `<${c}>${t}</${c}>`, bold: (t: string) => `<b>${t}</b>` });
-	assert.match(painted[1]!, /<toolTitle><b>read<\/b><\/toolTitle>/, "the tool name in bold");
-	assert.match(painted[3]!, /<dim>↳<\/dim> <success>✓<\/success> <muted>1 line<\/muted>/);
-});
-
-test("float: each quiet tool says its result in a short ↳ ✓ summary", () => {
-	const tools = registeredQuietTools();
-	const summary = (name: string, args: Record<string, unknown>, value: unknown) => sectionsRow(tools.get(name), args, value, {}, 80).map(stripAnsi).find((row) => row.includes("↳"))?.replace(/^ ▎ /, "").trim();
-	assert.equal(summary("grep", { pattern: "x" }, textResult("a.ts:1:x\nb.ts:2:x\nc.ts:3:x")), "↳ ✓ 3 matches");
-	assert.equal(summary("grep", { pattern: "x" }, textResult("No matches found")), "↳ ✓ no matches");
-	assert.equal(summary("find", { pattern: "*.ts" }, textResult("a.ts\nb.ts")), "↳ ✓ 2 files");
-	assert.equal(summary("ls", { path: "." }, textResult("a\nb")), "↳ ✓ 2 entries");
-	assert.equal(summary("edit", { path: "a.ts" }, textResult("Applied", { diff: "-before\n+after\n+more" })), "↳ ✓ +2 / -1");
-	assert.equal(summary("write", { path: "a.ts", content: "body" }, textResult("Successfully wrote 4 bytes")), "↳ ✓ wrote 4 bytes");
-	assert.equal(summary("bash", { command: "printf hi" }, textResult("hi\nthere")), "↳ ✓ 2 lines");
-	assert.equal(summary("bash", { command: "true" }, textResult("(no output)")), "↳ ✓ no output");
-});
-
-test("float: a failed call says ↳ ✗ and why, in the bad color, above its tail, on the error tone", () => {
-	const tools = registeredQuietTools();
-	const tagged = { ...floatToolTheme, fg: (c: string, t: string) => `<${c}>${t}</${c}>`, bold: (t: string) => t };
-	const bash = sectionsRow(tools.get("bash"), { command: "npm test" }, textResult("--- FAIL: TestAdds\nFAIL\nCommand exited with code 1"), { isError: true }, 200, tagged);
-	const why = bash.findIndex((row) => row.includes("↳"));
-	assert.match(bash[why]!, /<error>↳ ✗ exited 1 · 1 failed<\/error>/);
-	assert.match(bash[why + 1]!, /<error>✗ TestAdds<\/error>/, "the first failure follows");
-	const read = sectionsRow(tools.get("read"), { path: "gone.md" }, textResult("ENOENT: no such file\nat open"), { isError: true }, 200, tagged);
-	assert.match(read.find((row) => row.includes("↳"))!, /<error>↳ ✗ ENOENT: no such file<\/error>/);
-	assert.ok(read.every((row) => row.startsWith(" \x1b[48;5;52m")), "the error tone paints the panel");
-	assert.ok(read.every((row) => row.includes("<error>▎</error>")), "the bar in the error tone");
-});
-
-test("float: a failed bash says why once: the tail drops the rows the ↳ ✗ lines already say (B2)", () => {
-	const bash = registeredQuietTools().get("bash");
-	const output = "▶ ask view\n✖ the question view (2.1ms)\n  at test/ui-ask-view.test.ts:42:9\nℹ tests 5\nℹ fail 1\nCommand exited with code 1";
-	const rows = sectionsRow(bash, { command: "node --test" }, textResult(output), { isError: true }, 80).map(stripAnsi).map((row) => row.trim()).filter(Boolean);
-	const said = rows.filter((row) => row.includes("the question view"));
-	assert.equal(said.length, 1, `the failure once:\n${rows.join("\n")}`);
-	assert.equal(rows.filter((row) => row.includes("ui-ask-view.test.ts:42")).length, 1, `its place once:\n${rows.join("\n")}`);
-	assert.ok(rows.some((row) => row.includes("ℹ fail 1")), "the rest of the tail stays");
-});
-
-test("float: a running call keeps its running row in the panel; neon closes its own outline", () => {
-	const read = registeredQuietTools().get("read");
-	const running = read.renderCall({ path: "a.md" }, floatToolTheme, routineRenderContext({ args: { path: "a.md" }, state: {} })).render(40).map(stripAnsi);
-	assert.deepEqual(running.map((row) => row.trimEnd()), [" ▎", " ▎ ▤ read a.md", " ▎", " ▎ running…", " ▎"]);
-	for (const row of running) assert.equal(visibleWidth(row), 40);
-	const neon = read.renderCall({ path: "a.md" }, passthroughTheme, routineRenderContext({ args: { path: "a.md" }, state: {} })).render(40);
-	assert.match(neon[0]!, /^╭─ ▤ read a\.md ─+╮$/);
-	assert.match(neon[1]!, /^│ running… +│$/);
-	assert.match(neon[2]!, /^╰─+╯$/);
-});
-

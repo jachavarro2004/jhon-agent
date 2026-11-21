@@ -11,6 +11,10 @@ import { stripAnsi } from "../lib/ui/primitives/index.ts";
 export const SNAPSHOT_WIDTHS = [180, 100] as const;
 export type SnapshotWidth = (typeof SNAPSHOT_WIDTHS)[number];
 
+/** The conversation's width beside the right pane at 180 columns (lib/ui/pane.ts), and the narrow terminal: where cards draw. */
+export const CARD_WIDTHS = [133, 100] as const;
+export type CardWidth = (typeof CARD_WIDTHS)[number];
+
 /** No colour and no background: what a terminal without a theme would show. */
 export const plainTheme = {
 	fg: (_role: string, text: string) => text,
@@ -46,6 +50,18 @@ export function assertRows(
 	message = "rows",
 ): void {
 	for (const width of SNAPSHOT_WIDTHS) {
+		const want = typeof expected === "function" ? expected(width) : expected[width];
+		assert.deepEqual(rowsAt(render, width), [...want], `${message} at ${width} columns`);
+	}
+}
+
+/** assertRows at the card widths, 133 and 100 columns. */
+export function assertCardRows(
+	render: (width: number, theme: PlainTheme) => readonly string[],
+	expected: Record<CardWidth, readonly string[]> | ((width: CardWidth) => readonly string[]),
+	message = "rows",
+): void {
+	for (const width of CARD_WIDTHS) {
 		const want = typeof expected === "function" ? expected(width) : expected[width];
 		assert.deepEqual(rowsAt(render, width), [...want], `${message} at ${width} columns`);
 	}

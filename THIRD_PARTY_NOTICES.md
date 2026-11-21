@@ -16,7 +16,6 @@ from the file named (gentle-pi's paths, at the version given).
 Sources:
 
 - `shell/extensions/pretty.ts`: `extensions/pi-pretty.ts` (gentle-pi 4.1.0)
-- `shell/extensions/quiet.ts`: `extensions/quiet-tools.ts` (gentle-pi 4.1.0)
 - `shell/extensions/todo.ts`: `extensions/gentle-todo.ts` (gentle-pi 4.1.0)
 - `shell/extensions/ui.ts`: `extensions/ui.ts` (gentle-pi 4.1.0)
 - `shell/lib/background-tasks-tools.ts`: `lib/background-jobs-tools.ts` and `extensions/gentle-agents.ts` (its background jobs) (gentle-pi 4.1.0)
@@ -57,7 +56,6 @@ Tests:
 - `shell/test/ui-overlay-repaint.test.ts`: `tests/overlay-repaint.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-pretty.test.ts`: `tests/pi-pretty.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-quiet-bash-runtime.test.ts`: `tests/quiet-bash-runtime.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-quiet.test.ts`: `tests/quiet-tool-rendering.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-selection-engine.test.ts`: `tests/selection-engine.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-session-change-capture.test.ts`: `tests/session-change-capture.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-session-changes.test.ts`: `tests/session-changes.test.ts` (gentle-pi 4.1.0)

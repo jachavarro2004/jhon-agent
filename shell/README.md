@@ -82,7 +82,7 @@ Not covered: an extension that calls a model itself through pi's registry.
 | `extensions/ui.ts` | The shell UI: the status bar and header, the prompt editor (double-Esc cancel, animations; after 60 s with no stream event and no tool running its working line reads `waiting for Claude API · <N>s`; after 75 s the main session aborts the turn as Esc does and sends one continue, once per owner message, never while a tool or an owner prompt is open; `shell.behaviour.stall_seconds` sets the seconds and `0` turns all recovery off; on the `claude-bridge` provider or while a reasoning model thinks above minimal, where minutes can pass with no stream event, the threshold is `shell.behaviour.thinking_stall_seconds` instead, 300 s, `0` never recovering there), the right pane (`lib/ui/pane.ts`), and Customize. |
 | `extensions/pretty.ts` | pi-pretty (syntax-highlighted reads, diffs, file trees) under the UI: the render lists `@heyhuynhgiabuu/pi-pretty` pinned with nothing loaded, so pi installs it into `<agent dir>/npm`, and this loads it from there, never in a sub-agent, keeping the prompt editor the UI's and its FFF store in the agent dir. |
 | `extensions/todo.ts` | The `todo` tool the model keeps its task list with, drawn in the right pane's TODOS section while no LDD change is active, restored from the session. With no list, the model is told when to start one, and three tool-use turns that change something without a list bring one nudge per owner message. The list block and the start rule never sit in the system prompt: each goes out as a persisted `jhon-todo-list` message when it changed, and the nudges (`jhon-todo-start`, `jhon-todo-reminder`) as persisted steer messages after a tool-use turn, so the prompt cache holds (T115d). |
-| `extensions/quiet.ts` | The quiet tool cards: `read`, `grep`, `find`, `ls`, `edit`, and `write` drawn as compact cards with bounded previews (and `bash` too under the minimal card content), executing as pi's own tools (`bash` in the OS sandbox when `sandbox.mode` is on, `lib/sandbox.ts`, drawn the same); every other tool's call gets its family icon (`lib/ui/tool-icons.ts`). Always Jhon's cards (T15.3: `quiet_tools` is gone). |
+| `extensions/quiet.ts` | The tool cards (design 01, T174-S6; drawn by `lib/ui/tool-card.ts`): `read`, `grep`, `find`, `ls`, `edit`, `write` and `bash` as cards with bounded previews, executing as pi's own tools (`bash` in the OS sandbox when `sandbox.mode` is on, `lib/sandbox.ts`, drawn the same); a call a Jhon guard refused is a red band; every other tool's call gets its family icon (`lib/ui/tool-icons.ts`). Always Jhon's cards (T15.3: `quiet_tools` is gone). |
 | `lib/ui/` | The UI's modules, one per piece: bars, prompt, the right pane (`pane.ts`) and its sections (`panel.ts`), Customize and `primitives/` (cards, tinted blocks, rules, glyphs). `ldd-status.ts` reads the session's LDD change and the other worktrees' through `jhon status --json`; their keys (`t` tests, `o` tasks.md) live in the LDD detail (alt+j). Under a multiplexer the pane shows it too: the multiplexer shows nothing of LDD (L112). |
 | `lib/profiles.ts` | The owner's active Jhon profile, shown in the header poster and the bar, and a profile's delegation mode (`delegation` in profiles.json: `writer`, else `inline`). |
 | `lib/session-profile.ts` | T120: a profile used in one session only, apart from the default for new sessions. `u` in the profiles panel appends the session entry `jhon-shell.session-profile/v1` (`{ profile }`) and writes nothing global: no `jhon profile use`, and settings' `pi.profile`, profiles.json's `active`, the agent folder's `settings.json` and the rendered agent files stay as they are, so the other sessions are untouched. From then on the session's sub-agents run on that profile's model and thinking level for each agent (read from `jhon profile json` at each launch, in place of the rendered file's `model:` and `thinking:`), its orchestrator switches to the profile's model and level through `pi.setModel` and `pi.setThinkingLevel` with a notice (pi saves neither as a default), its delegation mode follows the profile, and the header, the status bar and the panel name it, marked while it is not the default (`<name> (session)`; `●` on its tab). The entry is read from the session's branch at each start: a resumed session comes back with its profile, `/new` starts on the default. A sub-agent hears its parent session's profile in `JHON_PI_SESSION_PROFILE`, so the sub-agents it launches follow it. `u` is refused, with one line and nothing changed, when this pi does not list one of the profile's models as available (its provider is not loaded in this process, or has no credential): `d` and a restart load it, as the line says; the panel wraps a note wider than the card onto up to three rows. A session profile that was renamed or deleted puts the session back on the default with a one-line notice. `d` is unchanged: `jhon profile use`, the default every session without a profile of its own reads. Claude Code sessions (no panel; their agent files are global) and `jhon review-native` keep reading the default profile. |
@@ -159,10 +159,24 @@ the strip.
 
 Cards come in two styles, `shell.appearance.cards`: `float` (the default: a
 tinted panel with a `▎` bar in the card's tone) or `neon` (a rounded
-outline). Notices, tool cards (`<icon> <name> <args>`, then `↳ ✓ <summary>`
-or `↳ ✗ <why>` and a preview) take it; a theme that
-cannot paint a background draws the outline. `shell.appearance.ascii` draws every glyph of the chrome in ASCII (`力`
-reads `jhon`).
+outline). Notices take it; a theme that cannot paint a background draws the
+outline. Tool cards (T174-S6, design 01) map it onto design/shell-tui's
+forms: `float` is the tinted block (the rows on the Box surface, a failed
+call's header on errorContainer), `neon` design 02's outline (the title and
+the state in the top edge, the frame red on a failure). A tool card is a
+header, `<icon> <name>  <target>` with its state at the right (`◐ running`,
+`✓ 2.3s`, `+3 −1`, `↳ 61 lines`, `✗ failed`), then its body: bash's
+`$ <command>` (a long or multi-line command continues under the header,
+every word kept) and the last five output lines under
+`... (N earlier lines, ctrl+o to expand)`, a failure's exit code, first
+failure and place, an edit's numbered diff (`87 − old`, `87 + new`), the
+first lines a read or a search found. A call a Jhon guard refused (the
+engine's `<name>-guard:` reasons, the shell's own `jhon:` refusals, an ask
+the owner declined) is a red band, `✗ refused  <call>  <guard>`, with the
+reason and the fix under it. ctrl+o (pi's `app.tools.expand`, or a click on
+the card) shows all of it, rows wrapped instead of cut; its hint rides the
+header's right while it would change something. `shell.appearance.ascii`
+draws every glyph of the chrome in ASCII (`力` reads `jhon`).
 
 The surface, `shell.appearance.surface`: `transparent` (the default) leaves
 the right pane's sections on the terminal's background; `tinted` paints them
@@ -172,10 +186,10 @@ The density, `shell.appearance.density`, picks one of the pane's two forms
 (L1495): `comfortable` draws each of the pane's sections (LDD,
 TODOS, Agents, Jobs) in its own rounded box, in rose ink's border role, in
 the same pane; `compact` (the default, L1498) draws them flat with one blank
-row between them (design 01); `minimal` stacks them with none and keeps bash tool cards quiet (`↳ ✓ N lines` and a short
-preview, no output tail or duration); tool calls are otherwise full cards (a
+row between them (design 01); `minimal` stacks them with none and keeps bash tool cards quiet (`↳ N lines` and a short
+preview, no output tail or duration, and an edit's diff to three rows); tool calls are otherwise full cards (a
 bash card shows its whole command, the last five output lines with the
-ctrl+o hint, and "Took Ns") (T91, L656).
+ctrl+o hint, and its duration, `✓ 2.3s`) (T91, L656).
 
 The right pane (`lib/ui/pane.ts`; design 01) sits beside the conversation
 and the editor behind one thin `│`, 47 columns wide whatever the terminal's
@@ -328,8 +342,8 @@ Adding a theme is one file, `themes/<name>.json`, a pi theme whose `name` is
 
 ## Where it came from
 
-The UI and its companions (pretty, todo, quiet) are adapted from
-gentle-pi 4.1.0 (the question view's layout from 4.6.0), which the render
+The UI and its companions (pretty, todo) are adapted from
+gentle-pi 4.1.0 (the tool cards, quiet, are Jhon's own since T174-S6) (the question view's layout from 4.6.0), which the render
 loaded as a filtered bridge until each had its own place here (docket AY,
 B0); gentle-pi is no longer loaded. `THIRD_PARTY_NOTICES.md`, at the repository's root, lists
 each adapted file and carries gentle-pi's MIT license.
