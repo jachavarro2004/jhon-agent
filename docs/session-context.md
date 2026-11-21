@@ -62,7 +62,8 @@ Sub-agents keep the full always-on layer in every case.
   (`git switch`, `git checkout`), runs `jhon executions` or `jhon risk`, or
   names the changes folder. Only at such a moment, and only while the
   session is still lean, the engine is asked as at the start: pi runs
-  `jhon hook session-brief` and switches on `"context": "full"`; Claude
+  `jhon hook session-brief` and switches on `"context": "full"` (an
+  answer slower than 3 seconds counts as unknown: the session stays lean); Claude
   Code's hook reads the same answer (the active change is not small). A
   small change, or no change, keeps the session lean. Other tools never
   ask.

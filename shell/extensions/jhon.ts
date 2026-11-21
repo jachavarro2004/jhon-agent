@@ -115,7 +115,7 @@ import { parseSessionBrief, sessionBriefs } from "../lib/session-brief.ts";
 import { codegraphIndexed, withoutCodegraph } from "../lib/codegraph.ts";
 import { ROUTE_MESSAGE, SessionPrompt, compactSkills, memoryIndexPrompt, splitRoute } from "../lib/session-prompt.ts";
 import { ToolPolicy, enabledOnBranch, toolsMoreTool } from "../lib/tools-deferred.ts";
-import { FULL_MESSAGE, changeMoment, fullOnBranch, fullTrigger, setContextLevel } from "../lib/lean-context.ts";
+import { CHANGE_ASK_MS, FULL_MESSAGE, changeMoment, fullOnBranch, fullTrigger, setContextLevel } from "../lib/lean-context.ts";
 import { AnnounceSendBack, engineStopRunner } from "../lib/announce-stop.ts";
 
 export { CONFIG_FILE, claudeCall, inspect, judge, loadConfig } from "../lib/guards.ts";
@@ -889,13 +889,15 @@ export default function jhon(pi: any): void {
   });
 
   // T31 D: in a project that uses LDD, the binding lead and the project's rules Claude Code's session gets (lib/session-brief.ts).
-  const briefOf = (cwd: string) => new Promise<string>((resolve, reject) => {
+  // timeoutMs bounds a mid-session ask (T192 S7): past it the engine is stopped and the answer is unknown.
+  const briefOf = (cwd: string, timeoutMs?: number) => new Promise<string>((resolve, reject) => {
     if (!config) return reject(new Error("no jhon.json"));
     const run = spawn(config.jhon, ["hook", "session-brief", "jhon-orchestrator"], { cwd, stdio: ["pipe", "pipe", "ignore"] });
+    const timer = timeoutMs === undefined ? undefined : setTimeout(() => { try { run.kill("SIGKILL"); } catch { /* gone already */ } reject(new Error("session-brief timed out")); }, timeoutMs);
     let out = "";
     run.stdout.setEncoding("utf8").on("data", (d: string) => { out += d; });
-    run.once("error", reject);
-    run.once("close", (code: number | null) => (code === 0 ? resolve(out) : reject(new Error(`session-brief exited ${code}`))));
+    run.once("error", (error: Error) => { clearTimeout(timer); reject(error); });
+    run.once("close", (code: number | null) => { clearTimeout(timer); if (code === 0) resolve(out); else reject(new Error(`session-brief exited ${code}`)); });
     run.stdin.on("error", () => {});
     run.stdin.end(JSON.stringify({ cwd }));
   });
@@ -1004,7 +1006,7 @@ export default function jhon(pi: any): void {
     // One ask at a time; one that waited finds the session full already and asks nothing.
     const ask = asked.then(async () => {
       if (!lean?.on || lean.loaded) return;
-      const brief = parseSessionBrief(await briefOf(where).catch(() => ""));
+      const brief = parseSessionBrief(await briefOf(where, CHANGE_ASK_MS).catch(() => ""));
       if (brief?.context === "full" && !lean.loaded) loadFull(ctx);
     });
     asked = ask.catch(() => {});

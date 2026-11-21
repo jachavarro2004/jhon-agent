@@ -278,14 +278,14 @@ test("a child session's tools are untouched by the lean start", async () => {
 // ── T192 S7: a change that appears mid-session ──
 
 /** An agent dir whose jhon answers session-brief with the context in its `context` file, and logs each ask. */
-function changingDir(): { dir: string; context: (c: "lean" | "full") => void; asks: () => number } {
+function changingDir(): { dir: string; context: (c: "lean" | "full") => void; asks: () => number; hang: () => void } {
 	const dir = agentDir("lean");
 	const fake = join(dir, "jhon");
 	writeFileSync(join(dir, "context"), "lean");
-	writeFileSync(fake, `#!/bin/sh\nif [ "$2" = session-brief ]; then echo x >> '${dir}/asks'; printf '{"lead":"Lead.","brief":"## The project rules","context":"%s"}' "$(cat '${dir}/context')"; exit 0; fi\nif [ "$1" = status ]; then printf '{}'; exit 0; fi\nexit 0\n`);
+	writeFileSync(fake, `#!/bin/sh\nif [ "$2" = session-brief ]; then echo x >> '${dir}/asks'; if [ -f '${dir}/hang' ]; then exec sleep 30; fi; printf '{"lead":"Lead.","brief":"## The project rules","context":"%s"}' "$(cat '${dir}/context')"; exit 0; fi\nif [ "$1" = status ]; then printf '{}'; exit 0; fi\nexit 0\n`);
 	chmodSync(fake, 0o755);
 	const asks = () => { try { return readFileSync(join(dir, "asks"), "utf8").split("\n").filter(Boolean).length; } catch { return 0; } };
-	return { dir, context: (c) => writeFileSync(join(dir, "context"), c), asks };
+	return { dir, context: (c) => writeFileSync(join(dir, "context"), c), asks, hang: () => writeFileSync(join(dir, "hang"), "") };
 }
 
 const writeResult = (path: string) => ({ toolName: "write", input: { path, content: "## 1. Tasks\n" }, content: [{ type: "text", text: `Wrote ${path}` }], isError: false });
@@ -340,4 +340,40 @@ test("a small change that appears mid-session keeps the session lean", async () 
 	assert.deepEqual(s.sent.filter((m) => m.message.customType === FULL_MESSAGE), []);
 	assert.equal(contextLevel(), "lean");
 	assert.ok(!s.active().includes("jhon_review"), "Jhon's own tools still wait");
+});
+
+// T192 fix round (L11): three change moments at once ask the engine once, and the session gets one full message.
+test("concurrent change moments ask the engine once and send one full message", async () => {
+	const d = changingDir(), cwd = temp("jhon-lean-cwd-");
+	mkdirSync(join(cwd, "ldd/changes/c1"), { recursive: true });
+	const s = load(d.dir);
+	const options = { appendSystemPrompt: "", sections: {} as Record<string, string>, selectedTools: s.active() };
+	await s.emit("before_agent_start", { systemPromptOptions: options }, ctx(cwd));
+	const started = d.asks();
+	d.context("full");
+	await Promise.all([
+		s.emit("tool_result", writeResult(join(cwd, "ldd/changes/c1/tasks.md")), ctx(cwd)),
+		s.emit("tool_result", bashResult("git switch feat/c1"), ctx(cwd)),
+		s.emit("tool_result", bashResult("jhon executions run"), ctx(cwd)),
+	]);
+	assert.equal(d.asks(), started + 1, "one ask");
+	assert.equal(s.sent.filter((m) => m.message.customType === FULL_MESSAGE).length, 1, "one full message");
+	assert.equal(contextLevel(), "full");
+});
+
+// T192 fix round (L11): a slow or hung engine never holds a tool result for long; the moment is unknown, the session stays lean.
+test("a hung session-brief at a change moment gives up within a few seconds and keeps the session lean", async () => {
+	const d = changingDir(), cwd = temp("jhon-lean-cwd-");
+	const s = load(d.dir);
+	const options = { appendSystemPrompt: "", sections: {} as Record<string, string>, selectedTools: s.active() };
+	await s.emit("before_agent_start", { systemPromptOptions: options }, ctx(cwd));
+	d.context("full");
+	d.hang();
+	const t0 = Date.now();
+	const r = await s.emit("tool_result", bashResult("git switch feat/c1"), ctx(cwd));
+	const took = Date.now() - t0;
+	assert.ok(took < 6_000, `held the tool result ${took} ms`);
+	assert.equal(r, undefined, "no error reaches the model");
+	assert.deepEqual(s.sent.filter((m) => m.message.customType === FULL_MESSAGE), []);
+	assert.equal(contextLevel(), "lean");
 });

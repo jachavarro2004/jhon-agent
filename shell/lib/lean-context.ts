@@ -56,6 +56,9 @@ const CHANGES = /(?:^|[\\/])(?:openspec|ldd)[\\/]changes[\\/]/;
 /** A bash command that may make or select a change: a git branch switch, a jhon run or risk read, or one naming the changes folder. */
 const CHANGE_COMMAND = /\bgit\s+(?:switch|checkout)\b|(?:^|[;&|(]\s*|\s)jhon\s+(?:executions|risk)\b|(?:^|[\s'"=/])(?:openspec|ldd)\/changes\//;
 
+/** T192 S7: how long a change moment's ask may hold its tool result; past it the answer is unknown and the session stays lean. */
+export const CHANGE_ASK_MS = 3_000;
+
 /**
  * T192 S7: where a lean session asks the engine whether a change that is not
  * small appeared, after a tool result that may have made or selected one: a
