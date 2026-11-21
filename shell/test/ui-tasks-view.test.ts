@@ -25,9 +25,11 @@ const NOW = 10_000_000;
 function agent(overrides: Partial<AgentRun> & Pick<AgentRun, "id">): AgentRun {
 	return { kind: "agent", label: "x", agent: "worker", task: "fix it", ownerSessionId: "s1", startedAt: NOW - 125_000, status: "running", activity: [], tokens: 0, cost: 0, thread: [], ...overrides };
 }
-function job(overrides: Partial<JobRecord> & Pick<JobRecord, "id">): JobRecord {
-	return { kind: "command", label: overrides.id, command: `run ${overrides.id}`, cwd: "/repo", ownerSessionId: "s1", outputPath: `/tmp/jobs/${overrides.id}.log`, startedAt: NOW - 125_000, status: "running", tail: [], ...overrides };
-}
+/** A running command of session s1 named after its id, started 125 s ago; `fields` change any of it. */
+const job = (fields: Partial<JobRecord> & { id: string }): JobRecord => {
+	const { id } = fields;
+	return { kind: "command", label: id, command: `run ${id}`, cwd: "/repo", ownerSessionId: "s1", outputPath: `/tmp/jobs/${id}.log`, startedAt: NOW - 125_000, status: "running", tail: [], ...fields };
+};
 const tool = (name: string, subject: string | undefined, state: "done" | "error" | "running" = "done", output = ""): ThreadItem =>
 	({ kind: "tool", callId: `${name}-${subject}`, name, ...(subject ? { subject } : {}), output, running: state === "running", isError: state === "error" });
 

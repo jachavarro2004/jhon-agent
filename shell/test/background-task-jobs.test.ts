@@ -36,7 +36,7 @@ function jobs(commandPrefix?: string) {
 	const settled: TaskRecord[] = [];
 	let clock = 50_000;
 	const registry = createTaskRegistry({
-		outputDir: () => dir,
+		outputDir() { return dir; },
 		now: () => clock,
 		shell: () => ({ operations, commandPrefix }),
 		runAgent: (_a, _t, _c, { signal }) => new Promise((resolve) => { answers.push(resolve); signal.addEventListener("abort", () => resolve({ ok: false, text: "cancelled" }), { once: true }); }),

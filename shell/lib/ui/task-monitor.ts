@@ -12,41 +12,39 @@
  */
 import type { JobRecord, JobStartRequest, TaskRegistry } from "../background-tasks.ts";
 
-/** Lines within this many milliseconds of a notice's first line join it. */
-export const MONITOR_BATCH_MS = 200;
-/** Lines one notice carries. */
-export const MONITOR_LINES_PER_NOTICE = 20;
-/** A monitor printing more lines than this within MONITOR_FLOOD_WINDOW_MS is stopped. */
-export const MONITOR_FLOOD_LINES = 120;
-export const MONITOR_FLOOD_WINDOW_MS = 60_000;
-/** The longest timeout a monitor takes: 30 minutes. */
-export const MONITOR_MAX_TIMEOUT_SECONDS = 1800;
+/**
+ * A monitor's limits: a notice gathers the lines that come within `batchMs`
+ * of its first one, `perNotice` of them at most; more than `floodLines` lines
+ * within `floodWindowMs` stop the monitor; its timeout is at most
+ * `maxTimeoutSeconds` (30 minutes).
+ */
+export const {
+	batchMs: MONITOR_BATCH_MS,
+	perNotice: MONITOR_LINES_PER_NOTICE,
+	floodLines: MONITOR_FLOOD_LINES,
+	floodWindowMs: MONITOR_FLOOD_WINDOW_MS,
+	maxTimeoutSeconds: MONITOR_MAX_TIMEOUT_SECONDS,
+} = { batchMs: 200, perNotice: 20, floodLines: 120, floodWindowMs: 60_000, maxTimeoutSeconds: 1800 } as const;
 
-/** The lines one notice carries, and how many more arrived with them. */
-export interface MonitorBatch {
-	lines: string[];
-	omitted: number;
-}
+/** One notice's lines, and the count of those that came with them but did not fit. */
+export type MonitorBatch = { lines: string[]; omitted: number };
 
-export type MonitorStopReason = "timeout" | "flood";
+/** Why a monitor was stopped while its command still ran. */
+export type MonitorStopReason = "flood" | "timeout";
 
-export type MonitorNotice =
-	| { job: JobRecord; kind: "events"; batch: MonitorBatch }
-	| { job: JobRecord; kind: "stopped"; reason: MonitorStopReason };
+/** What the agent hears of a monitor: a batch of its lines, or that it was stopped. */
+export type MonitorNotice = { job: JobRecord } & ({ kind: "events"; batch: MonitorBatch } | { kind: "stopped"; reason: MonitorStopReason });
 
-export interface MonitorControllerDeps {
+/** What a monitor controller is handed: the task registry, a clock, a timer whose result cancels it, and where notices go (in order). */
+export type MonitorControllerDeps = {
 	registry: TaskRegistry;
-	/** Runs `fn` after `ms`; returns what cancels it. */
-	schedule(fn: () => void, ms: number): () => void;
-	now(): number;
-	/** Receives each notice, in order. */
-	deliver(notice: MonitorNotice): void;
-}
+	now: () => number;
+	schedule: (fn: () => void, ms: number) => () => void;
+	deliver: (notice: MonitorNotice) => void;
+};
 
-export interface MonitorStartRequest extends Omit<JobStartRequest, "kind" | "onLine"> {
-	/** The monitor is stopped after this many seconds: a whole number from 1 to MONITOR_MAX_TIMEOUT_SECONDS. */
-	timeoutSeconds: number;
-}
+/** A monitor's command, as a job takes it, plus its timeout: a whole number of seconds from 1 to MONITOR_MAX_TIMEOUT_SECONDS. */
+export type MonitorStartRequest = Omit<JobStartRequest, "kind" | "onLine"> & { timeoutSeconds: number };
 
 /** One live monitor: its open batch, its line times inside the flood window, its timers. */
 interface Watch {
@@ -58,7 +56,7 @@ interface Watch {
 	readonly cancelTimeout: () => void;
 }
 
-export function createMonitorController(deps: MonitorControllerDeps) {
+export function createMonitorController({ registry, now, schedule, deliver }: MonitorControllerDeps) {
 	const watches = new Map<string, Watch>();
 
 	/** Delivers the open batch, if any. */
@@ -67,7 +65,7 @@ export function createMonitorController(deps: MonitorControllerDeps) {
 		watch.cancelBatch = undefined;
 		const batch = watch.batch;
 		watch.batch = undefined;
-		if (batch) deps.deliver({ job: watch.job, kind: "events", batch });
+		if (batch) deliver({ job: watch.job, kind: "events", batch });
 	};
 	/** Forgets a monitor: its timers go, its open batch is dropped. */
 	const cancel = (id: string) => {
@@ -83,14 +81,14 @@ export function createMonitorController(deps: MonitorControllerDeps) {
 		if (watch.job.status !== "running") return;
 		flush(watch);
 		cancel(watch.job.id);
-		deps.registry.stop(watch.job.id);
-		deps.deliver({ job: watch.job, kind: "stopped", reason });
+		registry.stop(watch.job.id);
+		deliver({ job: watch.job, kind: "stopped", reason });
 	};
 	const line = (id: string | undefined, text: string) => {
 		const watch = id === undefined ? undefined : watches.get(id);
 		// Nothing more from a monitor that ended, stopped or was let go.
 		if (!watch || watch.job.status !== "running" || text.trim() === "") return;
-		const at = deps.now();
+		const at = now();
 		watch.lines++;
 		watch.job.events = watch.lines;
 		watch.arrivals.push(at);
@@ -100,22 +98,22 @@ export function createMonitorController(deps: MonitorControllerDeps) {
 		if (batch.lines.length < MONITOR_LINES_PER_NOTICE) batch.lines.push(text);
 		else batch.omitted++;
 		if (watch.arrivals.length > MONITOR_FLOOD_LINES) return halt(watch, "flood");
-		if (opened) watch.cancelBatch = deps.schedule(() => flush(watch), MONITOR_BATCH_MS);
+		if (opened) watch.cancelBatch = schedule(() => flush(watch), MONITOR_BATCH_MS);
 	};
 
 	return {
 		/** Starts a monitor; throws before anything runs when the timeout is out of range. */
-		start(request: MonitorStartRequest): JobRecord {
-			const { timeoutSeconds, ...job } = request;
-			if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > MONITOR_MAX_TIMEOUT_SECONDS) {
+		start({ timeoutSeconds, ...job }: MonitorStartRequest): JobRecord {
+			const allowed = Number.isInteger(timeoutSeconds) && timeoutSeconds >= 1 && timeoutSeconds <= MONITOR_MAX_TIMEOUT_SECONDS;
+			if (!allowed) {
 				throw new Error(`timeout_seconds must be a whole number from 1 to ${MONITOR_MAX_TIMEOUT_SECONDS}.`);
 			}
 			let id: string | undefined;
-			const started = deps.registry.start({ ...job, kind: "monitor", onLine: (text) => line(id, text) });
+			const started = registry.start({ ...job, kind: "monitor", onLine: (text) => line(id, text) });
 			id = started.id;
 			started.events = 0;
 			started.timeoutSeconds = timeoutSeconds;
-			const watch: Watch = { job: started, arrivals: [], lines: 0, cancelTimeout: deps.schedule(() => halt(watch, "timeout"), timeoutSeconds * 1000) };
+			const watch: Watch = { job: started, arrivals: [], lines: 0, cancelTimeout: schedule(() => halt(watch, "timeout"), timeoutSeconds * 1000) };
 			watches.set(started.id, watch);
 			return started;
 		},

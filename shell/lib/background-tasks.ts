@@ -25,27 +25,23 @@ export const MONITOR_TOOL = "monitor";
 
 /** How many tasks may run at once in the process. */
 export const MAX_RUNNING_TASKS = 25;
-/** The output lines a job keeps for its notice and for task_result. */
-export const TAIL_LINES = 20;
-/** The characters kept of one output line: its newest, after an ellipsis. */
-export const MAX_TAIL_LINE_CHARS = 2000;
+/**
+ * How much of a job's output its record keeps: its newest 20 lines (for its
+ * notice and task_result), each cut to its newest 2000 characters after an
+ * ellipsis.
+ */
+export const [TAIL_LINES, MAX_TAIL_LINE_CHARS] = [20, 2000] as const;
 
-/** What a job needs of pi's `BashOperations`. */
-export interface JobExecOperations {
-	exec(command: string, cwd: string, options: { onData: (data: Buffer) => void; signal?: AbortSignal }): Promise<{ exitCode: number | null }>;
-}
+/** The one call a job makes on pi's `BashOperations`: run a command, streaming its bytes, until it exits or the signal aborts it. */
+export type JobExecOperations = {
+	exec: (command: string, cwd: string, options: { onData: (data: Buffer) => void; signal?: AbortSignal }) => Promise<{ exitCode: number | null }>;
+};
 
 /** exited: a command ended with its exit code; completed: a sub-agent answered; failed: it could not run or finish. */
 export type TaskStatus = "running" | "exited" | "completed" | "failed" | "stopped";
 
-interface TaskBase {
-	readonly id: string;
-	readonly label: string;
-	readonly ownerSessionId: string;
-	readonly startedAt: number;
-	status: TaskStatus;
-	endedAt?: number;
-}
+/** What every task has: who started it and when, and where it stands. */
+type TaskBase = Readonly<{ id: string; label: string; ownerSessionId: string; startedAt: number }> & { status: TaskStatus; endedAt?: number };
 
 export interface JobRecord extends TaskBase {
 	readonly kind: "command" | "monitor";
@@ -56,10 +52,8 @@ export interface JobRecord extends TaskBase {
 	error?: string;
 	/** Its last output lines, kept current until it ends. */
 	tail: string[];
-	/** A monitor's output lines reported so far. */
-	events?: number;
-	/** A monitor's timeout, as started. */
-	timeoutSeconds?: number;
+	/** A monitor's output lines reported so far, and its timeout as started. */
+	events?: number; timeoutSeconds?: number;
 	/** Started by the owner (JobStartRequest.byOwner). */
 	readonly byOwner?: boolean;
 	/** What the records of a `jhon executions run` say, read when it ends (executionsResult). */
@@ -105,24 +99,22 @@ export type ThreadItem =
 
 export type TaskRecord = JobRecord | AgentRun;
 
-export interface JobStartRequest {
-	command: string;
-	cwd: string;
-	ownerSessionId: string;
+/** A command to start: what runs where, for which session, and how it is named. */
+export type JobStartRequest = Pick<JobRecord, "command" | "cwd" | "ownerSessionId"> & {
 	label?: string;
-	kind?: "command" | "monitor";
+	kind?: JobRecord["kind"];
 	/** The owner started it (the change detail's `t`): the agent hears nothing of it and its tools never see it. */
 	byOwner?: boolean;
 	/** Receives each complete output line, and what is left of the last one when the command ends. */
 	onLine?: (line: string) => void;
-}
+};
 
 /** A background sub-agent's run options: runAgent's, less the two the registry supplies. */
 export type AgentStartOptions = Omit<RunOptions, "signal" | "onEvent">;
 
 export interface TaskRegistryDeps {
 	/** Where each job's `<id>.log` goes; asked at every start. */
-	outputDir(): string;
+	outputDir: () => string;
 	now(): number;
 	/** The shell a job runs in, asked at every start so a changed setting applies to the next job; `byOwner` for the owner's own command, which no sandbox wraps (lib/sandbox.ts). */
 	shell(cwd: string, byOwner?: boolean): { operations: JobExecOperations; commandPrefix?: string };
@@ -143,10 +135,10 @@ const STANDALONE_SLEEP = /^sleep\s+\d+(?:\.\d+)?[smhd]?$/;
  * steps joined by `&&` or `;`. A sleep inside a loop, a pipe or beside any
  * other command is real work.
  */
-export function isStandaloneSleep(command: string): boolean {
+export const isStandaloneSleep = (command: string): boolean => {
 	const steps = command.split(/&&|;/).map((step) => step.trim()).filter((step) => step !== "");
 	return steps.length > 0 && steps.every((step) => STANDALONE_SLEEP.test(step));
-}
+};
 
 /** `line` without a trailing carriage return, cut to its newest characters after `…` when too long or already cut. */
 function boundLine(line: string, cut: boolean): string {
@@ -159,7 +151,10 @@ function boundLine(line: string, cut: boolean): string {
  * A command's decoded output split into lines: every complete line once
  * (bounded), the newest TAIL_LINES of them, and the line still being written.
  */
-export function createOutputTail() {
+/** A command's output as lines: push decoded text in, read the line still being written and the newest lines. */
+export type OutputTail = { push(text: string): string[]; pending(): string | undefined; lines(): string[] };
+
+export function createOutputTail(): OutputTail {
 	const kept: string[] = [];
 	let open = "";
 	let openCut = false;
@@ -343,23 +338,16 @@ export function createTaskRegistry(deps: TaskRegistryDeps) {
 	};
 
 	/** Runs a command in the background. */
-	const start = (request: JobStartRequest): JobRecord => {
+	const start = (request: Readonly<JobStartRequest>): JobRecord => {
 		admit();
-		const { operations, commandPrefix } = deps.shell(request.cwd, request.byOwner === true);
+		const { command, cwd, ownerSessionId, byOwner } = request;
+		const { operations, commandPrefix } = deps.shell(cwd, byOwner === true);
 		const id = `job-${++jobs}`;
-		const job: JobRecord = {
-			id,
-			kind: request.kind ?? "command",
-			label: request.label?.trim() || request.command,
-			command: request.command,
-			cwd: request.cwd,
-			ownerSessionId: request.ownerSessionId,
-			outputPath: join(deps.outputDir(), `${id}.log`),
-			startedAt: deps.now(),
-			status: "running",
-			tail: [],
-			...(request.byOwner ? { byOwner: true } : {}),
-		};
+		// The name shown is the label when it says anything, else the command itself.
+		const label = request.label?.trim() || command;
+		const logFile = join(deps.outputDir(), id + ".log");
+		const job: JobRecord = { id, kind: request.kind ?? "command", label, command, cwd, ownerSessionId, outputPath: logFile, startedAt: deps.now(), status: "running", tail: [] };
+		if (byOwner) Object.assign(job, { byOwner: true });
 		const log = createWriteStream(job.outputPath);
 		// The log is a convenience: losing it must not take the session down; the tail stays.
 		log.on("error", () => {});
@@ -492,9 +480,9 @@ export function createTaskRegistry(deps: TaskRegistryDeps) {
 		/** Jobs still running or closing their log. */
 		pending: () => closing.size,
 		/** Stops every running task; resolves once every job's log is closed. */
-		stopAll: async () => {
-			for (const id of [...tasks.keys()]) stop(id);
-			await Promise.allSettled([...closing]);
+		async stopAll() {
+			for (const id of Array.from(tasks.keys())) stop(id);
+			await Promise.allSettled(Array.from(closing));
 		},
 	};
 }

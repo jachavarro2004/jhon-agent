@@ -215,7 +215,7 @@ test("the float style: a tinted panel inside a one-cell margin, a ▎ bar, a bla
 
 test("a preview keeps its row budget after wrapping, in both styles", () => {
 	const value: Card = { ...NOTICE, body: ["one\ntwo\nthree\nfour"] };
-	for (const style of [CARD_STYLE.FLOAT, CARD_STYLE.NEON]) {
+	for (const style of ["float", "neon"] as const) {
 		const rows = withStyle(style, () => renderCard(value, tinted, 60, { expanded: false, previewRows: 3 })).map(stripAnsi);
 		assert.ok(rows.some((row) => row.includes("three")) && !rows.some((row) => row.includes("four")), style);
 	}
@@ -267,10 +267,10 @@ test("a call card awaits its result until pi finishes the row or a result render
 	markCardResult(state);
 	assert.equal(cardAwaitingResult({ isPartial: true, state }), false);
 	assert.deepEqual(Object.keys(state), [], "the mark is not ordinary row state");
-	for (const value of [undefined, null, 1, "state"]) {
-		assert.doesNotThrow(() => markCardResult(value));
-		assert.equal(cardAwaitingResult({ isPartial: true, state: value }), true);
-	}
+	// A row state that is no object cannot carry the mark: marking it does nothing, and the call keeps waiting.
+	const notObjects = [undefined, null, 1, "state"];
+	notObjects.forEach((value) => markCardResult(value));
+	assert.deepEqual(notObjects.map((value) => cardAwaitingResult({ isPartial: true, state: value })), [true, true, true, true]);
 });
 
 // --- the overlay box, the meter, hover ---------------------------------------------------

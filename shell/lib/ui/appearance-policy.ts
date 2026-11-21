@@ -17,23 +17,24 @@ import { shellSettings, type AnimationsSetting, type ShellSettings } from "../se
 export const ANIMATION_KEY = "shell.appearance.animations";
 const STATUS_KEY = "shell.appearance.status";
 
-export const ANIMATION_POLICY = { QUALITY: "quality", POTATO: "potato" } as const;
-export type AnimationPolicy = (typeof ANIMATION_POLICY)[keyof typeof ANIMATION_POLICY];
+/** How the prompt moves: quality animates the working line, potato keeps it still. */
+export type AnimationPolicy = "quality" | "potato";
+export const ANIMATION_POLICY = { QUALITY: "quality", POTATO: "potato" } as const satisfies Record<string, AnimationPolicy>;
 
-export const STATUS_PLACEMENT = { AUTO: "auto", HIDDEN: "hidden" } as const;
-export type StatusPlacement = (typeof STATUS_PLACEMENT)[keyof typeof STATUS_PLACEMENT];
+/** Whether the status pane shows where it fits, or never. */
+export type StatusPlacement = "auto" | "hidden";
+export const STATUS_PLACEMENT = { AUTO: "auto", HIDDEN: "hidden" } as const satisfies Record<string, StatusPlacement>;
 
-export const CHROME_SURFACE = { TRANSPARENT: "transparent", TINTED: "tinted" } as const;
-export type ChromeSurface = (typeof CHROME_SURFACE)[keyof typeof CHROME_SURFACE];
+/** The right pane on the terminal's own background, or on rose ink's band. */
+export type ChromeSurface = "transparent" | "tinted";
+export const CHROME_SURFACE = { TRANSPARENT: "transparent", TINTED: "tinted" } as const satisfies Record<string, ChromeSurface>;
 
-export const DENSITY = { COMFORTABLE: "comfortable", COMPACT: "compact", MINIMAL: "minimal" } as const;
-export type Density = (typeof DENSITY)[keyof typeof DENSITY];
+/** How much room the pane's sections take: a box each, a blank row between them, or nothing between. */
+export type Density = "comfortable" | "compact" | "minimal";
+export const DENSITY = { COMFORTABLE: "comfortable", COMPACT: "compact", MINIMAL: "minimal" } as const satisfies Record<string, Density>;
 
-export interface VisualSettings {
-	statusPlacement: StatusPlacement;
-	surface: ChromeSurface;
-	density: Density;
-}
+/** The three layout choices Customize writes. */
+export type VisualSettings = { statusPlacement: StatusPlacement; surface: ChromeSurface; density: Density };
 
 export const DEFAULT_VISUAL_SETTINGS: VisualSettings = { statusPlacement: "auto", surface: "transparent", density: "compact" };
 
@@ -45,22 +46,11 @@ interface Options {
 	settings?: ShellSettings;
 }
 
-export interface AnimationResolution {
-	policy: AnimationPolicy;
-	source: Source;
-	/** The settings could not be read: the policy is the default. */
-	malformed: boolean;
-	/** Where the setting is kept, or why it could not be read. */
-	globalFile: string;
-}
+/** What every resolution says besides its value: its source, whether the settings could not be read (the value is then the default), and where the setting is kept or why it could not be read. */
+type Resolved = { source: Source; malformed: boolean; globalFile: string };
 
-export interface VisualResolution {
-	settings: VisualSettings;
-	source: Source;
-	malformed: boolean;
-	readError: boolean;
-	globalFile: string;
-}
+export type AnimationResolution = Resolved & { policy: AnimationPolicy };
+export type VisualResolution = Resolved & { settings: VisualSettings; readError: boolean };
 
 const POLICY_OF: Record<AnimationsSetting, AnimationPolicy> = { full: "quality", off: "potato" };
 const SETTING_OF: Record<AnimationPolicy, AnimationsSetting> = { quality: "full", potato: "off" };

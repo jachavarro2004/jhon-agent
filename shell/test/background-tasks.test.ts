@@ -12,7 +12,8 @@ import type { AgentDef, ChildEvent, ChildResult } from "../lib/agents.ts";
 
 const worker: AgentDef = { name: "worker", description: "w", model: "m", tools: [], bounded: true, body: "" };
 
-function harness() {
+/** A task registry on a fake clock, whose sub-agents finish when the test says. */
+function rig() {
 	const runs: Array<{ task: string; signal?: AbortSignal; finish: (r: ChildResult) => void; emit: (event: ChildEvent) => void }> = [];
 	let activityChanges = 0;
 	const timeouts: Array<number | undefined> = [];
@@ -36,7 +37,7 @@ function harness() {
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 test("a started sub-agent is running at once and owned by its session", () => {
-	const h = harness();
+	const h = rig();
 	const run = h.registry.startAgent(worker, "fix the bug", "/repo", "main");
 	assert.match(run.id, /^agent-\d+$/);
 	assert.equal(run.status, "running");
@@ -49,7 +50,7 @@ test("a started sub-agent is running at once and owned by its session", () => {
 });
 
 test("it settles once as completed or failed, with the sub-agent's answer", async () => {
-	const h = harness();
+	const h = rig();
 	const ok = h.registry.startAgent(worker, "a", "/repo", "main");
 	const bad = h.registry.startAgent(worker, "b", "/repo", "main");
 	h.runs[0]!.finish({ ok: true, text: "done: 3 files" });
@@ -60,7 +61,7 @@ test("it settles once as completed or failed, with the sub-agent's answer", asyn
 });
 
 test("a stop cancels the run and reports nothing; stopping again changes nothing", async () => {
-	const h = harness();
+	const h = rig();
 	const run = h.registry.startAgent(worker, "a", "/repo", "main");
 	assert.equal(h.registry.stop(run.id)?.status, "stopped");
 	assert.equal(h.runs[0]!.signal?.aborted, true);
@@ -74,7 +75,7 @@ test("a stop cancels the run and reports nothing; stopping again changes nothing
 });
 
 test("stopAll cancels every running sub-agent without reporting them", async () => {
-	const h = harness();
+	const h = rig();
 	h.registry.startAgent(worker, "a", "/repo", "main");
 	h.registry.startAgent(worker, "b", "/repo", "main");
 	await h.registry.stopAll();
@@ -84,7 +85,7 @@ test("stopAll cancels every running sub-agent without reporting them", async () 
 });
 
 test("a run keeps its recent activity from the child's events: tools it runs and what it says", () => {
-	const h = harness();
+	const h = rig();
 	const run = h.registry.startAgent(worker, "a", "/repo", "main");
 	h.runs[0]!.emit({ type: "tool_execution_start", toolName: "bash", args: { command: "go test ./..." } });
 	h.runs[0]!.emit({ type: "tool_execution_end", toolName: "bash", isError: true });
@@ -98,14 +99,14 @@ test("a run keeps its recent activity from the child's events: tools it runs and
 });
 
 test("a background sub-agent runs with the timeout it was started with", () => {
-	const h = harness();
+	const h = rig();
 	h.registry.startAgent(worker, "a", "/repo", "main", { timeoutSeconds: 600 });
 	h.registry.startAgent(worker, "b", "/repo", "main");
 	assert.deepEqual(h.timeouts, [600, undefined]);
 });
 
 test("a running sub-agent counts its tokens from each assistant message's usage, for AGENTS (L168)", () => {
-	const h = harness();
+	const h = rig();
 	const run = h.registry.startAgent(worker, "a", "/repo", "main");
 	assert.equal(run.tokens, 0, "none known yet");
 	const before = h.activity();

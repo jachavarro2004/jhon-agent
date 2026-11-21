@@ -227,17 +227,24 @@ test("pi wraps the input at its own width under the lead", () => {
 	} finally { editor.dispose(); }
 });
 
+
+/** A completion provider of slash commands: choosing one makes it the whole draft. */
+function slashCommands(...names: string[]) {
+	return {
+		getSuggestions: async () => ({ prefix: "/", items: names.map((name) => ({ value: `/${name}`, label: name })) }),
+		applyCompletion: (_lines: string[], _line: number, _col: number, item: { value: string }) => ({ lines: [item.value], cursorLine: 0, cursorCol: item.value.length }),
+	};
+}
+
 test("pi's completions sit under the bottom rule past the lead, and a click applies one", async () => {
 	const { editor } = prompt();
 	editor.focused = true;
-	editor.setAutocompleteProvider({
-		async getSuggestions() { return { prefix: "/", items: [{ value: "/alpha", label: "alpha" }, { value: "/beta", label: "beta" }] }; },
-		applyCompletion(_lines, _line, _col, item) { return { lines: [item.value], cursorLine: 0, cursorCol: item.value.length }; },
-	});
+	editor.setAutocompleteProvider(slashCommands("alpha", "beta"));
 	try {
 		editor.handleInput("/");
-		await new Promise<void>((resolve) => setImmediate(resolve));
-		assert.equal(editor.isShowingAutocomplete(), true);
+		// pi asks the provider asynchronously: the menu opens on a later turn of the loop.
+		await new Promise<void>((done) => setImmediate(done));
+		assert.ok(editor.isShowingAutocomplete(), "typing / opens the menu");
 		const rows = editor.render(30);
 		assert.deepEqual(rows.map(stripAnsi).slice(4), [padded("   → alpha", 30), padded("     beta", 30)]);
 		assert.ok(rows.every((row) => visibleWidth(row) === 30));

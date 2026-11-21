@@ -90,7 +90,9 @@ function taskLines(state: TodoState, theme: PanelTheme, cells: number): string[]
 
 /** Folded, the task at hand: in progress, else the next pending, else the blocked one, else `✓ N done`. */
 function currentText(state: TodoState, theme: PanelTheme): string {
-	const current = [TODO_STATUS.IN_PROGRESS, TODO_STATUS.PENDING, TODO_STATUS.BLOCKED].map((status) => state.tasks.find((task) => task.status === status)).find(Boolean);
+	const rank = (task: TodoTask) => ["in_progress", "pending", "blocked"].indexOf(task.status);
+	// The first task of the best-ranked open status; done and dropped rank nowhere.
+	const current = state.tasks.filter((task) => rank(task) >= 0).sort((a, b) => rank(a) - rank(b))[0];
 	if (current) return taskText(current, theme);
 	return `${theme.fg(MARK_ROLE[TODO_STATUS.DONE], MARK[TODO_STATUS.DONE])} ${theme.fg("muted", `${todoSummary(state).done} done`)}`;
 }

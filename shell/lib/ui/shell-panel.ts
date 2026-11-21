@@ -3,27 +3,35 @@ import { glyph } from "./primitives/glyphs.ts";
 import { BAND_ROLE, HOVER_ROLE, paintHover, paintSurfaceRows, surfaceOpener, type CardTheme } from "./primitives/index.ts";
 import type { ChromeSurface } from "./appearance-policy.ts";
 
-// The rail's sections drawn as Gentle Shell's panel (its lib/shell-panel.ts,
-// T15.12b): a one-row header `▾ NAME … count` and dense rows indented under
-// it (the todo list's). A tinted
-// surface paints them on rose ink's band, a transparent one leaves the
-// terminal's own background (shell.appearance.surface, as G's Layout →
-// Surface); ascii (shell.appearance.ascii) draws every glyph in its ASCII form.
+// The right pane's section chrome (design 01): each section opens with one
+// header row, a fold glyph, the section's name and a count pushed to the right
+// edge, and its rows sit two cells in under that header. The pane is either
+// left on the terminal's own background or laid on rose ink's band
+// (shell.appearance.surface); shell.appearance.ascii swaps every glyph for its
+// ASCII form.
 
-// Each extension loads its own copy of this module: the surface lives in a
-// process-wide slot, as the card style does.
-const SURFACE_SLOT = Symbol.for("jhon-shell.chrome-surface");
-const surfaceState = globalThis as typeof globalThis & { [SURFACE_SLOT]?: unknown };
+// pi gives each extension its own module cache, so the surface choice is kept
+// on globalThis where every copy of this module reads the same value.
+const SURFACE_KEY = Symbol.for("jhon-shell.chrome-surface");
+type SurfaceHolder = { [SURFACE_KEY]?: unknown };
+const holder = globalThis as SurfaceHolder;
+
 /** The live chrome surface (shell.appearance.surface): transparent leaves the right pane on the terminal's background, tinted paints one panel. */
-export function chromeSurface(): ChromeSurface { return surfaceState[SURFACE_SLOT] === "tinted" ? "tinted" : "transparent"; }
-export function setChromeSurface(value: ChromeSurface): void { surfaceState[SURFACE_SLOT] = value; }
+export function chromeSurface(): ChromeSurface {
+	const stored = holder[SURFACE_KEY];
+	return stored === "tinted" ? stored : "transparent";
+}
+export function setChromeSurface(value: ChromeSurface): void {
+	holder[SURFACE_KEY] = value;
+}
 
 /** The theme background a tinted rail paints behind its sections: rose ink's band. */
 export const PANEL_SURFACE_ROLE = BAND_ROLE;
-/** The SGR that opens the panel surface, or "" when the chrome is transparent or the theme cannot paint it. */
-export function panelSurfaceOpener(theme: CardTheme): string {
-	return chromeSurface() === "transparent" ? "" : surfaceOpener(theme, PANEL_SURFACE_ROLE);
-}
+
+const tinted = (): boolean => chromeSurface() !== "transparent";
+
+/** The colour code that starts rose ink's band behind the pane; empty on a transparent pane or a theme without that background. */
+export const panelSurfaceOpener = (theme: CardTheme): string => (tinted() ? surfaceOpener(theme, PANEL_SURFACE_ROLE) : "");
 
 /** The pane's two forms (L1495): comfortable draws each section in its own box. */
 export function sectionBoxes(density: string | undefined): boolean {
@@ -31,71 +39,85 @@ export function sectionBoxes(density: string | undefined): boolean {
 }
 
 /** Compact (the default, L1498) keeps a blank row between the pane's sections (01's); minimal none; comfortable's boxes need none. */
-export function sectionGap(density: string | undefined): boolean {
-	return density === undefined || density === "compact";
-}
+export const sectionGap = (density?: string): boolean => (density ?? "compact") === "compact";
 
-/** Columns a panel row is indented under its header. */
-export const PANEL_ROW_INDENT = 2;
+/** How far a section's rows sit in from its header, in cells. */
+export const PANEL_ROW_INDENT: number = 2;
 
-export interface PanelTheme extends CardTheme {
-	bold?(text: string): string;
-}
+/** A card theme that may also embolden text (the section names). */
+export type PanelTheme = CardTheme & { bold?: (text: string) => string };
 
-export interface PanelHeader {
+/** What a section's header row shows. */
+export type PanelHeader = {
+	/** Printed in capitals after the fold glyph. */
 	title: string;
-	/** Right-aligned summary, e.g. `2/6` or `1 running`. */
+	/** Short text at the right edge (`2/6`, `1 running`); none when absent. */
 	count?: string;
-	/** Role for the count; muted unless the section signals a state. */
+	/** The count's theme role; muted when absent. */
 	countRole?: string;
+	/** Whether the section is unfolded: ▾ when it is, ▸ when not. */
 	open: boolean;
-	/** The pointer is over the header, the section's collapse control. */
+	/** The pointer rests on the header, which folds the section when clicked. */
 	hovered?: boolean;
 	ascii?: boolean;
-}
+};
 
-/** Clips plain-or-ANSI `text` to `width` columns with an ellipsis; SGR codes are kept. */
+// An SGR colour or weight code, matched only where the scan stands.
+const SGR_AT = /\x1b\[[0-9;]*m/y;
+
+/** `text` (painted or not) cut to `width` cells, its last cell an ellipsis when cut; every colour code before the cut stays. */
 export function clipPanelText(text: string, width: number, ascii = false): string {
 	if (width <= 0) return "";
 	if (visibleWidth(text) <= width) return text;
-	let clipped = "";
-	// Walk escape sequences as zero-width units so a clip never splits one.
-	for (const unit of text.match(/\x1b\[[0-9;]*m|[\s\S]/gu) ?? []) {
-		if (unit.startsWith("\x1b[")) { clipped += unit; continue; }
-		if (visibleWidth(clipped + unit) > width - 1) break;
-		clipped += unit;
+	// One cell stays free for the ellipsis; colour codes pass at no width, so
+	// a cut never lands inside one.
+	const budget = width - 1;
+	let kept = "";
+	let at = 0;
+	while (at < text.length) {
+		SGR_AT.lastIndex = at;
+		const code = SGR_AT.exec(text);
+		if (code !== null) {
+			kept += code[0];
+			at += code[0].length;
+			continue;
+		}
+		const char = String.fromCodePoint(text.codePointAt(at) ?? 0);
+		if (visibleWidth(kept + char) > budget) break;
+		kept += char;
+		at += char.length;
 	}
-	return `${clipped}${glyph("ellipsis", ascii)}`;
+	return kept + glyph("ellipsis", ascii);
 }
 
-/** `left` and `right` on one row exactly `width` columns wide; `left` gives way first. */
+/** One row of exactly `width` cells: `left` at the start, `right` at the end; when room runs out, `left` is cut before `right` is dropped. */
 export function fitPanelLine(left: string, right: string, width: number, ascii = false): string {
-	const target = Math.max(0, Math.floor(width));
-	const rightWidth = visibleWidth(right);
-	const shownRight = rightWidth + 1 <= target ? right : "";
-	const room = target - visibleWidth(shownRight) - (shownRight ? 1 : 0);
-	const shownLeft = clipPanelText(left, room, ascii);
-	return `${shownLeft}${" ".repeat(Math.max(0, target - visibleWidth(shownLeft) - visibleWidth(shownRight)))}${shownRight}`;
+	const cells = width > 0 ? Math.floor(width) : 0;
+	// The right part needs its own cells plus one of gap, or it is left out.
+	const tail = visibleWidth(right) < cells ? right : "";
+	const gap = tail === "" ? 0 : 1;
+	const head = clipPanelText(left, cells - visibleWidth(tail) - gap, ascii);
+	const spaces = cells - visibleWidth(head) - visibleWidth(tail);
+	return head + (spaces > 0 ? " ".repeat(spaces) : "") + tail;
 }
 
-export function renderPanelHeader(theme: PanelTheme, width: number, header: PanelHeader): string {
-	const ascii = header.ascii ?? false;
-	const fold = paintHover(theme, glyph(header.open ? "open" : "closed", ascii), header.hovered ?? false, "muted");
-	const name = header.title.toUpperCase();
-	// The hover paints the name too: a lone glyph is too small a signal.
-	const title = theme.fg(header.hovered ? HOVER_ROLE : "text", theme.bold ? theme.bold(name) : name);
-	const count = header.count ? theme.fg(header.countRole ?? "muted", header.count) : "";
-	return fitPanelLine(`${fold} ${title}`, count, width, ascii);
+/** A section's header row: fold glyph, capitalised name, and the count at the right edge. */
+export function renderPanelHeader(theme: PanelTheme, width: number, { title, count, countRole, open, hovered = false, ascii = false }: PanelHeader): string {
+	const caps = title.toUpperCase();
+	const strong = theme.bold === undefined ? caps : theme.bold(caps);
+	// Hovering lights the name as well as the glyph: one cell alone reads poorly.
+	const label = theme.fg(hovered ? HOVER_ROLE : "text", strong);
+	const fold = paintHover(theme, glyph(open ? "open" : "closed", ascii), hovered, "muted");
+	const right = count === undefined || count === "" ? "" : theme.fg(countRole ?? "muted", count);
+	return fitPanelLine(`${fold} ${label}`, right, width, ascii);
 }
 
-/** One section row, indented under the header, with an optional right column. */
-export function renderPanelRow(width: number, left: string, right = "", indent = PANEL_ROW_INDENT): string {
-	return fitPanelLine(`${" ".repeat(indent)}${left}`, right, width);
-}
+/** A row of a section: `left` set in under the header, `right` (if any) at the row's end. */
+export const renderPanelRow = (width: number, left: string, right = "", indent = PANEL_ROW_INDENT): string => fitPanelLine(" ".repeat(indent) + left, right, width);
 
 /** Every row on the panel surface, padded to width; transparent, or a theme that cannot paint it, leaves rows as they are. */
 export function paintPanelSurface(theme: CardTheme, rows: readonly string[], width: number): string[] {
-	return chromeSurface() === "transparent" ? [...rows] : paintSurfaceRows(rows, theme, PANEL_SURFACE_ROLE, width);
+	return tinted() ? paintSurfaceRows(rows, theme, PANEL_SURFACE_ROLE, width) : rows.slice();
 }
 
 /** The right pane's parts in order (lib/ui/pane.ts, design 01): LDD first (L174), then the agent's todo list (while no change shows), Agents and Jobs. */

@@ -22,7 +22,8 @@ import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 const plain = { fg: (_c: string, t: string) => t, bold: (t: string) => t };
 const BG = "\x1b[48;5;236m";
 const painted = { ...plain, bg: (_c: string, t: string) => `${BG}${t}\x1b[49m` };
-const NOW = 1_788_600_000_000;
+/** A fixed clock: 5 September 2026, 09:20 UTC. */
+const NOW = Date.UTC(2026, 8, 5, 9, 20);
 const jobs = [
 	{ id: "job-1", kind: "command" as const, label: "npm test", startedAt: NOW - 65_000 },
 	{ id: "agent-1", kind: "agent" as const, label: "jhon-scout: map the pane", startedAt: NOW - 95_000 },

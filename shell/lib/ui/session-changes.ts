@@ -7,41 +7,35 @@
  * one of the session's roots (session-worktree-registry.ts, T132).
  */
 import { constants } from "node:fs";
-import { open } from "node:fs/promises";
+import { open, type FileHandle } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { generateUnifiedPatch } from "@earendil-works/pi-coding-agent";
 import { SESSION_WORKTREE_ENTRY, SUBAGENT_WORKTREE_EVIDENCE, isCommitId } from "./session-worktree-registry.ts";
 
-/** One file the session's own writes changed, with its line counts. */
-export interface ChangedFile {
-	path: string;
-	added: number;
-	deleted: number;
-	status: "modified" | "added" | "deleted";
-	countsUnavailable?: string;
-}
-/** A root's changed files, by path, and their totals. */
-export interface ChangesModel {
-	files: ChangedFile[];
-	added: number;
-	deleted: number;
-}
-export interface WorktreeChanges {
-	root: string;
-	model: ChangesModel;
-}
+/** Lines added and deleted, in a file or summed over files. */
+type LineCounts = { added: number; deleted: number };
 
-export function changesModel(changed: ChangedFile[]): ChangesModel {
-	const files = [...changed].sort((a, b) => a.path.localeCompare(b.path));
-	let added = 0;
-	let deleted = 0;
-	for (const file of files) { added += file.added; deleted += file.deleted; }
-	return { files, added, deleted };
+/** One file the session's own writes changed, with its line counts; `countsUnavailable` says why they are zero. */
+export type ChangedFile = LineCounts & { path: string; status: "added" | "modified" | "deleted"; countsUnavailable?: string };
+
+/** A root's changed files, sorted by path, with their summed counts. */
+export type ChangesModel = LineCounts & { files: ChangedFile[] };
+
+/** One root and what changed in it. */
+export type WorktreeChanges = { root: string; model: ChangesModel };
+
+export function changesModel(list: readonly ChangedFile[]): ChangesModel {
+	const totals: LineCounts = { added: 0, deleted: 0 };
+	for (const { added, deleted } of list) {
+		totals.added += added;
+		totals.deleted += deleted;
+	}
+	return { files: list.slice().sort((a, b) => a.path.localeCompare(b.path)), ...totals };
 }
 
 export const SESSION_CHANGE_ENTRY = "jhon-shell.session-change/v1";
 /** The largest file a copy is taken of. */
-export const MAX_CHANGE_BYTES = 64 * 1024;
+export const MAX_CHANGE_BYTES = 65_536;
 /** How much one session records: calls, bytes of evidence, and lines per copy. */
 const LIMITS = { records: 256, sessionBytes: 4 * 1024 * 1024, lines: 2000, reason: 200, id: 256, path: 4096 } as const;
 
@@ -54,19 +48,25 @@ const REASONS = {
 	unseenEdit: "The copies lost continuity (an external or unseen edit); no session diff.",
 } as const;
 
-export type ChangeSnapshot = { kind: "text"; text: string } | { kind: "absent" } | { kind: "unavailable"; reason: string };
-export interface SessionChangeEvidence {
-	id: string;
-	root: string;
-	path: string;
-	before: ChangeSnapshot;
-	after: ChangeSnapshot;
-}
-type Entry = { type?: string; customType?: string; data?: unknown };
-/** A file as the session left it: its first copy, its last, and why no diff can be drawn, if so. */
-interface FileState { before: ChangeSnapshot; after: ChangeSnapshot; unavailable?: string; diff?: string }
+/** A copy of a file: its text, its absence, or why no copy was taken. */
+export type ChangeSnapshot =
+	| { kind: "text"; text: string }
+	| { kind: "absent" }
+	| { kind: "unavailable"; reason: string };
 
-const unavailable = (reason: string): ChangeSnapshot => ({ kind: "unavailable", reason });
+/** What one write or edit call left as a record: the file (root and relative path) before and after it. */
+export type SessionChangeEvidence = { id: string; root: string; path: string } & Record<"before" | "after", ChangeSnapshot>;
+
+/** A session entry as far as this module reads it. */
+type Entry = Readonly<{ type?: string; customType?: string; data?: unknown }>;
+
+/** A file as the session left it: its first copy, its last, and why no diff can be drawn, if so. */
+type FileState = Record<"before" | "after", ChangeSnapshot> & { unavailable?: string; diff?: string };
+
+function unavailable(reason: string): ChangeSnapshot {
+	const missing: ChangeSnapshot = { kind: "unavailable", reason };
+	return missing;
+}
 
 /** Whether `text` has at least `count` newlines, counting no further. */
 function hasNewlines(text: string, count: number): boolean {
@@ -76,32 +76,49 @@ function hasNewlines(text: string, count: number): boolean {
 }
 
 /** A copy of a file's text, or why there is none: too large, too many lines, or binary. */
-export function textSnapshot(text: string): ChangeSnapshot {
-	if (Buffer.byteLength(text) > MAX_CHANGE_BYTES || hasNewlines(text, LIMITS.lines)) return unavailable(REASONS.tooBig);
-	if (text.includes("\0")) return unavailable(REASONS.binary);
-	return { kind: "text", text };
+export function textSnapshot(content: string): ChangeSnapshot {
+	const oversized = Buffer.byteLength(content) > MAX_CHANGE_BYTES || hasNewlines(content, LIMITS.lines);
+	const refusal = oversized ? REASONS.tooBig : content.includes("\0") ? REASONS.binary : undefined;
+	return refusal === undefined ? { kind: "text", text: content } : unavailable(refusal);
+}
+
+// Read only, never through a symlink, and never waiting on a FIFO's writer.
+const SNAPSHOT_FLAGS = constants.O_RDONLY | constants.O_NONBLOCK | (constants.O_NOFOLLOW ?? 0);
+
+/** A failed open or read: a missing file is absent, anything else has no copy. */
+function failedCopy(error: unknown): ChangeSnapshot {
+	const code = (error as { code?: unknown } | undefined)?.code;
+	return code === "ENOENT" ? { kind: "absent" } : unavailable(REASONS.unreadable);
+}
+
+/** The opened file's text, refused for a non-file, an oversize file or one that changed under the read. */
+async function copyOf(handle: FileHandle): Promise<ChangeSnapshot> {
+	const info = await handle.stat();
+	if (!info.isFile() || info.size > MAX_CHANGE_BYTES) return unavailable(REASONS.special);
+	// One byte past the limit, so a file that grew since the stat shows as moving.
+	const buffer = Buffer.alloc(MAX_CHANGE_BYTES + 1);
+	const got = (await handle.read(buffer, 0, buffer.length, 0)).bytesRead;
+	if (got !== info.size) return unavailable(REASONS.moving);
+	return textSnapshot(new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, got)));
 }
 
 /**
  * A copy of the one file a call names. It never follows a symlink, never
  * blocks on a FIFO and reads no folder; a file that is missing is absent.
  */
-export async function readChangeSnapshot(path: string): Promise<ChangeSnapshot> {
-	let file: Awaited<ReturnType<typeof open>> | undefined;
+export async function readChangeSnapshot(file: string): Promise<ChangeSnapshot> {
+	let handle: FileHandle;
 	try {
-		file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK | (constants.O_NOFOLLOW ?? 0));
-		const stat = await file.stat();
-		if (!stat.isFile() || stat.size > MAX_CHANGE_BYTES) return unavailable(REASONS.special);
-		const bytes = Buffer.alloc(MAX_CHANGE_BYTES + 1);
-		const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
-		if (bytesRead !== stat.size) return unavailable(REASONS.moving);
-		const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, bytesRead));
-		return textSnapshot(text);
+		handle = await open(file, SNAPSHOT_FLAGS);
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent" };
-		return unavailable(REASONS.unreadable);
+		return failedCopy(error);
+	}
+	try {
+		return await copyOf(handle);
+	} catch (error) {
+		return failedCopy(error);
 	} finally {
-		await file?.close().catch(() => {});
+		await handle.close().catch(() => undefined);
 	}
 }
 
@@ -123,12 +140,15 @@ function staysInRoot(path: string): boolean {
 
 const sized = (value: unknown, max: number): value is string => typeof value === "string" && value.length > 0 && value.length <= max;
 
-export function isSessionChangeEvidence(value: unknown): value is SessionChangeEvidence {
-	if (!value || typeof value !== "object") return false;
-	const evidence = value as SessionChangeEvidence;
-	if (!sized(evidence.id, LIMITS.id) || typeof evidence.root !== "string" || !isAbsolute(evidence.root) || evidence.root.length > LIMITS.path) return false;
-	if (!sized(evidence.path, LIMITS.path) || !staysInRoot(evidence.path) || /[\0\r\n]/.test(evidence.root + evidence.path)) return false;
-	return isSnapshot(evidence.before) && isSnapshot(evidence.after);
+export function isSessionChangeEvidence(candidate: unknown): candidate is SessionChangeEvidence {
+	if (typeof candidate !== "object" || candidate === null) return false;
+	const { id, root, path, before, after } = candidate as { [K in keyof SessionChangeEvidence]?: unknown };
+	if (!sized(id, LIMITS.id)) return false;
+	if (typeof root !== "string" || root.length > LIMITS.path || !isAbsolute(root)) return false;
+	if (!sized(path, LIMITS.path) || !staysInRoot(path)) return false;
+	// No NUL or line break anywhere in the location: it is printed and joined into paths.
+	if (/[\0\r\n]/.test(`${root}${path}`)) return false;
+	return isSnapshot(before) && isSnapshot(after);
 }
 
 /** Two copies with the same content; an unavailable copy is never the same as anything. */
@@ -163,13 +183,15 @@ function firstRegistrations(sessionId: string, entries: readonly Entry[]): Map<s
  * those added by hand and those of its sub-agents) and the roots its own
  * writes changed. Only roots, never files.
  */
-export function sessionChangeRoots(sessionId: string, entries: readonly Entry[]): string[] {
-	const roots = new Set<string>();
-	for (const { customType, data } of ownEntries(sessionId, entries)) {
-		if (customType === SESSION_WORKTREE_ENTRY && typeof data.root === "string" && isAbsolute(data.root)) roots.add(data.root);
-		if (customType === SESSION_CHANGE_ENTRY && isSessionChangeEvidence(data.evidence)) roots.add(data.evidence.root);
+export function sessionChangeRoots(sessionId: string, log: readonly Entry[]): string[] {
+	const found = new Set<string>();
+	for (const { customType, data } of ownEntries(sessionId, log)) {
+		let root: unknown;
+		if (customType === SESSION_CHANGE_ENTRY) root = isSessionChangeEvidence(data.evidence) ? data.evidence.root : undefined;
+		else if (customType === SESSION_WORKTREE_ENTRY) root = data.root;
+		if (typeof root === "string" && isAbsolute(root)) found.add(root);
 	}
-	return [...roots];
+	return Array.from(found);
 }
 
 /**
@@ -212,11 +234,9 @@ export class SessionChanges {
 	}
 
 	/** Records the evidence this session's entries hold. */
-	restore(entries: readonly Entry[]): void {
-		for (const entry of entries) {
-			if (entry.type !== "custom" || entry.customType !== SESSION_CHANGE_ENTRY) continue;
-			const data = entry.data as { sessionId?: string; evidence?: unknown } | undefined;
-			if (data?.sessionId === this.sessionId && isSessionChangeEvidence(data.evidence)) this.record(data.evidence);
+	restore(log: readonly Entry[]): void {
+		for (const { customType, data } of ownEntries(this.sessionId, log)) {
+			if (customType === SESSION_CHANGE_ENTRY && isSessionChangeEvidence(data.evidence)) this.record(data.evidence);
 		}
 	}
 
@@ -225,7 +245,7 @@ export class SessionChanges {
 	 * call is counted once, and the session stops recording at its limits, so
 	 * the session file cannot grow without end.
 	 */
-	record(evidence: SessionChangeEvidence): boolean {
+	record(evidence: Readonly<SessionChangeEvidence>): boolean {
 		if (!isSessionChangeEvidence(evidence) || this.calls.has(evidence.id)) return false;
 		const size = Buffer.byteLength(JSON.stringify(evidence));
 		if (this.calls.size >= LIMITS.records || this.bytes + size > LIMITS.sessionBytes) return false;

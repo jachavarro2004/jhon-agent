@@ -407,11 +407,10 @@ test("a finished list stays on screen for its turn and is gone at the next run",
 
 test("a new session replays the list from its branch (rpiv-todo's too) and counts the owner's messages as turns", async () => {
 	const r = rig();
-	const branch = [
-		{ type: "message", message: { role: "user", content: "hi" } },
-		{ type: "message", message: { role: "toolResult", toolName: "todo", isError: false, details: { action: "create", params: {}, tasks: [{ id: 1, subject: "Old task", status: "in_progress", activeForm: "still going" }], nextId: 2 } } },
-		{ type: "message", message: { role: "user", content: "again" } },
-	];
+	const owner = (content: string) => ({ type: "message", message: { role: "user", content } });
+	// rpiv-todo kept its tasks at the top of the details, with a subject and, in progress, an activeForm.
+	const rpivResult = { role: "toolResult", toolName: "todo", isError: false, details: { action: "create", params: {}, tasks: [{ id: 1, subject: "Old task", status: "in_progress", activeForm: "still going" }], nextId: 2 } };
+	const branch = [owner("hi"), { type: "message", message: rpivResult }, owner("again")];
 	const s = session("s1", branch);
 	await r.fire("session_start", s.ctx);
 	const rows = s.section()!;

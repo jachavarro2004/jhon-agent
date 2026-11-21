@@ -82,14 +82,12 @@ test("list reports the tasks and leaves the list as it was", () => {
 
 test("the summary counts done and open; a list goes stale with turns while work it can do is open", () => {
 	const state = three();
-	assert.deepEqual(todoSummary(state), { done: 1, total: 3, open: 2 });
-	assert.equal(staleTurns(state, 3), 0);
-	assert.equal(staleTurns(state, 5), 2);
-	assert.equal(staleTurns(state, 1), 0, "never below zero");
+	// three() was written at turn 3: stale by the turns since, never below zero.
+	const seen = { summary: todoSummary(state), stale: [1, 3, 5].map((turn) => staleTurns(state, turn)) };
+	assert.deepEqual(seen, { summary: { done: 1, total: 3, open: 2 }, stale: [0, 0, 2] });
 	const finished = after(state, { action: "write", tasks: state.tasks.map((task) => ({ ...task, status: "done" })) }, 4).state;
-	assert.equal(staleTurns(finished, 9), 0);
-	assert.equal(staleTurns(emptyTodo(), 9), 0);
-	assert.equal(staleTurns({ ...state, updatedTurn: null }, 9), 0, "never written: never stale");
+	const quiet = [finished, emptyTodo(), { ...state, updatedTurn: null }].map((list) => staleTurns(list, 9));
+	assert.deepEqual(quiet, [0, 0, 0], "finished, empty, or never written: never stale");
 });
 
 test("the list comes back from the branch's last good todo result: Jhon's, before-T59 gentleTodo, and rpiv-todo's", () => {
@@ -107,7 +105,7 @@ test("the list comes back from the branch's last good todo result: Jhon's, befor
 	assert.equal(replayTodo([saved, ours]).tasks[0]!.title, "Ours");
 	assert.equal(replayTodo([ours, failed, result(undefined), null]).tasks[0]!.title, "Ours", "a failed result, no details or no entry change nothing");
 	assert.equal(replayTodo([result({ jhonTodo: { tasks: [], nextId: 3 } })]).updatedTurn, null);
-	assert.deepEqual(replayTodo([]), emptyTodo());
+	assert.deepEqual(replayTodo([]), { tasks: [], nextId: 1, updatedTurn: null }, "no result on the branch: the empty list");
 	assert.deepEqual(todoDetails({ jhonTodo: undefined, gentleTodo: { x: 1 } }), { state: undefined }, "Jhon's key first, even when empty");
 	assert.equal(todoDetails({}), undefined);
 	assert.equal(todoDetails(undefined), undefined);
@@ -125,7 +123,7 @@ test("the run's block: the open list with its rules, stale from two turns, nothi
 	].join("\n"));
 	assert.equal(todoPromptBlock(three(), 1), block);
 	assert.equal(todoPromptBlock(three(), 2), `${block}\n(stale: 2 turns without an update — bring the list up to date now)`);
-	assert.equal(todoPromptBlock(emptyTodo(), 0), undefined);
+	assert.equal(todoPromptBlock(emptyTodo()), undefined, "an empty list adds no block");
 	assert.equal(todoPromptBlock(after(three(), { action: "write", tasks: [{ title: "A", status: "done" }] }).state, 0), undefined);
 	assert.equal(todoStartBlock(three()), undefined, "the start rule only with nothing open");
 	assert.match(todoStartBlock(emptyTodo())!, /^## Todo list\nInside an LDD change or not/);
@@ -134,7 +132,8 @@ test("the run's block: the open list with its rules, stale from two turns, nothi
 test("dropped and blocked are statuses; cancel words mean dropped; a blocked task needs a note", () => {
 	const { state, error } = after(emptyTodo(), { action: "write", tasks: [{ title: "Old plan", status: "dropped" }, { title: "Deploy", status: "blocked", note: "an admin" }, { title: "A", status: "cancelled" }, { title: "B", status: "canceled" }, { title: "C", status: "abandoned" }] });
 	assert.equal(error, undefined);
-	assert.deepEqual(state.tasks.map((task) => task.status), [TODO_STATUS.DROPPED, TODO_STATUS.BLOCKED, TODO_STATUS.DROPPED, TODO_STATUS.DROPPED, TODO_STATUS.DROPPED]);
+	const { DROPPED, BLOCKED } = TODO_STATUS;
+	assert.deepEqual(state.tasks.map(({ status }) => status), [DROPPED, BLOCKED, DROPPED, DROPPED, DROPPED]);
 	const before = three();
 	for (const params of [{ action: "add", title: "Deploy", status: "blocked" }, { action: "update", id: 3, status: "blocked" }, { action: "write", tasks: [{ title: "Deploy", status: "blocked", note: "   " }] }]) {
 		const refused = after(before, params, 9);
@@ -149,9 +148,8 @@ test("dropped and blocked are statuses; cancel words mean dropped; a blocked tas
 
 test("done and dropped together finish a list: not open, no block, never stale", () => {
 	const state = after(emptyTodo(), { action: "write", tasks: [{ title: "A", status: "done" }, { title: "B", status: "dropped" }, { title: "C", status: "dropped" }] }).state;
-	assert.deepEqual(todoSummary(state), { done: 1, total: 3, open: 0 });
-	assert.equal(todoPromptBlock(state, 5), undefined);
-	assert.equal(staleTurns(state, 9), 0);
+	// Summary, the run's block five turns on, and the staleness at turn 9.
+	assert.deepEqual([todoSummary(state), todoPromptBlock(state, 5), staleTurns(state, 9)], [{ done: 1, total: 3, open: 0 }, undefined, 0]);
 });
 
 test("waiting work is open but alone never stale; work the agent can do makes the list stale again", () => {

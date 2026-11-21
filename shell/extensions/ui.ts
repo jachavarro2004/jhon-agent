@@ -46,12 +46,14 @@ interface Repaint {
 	invalidatePane?(): void;
 }
 
-export interface ShellDeps {
-	activeProfile(): string | undefined;
-	now(): number;
-	resolveWorktree: WorktreeResolver;
+/** What the shell reads from outside: the clock, Git, the filesystem, `jhon status`, timers and the network; tests replace any of them. */
+export type ShellDeps = {
+	/** The profile the bar names, none on the default. */
+	activeProfile: () => string | undefined;
+	/** The clock, and Git's answer to which worktree a path is in (lib/ui/session-worktree-registry.ts). */
+	now: () => number; resolveWorktree: WorktreeResolver;
 	/** A session root the LDD section may read: removed worktrees and leftover directories are skipped. */
-	rootExists(root: string): boolean;
+	rootExists: (root: string) => boolean;
 	/** The LDD change the session works on, through `jhon status` (lib/ui/ldd-status.ts). */
 	lddStatus(cwd: string): Promise<LddStatus | undefined>;
 	/** The owner's permission mode the last lddStatus read of cwd reported (S31), for the status line's badge. */
@@ -64,7 +66,7 @@ export interface ShellDeps {
 	fetch?: typeof fetch;
 	/** `jhon profile json`, for the usage scope of a session on its own profile; JHON_BIN's by default. */
 	profilesJson?(cwd: string): Promise<ProfilesJson>;
-}
+};
 
 // The `±N` beside the branch: the files the session's own writes changed
 // (lib/ui/session-change-capture.ts records them as session entries), counted
@@ -83,58 +85,93 @@ function sessionChangedFiles(ctx: ExtensionContext): number {
 	} catch { return 0; }
 }
 
-export type ActiveProfileReader = (() => string | undefined) & {
-	bind(cwd: string, resolveWorktree: WorktreeResolver, sessionId?: string): boolean;
-	refresh(): boolean;
-	reset(): void;
+/**
+ * The profile the bar names: the owner's active Jhon profile (settings'
+ * pi.profile, else profiles.json), or the session's own (T120), marked while
+ * it differs from the default; `default` names none. It is read on refresh
+ * and by its poll, never during a frame.
+ */
+export type ProfileReader = (() => string | undefined) & {
+	/** Reads the profile again; true when the name shown changed. */
+	refresh: () => boolean;
+	/** Reads it for a session starting in `cwd`; the folder and the id change nothing yet: the profile is the owner's, or the session's own. */
+	bind: (cwd: string, resolveWorktree: WorktreeResolver, sessionId?: string) => boolean;
+	/** Forgets the name: nothing shows until the next read. */
+	reset: () => void;
+	/** Reads it now, then every `everyMs` (2 s) while `live` holds, calling `changed` when the name moves. */
+	follow: (live: () => boolean, changed: () => void, everyMs?: number) => void;
+	/** Ends the poll and forgets the name, until the next follow. */
+	stop: () => void;
 };
 
-// The owner's active Jhon profile (settings' pi.profile, else profiles.json), read on
-// refresh and never during a frame; `default` shows as no profile. A session
-// that uses a profile of its own (T120, `session`) shows that one, marked
-// while it differs from the default.
-export function createActiveProfileReader(read: () => string = activeProfileName, session: () => string | undefined = () => undefined): ActiveProfileReader {
-	let effective: string | undefined;
-	const current = () => { const name = sessionMark(session(), read()); return name === "default" ? undefined : name; };
-	const reader = (() => effective) as ActiveProfileReader;
-	reader.refresh = () => {
-		const next = current();
-		const changed = next !== effective;
-		effective = next;
-		return changed;
+export function createActiveProfileReader(read: () => string = activeProfileName, session: () => string | undefined = () => undefined): ProfileReader {
+	let shown: string | undefined;
+	let poll: ReturnType<typeof setInterval> | undefined;
+	const refresh = (): boolean => {
+		const marked = sessionMark(session(), read());
+		const before = shown;
+		shown = marked === "default" ? undefined : marked;
+		return shown !== before;
 	};
-	reader.bind = () => reader.refresh();
-	reader.reset = () => { effective = undefined; };
-	return reader;
+	const reset = (): void => {
+		shown = undefined;
+	};
+	const stop = (): void => {
+		if (poll !== undefined) clearInterval(poll);
+		poll = undefined;
+		reset();
+	};
+	const follow = (live: () => boolean, changed: () => void, everyMs = 2_000): void => {
+		stop();
+		refresh();
+		poll = setInterval(() => { if (live() && refresh()) changed(); }, everyMs);
+		poll.unref?.();
+	};
+	return Object.assign(() => shown, { refresh, bind: () => refresh(), reset, follow, stop });
 }
 
-const defaultShellDeps: Omit<ShellDeps, "activeProfile"> = { now: () => Date.now(), resolveWorktree: resolveSessionWorktree, rootExists: (root) => existsSync(join(root, ".git")), lddStatus: (cwd) => readLddStatus(cwd), permissionMode };
+/** The shell's own dependencies around the profile reader; the caller's overrides (tests) replace any of them. */
+function shellDeps(activeProfile: ShellDeps["activeProfile"], overrides: Partial<ShellDeps>): ShellDeps {
+	const own: ShellDeps = {
+		activeProfile,
+		now: () => Date.now(), resolveWorktree: resolveSessionWorktree,
+		rootExists: (root) => existsSync(join(root, ".git")),
+		lddStatus: (cwd) => readLddStatus(cwd),
+		permissionMode,
+	};
+	return { ...own, ...overrides };
+}
 
-interface PromptEditorDeps {
+/** What the prompt asks of the session, whoever builds it (claimPrompt, or a test). */
+type PromptSession = {
+	now: () => number;
+	/** shell.behaviour.double_esc_cancel, read on every press (Customize changes it in memory). */
+	doubleEscCancelEnabled: () => boolean;
+	/** The messages pi put back in the editor when esc stopped the turn: sent as the next turn instead. */
+	dispatchQueuedText: (text: string) => void;
+	/** The wait on the Claude API, shown in place of what the agent does (lib/ui/api-wait.ts); read on every frame. */
+	workingLabel?(): string | undefined;
+	/** What the agent does now (thinking, writing, a tool's name), read on every frame. */
+	activity?: () => string | undefined;
+};
+
+/** The prompt's dependencies: the session's, pi's theme painters and repaint, and the rows above the working line. */
+type PromptEditorDeps = PromptSession & {
 	fg: (color: string, text: string) => string;
 	bold: (text: string) => string;
 	italic?: (text: string) => string;
-	requestRender(): void;
+	requestRender: () => void;
 	/** A message waits for the turn to end: the working line says queued. */
-	pending(): boolean;
-	now(): number;
-	/** shell.behaviour.double_esc_cancel, read on every press (Customize changes it in memory). */
-	doubleEscCancelEnabled(): boolean;
-	/** The messages pi put back in the editor when esc stopped the turn: sent as the next turn instead. */
-	dispatchQueuedText(text: string): void;
+	pending: () => boolean;
 	/** Run fn after ms, returning its cancel; a timer by default. */
 	schedule?: (fn: () => void, ms: number) => () => void;
-	/** The wait on the Claude API in place of what the agent does (lib/ui/api-wait.ts), read on every frame. */
-	workingLabel?: () => string | undefined;
-	/** What the agent does now (thinking, writing, a tool's name), read on every frame. */
-	activity?: () => string | undefined;
 	/** shell.appearance.ascii; the settings' by default. */
 	ascii?: () => boolean;
-	/** Rows the shell draws above the working line (the narrow form's Running block), with the hovered one's index. */
-	topRows?: (width: number, hovered?: number) => string[];
-	/** A left click on one of the top rows (index into topRows). */
-	onTopRowClick?: (index: number) => void;
-}
+	/** Rows the shell draws above the working line (the narrow form's Running block), given the hovered one's index. */
+	topRows?(width: number, hovered?: number): string[];
+	/** A left click on top row `index`. */
+	onTopRowClick?(index: number): void;
+};
 
 export { extractQueuedText };
 
@@ -145,7 +182,7 @@ export { extractQueuedText };
  * the selection (lib/ui/prompt-selection.ts) and the rows above the line.
  */
 export class JhonPromptEditor extends CustomEditor {
-	private readonly deps: PromptEditorDeps;
+	private readonly deps: Readonly<PromptEditorDeps>;
 	private readonly host: TUI;
 	// CustomEditor keeps its keybindings private; the esc gate needs app.interrupt's match.
 	private readonly keys: KeybindingsManager;
@@ -153,14 +190,13 @@ export class JhonPromptEditor extends CustomEditor {
 	private readonly esc: ReturnType<typeof createEscGate>;
 	private working = false;
 	private startedAt = 0;
-	private tick = 0;
-	private animationPolicy: AnimationPolicy = "quality";
-	private timer: NodeJS.Timeout | undefined;
+	/** The working line's motion: the frame it is on, its pulse timer, and whether it moves at all (potato: only with pi's repaints). */
+	private readonly motion: { tick: number; timer?: NodeJS.Timeout; policy: AnimationPolicy } = { tick: 0, policy: "quality" };
 	private hintRepaint: (() => void) | undefined;
 	/** Rows above pi's editor in the last frame: the top rows and the working line. */
 	private shellRows = 0;
-	private topRowCount = 0;
-	private hoveredTopRow: number | undefined;
+	/** The rows drawn above the working line in the last frame, and the one under the pointer. */
+	private readonly top: { count: number; hovered?: number } = { count: 0 };
 
 	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, deps: PromptEditorDeps) {
 		super(tui, theme, keybindings);
@@ -171,16 +207,17 @@ export class JhonPromptEditor extends CustomEditor {
 		this.esc = createEscGate(() => deps.now());
 	}
 
-	setAnimationPolicy(policy: AnimationPolicy): void {
-		if (this.animationPolicy === policy) return;
-		this.animationPolicy = policy;
+	setAnimationPolicy(next: AnimationPolicy): void {
+		if (this.motion.policy === next) return;
+		this.motion.policy = next;
 		this.restartTimer();
 		this.deps.requestRender();
 	}
 
-	setWorking(working: boolean): void {
-		this.working = working;
-		if (working) this.startedAt = this.deps.now();
+	/** The turn starts or ends: the clock restarts, the esc gate disarms, the line animates or stops. */
+	setWorking(on: boolean): void {
+		if (on) this.startedAt = this.deps.now();
+		this.working = on;
 		this.esc.reset();
 		this.restartTimer();
 		this.deps.requestRender();
@@ -188,12 +225,13 @@ export class JhonPromptEditor extends CustomEditor {
 
 	/** While working with animations on, the line moves every frame; off, it starts no timer and moves with pi's own repaints. */
 	private restartTimer(): void {
-		if (this.timer) clearInterval(this.timer);
-		this.timer = undefined;
-		this.tick = 0;
-		if (!this.working || this.animationPolicy === "potato") return;
-		this.timer = setInterval(() => { this.tick += 1; this.deps.requestRender(); }, SHELL_PULSE_MS);
-		this.timer.unref?.();
+		const motion = this.motion;
+		if (motion.timer !== undefined) clearInterval(motion.timer);
+		motion.timer = undefined;
+		motion.tick = 0;
+		if (!this.working || motion.policy === "potato") return;
+		motion.timer = setInterval(() => { motion.tick += 1; this.deps.requestRender(); }, SHELL_PULSE_MS);
+		motion.timer.unref?.();
 	}
 
 	override handleInput(data: string): void {
@@ -219,12 +257,14 @@ export class JhonPromptEditor extends CustomEditor {
 
 	/** pi stops the turn and puts its queued messages back ahead of the draft; the draft stays, the queue goes out as the next turn. */
 	private stopTurn(data: string): void {
-		const draft = this.getText();
+		const typed = this.getText();
 		super.handleInput(data);
-		const queued = extractQueuedText(this.getText(), draft);
-		if (queued === undefined || queued === "") return;
-		this.setText(draft);
-		if (queued.trim() !== "") this.deps.dispatchQueuedText(queued);
+		// What pi restored, less the owner's own draft, is the queue it gave back.
+		const restored = this.getText();
+		const queued = extractQueuedText(restored, typed);
+		if (!queued) return;
+		this.setText(typed);
+		if (queued.trim()) this.deps.dispatchQueuedText(queued);
 	}
 
 	/** One repaint just after the window closes, so its hint leaves the screen. */
@@ -239,19 +279,19 @@ export class JhonPromptEditor extends CustomEditor {
 	}
 
 	private clearTopHover(): void {
-		if (this.hoveredTopRow === undefined) return;
-		this.hoveredTopRow = undefined;
+		if (this.top.hovered === undefined) return;
+		delete this.top.hovered;
 		this.deps.requestRender();
 	}
 
 	handleMouse(event: Parameters<CustomEditor["handleMouse"]>[0]): ReturnType<CustomEditor["handleMouse"]> {
 		const moving = event.type === "move" && event.button === "none";
-		if (event.y < this.topRowCount) {
+		if (event.y < this.top.count) {
 			// The top rows are the shell's controls: hover, then a click opens the row's view.
 			if (moving) {
 				setPaneHover(this.host, this, () => this.clearTopHover());
-				if (this.hoveredTopRow === event.y) return { handled: true };
-				this.hoveredTopRow = event.y;
+				if (this.top.hovered === event.y) return { handled: true };
+				this.top.hovered = event.y;
 				this.deps.requestRender();
 				return { handled: true, render: true };
 			}
@@ -281,8 +321,8 @@ export class JhonPromptEditor extends CustomEditor {
 		const hint = this.esc.hint(this.working, text);
 		const line = renderWorkingLine(width, {
 			state,
-			tick: this.tick,
-			animate: this.animationPolicy !== "potato",
+			tick: this.motion.tick,
+			animate: this.motion.policy !== "potato",
 			elapsedMs: this.deps.now() - this.startedAt,
 			activity: this.working ? this.deps.activity?.() : undefined,
 			wait: this.working ? this.deps.workingLabel?.() : undefined,
@@ -298,16 +338,16 @@ export class JhonPromptEditor extends CustomEditor {
 			ascii,
 			decorateBottom: (rule) => this.selection.hint(rule, width, this.borderColor(glyph("rule", ascii))),
 		});
-		const top = this.deps.topRows?.(width, this.hoveredTopRow) ?? [];
-		if (this.hoveredTopRow !== undefined && this.hoveredTopRow >= top.length) this.hoveredTopRow = undefined;
-		this.topRowCount = top.length;
-		this.shellRows = top.length + 1;
-		return [...top, line, ...framed];
+		const above = this.deps.topRows?.(width, this.top.hovered) ?? [];
+		if ((this.top.hovered ?? -1) >= above.length) delete this.top.hovered;
+		this.top.count = above.length;
+		this.shellRows = above.length + 1;
+		return [...above, line, ...framed];
 	}
 
 	dispose(): void {
-		if (this.timer) clearInterval(this.timer);
-		this.timer = undefined;
+		if (this.motion.timer !== undefined) clearInterval(this.motion.timer);
+		this.motion.timer = undefined;
 		this.hintRepaint?.();
 		this.hintRepaint = undefined;
 	}
@@ -334,15 +374,10 @@ function narrowChrome(tui: TUI): boolean {
 }
 
 /** What the shell's prompt needs from the session, beyond pi's theme and the context. */
-interface PromptWiring {
-	now: () => number;
-	doubleEscCancelEnabled: () => boolean;
-	dispatchQueuedText: (text: string) => void;
-	workingLabel?: () => string | undefined;
-	activity?: () => string | undefined;
+type PromptWiring = PromptSession & {
 	topRows?: (tui: TUI, width: number, hovered?: number) => string[];
 	onTopRowClick?: (tui: TUI, index: number) => void;
-}
+};
 
 /**
  * Makes the shell's prompt pi's editor, unless another extension's editor is
@@ -393,19 +428,14 @@ const SETTINGS_MOVED: Record<string, string> = {
 export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, overrides: Partial<ShellDeps> = {}): void {
 	// Its commands and shortcuts are counted (lib/ui-use.ts).
 	pi = counted(pi);
-	installSessionChangeCapture(pi, env, overrides.resolveWorktree ?? resolveSessionWorktree);
+	// The change capture runs with the shell off too; its resolver defaults to the shared one.
+	installSessionChangeCapture(pi, env, overrides.resolveWorktree);
 	if (!shellEnabled(env)) return;
 	// T120: the session's own profile, its branch's at the start and then as extensions/jhon.ts says it.
 	let sessionProfile: string | undefined;
 	const profileReader = createActiveProfileReader(activeProfileName, () => sessionProfile);
-	const deps: ShellDeps = { ...defaultShellDeps, activeProfile: profileReader, ...overrides };
+	const deps = shellDeps(profileReader, overrides);
 	let closeSettings: (() => void) | undefined;
-	let profilePoll: ReturnType<typeof setInterval> | undefined;
-	const stopProfilePoll = () => {
-		if (profilePoll) clearInterval(profilePoll);
-		profilePoll = undefined;
-		profileReader.reset();
-	};
 	let renderHost: Repaint | undefined;
 	// The agent dir `jhon start pi` sets: Customize's Rose ink theme is written there.
 	const agentDir = env.PI_CODING_AGENT_DIR;
@@ -457,8 +487,9 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	// process-wide slots that every extension's cards and the pane read; the
 	// saved values fill them at each session start and on each change.
 	const applyAppearance = () => {
+		const { surface } = visualSettings;
 		setCardStyle(settings.cards());
-		setChromeSurface(visualSettings.surface);
+		setChromeSurface(surface);
 	};
 	const refreshVisual = () => {
 		visualSettings = resolveVisualSettings(fromSettings).settings;
@@ -506,9 +537,9 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	});
 	// This session's background tasks (lib/background-tasks-tools.ts): those
 	// running, and those that ended in the last minute, which the pane keeps.
-	let runningJobs: RunningJobDisplay[] | undefined;
+	let shownJobs: RunningJobDisplay[] | undefined;
 	/** Something runs, or ended less than a minute ago: the clock keeps the pane's times and lingering rows live. */
-	const jobsLive = () => (runningJobs ?? []).some((job) => job.endedAt === undefined || deps.now() - job.endedAt < JOBS_FINISHED_TTL_MS);
+	const jobsLive = () => (shownJobs ?? []).some((job) => job.endedAt === undefined || deps.now() - job.endedAt < JOBS_FINISHED_TTL_MS);
 	let jobClock: ReturnType<typeof setInterval> | undefined;
 	/** Opens the agents view or the jobs view (lib/background-tasks-tools.ts). */
 	const openTasks = (ctx: ExtensionContext, view: "agents" | "jobs") => { pi.events.emit(OPEN_TASKS_EVENT, { ctx, view }); };
@@ -519,7 +550,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		const event = value as { sessionId?: unknown; tasks?: unknown; finished?: unknown } | undefined;
 		if (!currentContext || event?.sessionId !== currentContext.sessionManager.getSessionId() || !Array.isArray(event.tasks)) return;
 		const finished = displays(event.finished).filter((job) => typeof job.endedAt === "number");
-		runningJobs = [...displays(event.tasks).filter((job) => job.endedAt === undefined), ...finished];
+		shownJobs = [...displays(event.tasks).filter((job) => job.endedAt === undefined), ...finished];
 		// The elapsed times run live: one redraw a second while a task runs or a
 		// finished one still shows, none when idle.
 		if (jobsLive() && !jobClock) {
@@ -682,12 +713,13 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	});
 	pi.on("session_start", async (_event, ctx) => {
 		closeSettings?.();
-		runningJobs = undefined;
-		stopProfilePoll();
+		shownJobs = undefined;
+		profileReader.stop();
 		registry?.close();
 		currentContext = ctx;
-		registry = new SessionWorktreeRegistry(pi, ctx.sessionManager, ctx.cwd, deps.resolveWorktree);
-		registry.start();
+		const worktrees = new SessionWorktreeRegistry(pi, ctx.sessionManager, ctx.cwd, deps.resolveWorktree);
+		registry = worktrees;
+		worktrees.start();
 		if (settingsLoadedOnce) settings.refresh();
 		settingsLoadedOnce = true;
 		if (!ctx.hasUI) return;
@@ -702,15 +734,11 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		applyAppearance();
 		if (!overrides.activeProfile) {
 			try { sessionProfile = sessionProfileOnBranch((ctx.sessionManager as { getBranch?(): unknown[] }).getBranch?.()); } catch { sessionProfile = undefined; }
-			profileReader.bind(ctx.cwd, deps.resolveWorktree, ctx.sessionManager.getSessionId());
-			const sessionId = ctx.sessionManager.getSessionId();
-			profilePoll = setInterval(() => {
-				if (currentContext !== ctx || ctx.sessionManager.getSessionId() !== sessionId) return;
-				if (!profileReader.refresh()) return;
-				renderHost?.invalidatePane?.();
-				renderHost?.requestRender();
-			}, 2_000);
-			profilePoll.unref?.();
+			// Polled: the owner may switch profiles from another terminal. A poll that
+			// outlives its session (another started, or the id moved) stays quiet.
+			const owner = ctx.sessionManager.getSessionId();
+			const live = () => currentContext === ctx && ctx.sessionManager.getSessionId() === owner;
+			profileReader.follow(live, () => { renderHost?.invalidatePane?.(); renderHost?.requestRender(); });
 		}
 		lanes = laneReads();
 		releaseSelection?.();
@@ -758,8 +786,8 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			// the last minute (01); a click on one of its rows opens its view
 			// (/jhon:agents, /jhon:jobs).
 			const workPart = (key: "agents" | "jobs", render: typeof renderJobsSection) => paneSlot(tui, key, foldablePart(tui, {
-				digest: () => JSON.stringify([runningJobs, settings.ascii(), jobsLive() ? Math.floor(deps.now() / 1000) : 0]),
-				render: (width, view) => render(runningJobs, theme, width, { now: deps.now(), ascii: settings.ascii(), ...view }),
+				digest: () => JSON.stringify([shownJobs, settings.ascii(), jobsLive() ? Math.floor(deps.now() / 1000) : 0]),
+				render: (width, view) => render(shownJobs, theme, width, { now: deps.now(), ascii: settings.ascii(), ...view }),
 				rows: true,
 				open: () => { openTasks(ctx, key); return true; },
 			}));
@@ -788,7 +816,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				render(width: number) {
 					if (paneState(tui).hosted?.()) return [];
 					if (visualSettings.statusPlacement !== "hidden") return [renderStatusBar(bars(), theme, width)];
-					const running = (runningJobs ?? []).filter((job) => job.endedAt === undefined).length;
+					const running = (shownJobs ?? []).filter((job) => job.endedAt === undefined).length;
 					if ((tui as TUI & { mode?: string }).mode !== "fullscreen" && running) {
 						return [truncateToWidth(theme.fg("muted", shellJobsCount(running)), width, "…")];
 					}
@@ -827,12 +855,12 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			// The narrow form's Running block (04): the agents and jobs while they run.
 			topRows: (tui, width, hovered) => {
 				if (!narrowChrome(tui)) return [];
-				return renderRunningBlock(runningJobs, ctx.ui.theme, width, { now: deps.now(), ascii: shellSettings().ascii(), ...(hovered !== undefined ? { hover: hovered } : {}) }).rows;
+				return renderRunningBlock(shownJobs, ctx.ui.theme, width, { now: deps.now(), ascii: shellSettings().ascii(), ...(hovered !== undefined ? { hover: hovered } : {}) }).rows;
 			},
 			// A click on one of its rows opens the agents view or the jobs view.
 			onTopRowClick: (tui, index) => {
 				if (!narrowChrome(tui)) return;
-				const view = renderRunningBlock(runningJobs, ctx.ui.theme, tui.terminal?.columns ?? 0, { now: deps.now() }).opens[index];
+				const view = renderRunningBlock(shownJobs, ctx.ui.theme, tui.terminal?.columns ?? 0, { now: deps.now() }).opens[index];
 				if (view) openTasks(ctx, view);
 			},
 		};
@@ -841,12 +869,12 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	});
 	pi.on("session_shutdown", (_event, ctx) => {
 		closeSettings?.();
-		runningJobs = undefined;
+		shownJobs = undefined;
 		if (jobClock) { clearInterval(jobClock); jobClock = undefined; }
 		stopLddSources();
 		releaseSelection?.();
 		releaseSelection = undefined;
-		stopProfilePoll();
+		profileReader.stop();
 		afterStop.take();
 		prompt?.dispose();
 		prompt = undefined;

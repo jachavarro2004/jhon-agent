@@ -389,7 +389,7 @@ A proportional LDD record, a light verify before the PR, a shell drawn as the Ge
 - A dashboard left running from an older release is restarted by `jhon sync`, `jhon update`, `jhon update --rollback` and `/jhon:dashboard`, once proven Jhon's through the new `/api/version` and the record it writes at start. Anything else on the port is left running and said.
 - `jhon settings list --json` describes each key from the schema: `kind`, `values`, `default`, `min`, `max`.
 - Customize (`/jhon:customize`) has Permissions (the mode as radios; super yolo only after your Yes), Appearance's Theme (rose ink and any JSON file in `shell/themes/`), Density, `cards` (`float` or `neon`), `surface` (`transparent` or `tinted`) and Reset, and Keys' Reload now.
-- `/jhon:panel` (and `alt+r` when no rail is visible): the rail's sections as a full-width sheet. `shell.appearance.status`, `shell.keys.rail` and `shell.keys.commands` (`alt+k`, the command palette).
+- `/jhon:panel` (and `alt+r` when no rail is visible) opens every rail section in one sheet as wide as the terminal. `shell.appearance.status`, `shell.keys.rail` and `shell.keys.commands` (`alt+k`, the command palette).
 - `/jhon-ldd` in pi is the shell's own command, completing its action and then the change; `jhon sync` removes the old `~/.pi/jhon/prompts/jhon-ldd.md`.
 - A guard regression corpus (`test/guards/corpus/*.tsv`) replayed through the built binary by `TestGuardCorpus`; holes still open are flagged `known`.
 

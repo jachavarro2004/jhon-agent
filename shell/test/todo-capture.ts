@@ -39,11 +39,12 @@ function host(env: NodeJS.ProcessEnv) {
 		sendMessage: (message: unknown, options: unknown) => { log.push({ sent: message, options }); },
 	} as unknown as ExtensionAPI;
 	jhonTodo(pi, env);
-	const fire = async (event: string, ctx: ExtensionContext, payload: unknown = {}) => {
-		let last: unknown;
-		for (const handler of handlers.get(event) ?? []) last = await handler(payload, ctx);
-		return last;
-	};
+	/** Runs every handler of `event` in turn; what the last one returned. */
+	async function fire(event: string, ctx: ExtensionContext, payload: unknown = {}): Promise<unknown> {
+		const results: unknown[] = [];
+		for (const handler of handlers.get(event) ?? []) results.push(await handler(payload, ctx));
+		return results.at(-1);
+	}
 	return { tools, shortcuts, log, fire };
 }
 

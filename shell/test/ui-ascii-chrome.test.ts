@@ -23,7 +23,8 @@ import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { useMemorySettings } from "./fake-jhon-settings.ts";
 
 const plain = { fg: (_r: string, t: string) => t, bold: (t: string) => t, bg: (_r: string, t: string) => `\x1b[48;5;236m${t}\x1b[49m`, strikethrough: (t: string) => t };
-const NOW = 1_788_600_000_000;
+/** A fixed clock: 5 September 2026, 09:20 UTC. */
+const NOW = Date.UTC(2026, 8, 5, 9, 20);
 const WIDTHS = [160, 100, 80];
 
 function pureAscii(name: string, lines: string[]): void {
@@ -66,7 +67,7 @@ const todos = { tasks: [
 test("the working line, the prompt's rules and its mark draw in ASCII, idle, working and queued (T174-S8)", (t) => {
 	ascii(t);
 	for (const width of WIDTHS) {
-		for (const state of [PROMPT_STATE.IDLE, PROMPT_STATE.WORKING, PROMPT_STATE.QUEUED]) {
+		for (const state of ["idle", "working", "queued"] as const) {
 			for (const wait of [undefined, "waiting for Claude API · 72s"]) {
 				const line = renderWorkingLine(width, { state, tick: 1, animate: true, elapsedMs: 65_000, activity: "thinking", wait, doubleEsc: true, ascii: true }, plain);
 				pureAscii(`working line ${state} ${width}`, [line]);
@@ -126,7 +127,7 @@ test("a notice's title draws in ASCII in both card styles", (t) => {
 	ascii(t);
 	const previous = cardStyle();
 	t.after(() => setCardStyle(previous));
-	for (const style of [CARD_STYLE.FLOAT, CARD_STYLE.NEON]) {
+	for (const style of ["float", "neon"] as const) {
 		setCardStyle(style);
 		for (const width of WIDTHS) {
 			pureAscii(`notice ${style} ${width}`, renderCard({ title: "Settings", body: ["saved"], tone: CARD_TONE.INFO }, plain, width, { expanded: true }));
