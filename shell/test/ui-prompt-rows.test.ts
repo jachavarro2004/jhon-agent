@@ -16,11 +16,12 @@
 import "./isolated-env.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import { JhonPromptEditor } from "../extensions/ui.ts";
 import * as shellPrompt from "../lib/ui/shell-prompt.ts";
 import { PROMPT_STATE } from "../lib/ui/shell-prompt.ts";
 import { assertRows, padded, plainTheme, spread, type PlainTheme } from "./rows.ts";
+import { stripAnsi } from "../lib/ui/primitives/index.ts";
 
 const identity = (text: string) => text;
 const selectList = { selectedPrefix: identity, selectedText: identity, description: identity, scrollInfo: identity, noMatch: identity };
@@ -150,7 +151,7 @@ test("pi's scroll indicators ride the rules' right ends; continuation rows keep 
 	} finally { editor.dispose(); }
 });
 
-test("a selection's count rides the bottom rule (selection-engine.ts decorates it)", () => {
+test("a selection's count rides the bottom rule (lib/ui/prompt-selection.ts; the rest in ui-prompt-selection.test.ts)", () => {
 	const { editor, render } = prompt();
 	try {
 		editor.setText("hello world");
@@ -178,4 +179,84 @@ test("renderWorkingLine is exactly the width; the right end gives way first, the
 	assert.equal(line(60), spread(" 力 Working…  thinking · 38s", "esc esc interrupts ", 60));
 	assert.equal(line(40), padded(" 力 Working…  thinking · 38s", 40));
 	for (const width of [0, 1, 5, 12, 20]) assert.equal(visibleWidth(line(width)), width, `${width}`);
+});
+
+// --- where pi's editor sits inside the prompt (moved from the adapted selection tests, T174-S9) ---
+
+const leftClick = (x: number, y: number, width: number) =>
+	({ type: "click", button: "left", x, y, width, height: 30, screenX: x, screenY: y, shift: false, alt: false, ctrl: false }) as never;
+
+test("pi's caret sits past the ` ❯ ` lead, and a click there lands on the same cell; the rows around the input take no click", () => {
+	const { editor } = prompt();
+	try {
+		editor.focused = true;
+		editor.setText("abcd");
+		editor.handleInput("\x1b[D");
+		const row = editor.render(80)[2]!;
+		assert.equal(visibleWidth(row.split(CURSOR_MARKER)[0]!), 6, "` ❯ abc` before the caret");
+		editor.render(30);
+		editor.handleMouse(leftClick(5, 2, 30));
+		assert.deepEqual(editor.getCursor(), { line: 0, col: 2 }, "x 5 is the third character");
+		for (const y of [0, 1, 3]) {
+			editor.handleMouse(leftClick(10, y, 30));
+			assert.deepEqual(editor.getCursor(), { line: 0, col: 2 }, `row ${y} is inert`);
+		}
+	} finally { editor.dispose(); }
+});
+
+test("the rules follow pi's live border colour; the ❯ mark does not", () => {
+	const { editor } = prompt();
+	try {
+		editor.setText("abcd");
+		editor.borderColor = (text) => `\x1b[35m${text}\x1b[39m`;
+		let rows = editor.render(40);
+		assert.match(rows[1]!, /^\x1b\[35m─+\x1b\[39m$/);
+		assert.ok(!rows[2]!.includes("\x1b[35m"), "the mark is the accent, not the border");
+		editor.borderColor = (text) => `\x1b[36m${text}\x1b[39m`;
+		rows = editor.render(40);
+		assert.match(rows[1]!, /^\x1b\[36m─/);
+		assert.match(rows.at(-1)!, /^\x1b\[36m─/);
+	} finally { editor.dispose(); }
+});
+
+test("pi wraps the input at its own width under the lead", () => {
+	const { editor, render } = prompt();
+	try {
+		editor.setText("abcdefghijklmnop");
+		assert.deepEqual(render(12, plainTheme).map(stripAnsi).slice(1), [rule(12), " ❯ abcdefgh ", "   ijklmnop ", rule(12)]);
+	} finally { editor.dispose(); }
+});
+
+test("pi's completions sit under the bottom rule past the lead, and a click applies one", async () => {
+	const { editor } = prompt();
+	editor.focused = true;
+	editor.setAutocompleteProvider({
+		async getSuggestions() { return { prefix: "/", items: [{ value: "/alpha", label: "alpha" }, { value: "/beta", label: "beta" }] }; },
+		applyCompletion(_lines, _line, _col, item) { return { lines: [item.value], cursorLine: 0, cursorCol: item.value.length }; },
+	});
+	try {
+		editor.handleInput("/");
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		assert.equal(editor.isShowingAutocomplete(), true);
+		const rows = editor.render(30);
+		assert.deepEqual(rows.map(stripAnsi).slice(4), [padded("   → alpha", 30), padded("     beta", 30)]);
+		assert.ok(rows.every((row) => visibleWidth(row) === 30));
+		assert.equal((editor.handleMouse(leftClick(5, 5, 30)) as { handled?: boolean } | undefined)?.handled, true);
+		assert.equal(editor.getText(), "/beta");
+		assert.equal(editor.isShowingAutocomplete(), false);
+	} finally { editor.dispose(); }
+});
+
+test("the ❯ lead shows from 5 columns; below that pi's rows alone, and nothing is ever wider than the width", () => {
+	const { editor } = prompt();
+	try {
+		for (const width of [0, 1, 2, 3, 4, 5, 9, 10, 30, 80]) {
+			// pi's wrap recurses on a wide glyph at a wrap width of 1: the narrow widths take plain text.
+			editor.setText(width < 10 ? "abcd" : "雪abcd");
+			const rows = editor.render(width).map(stripAnsi);
+			if (width >= 10) assert.match(rows[2]!, /^ ❯ 雪abcd/);
+			else if (width >= 5) assert.match(rows[2]!, /^ ❯ a/);
+			assert.ok(rows.every((row) => visibleWidth(row) <= width), `${width}: ${JSON.stringify(rows)}`);
+		}
+	} finally { editor.dispose(); }
 });
