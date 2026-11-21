@@ -533,15 +533,20 @@ function suite(): void {
 		assert.match(textOf(result), /^out\nForeground wait: `sleep 60` held the turn until it ended\./);
 	});
 
-	// T128f (L1352 F1): pi reads the engine's effective mode, on by default on Linux and off elsewhere (D3).
-	test("with an empty settings file the tree's jhon gives pi the default mode: on on Linux", async (t) => {
+	// T128f (L1352 F1): pi reads the engine's effective mode, on by default on Linux and off elsewhere (D3);
+	// on Linux only where bubblewrap can run (T128f slice 8, L1375): a CI runner whose AppArmor stops it is off.
+	test("with an empty settings file the tree's jhon gives pi the default mode: on on Linux where the sandbox can run", async (t) => {
 		const bin = process.env.JHON_TEST_BIN || join(REPO, "build", "jhon");
 		if (!existsSync(bin)) { t.skip(`needs the tree's jhon (JHON_TEST_BIN or build/jhon): ${bin}`); return; }
 		const d = scratch(t, "jhon-sbx-default-");
 		const file = join(d, "settings.toml");
 		const was = process.env.JHON_SETTINGS;
 		t.after(() => { process.env.JHON_SETTINGS = was; });
-		const want = process.platform === "linux" ? "on" : "off";
+		writeFileSync(file, '[sandbox]\nmode = "on"\n');
+		process.env.JHON_SETTINGS = file;
+		const probe = await readSandboxStatus({ jhon: bin }, d);
+		const canRun = !("unread" in probe) && probe.canRun;
+		const want = process.platform === "linux" && canRun ? "on" : "off";
 		for (const [text, mode] of [["", want], ['[sandbox]\nmode = "off"\n', "off"], ['[sandbox]\nmode = "on"\n', "on"]]) {
 			writeFileSync(file, text);
 			process.env.JHON_SETTINGS = file;
