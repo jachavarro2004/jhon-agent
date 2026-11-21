@@ -732,7 +732,8 @@ func DeliveryNote(argv []string) string {
 // deliveryNote is DeliveryNote's text.
 const deliveryNote = "git over SSH and gh run outside the sandbox only on a line of their own, with no pipes, $(…) or other commands: run it alone, as in git -C <dir> fetch origin main"
 
-// delivers is whether p is gh, or git with a network subcommand, by its
+// delivers is whether p is gh, or git with a network subcommand (remote
+// only as remote update, after the options beforeSecond lists), by its
 // name or a path to it, whatever its options.
 func delivers(p sh.Program) bool {
 	if len(p.Argv) == 0 {
@@ -748,8 +749,18 @@ func delivers(p sh.Program) bool {
 			case args[k] == "-C" || args[k] == "-c":
 				k++
 			case !strings.HasPrefix(args[k], "-"):
+				if before, ok := beforeSecond[args[k]]; ok {
+					rest := args[k+1:]
+					j := 0
+					for ; j < len(rest); j++ {
+						if _, ok := before[rest[j]]; !ok {
+							break
+						}
+					}
+					return j < len(rest) && rest[j] == "update"
+				}
 				_, network := gitOptions[args[k]]
-				return network || args[k] == "remote"
+				return network
 			}
 		}
 	}

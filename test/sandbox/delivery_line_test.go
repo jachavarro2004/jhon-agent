@@ -98,3 +98,20 @@ func TestAFailingWorkLineWithADeliveryProgramEndsWithTheNote(t *testing.T) {
 		t.Errorf("a line that does not fail: exit %d, stderr %q; want 0 and no note", r.Code, r.Stderr)
 	}
 }
+
+// A work line whose shell a signal kills gets no note: bubblewrap reports
+// it as an exit above 128 (143 for SIGTERM). git's own fatal errors exit
+// 128, and keep it.
+func TestAWorkLineKilledByASignalEndsWithNoNote(t *testing.T) {
+	b := newBox(t)
+	bash := realShell(t, "bash")
+	run := func(line string) support.Result {
+		return support.Jhon(t, b.proj, b.env, "sandbox", "run", "--project", b.proj, "--profile", "unsandboxed", "--", bash, "-c", line)
+	}
+	if r := run("git fetch origin 2>/dev/null; kill -TERM $$"); r.Code != 143 || strings.Contains(r.Stderr, deliveryNote) {
+		t.Errorf("a shell killed by SIGTERM: exit %d, stderr %q; want 143 and no note", r.Code, r.Stderr)
+	}
+	if r := run("echo x; git fetch origin"); r.Code != 128 || !strings.HasSuffix(r.Stderr, "\n"+deliveryNote) || strings.Count(r.Stderr, deliveryNote) != 1 {
+		t.Errorf("git fetch origin failing with 128: exit %d, stderr %q; want 128 ending with the note once", r.Code, r.Stderr)
+	}
+}
