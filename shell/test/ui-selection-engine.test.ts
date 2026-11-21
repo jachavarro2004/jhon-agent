@@ -35,8 +35,7 @@ function promptEditor(): JhonPromptEditor {
 	const editor = new JhonPromptEditor(tui, theme, { matches: () => false } as unknown as CtorParams[2], {
 		fg: (_r, t) => t, bold: identity, requestRender() {}, pending: () => false,
 		now: () => 0, doubleEscCancelEnabled: () => false, dispatchQueuedText() {},
-		// The fullscreen chrome: G's panel editor.
-		panelChrome: () => true,
+		ascii: () => false,
 	});
 	editor.focused = true;
 	return editor;
@@ -46,45 +45,48 @@ const click = (x: number, y: number, width: number): TuiMouseEvent => ({
 	type: "click", button: "left", x, y, width, height: 30, screenX: x, screenY: y, shift: false, alt: false, ctrl: false,
 });
 
-test("the rule-line prompt: native cursor, selection, replacement and mouse share geometry past the `› ` lead", () => {
+test("the prompt (T174-S8): native cursor, selection, replacement and mouse share geometry past the ` ❯ ` lead", () => {
 	const editor = promptEditor();
 	try {
 		editor.borderColor = (text) => `\x1b[35m${text}\x1b[39m`;
 		editor.setText("abcd");
 		editor.handleInput("\x1b[D");
 		let rows = editor.render(80);
-		assert.match(rows[0], /^\x1b\[35m─ \x1b\[39m力 ready for you/);
-		assert.match(rows[1], /^› abc/, "the › mark in the theme's accent, not the border colour (T15.12c)");
-		assert.equal(visibleWidth(rows[1].split(CURSOR_MARKER)[0]), 5);
+		assert.match(stripAnsi(rows[0]), /^ 力 ready for you +$/, "the working line first");
+		assert.match(rows[1], /^\x1b\[35m─+\x1b\[39m$/, "the rule in pi's live border colour");
+		assert.match(rows[2], /^ ❯ abc/, "the ❯ mark in the theme's accent, not the border colour");
+		assert.equal(visibleWidth(rows[2].split(CURSOR_MARKER)[0]), 6);
 		// pi-tui 1.4.0 marks the fake cursor with APC markers (no SGR reset).
-		assert.ok(rows[1].includes(`${CURSOR_MARKER}\x1b_pi:fc\x07d\x1b_pi:/fc\x07`));
+		assert.ok(rows[2].includes(`${CURSOR_MARKER}\x1b_pi:fc\x07d\x1b_pi:/fc\x07`));
 		editor.handleInput("\x1b[1;2H");
 		rows = editor.render(80);
-		assert.equal(stripAnsi(rows[1].replaceAll(CURSOR_MARKER, "")).trim(), "› abcd");
+		assert.equal(stripAnsi(rows[2].replaceAll(CURSOR_MARKER, "")).trim(), "❯ abcd");
 		// The TUI resolves the fake cursor's closing marker to SGR 27, so reverse is re-armed after it.
-		assert.ok(rows[1].includes(`\x1b[7m${CURSOR_MARKER}\x1b_pi:fc\x07a\x1b_pi:/fc\x07\x1b[7mbc\x1b[27md`), "native selection inversion survives the software cursor reset");
-		assert.match(rows[2], /3 chars selected/);
+		assert.ok(rows[2].includes(`\x1b[7m${CURSOR_MARKER}\x1b_pi:fc\x07a\x1b_pi:/fc\x07\x1b[7mbc\x1b[27md`), "native selection inversion survives the software cursor reset");
+		assert.match(rows[3], /3 chars selected/);
 		editor.handleInput("X");
 		assert.equal(editor.getText(), "Xd");
 		editor.setText("abcd");
 		editor.render(30);
-		editor.handleMouse(click(4, 1, 30));
-		assert.deepEqual(editor.getCursor(), { line: 0, col: 2 }, "x is translated past the two-cell lead");
+		editor.handleMouse(click(5, 2, 30));
+		assert.deepEqual(editor.getCursor(), { line: 0, col: 2 }, "x is translated past the three-cell lead");
 		editor.handleMouse(click(10, 0, 30));
+		assert.deepEqual(editor.getCursor(), { line: 0, col: 2 }, "the working line is inert");
+		editor.handleMouse(click(10, 1, 30));
 		assert.deepEqual(editor.getCursor(), { line: 0, col: 2 }, "the rule row is inert");
-		editor.handleMouse(click(10, 2, 30));
-		assert.deepEqual(editor.getCursor(), { line: 0, col: 2 }, "the hint row is inert");
+		editor.handleMouse(click(10, 3, 30));
+		assert.deepEqual(editor.getCursor(), { line: 0, col: 2 }, "the bottom rule is inert");
 		editor.borderColor = (text) => `\x1b[36m${text}\x1b[39m`;
-		assert.match(editor.render(30)[0], /^\x1b\[36m─ /, "the rule reads the current public mode callback; the › mark stays the accent (T15.12c)");
-		assert.equal(editor.handleMouse({ ...click(3, 1, 30), type: "press" }), undefined, "native drag selection remains unhandled");
+		assert.match(editor.render(30)[1], /^\x1b\[36m─/, "the rule reads the current public mode callback; the ❯ mark stays the accent");
+		assert.equal(editor.handleMouse({ ...click(4, 2, 30), type: "press" }), undefined, "native drag selection remains unhandled");
 		editor.setText("abcdefghijklmnop");
-		assert.deepEqual(editor.render(12).map(stripAnsi), ["────────────", "› abcdefghi ", "  jklmnop   ", "            "], "native layout width=10 wraps under the lead");
+		assert.deepEqual(editor.render(12).map(stripAnsi).slice(1), ["────────────", " ❯ abcdefgh ", "   ijklmnop ", "─".repeat(12)], "native layout width=8 wraps under the lead");
 		editor.handleInput("\x1ba");
-		assert.ok(editor.render(12).slice(1, -1).every((row) => row.includes("\x1b[7m")), "selection paints every wrapped content row");
+		assert.ok(editor.render(12).slice(2, -1).every((row) => row.includes("\x1b[7m")), "selection paints every wrapped content row");
 	} finally { editor.dispose(); }
 });
 
-test("the rule-line prompt: native completions sit under the hint row and a click applies one", async () => {
+test("the prompt: native completions sit under the bottom rule, past the lead, and a click applies one", async () => {
 	const editor = promptEditor();
 	editor.setAutocompleteProvider({
 		async getSuggestions() { return { prefix: "/", items: [{ value: "/alpha", label: "alpha" }, { value: "/beta", label: "beta" }] }; },
@@ -95,25 +97,24 @@ test("the rule-line prompt: native completions sit under the hint row and a clic
 		await new Promise<void>((resolve) => setImmediate(resolve));
 		assert.equal(editor.isShowingAutocomplete(), true);
 		const rows = editor.render(30);
-		assert.deepEqual(rows.map(stripAnsi).slice(3), ["  → alpha                     ", "    beta                      "]);
+		assert.deepEqual(rows.map(stripAnsi).slice(4), ["   → alpha                    ", "     beta                     "]);
 		assert.ok(rows.every((row) => visibleWidth(row) === 30));
-		assert.equal(editor.handleMouse(click(4, 4, 30))?.handled, true);
+		assert.equal(editor.handleMouse(click(5, 5, 30))?.handled, true);
 		assert.equal(editor.getText(), "/beta");
 		assert.equal(editor.isShowingAutocomplete(), false);
 	} finally { editor.dispose(); }
 });
 
-test("the panel editor keeps a rounded frame under 4 columns and the rule line from 4, as G's, at every width", () => {
+test("the prompt draws ❯ from 5 columns and pi's rows alone below that, never wider than the width", () => {
 	const editor = promptEditor();
 	try {
-		for (const width of [0, 1, 2, 3, 4, 9, 10, 30, 80]) {
+		for (const width of [0, 1, 2, 3, 4, 5, 9, 10, 30, 80]) {
 			// Pi 0.99.2 wordWrapLine recurses on a wide glyph at layoutWidth=1.
 			editor.setText(width < 10 ? "abcd" : "雪abcd");
 			const rows = editor.render(width);
-			if (width >= 10) assert.match(stripAnsi(rows[1]), /^› 雪abcd/);
-			else if (width >= 4) assert.match(stripAnsi(rows[1]), /^› a/);
-			else if (width >= 2) assert.match(stripAnsi(rows[0]), /^╭/);
-			assert.ok(rows.every((row) => visibleWidth(row) <= width));
+			if (width >= 10) assert.match(stripAnsi(rows[2]), /^ ❯ 雪abcd/);
+			else if (width >= 5) assert.match(stripAnsi(rows[2]), /^ ❯ a/);
+			assert.ok(rows.every((row) => visibleWidth(row) <= width), `${width}: ${JSON.stringify(rows.map(stripAnsi))}`);
 		}
 	} finally { editor.dispose(); }
 });
@@ -227,7 +228,7 @@ test("render wraps the selected span in reverse video and shows the hint", () =>
 	editor.handleInput(END);
 	engine.handleInput(SHIFT_HOME, native);
 	const rows = editor.render(80);
-	const content = rows[1] ?? "";
+	const content = rows[2] ?? ""; // the working line, the rule, then the input
 	assert.ok(content.includes("\x1b[7m"), "reverse-video span missing");
 	const last = rows[rows.length - 1] ?? "";
 	assert.ok(last.includes("chars selected"), "selection hint missing on the bottom rule");
