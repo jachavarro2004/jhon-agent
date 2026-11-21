@@ -1,23 +1,23 @@
 # Third-party notices
 
-Jhon is its own work, under its own name. Parts of the shell (`shell/`) are
-adapted from MIT-licensed packages; this file is the one record of what came
-from where, in place of a note in each file. It also records what a
+Jhon is its own work, under its own name. One line of the shell (`shell/`)
+is adapted from an MIT-licensed package; this file is the one record of what
+came from where, in place of a note in each file. It also records what a
 release ships that is not Jhon's: pi and the Go modules linked into `jhon`.
 Jhon itself is under the Apache License 2.0 (`LICENSE`).
 
-## gentle-pi
+## Gentle Shell (design reference)
 
-gentle-pi (https://www.npmjs.com/package/gentle-pi), MIT. Its license, with
-its copyright as its LICENSE file ships it (Mario Zechner, pi's author),
-follows the lists. The files below are adapted from it, each
-from the file named (gentle-pi's paths, at the version given).
+Jhon's shell started as an adaptation of gentle-pi 4.1.0's Gentle Shell
+(https://www.npmjs.com/package/gentle-pi), MIT. T174 rewrote every adapted
+file in Jhon's own code: no gentle-pi code remains in this repository and
+gentle-pi is not loaded. Its Gentle Shell stays the design reference for the
+shell's views.
 
-Sources:
+## MIT license text
 
-
-Tests:
-
+The MIT license below, with the copyright line pi ships (Mario Zechner, pi's
+author), is the text the sections after it refer to.
 
 ```text
 MIT License
@@ -55,6 +55,12 @@ declaration is the license of record. Adapted from it:
 The MIT license text above applies to it, with Gentleman Programming as the
 copyright holder.
 
+## Engram
+
+Jhon's memory uses Engram (https://github.com/Gentleman-Programming/engram),
+MIT, by Gentleman Programming, as an external tool: `jhon setup` installs it
+and Jhon talks to it; no Engram code ships with Jhon.
+
 ## Bubble Tea
 
 `third_party/bubbletea/` is Bubble Tea v1.3.10
@@ -74,7 +80,7 @@ pi, the coding agent `jhon start pi` and `jhon-shell` run on:
 `@earendil-works/pi-coding-agent` 1.5.0
 (https://github.com/earendil-works/pi), MIT, by Mario Zechner, installed as a
 dependency of `shell/package.json`. Its package ships no LICENSE file; its
-`package.json` declares MIT, and the MIT license text under gentle-pi above
+`package.json` declares MIT, and the MIT license text above
 applies to it, with the same copyright holder.
 
 ## Go modules in the `jhon` binary
