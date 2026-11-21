@@ -9,7 +9,7 @@ odd/
 jhon-*.tar.gz
 jhon-*.tar.gz.sha256
 
-# Python bytecode (dist/test).
+# Python bytecode (test/install).
 __pycache__/
 
 # Designs stay on the owner's disk, never in git (owner, L129).
@@ -19,7 +19,7 @@ __pycache__/
 .atl/
 .codegraph/
 
-# The films are rendered here (docs/media) but kept out of git: each render
+# The films are rendered here (tools/media) but kept out of git: each render
 # would add ~28 MB to every clone. They are published on the landing page
 # (github.com/jachavarro2004/jhon-site) and in the README's players.
 /docs/assets/video/*.mp4

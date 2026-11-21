@@ -377,7 +377,7 @@ Jhon's source, its releases and its installers (`install.sh`,
 `install.ps1`) live in one public repository,
 [jachavarro2004/jhon-agent](https://github.com/jachavarro2004/jhon-agent),
 whose `.github/workflows/release.yml` builds, signs and publishes every
-release (`dist/README.md`). To verify a release by hand, with its tarball,
+release (`test/install/README.md`). To verify a release by hand, with its tarball,
 checksum and signature bundle in one directory:
 
 ```sh

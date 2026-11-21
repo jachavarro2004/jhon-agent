@@ -294,7 +294,7 @@ func TestReleaseArtifactProbes(t *testing.T) {
 // devOnly is what the artifact leaves out (T10f): what only development
 // reads. The installed release's validation checks what ships, never the
 // repository's own evidence.
-var devOnly = []string{"test", "design", "dist", "docs", "openspec", "tools", ".codegraph", ".github", "staticcheck.conf", "shell/test", "dashboard/test"}
+var devOnly = []string{"test", "design", "docs", "openspec", "tools", ".codegraph", ".github", "staticcheck.conf", "shell/test", "dashboard/test"}
 
 func TestReleaseArtifactLeavesOutDevelopment(t *testing.T) {
 	parallel(t)

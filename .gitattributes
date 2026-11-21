@@ -23,7 +23,6 @@
 # audit fixtures, matrix evidence) is checked in the checkout. third_party/
 # ships: go.mod replaces bubbletea with it and the release builds from the archive.
 /test export-ignore
-/dist export-ignore
 /docs export-ignore
 /openspec export-ignore
 /tools export-ignore
