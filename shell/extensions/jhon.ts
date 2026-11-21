@@ -117,6 +117,7 @@ import { ROUTE_MESSAGE, SessionPrompt, compactSkills, memoryIndexPrompt, splitRo
 import { ToolPolicy, enabledOnBranch, toolsMoreTool } from "../lib/tools-deferred.ts";
 import { CHANGE_ASK_MS, FULL_MESSAGE, changeMoment, fullOnBranch, fullTrigger, setContextLevel } from "../lib/lean-context.ts";
 import { AnnounceSendBack, engineStopRunner } from "../lib/announce-stop.ts";
+import { fromTheShell } from "../lib/from-the-shell.ts";
 
 export { CONFIG_FILE, claudeCall, inspect, judge, loadConfig } from "../lib/guards.ts";
 export { activeProfileName } from "../lib/profiles.ts";
@@ -878,12 +879,12 @@ export default function jhon(pi: any): void {
     const notice = [delegate, handoff].filter(Boolean).join("\n\n");
     if (notice) {
       ctx.ui?.notify?.(notice, "info");
-      pi.sendMessage?.({ customType: handoff ? FRESH_SESSION_ENTRY : BACKSTOP_ENTRY, content: notice, display: false }, { deliverAs: "nextTurn" });
+      pi.sendMessage?.({ customType: handoff ? FRESH_SESSION_ENTRY : BACKSTOP_ENTRY, content: fromTheShell(notice), display: false }, { deliverAs: "nextTurn" });
     }
-    // T135: the send-back is the shell's follow-up message, never the owner's; a failure lets the turn end.
+    // T135: the send-back is the shell's follow-up message, never the owner's, and says so (T194); a failure lets the turn end.
     const sendBack = await announce?.settled(event?.aborted === true, ctx?.cwd ?? process.cwd());
     if (sendBack) {
-      try { pi.sendUserMessage?.(sendBack, ctx?.isIdle?.() === false ? { deliverAs: "followUp" } : undefined); } catch { /* the turn just ends */ }
+      try { pi.sendUserMessage?.(fromTheShell(sendBack), ctx?.isIdle?.() === false ? { deliverAs: "followUp" } : undefined); } catch { /* the turn just ends */ }
     }
     return undefined;
   });
@@ -966,7 +967,7 @@ export default function jhon(pi: any): void {
     appendSessionOnce(options, memory);
     // The route follows the diff: a persisted message, sent when it changes.
     const route = sessionPrompt.routeChange(split?.route);
-    return route ? { message: { customType: ROUTE_MESSAGE, content: route, display: false } } : undefined;
+    return route ? { message: { customType: ROUTE_MESSAGE, content: fromTheShell(route), display: false } } : undefined;
   });
 
   // The orchestrator's full prompt: writer mode's rules over the marked region, or the organic
@@ -994,7 +995,7 @@ export default function jhon(pi: any): void {
     if (leanSkills) text += `\n\n## Skills\n\nRead a skill's file when its task applies:\n${leanSkills}`;
     const all = (pi.getAllTools?.() ?? []).map((t: any) => t.name).filter((n: unknown): n is string => typeof n === "string");
     if (all.length) pi.setActiveTools?.(toolPolicy.filter(all, cwd) ?? all);
-    if (text) pi.sendMessage?.({ customType: FULL_MESSAGE, content: `Jhon: this work needs the full context; it binds from now on.\n\n${text}`, display: false }, { deliverAs: "steer" });
+    if (text) pi.sendMessage?.({ customType: FULL_MESSAGE, content: fromTheShell(`Jhon: this work needs the full context; it binds from now on.\n\n${text}`), display: false }, { deliverAs: "steer" });
   };
   let asked: Promise<unknown> = Promise.resolve();
   if (!child && config) pi.on("tool_result", async (event: any, ctx: any) => {
@@ -1305,7 +1306,7 @@ export default function jhon(pi: any): void {
   pi.registerTool({
     name: "ask_user",
     label: "Ask the owner",
-    description: `Ask the owner 1 to ${MAX_QUESTIONS} questions and wait. Each takes ${MIN_OPTIONS} to ${MAX_OPTIONS} options (label, meaning) or none for a free answer; a typed answer is always offered, so never add one. multiSelect allows several picks. Put a recommended option first, its label ending in "(Recommended)". Only the interactive main session can ask.`,
+    description: `Ask the owner 1 to ${MAX_QUESTIONS} questions and wait, questions and options in the owner's reply language. Each takes ${MIN_OPTIONS} to ${MAX_OPTIONS} options or none for a free answer; a typed answer is offered; never add one. multiSelect allows several picks. Recommended option first, label ending "(Recommended)" translated. Only the interactive main session asks.`,
     parameters: {
       type: "object", additionalProperties: false, required: ["questions"],
       properties: {
@@ -1317,7 +1318,7 @@ export default function jhon(pi: any): void {
               question: { type: "string", description: "The question, complete enough to answer without other context." },
               header: { type: "string", maxLength: MAX_HEADER, description: "A short label for it, e.g. \"Library\"." },
               options: {
-                type: "array", minItems: MIN_OPTIONS, maxItems: MAX_OPTIONS, description: "The choices; omit them for a free answer.",
+                type: "array", minItems: MIN_OPTIONS, maxItems: MAX_OPTIONS, description: "The choices.",
                 items: {
                   type: "object", additionalProperties: false, required: ["label"],
                   properties: {

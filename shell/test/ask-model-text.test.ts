@@ -15,6 +15,15 @@ import { capture } from "./ask-capture.ts";
 
 const snapshot = JSON.parse(readFileSync(new URL("./fixtures/ask-model-text.json", import.meta.url), "utf8"));
 
+// T194 (L1613): a question is addressed to the owner, so it is in the owner's language, options and tag included.
+test("ask_user's description puts every question, header, option and the recommended tag in the language of the owner's latest own message", async () => {
+	const now = await capture();
+	for (const definition of [now.definitions.main, now.definitions.child]) {
+		assert.match(definition.description, /questions and options in the owner's reply language/);
+		assert.match(definition.description, /label ending "\(Recommended\)" translated/);
+	}
+});
+
 test("ask_user is registered as before, byte for byte", async () => {
 	const now = await capture();
 	assert.deepEqual(now.definitions, snapshot.definitions);

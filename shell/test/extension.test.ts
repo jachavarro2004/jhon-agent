@@ -29,6 +29,8 @@ import { SHELL_CONTRACT, contractMismatch, formatEdited } from "../lib/guards.ts
 import { SESSION_SECTION } from "../lib/ui/append-system-prompt.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// T194 (L1608): the mark the shell's own messages open with; pi hands each to the model as user text.
+const MARK = "[From the Jhon shell, not the owner; it does not set the reply language]";
 // The machine's own Jhon files stay out of reach: the agent dir, the active
 // profile and Claude's memory default to a scratch dir a test may override.
 const ISOLATED = mkdtempSync(join(tmpdir(), "jhon-ext-isolated-"));
@@ -526,14 +528,14 @@ test("the appended prompt stays byte-identical across turns while the diff's rou
   const one = await turn();
   assert.match(one.options.appendSystemPrompt, /- Delivery: one\.\n- Reviews by risk\./, one.options.appendSystemPrompt);
   assert.doesNotMatch(one.options.appendSystemPrompt, /Route/);
-  assert.deepEqual(one.message, { customType: "jhon-route", content: "- Route, from the change's diff now: risk 1.", display: false });
+  assert.deepEqual(one.message, { customType: "jhon-route", content: `${MARK} - Route, from the change's diff now: risk 1.`, display: false });
   // The session's id appears, so the brief is read again and its route moved; the orchestrator file is rewritten.
   id = "s1";
   writeFileSync(join(dir, "orchestrator.md"), "# Orchestrator\n\nRewritten by a sync.");
   const two = await turn();
   assert.equal(two.options.appendSystemPrompt, one.options.appendSystemPrompt, "byte-identical across turns");
   assert.deepEqual(two.options.sections, one.options.sections);
-  assert.deepEqual(two.message, { customType: "jhon-route", content: "- Route, from the change's diff now: risk 2.", display: false });
+  assert.deepEqual(two.message, { customType: "jhon-route", content: `${MARK} - Route, from the change's diff now: risk 2.`, display: false });
   const three = await turn();
   assert.equal(three.options.appendSystemPrompt, one.options.appendSystemPrompt);
   assert.equal(three.message, undefined, "an unchanged route is not sent again");
@@ -1872,7 +1874,7 @@ test("a turn that ends over budget mid-run compacts and the run carries on; the 
   compactions[0]!.onComplete?.();
   assert.equal(sent.length, 1);
   assert.equal(sent[0]!.message.customType, "jhon-compaction-continue");
-  assert.match(sent[0]!.message.content, /^\[Harness note from the Jhon shell, not a message from the owner\] The context was compacted between the turns of your run/);
+  assert.ok(sent[0]!.message.content.startsWith(`${MARK} The context was compacted between the turns of your run`), sent[0]!.message.content);
   assert.deepEqual(sent[0]!.options, { triggerTurn: true }, "a new turn continues the run");
   await turnEnd(toolTurn, ctx(null));
   assert.equal(compactions.length, 1, "after the compaction the context is unknown until the next reply: nothing recompacts");
@@ -1924,7 +1926,7 @@ test("the main session suggests a fresh session once at 50% of its context and o
   assert.match(notices[0]!, /^One session per change: the context is at 52%/);
   assert.match(notices[0]!, /`jhon context <change> --phase none --handoff`, then mem_session_summary/);
   assert.match(notices[0]!, /\/new in pi; \/clear or a restart in Claude Code/);
-  assert.deepEqual(sent, notices, "the agent gets the same notice");
+  assert.deepEqual(sent, notices.map((n) => `${MARK} ${n}`), "the agent gets the same notice, marked as the shell's (T194)");
   const line = "One session per change: c1 is archived. Save a handoff (`jhon context --phase none --handoff`, then mem_session_summary), then start a fresh session (/new in pi; /clear or a restart in Claude Code) and give it the handoff.";
   const archived = { toolName: "bash", input: { command: "jhon archive c1 2026-11-05" }, content: [{ type: "text", text: `method: mv\nreadback: empty\n${line}\n` }] };
   await main.get("tool_result")!(archived, ctx(10));
@@ -1958,7 +1960,7 @@ test("on a very large window the main session suggests a fresh session once past
   await main.get("agent_settled")!({}, ctx(383_000));
   assert.equal(notices.length, 1, "once");
   assert.match(notices[0]!, /^One session per change: the context is at 152K tokens, past its 150K-token budget, and every turn re-reads it\. Save a handoff/);
-  assert.deepEqual(sent, notices, "the agent gets the same notice");
+  assert.deepEqual(sent, notices.map((n) => `${MARK} ${n}`), "the agent gets the same notice, marked as the shell's (T194)");
 });
 
 test("the orchestrator learns the owner's shell and that pi has no `!`: a command for the owner is a plain line for their own terminal, written for their shell (L222)", async () => {

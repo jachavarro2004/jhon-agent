@@ -645,7 +645,9 @@ test("after 60 s with no stream event and no tool running, the working line says
 
 // Stall recovery (T47, L164): a fake clock and fake one-shot timers drive the
 // shell's single setTimeout; the fake context counts aborts.
-const STALL_CONTINUE = "The Claude API sent no answer for 75s; the turn was restarted. Continue where you stopped.";
+// T194 (L1608): the continue goes to the model as user text, so it carries the shell's mark.
+const MARK = "[From the Jhon shell, not the owner; it does not set the reply language]";
+const STALL_CONTINUE = "[From the Jhon shell, not the owner; it does not set the reply language] The Claude API sent no answer for 75s; the turn was restarted. Continue where you stopped.";
 // The default is a real stall's setting: a direct API provider with thinking
 // off (T38: a thinking model or the claude-bridge provider never recovers by
 // silence alone).
@@ -757,7 +759,7 @@ test("a stream event before 75 s restarts the count, and a running tool holds re
 	}
 });
 
-const STALL_CONTINUE_300 = "The Claude API sent no answer for 300s; the turn was restarted. Continue where you stopped.";
+const STALL_CONTINUE_300 = "[From the Jhon shell, not the owner; it does not set the reply language] The Claude API sent no answer for 300s; the turn was restarted. Continue where you stopped.";
 // Recovers once at `at` ms (not a millisecond before), with the notice and continue naming `secs`.
 function assertRecoversAt(h: ReturnType<typeof stallHarness>, at: number, secs: number, label: string) {
 	h.ownerMessage("Review the change.");
@@ -767,7 +769,7 @@ function assertRecoversAt(h: ReturnType<typeof stallHarness>, at: number, secs: 
 	assert.equal(h.aborts.count, 1, label);
 	assert.deepEqual(h.ui.notices.filter((notice) => /Claude API did not answer/.test(notice)), [`Claude API did not answer in ${secs}s; retried`], label);
 	h.settle(true);
-	assert.deepEqual(h.userMessages.map((message) => message.content), [`The Claude API sent no answer for ${secs}s; the turn was restarted. Continue where you stopped.`], label);
+	assert.deepEqual(h.userMessages.map((message) => message.content), [`${MARK} The Claude API sent no answer for ${secs}s; the turn was restarted. Continue where you stopped.`], label);
 }
 
 test("a thinking model waits thinking_stall_seconds (300 s), not 75 s; with thinking off or minimal a real stall recovers at 75 s (T38, L382)", () => {
@@ -878,7 +880,7 @@ test("a child session and JHON_SHELL_STALL_SECONDS=0 never recover; another valu
 		assert.equal(h.aborts.count, 1);
 		assert.ok(h.ui.notices.includes("Claude API did not answer in 120s; retried"));
 		h.settle(true);
-		assert.deepEqual(h.userMessages.map((message) => message.content), ["The Claude API sent no answer for 120s; the turn was restarted. Continue where you stopped."]);
+		assert.deepEqual(h.userMessages.map((message) => message.content), [`${MARK} The Claude API sent no answer for 120s; the turn was restarted. Continue where you stopped.`]);
 	} finally {
 		h.editor?.dispose();
 	}

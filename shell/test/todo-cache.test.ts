@@ -40,7 +40,8 @@ test("the system prompt is byte-identical while the todo list changes; the block
 	await s.fire("session_start");
 	const empty = await s.turn();
 	assert.equal(empty.message?.customType, "jhon-todo-list");
-	assert.match(empty.message.content, /^## Todo list\nInside an LDD change/);
+	// T194 (L1608): the block reaches the model as user text, after the shell's mark.
+	assert.match(empty.message.content, /^\[From the Jhon shell, not the owner; it does not set the reply language\] ## Todo list\nInside an LDD change/);
 	assert.equal(empty.message.display, false);
 	assert.ok(!("timestamp" in empty.message));
 	assert.equal((await s.turn()).message, undefined, "an unchanged block is not sent again");

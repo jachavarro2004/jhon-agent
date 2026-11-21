@@ -582,7 +582,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
 							"display": false
 						}
 					}
@@ -684,7 +684,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [in_progress] Write the parser — writing tests\n3. [pending] Ship it",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [in_progress] Write the parser — writing tests\n3. [pending] Ship it",
 							"display": false
 						}
 					}
@@ -1047,7 +1047,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs",
 							"display": false
 						}
 					}
@@ -1071,7 +1071,7 @@
 				{
 					"sent": {
 						"customType": "jhon-todo-reminder",
-						"content": "[Harness reminder from the Jhon shell, not a message from the owner] Several tool-use turns went by without a look at the todo list. Compare it with the work done so far and update any task that no longer matches. Mark nothing done until it is verified.",
+						"content": "[From the Jhon shell, not the owner; it does not set the reply language] Several tool-use turns went by without a look at the todo list. Compare it with the work done so far and update any task that no longer matches. Mark nothing done until it is verified.",
 						"display": false
 					},
 					"options": {
@@ -1089,7 +1089,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: no update for 2 turns — update the list now)",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: no update for 2 turns — update the list now)",
 							"display": false
 						}
 					}
@@ -1098,7 +1098,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: no update for 3 turns — update the list now)",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: no update for 3 turns — update the list now)",
 							"display": false
 						}
 					}
@@ -1107,7 +1107,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: no update for 4 turns — update the list now)",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: no update for 4 turns — update the list now)",
 							"display": false
 						}
 					}
@@ -1189,7 +1189,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Ship the parser\n2. [pending] dup id\n3. [dropped] zero id\n4. [dropped] later",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Ship the parser\n2. [pending] dup id\n3. [dropped] zero id\n4. [dropped] later",
 							"display": false
 						}
 					}
@@ -1198,7 +1198,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Ship the parser\n2. [pending] dup id\n3. [dropped] zero id\n4. [dropped] later\n(stale: no update for 2 turns — update the list now)",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Ship the parser\n2. [pending] dup id\n3. [dropped] zero id\n4. [dropped] later\n(stale: no update for 2 turns — update the list now)",
 							"display": false
 						}
 					}
@@ -1236,7 +1236,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
 							"display": false
 						}
 					}
@@ -1774,7 +1774,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.",
 							"display": false
 						}
 					}
@@ -1790,7 +1790,7 @@
 				{
 					"sent": {
 						"customType": "jhon-todo-start",
-						"content": "[Harness reminder from the Jhon shell, not a message from the owner] This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in `jhon status`.",
+						"content": "[From the Jhon shell, not the owner; it does not set the reply language] This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in `jhon status`.",
 						"display": false
 					},
 					"options": {
@@ -1842,7 +1842,7 @@
 				{
 					"sent": {
 						"customType": "jhon-todo-start",
-						"content": "[Harness reminder from the Jhon shell, not a message from the owner] This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in `jhon status`.",
+						"content": "[From the Jhon shell, not the owner; it does not set the reply language] This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in `jhon status`.",
 						"display": false
 					},
 					"options": {
@@ -1924,7 +1924,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [pending] Fix the bug",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [pending] Fix the bug",
 							"display": false
 						}
 					}
@@ -2003,7 +2003,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] Scout — reading",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] Scout — reading",
 							"display": false
 						}
 					}
@@ -2032,7 +2032,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] Scout — reading\n(stale: no update for 2 turns — update the list now)",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] Scout — reading\n(stale: no update for 2 turns — update the list now)",
 							"display": false
 						}
 					}
@@ -2049,7 +2049,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] old rpiv — porting",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] old rpiv — porting",
 							"display": false
 						}
 					}
@@ -2103,7 +2103,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] old rpiv — porting\n2. [pending] next",
+							"content": "[From the Jhon shell, not the owner; it does not set the reply language] ## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] old rpiv — porting\n2. [pending] next",
 							"display": false
 						}
 					}

@@ -22,6 +22,8 @@ import { session } from "./background-tasks-capture.ts";
 const dirs: string[] = [];
 const scratch = (prefix: string) => { const d = mkdtempSync(join(tmpdir(), prefix)); dirs.push(d); return d; };
 after(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
+// T194 (L1608): every notice the model reads opens with the shell's mark.
+const MARK = "[From the Jhon shell, not the owner; it does not set the reply language]";
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 async function until(check: () => boolean): Promise<void> {
 	for (const deadline = Date.now() + 3000; !check(); await tick()) if (Date.now() > deadline) throw new Error("timed out waiting");
@@ -58,7 +60,7 @@ test("a job the owner stops in the Jobs view is reported to the agent as stopped
 		s.execs[0]!.output("ready\n");
 		await inView(s, "jobs", ["x"]);
 		await until(() => s.sent.length === 1);
-		assert.equal(s.sent[0]!.message.content, `Background job job-1 ("serve") was stopped by the owner after 0s.\nCommand: make serve\nLast output:\nready\nFull output: ${s.out}/job-1.log (use the read tool on it for more).`);
+		assert.equal(s.sent[0]!.message.content, `${MARK} Background job job-1 ("serve") was stopped by the owner after 0s.\nCommand: make serve\nLast output:\nready\nFull output: ${s.out}/job-1.log (use the read tool on it for more).`);
 		assert.deepEqual(s.sent[0]!.options, { triggerTurn: true, deliverAs: "followUp" });
 		assert.equal(s.sent[0]!.message.details.jhonTasks.status, "stopped");
 		await tick();
@@ -74,15 +76,16 @@ test("a monitor the owner stops delivers its pending lines first, then the stop;
 		s.execs[0]!.output("pending line\n");
 		await inView(s, "jobs", ["x"]);
 		await until(() => s.sent.length === 2);
-		assert.equal(s.sent[0]!.message.content, 'Monitor job-1 ("watch") reported 1 new line:\npending line');
-		assert.match(s.sent[1]!.message.content, /^Monitor job-1 \("watch"\) was stopped by the owner after 0s, 1 event\./);
+		assert.equal(s.sent[0]!.message.content, `${MARK} Monitor job-1 ("watch") reported 1 new line:\npending line`);
+		assert.ok(s.sent[1]!.message.content.startsWith(`${MARK} `));
+		assert.match(s.sent[1]!.message.content, /Monitor job-1 \("watch"\) was stopped by the owner after 0s, 1 event\./);
 		s.advance(120_000);
 		await tick();
 		assert.equal(s.sent.length, 2, "its timeout is gone");
 		const run = s.background!.startAgent(worker, "review", s.out, "main");
 		await inView(s, "agents", ["x"]);
 		await until(() => s.sent.length === 3);
-		assert.equal(s.sent[2]!.message.content, `Background sub-agent ${run.id} (worker) was stopped by the owner after 0s.\n\njhon: the sub-agent "worker" was stopped`);
+		assert.equal(s.sent[2]!.message.content, `${MARK} Background sub-agent ${run.id} (worker) was stopped by the owner after 0s.\n\njhon: the sub-agent "worker" was stopped`);
 		assert.equal(s.agents[0]!.task, "review");
 	} finally { s.cleanup(); }
 });

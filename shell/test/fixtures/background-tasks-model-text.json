@@ -168,7 +168,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background job job-1 (\"build\") exited with code 0 after 4s.\nCommand: make build\nLast output:\ncompiled\nok\nFull output: <out>/job-1.log (use the read tool on it for more).",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background job job-1 (\"build\") exited with code 0 after 4s.\nCommand: make build\nLast output:\ncompiled\nok\nFull output: <out>/job-1.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -217,7 +217,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background job job-2 (\"false\") exited with code 2 after 1m 5s.\nCommand: false\nNo output.\nFull output: <out>/job-2.log (use the read tool on it for more).",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background job job-2 (\"false\") exited with code 2 after 1m 5s.\nCommand: false\nNo output.\nFull output: <out>/job-2.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -267,7 +267,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background job job-3 (\"nope\") could not run: Working directory does not exist: /missing after 0s.\nCommand: nope\nNo output.\nFull output: <out>/job-3.log (use the read tool on it for more).",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background job job-3 (\"nope\") could not run: Working directory does not exist: /missing after 0s.\nCommand: nope\nNo output.\nFull output: <out>/job-3.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -316,7 +316,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background job job-4 (\"killed\") exited with no exit code after 1h 1m.\nCommand: killed\nNo output.\nFull output: <out>/job-4.log (use the read tool on it for more).",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background job job-4 (\"killed\") exited with no exit code after 1h 1m.\nCommand: killed\nNo output.\nFull output: <out>/job-4.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -611,7 +611,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-6 (\"errors\") reported 2 new lines:\nERROR one\nERROR two",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Monitor job-6 (\"errors\") reported 2 new lines:\nERROR one\nERROR two",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -636,7 +636,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-6 (\"errors\") reported 20 new lines:\nline 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\n(5 more lines left out; the full output is in <out>/job-6.log)",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Monitor job-6 (\"errors\") reported 20 new lines:\nline 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\n(5 more lines left out; the full output is in <out>/job-6.log)",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -661,7 +661,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-6 (\"errors\") was stopped by its 30s timeout, after 27 events. Start another monitor to keep watching.\nFull output: <out>/job-6.log",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Monitor job-6 (\"errors\") was stopped by its 30s timeout, after 27 events. Start another monitor to keep watching.\nFull output: <out>/job-6.log",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -712,7 +712,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-7 (\"yes\") reported 20 new lines:\nspam 0\nspam 1\nspam 2\nspam 3\nspam 4\nspam 5\nspam 6\nspam 7\nspam 8\nspam 9\nspam 10\nspam 11\nspam 12\nspam 13\nspam 14\nspam 15\nspam 16\nspam 17\nspam 18\nspam 19\n(101 more lines left out; the full output is in <out>/job-7.log)",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Monitor job-7 (\"yes\") reported 20 new lines:\nspam 0\nspam 1\nspam 2\nspam 3\nspam 4\nspam 5\nspam 6\nspam 7\nspam 8\nspam 9\nspam 10\nspam 11\nspam 12\nspam 13\nspam 14\nspam 15\nspam 16\nspam 17\nspam 18\nspam 19\n(101 more lines left out; the full output is in <out>/job-7.log)",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -737,7 +737,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-7 (\"yes\") was stopped after more than 120 lines in 60s (121 events). Tighten the command's filter before you watch it again.\nFull output: <out>/job-7.log",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Monitor job-7 (\"yes\") was stopped after more than 120 lines in 60s (121 events). Tighten the command's filter before you watch it again.\nFull output: <out>/job-7.log",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -789,7 +789,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-8 (\"CI\") reported 2 new lines:\nlint: pass\ntest: pass",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Monitor job-8 (\"CI\") reported 2 new lines:\nlint: pass\ntest: pass",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -814,7 +814,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-8 (\"CI\") exited with code 0 after 0s, 2 events.\nCommand: gh run watch 7\nLast output:\nlint: pass\ntest: pass\nFull output: <out>/job-8.log (use the read tool on it for more).",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Monitor job-8 (\"CI\") exited with code 0 after 0s, 2 events.\nCommand: gh run watch 7\nLast output:\nlint: pass\ntest: pass\nFull output: <out>/job-8.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -895,7 +895,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background sub-agent agent-1 (worker) completed after 0s.\n\nfound 3 callers",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background sub-agent agent-1 (worker) completed after 0s.\n\nfound 3 callers",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -917,7 +917,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background sub-agent agent-2 (worker) failed after 0s.\n\njhon: the sub-agent \"worker\" exited 1",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background sub-agent agent-2 (worker) failed after 0s.\n\njhon: the sub-agent \"worker\" exited 1",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -939,7 +939,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background sub-agent agent-3 (worker) failed after 0s.\n\njhon: the sub-agent \"worker\" could not run: spawn pi ENOENT",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background sub-agent agent-3 (worker) failed after 0s.\n\njhon: the sub-agent \"worker\" could not run: spawn pi ENOENT",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -961,7 +961,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background sub-agent agent-4 (worker) completed after 0s.\n\nrow 0 zzzzzzzzzzzzzzzzzzzz\nrow 1 zzzzzzzzzzzzzzzzzzzz\nrow 2 zzzzzzzzzzzzzzzzzzzz\nrow 3 zzzzzzzzzzzzzzzzzzzz\nrow 4 zzzzzzzzzzzzzzzzzzzz\nrow 5 zzzzzzzzzzzzzzzzzzzz\nrow 6 zzzzzzzzzzzzzzzzzzzz\nrow 7 zzzzzzzzzzzzzzzzzzzz\nrow 8 zzzzzzzzzzzzzzzzzzzz\nrow 9 zzzzzzzzzzzzzzzzzzzz\nrow 10 zzzzzzzzzzzzzzzzzzzz\nrow 11 zzzzzzzzzzzzzzzzzzzz\nrow 12 zzzzzzzzzzzzzzzzzzzz\nrow 13 zzzzzzzzzzzzzzzzzzzz\nrow 14 zzzzzzzzzzzzzzzzzzzz\nrow 15 zzzzzzzzzzzzzzzzzzzz\nrow 16 zzzzzzzzzzzzzzzzzzzz\nrow 17 zzzzzzzzzzzzzzzzzzzz\nrow 18 zzzzzzzzzzzzzzzzzzzz\nrow 19 zzzzzzzzzzzzzzzzzzzz\nrow 20 zzzzzzzzzzzzzzzzzzzz\nrow 21 zzzzzzzzzzzzzzzzzzzz\nrow 22 zzzzzzzzzzzzzzzzzzzz\nrow 23 zzzzzzzzzzzzzzzzzzzz\nrow 24 zzzzzzzzzzzzzzzzzzzz\nrow 25 zzzzzzzzzzzzzzzzzzzz\nrow 26 zzzzzzzzzzzzzzzzzzzz\nrow 27 zzzzzzzzzzzzzzzzzzzz\nrow 28 zzzzzzzzzzzzzzzzzzzz\nrow 29 zzzzzzzzzzzzzzzzzzzz\nrow 30 zzzzzzzzzzzzzzzzzzzz\nrow 31 zzzzzzzzzzzzzzzzzzzz\nrow 32 zzzzzzzzzzzzzzzzzzzz\nrow 33 zzzzzzzzzzzzzzzzzzzz\nrow 34 zzzzzzzzzzzzzzzzzzzz\nrow 35 zzzzzzzzzzzzzzzzzzzz\nrow 36 zzzzzzzzzzzzzzzzzzzz\nrow 37 zzzzzzzzzzzzzzzzzzzz\nrow 38 zzzzzzzzzzzzzzzzzzzz\nrow 39 zzzzzzzzzzzzzzzzzzzz\nrow 40 zzzzzzzzzzzzzzzzzzzz\nrow 41 zzzzzzzzzzzzzzzzzzzz\nrow 42 zzzzzzzzzzzzzzzzzzzz\nrow 43 zzzzzzzzzzzzzzzzzzzz\nrow 44 zzzzzzzzzzzzzzzzzzzz\nrow 45 zzzzzzzzzzzzzzzzzzzz\nrow 46 zzzzzzzzzzzzzzzzzzzz\nrow 47 zzzzzzzzzzzzzzzzzzzz\nrow 48 zzzzzzzzzzzzzzzzzzzz\nrow 49 zzzzzzzzzzzzzzzzzzzz\nrow 50 zzzzzzzzzzzzzzzzzzzz\nrow 51 zzzzzzzzzzzzzzzzzzzz\nrow 52 zzzzzzzzzzzzzzzzzzzz\n[1896 more characters not shown; task_result with id \"agent-4\" returns the full result.]",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background sub-agent agent-4 (worker) completed after 0s.\n\nrow 0 zzzzzzzzzzzzzzzzzzzz\nrow 1 zzzzzzzzzzzzzzzzzzzz\nrow 2 zzzzzzzzzzzzzzzzzzzz\nrow 3 zzzzzzzzzzzzzzzzzzzz\nrow 4 zzzzzzzzzzzzzzzzzzzz\nrow 5 zzzzzzzzzzzzzzzzzzzz\nrow 6 zzzzzzzzzzzzzzzzzzzz\nrow 7 zzzzzzzzzzzzzzzzzzzz\nrow 8 zzzzzzzzzzzzzzzzzzzz\nrow 9 zzzzzzzzzzzzzzzzzzzz\nrow 10 zzzzzzzzzzzzzzzzzzzz\nrow 11 zzzzzzzzzzzzzzzzzzzz\nrow 12 zzzzzzzzzzzzzzzzzzzz\nrow 13 zzzzzzzzzzzzzzzzzzzz\nrow 14 zzzzzzzzzzzzzzzzzzzz\nrow 15 zzzzzzzzzzzzzzzzzzzz\nrow 16 zzzzzzzzzzzzzzzzzzzz\nrow 17 zzzzzzzzzzzzzzzzzzzz\nrow 18 zzzzzzzzzzzzzzzzzzzz\nrow 19 zzzzzzzzzzzzzzzzzzzz\nrow 20 zzzzzzzzzzzzzzzzzzzz\nrow 21 zzzzzzzzzzzzzzzzzzzz\nrow 22 zzzzzzzzzzzzzzzzzzzz\nrow 23 zzzzzzzzzzzzzzzzzzzz\nrow 24 zzzzzzzzzzzzzzzzzzzz\nrow 25 zzzzzzzzzzzzzzzzzzzz\nrow 26 zzzzzzzzzzzzzzzzzzzz\nrow 27 zzzzzzzzzzzzzzzzzzzz\nrow 28 zzzzzzzzzzzzzzzzzzzz\nrow 29 zzzzzzzzzzzzzzzzzzzz\nrow 30 zzzzzzzzzzzzzzzzzzzz\nrow 31 zzzzzzzzzzzzzzzzzzzz\nrow 32 zzzzzzzzzzzzzzzzzzzz\nrow 33 zzzzzzzzzzzzzzzzzzzz\nrow 34 zzzzzzzzzzzzzzzzzzzz\nrow 35 zzzzzzzzzzzzzzzzzzzz\nrow 36 zzzzzzzzzzzzzzzzzzzz\nrow 37 zzzzzzzzzzzzzzzzzzzz\nrow 38 zzzzzzzzzzzzzzzzzzzz\nrow 39 zzzzzzzzzzzzzzzzzzzz\nrow 40 zzzzzzzzzzzzzzzzzzzz\nrow 41 zzzzzzzzzzzzzzzzzzzz\nrow 42 zzzzzzzzzzzzzzzzzzzz\nrow 43 zzzzzzzzzzzzzzzzzzzz\nrow 44 zzzzzzzzzzzzzzzzzzzz\nrow 45 zzzzzzzzzzzzzzzzzzzz\nrow 46 zzzzzzzzzzzzzzzzzzzz\nrow 47 zzzzzzzzzzzzzzzzzzzz\nrow 48 zzzzzzzzzzzzzzzzzzzz\nrow 49 zzzzzzzzzzzzzzzzzzzz\nrow 50 zzzzzzzzzzzzzzzzzzzz\nrow 51 zzzzzzzzzzzzzzzzzzzz\nrow 52 zzzzzzzzzzzzzzzzzzzz\n[1896 more characters not shown; task_result with id \"agent-4\" returns the full result.]",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -983,7 +983,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background sub-agent agent-5 (worker) completed after 0s.\n\nwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww\n[1500 more characters not shown; task_result with id \"agent-5\" returns the full result.]",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background sub-agent agent-5 (worker) completed after 0s.\n\nwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww\n[1500 more characters not shown; task_result with id \"agent-5\" returns the full result.]",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -1005,7 +1005,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background sub-agent agent-6 (worker) completed after 0s.\n\nJSON result, summarized:\nfacet: risk\nok: false\ncount: 3\nnone: null\ninspection.status: completed\nfindings: 10 (WARNING 6, CRITICAL 1, info 1, odd 1)\n- CRITICAL b.ts:1: critical one\n- WARNING a.ts:0: warn 0 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- WARNING a.ts:1: warn 1 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- WARNING a.ts:2: warn 2 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- WARNING a.ts:3: warn 3 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- … 5 more not listed (WARNING 2, info 1, odd 1, unrated 1)\ntags: 2\nnotes: nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn…\n[Full JSON (4250 characters): task_result with id \"agent-6\" returns it.]",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background sub-agent agent-6 (worker) completed after 0s.\n\nJSON result, summarized:\nfacet: risk\nok: false\ncount: 3\nnone: null\ninspection.status: completed\nfindings: 10 (WARNING 6, CRITICAL 1, info 1, odd 1)\n- CRITICAL b.ts:1: critical one\n- WARNING a.ts:0: warn 0 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- WARNING a.ts:1: warn 1 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- WARNING a.ts:2: warn 2 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- WARNING a.ts:3: warn 3 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- … 5 more not listed (WARNING 2, info 1, odd 1, unrated 1)\ntags: 2\nnotes: nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn…\n[Full JSON (4250 characters): task_result with id \"agent-6\" returns it.]",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -1197,7 +1197,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background job job-9 (\"serve\") was stopped by the owner after 0s.\nCommand: make serve\nLast output:\nready\nFull output: <out>/job-9.log (use the read tool on it for more).",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background job job-9 (\"serve\") was stopped by the owner after 0s.\nCommand: make serve\nLast output:\nready\nFull output: <out>/job-9.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -1252,7 +1252,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-10 (\"watch\") reported 1 new line:\npending line",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Monitor job-10 (\"watch\") reported 1 new line:\npending line",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -1277,7 +1277,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Monitor job-10 (\"watch\") was stopped by the owner after 0s, 1 event.\nCommand: tail -f x\nLast output:\npending line\nFull output: <out>/job-10.log (use the read tool on it for more).",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Monitor job-10 (\"watch\") was stopped by the owner after 0s, 1 event.\nCommand: tail -f x\nLast output:\npending line\nFull output: <out>/job-10.log (use the read tool on it for more).",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -1305,7 +1305,7 @@
 			"sent": {
 				"message": {
 					"customType": "jhon-tasks.notice",
-					"content": "Background sub-agent agent-8 (worker) was stopped by the owner after 0s.\n\njhon: the sub-agent \"worker\" was stopped",
+					"content": "[From the Jhon shell, not the owner; it does not set the reply language] Background sub-agent agent-8 (worker) was stopped by the owner after 0s.\n\njhon: the sub-agent \"worker\" was stopped",
 					"display": true,
 					"details": {
 						"jhonTasks": {
@@ -2156,7 +2156,7 @@
 				{
 					"message": {
 						"customType": "jhon-tasks.notice",
-						"content": "Headless session: stopped waiting after 0s for 2 background tasks (worker: one, worker: two); their results are lost.",
+						"content": "[From the Jhon shell, not the owner; it does not set the reply language] Headless session: stopped waiting after 0s for 2 background tasks (worker: one, worker: two); their results are lost.",
 						"display": true
 					},
 					"options": {

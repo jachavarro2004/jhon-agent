@@ -28,7 +28,7 @@ interface TodoTool {
 
 const plain = { fg: (_role: string, text: string) => text, strikethrough: (text: string) => `~${text}~`, bold: (text: string) => text };
 
-const FRAME = "[Harness reminder from the Jhon shell, not a message from the owner] ";
+const FRAME = "[From the Jhon shell, not the owner; it does not set the reply language] ";
 const REMINDER = `${FRAME}Several tool-use turns went by without a look at the todo list. Compare it with the work done so far and update any task that no longer matches. Mark nothing done until it is verified.`;
 const START_NUDGE = `${FRAME}This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in \`jhon status\`.`;
 const START_RULE = "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.";
@@ -106,7 +106,9 @@ async function runStart(r: Rig, ctx: ExtensionContext): Promise<string> {
 	if (out?.message) assert.deepEqual(Object.keys(out.message), ["customType", "content", "display"]);
 	if (out?.message) assert.equal(out.message.display, false);
 	if (out?.message) assert.equal(out.message.customType, "jhon-todo-list");
-	return out?.message?.content ?? "";
+	// T194 (L1608): the block reaches the model as user text, so it carries the shell's mark; the block is what follows it.
+	if (out?.message) assert.ok(out.message.content.startsWith(FRAME), out.message.content);
+	return out?.message ? out.message.content.slice(FRAME.length) : "";
 }
 
 /** What pi turns a sent message into for the model: user text that says the harness speaks. */
@@ -386,7 +388,11 @@ test("a resumed session does not send again the block its branch carries", async
 	const resumed = session("s1", [{ type: "custom_message", customType: "jhon-todo-list", content: block, display: false }, { type: "custom_message", customType: "other", content: "x" }]);
 	await r.fire("session_start", resumed.ctx);
 	await r.call(resumed.ctx, { action: "write", tasks: [{ title: "Fix the bug" }] });
-	assert.equal(await runStart(r, resumed.ctx), "");
+	assert.equal(await runStart(r, resumed.ctx), "", "a branch from before the mark");
+	const marked = session("s2", [{ type: "custom_message", customType: "jhon-todo-list", content: `${FRAME}${block}`, display: false }]);
+	await r.fire("session_start", marked.ctx);
+	await r.call(marked.ctx, { action: "write", tasks: [{ title: "Fix the bug" }] });
+	assert.equal(await runStart(r, marked.ctx), "", "a branch whose block carries the mark");
 });
 
 test("a finished list stays on screen for its turn and is gone at the next run", async () => {

@@ -15,6 +15,7 @@
 import { shellSettings, type ShellSettings } from "../settings.ts";
 import type { ApiWait } from "./api-wait.ts";
 import { CLAUDE_BRIDGE } from "./usage.ts";
+import { fromTheShell } from "../from-the-shell.ts";
 
 /** The threshold in seconds, shell.behaviour.stall_seconds (JHON_SHELL_STALL_SECONDS overrides it): 0 turns recovery off; a child never recovers. */
 export function stallSeconds(env: NodeJS.ProcessEnv, settings: ShellSettings = shellSettings(env)): number {
@@ -32,9 +33,9 @@ export function stallThreshold(model: { provider?: string; reasoning?: boolean }
 	return model?.provider === CLAUDE_BRIDGE_PROVIDER || thinks ? seconds.thinking : seconds.stall;
 }
 
-/** The follow-up the agent receives after a recovered stall. */
+/** The follow-up the agent receives after a recovered stall, as user text: it says it is not the owner (T194). */
 export function stallContinueText(seconds: number): string {
-	return `The Claude API sent no answer for ${seconds}s; the turn was restarted. Continue where you stopped.`;
+	return fromTheShell(`The Claude API sent no answer for ${seconds}s; the turn was restarted. Continue where you stopped.`);
 }
 
 /** What the owner sees when the shell recovers a stall. */

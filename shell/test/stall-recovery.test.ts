@@ -21,7 +21,7 @@ test("a direct provider with no thinking keeps stall_seconds; the bridge or a th
 	assert.equal(stallThreshold({ provider: "anthropic" }, "off", { stall: 0, thinking: 300 }), 0);
 });
 
-test("the notice and the continue text are unchanged and name the real seconds", () => {
+test("the notice and the continue text name the real seconds; the continue, sent as user text, carries the shell's mark (T194)", () => {
 	assert.equal(stallNotice(75), "Claude API did not answer in 75s; retried");
-	assert.equal(stallContinueText(300), "The Claude API sent no answer for 300s; the turn was restarted. Continue where you stopped.");
+	assert.equal(stallContinueText(300), "[From the Jhon shell, not the owner; it does not set the reply language] The Claude API sent no answer for 300s; the turn was restarted. Continue where you stopped.");
 });

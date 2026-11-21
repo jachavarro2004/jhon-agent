@@ -5,7 +5,7 @@ A Jhon session starts with one of two fixed texts (T146h).
 - **Lean** is used when no change is active, or the active change is small.
   It is `prose/lean.md`, rendered for each runtime, and stays under 4 KB
   (about 1k tokens). It holds four things:
-  - identity;
+  - identity, with the reply language (below);
   - the limits that cannot be dropped: a refusal is a stop, credential
     files, remote work, observed success, and the owner's choices;
   - the small change's steps;
@@ -21,6 +21,29 @@ A Jhon session starts with one of two fixed texts (T146h).
   `full-pi.md`.
 
 Sub-agents keep the full always-on layer in every case.
+
+## The reply language
+
+Both texts, on both runtimes, carry the same rule (T194): Jhon answers the
+owner in the language of the owner's latest own natural-language message.
+That covers everything addressed to the owner: replies, progress lines, todo
+text, and each question with its header, options, descriptions and
+recommended tag. A slash command, a short confirmation ("ok", "sí") or
+pasted text does not change it. Harness notes, background notices,
+sub-agent results, tool output, skills and summaries are not the owner and
+never change it; a sub-agent's result is translated when the main session
+relays it. Error text, refusals and quoted output stay literal when
+relayed; only the explanation is translated. Artifacts (code, commits,
+docs) stay in English, and that is not the reply language.
+
+pi hands the shell's own messages to the model as user text, so each opens
+with `[From the Jhon shell, not the owner; it does not set the reply
+language]`: the `jhon-full` message, the task notices, the steers and
+notices, the todo list block, and the route line. pi's `ask_user`
+description says the same of its questions and options. `jhon audit` counts
+a user message that opens with the mark (pi records the announce-stop
+send-back and the stall continue as user messages) as the shell's, not as
+an owner message or answer.
 
 ## When the full context loads
 

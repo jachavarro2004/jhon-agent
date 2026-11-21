@@ -6,6 +6,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/rename"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -125,9 +126,10 @@ var (
 	// it ended, opens with the same task (details jhonTasks.id, kind agent)
 	// and how it ended, its answer after a blank line
 	// (shell/lib/background-tasks-tools.ts taskText); one still running, or
-	// stopped before its answer, gave none.
+	// stopped before its answer, gave none. The notice opens with the shell's
+	// mark (ShellMark, T194); task_result's answer does not.
 	agentStarted = lazyre.New(`^Started background sub-agent (\S+) \(`)
-	agentEnded   = lazyre.New(`^Background sub-agent (\S+) \([^)\n]*\) (?:completed|failed)\b`)
+	agentEnded   = lazyre.New(`^(?:` + regexp.QuoteMeta(ShellMark) + ` )?Background sub-agent (\S+) \([^)\n]*\) (?:completed|failed)\b`)
 )
 
 // startedTask is the background task a subagent call's result says it
