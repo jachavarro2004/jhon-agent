@@ -560,6 +560,16 @@ function suite(): void {
 		if (process.platform !== "linux" || !existsSync(bin) || !bash) { t.skip(`needs Linux, /bin/bash and the tree's jhon (JHON_TEST_BIN or build/jhon): ${bin}`); return; }
 		const d = scratch(t, "jhon-sbx-real-");
 		spawnSync("git", ["init", "-q"], { cwd: d });
+		// jhon sandbox run refuses a settings file a sandboxed command could
+		// rewrite, and /tmp and $TMPDIR are writable inside: the isolated file
+		// (under tmpdir()) would stop every run (exit 126). This run's file
+		// lives in the tree's build folder, outside the scratch project.
+		mkdirSync(join(REPO, "build"), { recursive: true });
+		const settingsDir = mkdtempSync(join(REPO, "build", "jhon-sbx-settings-"));
+		const settingsWas = process.env.JHON_SETTINGS;
+		t.after(() => { process.env.JHON_SETTINGS = settingsWas; rmSync(settingsDir, { recursive: true, force: true }); });
+		writeFileSync(join(settingsDir, "settings.toml"), '[sandbox]\nmode = "off"\n');
+		process.env.JHON_SETTINGS = join(settingsDir, "settings.toml");
 		const pin = await readSandboxStatus({ jhon: bin }, d);
 		if ("unread" in pin || !pin.canRun) { t.skip(`bubblewrap cannot run here, so stopping a sandboxed program is not proven on this machine: ${"unread" in pin ? pin.unread : `${pin.reason}; ${pin.fix}`}`); return; }
 		const operations = sandboxOperations({ jhon: bin, project: d });
@@ -576,10 +586,14 @@ function suite(): void {
 		const aborted = operations.exec(program("abort"), d, { onData: (b) => { output += b; }, signal: abort.signal, env });
 		await started("abort");
 		assert.ok(pids("abort").every(alive));
+		// jhon sandbox run copies the program's output through: the pid file can
+		// show before the echo reached this side, and the abort kills the copy.
+		await waitFor(() => output.length > 0, "abort: the sandboxed program's first line arrived");
+		assert.equal(output, "token:unset\n", "the program ran inside the sandbox");
 		abort.abort();
 		await assert.rejects(aborted, { message: "aborted" });
 		await gone("abort");
-		assert.equal(output, "token:unset\n", "the program ran inside the sandbox");
+		assert.equal(output, "token:unset\n", "nothing more came after the abort");
 
 		const timed = operations.exec(program("timeout"), d, { onData: () => {}, timeout: 2, env });
 		await started("timeout");
