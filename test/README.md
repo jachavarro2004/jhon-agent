@@ -20,6 +20,7 @@ jhon-shell's tests in `shell/test/`, and the coverage matrix), or one area with
 | `hooks/` | The repository's own git hooks: `tools/git-hooks/pre-push` runs its checks once per sha. |
 | `audit/` | `jhon audit` on recorded sessions, the dashboard, and the MCP server. |
 | `dashboard/` | `jhon dashboard --port` on a held port: an older Jhon dashboard replaced, one from this release left running, anything not proven Jhon's reported and untouched. |
+| `install/` | The installers, outside Go: `install.sh` runs in full and `install.ps1` is checked statically (`python3 -I -m unittest discover -s test/install -p 'test_*.py'`); its README is the release and install guide. |
 | `support/` | What the Go tests share: the binary (built once per run), the process runner, git fixtures, and a copy of the repository for tests that edit it. |
 | `testdata/` | The data the tests read (below). |
 
