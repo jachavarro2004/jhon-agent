@@ -12,8 +12,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,6 +35,24 @@ func js(t testing.TB, v any) string {
 		t.Fatal(err)
 	}
 	return strings.TrimSuffix(b.String(), "\n")
+}
+
+var goCacheOnce = sync.OnceValues(func() (string, error) {
+	out, err := exec.Command("go", "env", "GOCACHE").Output()
+	return strings.TrimSpace(string(out)), err
+})
+
+// goCache is this process's go build cache, for a fixture whose HOME does
+// not exist (sgHome): go derives its cache from XDG_CACHE_HOME, else HOME,
+// and with neither writable every go command fails before it runs. A
+// machine that sets XDG_CACHE_HOME hid that; a CI runner does not set it.
+func goCache(t testing.TB) string {
+	t.Helper()
+	dir, err := goCacheOnce()
+	if err != nil || !filepath.IsAbs(dir) {
+		t.Fatalf("go env GOCACHE: %q, %v", dir, err)
+	}
+	return dir
 }
 
 // hook runs `jhon hook <name> <args>` with stdin (a string as is, anything

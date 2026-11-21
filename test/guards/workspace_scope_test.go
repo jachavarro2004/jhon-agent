@@ -27,7 +27,10 @@ func newWorkspace(t *testing.T, config string) wsFixture {
 	// (project.TmpRoots), so a sibling there would never be outside.
 	scratch := outsideTemp(t)
 	w := wsFixture{app: filepath.Join(scratch, "app"), lib: filepath.Join(scratch, "lib"), web: filepath.Join(scratch, "web"), other: filepath.Join(scratch, "other")}
-	w.env = support.Env("HOME="+sgHome, "XDG_STATE_HOME="+filepath.Join(scratch, "state"), "TMPDIR="+mkdir(t, filepath.Join(scratch, "tmp")), "JHON_ROOT="+support.Root())
+	// A member's checks run its toolchain under this env: go vet needs a
+	// build cache, which HOME, a folder that does not exist, cannot hold
+	// (goCache).
+	w.env = support.Env("HOME="+sgHome, "XDG_STATE_HOME="+filepath.Join(scratch, "state"), "TMPDIR="+mkdir(t, filepath.Join(scratch, "tmp")), "JHON_ROOT="+support.Root(), "GOCACHE="+goCache(t))
 	for _, d := range []string{w.app, w.lib, w.web, w.other} {
 		support.Write(t, d, map[string]string{"src/a.py": "X = 1\n"})
 		support.GitRepo(t, d)
