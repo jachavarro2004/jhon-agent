@@ -8,6 +8,6 @@ Closes #
 
 <!-- The tests you added or ran, and anything you checked by hand. -->
 
-- [ ] `jhon validate` and `jhon test` pass
+- [ ] The checks in [CONTRIBUTING.md](https://github.com/jachavarro2004/jhon-agent/blob/main/CONTRIBUTING.md#pull-requests) pass (`jhon validate`, `jhon test`, and the shell's when it changed)
 - [ ] Tests cover the change (written first for a behaviour change)
 - [ ] Docs and help text describe the change
