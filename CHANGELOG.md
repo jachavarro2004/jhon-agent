@@ -63,6 +63,7 @@ All notable changes to Jhon are recorded here. The format follows
 
 ### Fixed
 
+- Sandbox: a settings file `JHON_SETTINGS` names in a folder a sandboxed command may write (the project, `/tmp`, `$TMPDIR`, the caches, a `sandbox.allow_write` folder), or reached through one by a link, can no longer turn the sandbox off: a command could create it, or rename its folder and write a new one, with `[sandbox] mode = "off"`. `jhon sandbox run` now runs nothing while that is so, or while `JHON_SETTINGS` is a relative path or one under `/proc` (another file for each folder a later `jhon` starts in), and exits 126 with the fix: keep the file outside those folders, or unset `JHON_SETTINGS`. A `JHON_SETTINGS` file outside them and the default `~/.config/jhon/settings.toml` are read and kept read-only as before (sandbox-deploy-tools S9).
 - Customize → Keys refuses a key pi already uses in the editor, the app or the fullscreen transcript, naming pi's action, and writes nothing (T165, L1438).
 - Docs: `shell.appearance.density = "minimal"` is described as what it does: it spaces like `compact` and keeps bash tool cards quiet. Nothing changed in the shell (T168, L1443).
 - `jhon context --handoff`: decisions_note now names why Engram could not be asked (not found, exit code with its first stderr line, timeout, or output over 1 MiB); an Engram that finds nothing still gives an empty list. asked-operations: ambient credentials and sessions are still not permission, and an owner-approved operation now uses them without asking again (T163, L1421, L1430).
