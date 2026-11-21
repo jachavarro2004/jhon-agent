@@ -18,7 +18,7 @@ import type { TUI } from "@earendil-works/pi-tui";
 import { knownAgents, resolveAgent } from "../agents.ts";
 import { SessionProfile, type ProfilesJson } from "../session-profile.ts";
 import type { ShellSettings } from "../settings.ts";
-import { withOverlayRepaint } from "./overlay-repaint.ts";
+import { CARD_OVERLAY, closeWithRepaint } from "./overlay.ts";
 import { barWindows, usageFromCodexEvent, usageFromHeaders, usageScope, usageTimeoutMs, UsageTracker, USAGE_SOURCE_EVENT, type BarWindow } from "./usage.ts";
 import { UsageOverlay } from "./usage-view.ts";
 
@@ -52,7 +52,7 @@ export interface UsageShell {
 }
 
 /** The overlay's size, as Customize's. */
-const OVERLAY = { overlay: true, overlayOptions: { anchor: "center", width: "70%", minWidth: 60, maxHeight: "85%" } } as const;
+const OVERLAY = CARD_OVERLAY;
 
 export function installUsage(pi: ExtensionAPI, env: NodeJS.ProcessEnv, deps: UsageShellDeps): UsageShell {
 	let repaintOverlay: (() => void) | undefined;
@@ -105,7 +105,7 @@ export function installUsage(pi: ExtensionAPI, env: NodeJS.ProcessEnv, deps: Usa
 	// It opens at once on what the tracker holds and repaints as the forced refresh settles.
 	const open = (ctx: ExtensionContext) => ctx.ui.custom<null>((tui: TUI, theme, _keys, done) => {
 		let scope = scopeOf(ctx);
-		const close = withOverlayRepaint(tui, done);
+		const close = closeWithRepaint(tui, done);
 		const view = new UsageOverlay({
 			tracker, theme, now: deps.now,
 			scope: () => scope,

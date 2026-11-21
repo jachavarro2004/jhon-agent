@@ -7,7 +7,7 @@
  * already owns the key, or a `jhon` command such as the mode's changeMode).
  */
 import type { SettingsKey, SettingValue, ShellSettings } from "../../settings.ts";
-import type { AnimationPolicy } from "../animation-policy.ts";
+import type { AnimationPolicy } from "../appearance-policy.ts";
 import type { DoubleEscCancelPolicy } from "../double-esc-cancel-policy.ts";
 import type { SettingRow } from "../settings-view.ts";
 

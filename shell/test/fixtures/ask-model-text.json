@@ -1,0 +1,828 @@
+{
+	"definitions": {
+		"main": {
+			"name": "ask_user",
+			"label": "Ask the owner",
+			"description": "Ask the owner 1 to 4 questions and wait. Each takes 2 to 4 options (label, meaning) or none for a free answer; a typed answer is always offered, so never add one. multiSelect allows several picks. Put a recommended option first, its label ending in \"(Recommended)\". Only the interactive main session can ask.",
+			"parameters": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [
+					"questions"
+				],
+				"properties": {
+					"questions": {
+						"type": "array",
+						"minItems": 1,
+						"maxItems": 4,
+						"items": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": [
+								"question"
+							],
+							"properties": {
+								"question": {
+									"type": "string",
+									"description": "The question, complete enough to answer without other context."
+								},
+								"header": {
+									"type": "string",
+									"maxLength": 12,
+									"description": "A short label for it, e.g. \"Library\"."
+								},
+								"options": {
+									"type": "array",
+									"minItems": 2,
+									"maxItems": 4,
+									"description": "The choices; omit them for a free answer.",
+									"items": {
+										"type": "object",
+										"additionalProperties": false,
+										"required": [
+											"label"
+										],
+										"properties": {
+											"label": {
+												"type": "string",
+												"description": "The choice, in a few words."
+											},
+											"description": {
+												"type": "string",
+												"description": "What choosing it means, and its trade-off."
+											}
+										}
+									}
+								},
+								"multiSelect": {
+									"type": "boolean",
+									"description": "The owner may pick several options."
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"child": {
+			"name": "ask_user",
+			"label": "Ask the owner",
+			"description": "Ask the owner 1 to 4 questions and wait. Each takes 2 to 4 options (label, meaning) or none for a free answer; a typed answer is always offered, so never add one. multiSelect allows several picks. Put a recommended option first, its label ending in \"(Recommended)\". Only the interactive main session can ask.",
+			"parameters": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [
+					"questions"
+				],
+				"properties": {
+					"questions": {
+						"type": "array",
+						"minItems": 1,
+						"maxItems": 4,
+						"items": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": [
+								"question"
+							],
+							"properties": {
+								"question": {
+									"type": "string",
+									"description": "The question, complete enough to answer without other context."
+								},
+								"header": {
+									"type": "string",
+									"maxLength": 12,
+									"description": "A short label for it, e.g. \"Library\"."
+								},
+								"options": {
+									"type": "array",
+									"minItems": 2,
+									"maxItems": 4,
+									"description": "The choices; omit them for a free answer.",
+									"items": {
+										"type": "object",
+										"additionalProperties": false,
+										"required": [
+											"label"
+										],
+										"properties": {
+											"label": {
+												"type": "string",
+												"description": "The choice, in a few words."
+											},
+											"description": {
+												"type": "string",
+												"description": "What choosing it means, and its trade-off."
+											}
+										}
+									}
+								},
+								"multiSelect": {
+									"type": "boolean",
+									"description": "The owner may pick several options."
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"refused": [
+		"ask_user needs 1 to 4 questions",
+		"ask_user needs 1 to 4 questions",
+		"ask_user needs 1 to 4 questions",
+		"ask_user: question 1 has no question",
+		"ask_user: question 1 has no question",
+		"ask_user: question 1 has no question",
+		"ask_user: question 1's header must be text of at most 12 characters",
+		"ask_user: question 1's header must be text of at most 12 characters",
+		"ask_user: question 1 offers 2 to 4 options, or none for a free answer",
+		"ask_user: question 1 offers 2 to 4 options, or none for a free answer",
+		"ask_user: question 1 offers 2 to 4 options, or none for a free answer",
+		"ask_user: every option of question 1 needs a label",
+		"ask_user: every option of question 1 needs a label",
+		"ask_user: an option's description of question 1 must be text",
+		"ask_user: question 1 repeats the option \"a\"",
+		"ask_user: question 1's multiSelect must be true or false",
+		"ask_user: question 1 is a multiple choice with no options",
+		"ask_user: question 2 has no question"
+	],
+	"rounds": [
+		{
+			"round": "single by keys",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which route? → B"
+			},
+			"asked": [
+				[
+					"custom"
+				]
+			]
+		},
+		{
+			"round": "single by keys",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which route? → B"
+			},
+			"asked": [
+				[
+					"select",
+					"Route: Which route?",
+					[
+						"A — the first",
+						"B",
+						"Write my own answer."
+					]
+				]
+			]
+		},
+		{
+			"round": "single by click",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which route? → C"
+			},
+			"asked": [
+				[
+					"custom"
+				]
+			]
+		},
+		{
+			"round": "single by click",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which route? → C"
+			},
+			"asked": [
+				[
+					"select",
+					"Which route?",
+					[
+						"A",
+						"B",
+						"C",
+						"Write my own answer."
+					]
+				]
+			]
+		},
+		{
+			"round": "described option",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which database? → Postgres (Recommended)"
+			},
+			"asked": [
+				[
+					"custom"
+				]
+			]
+		},
+		{
+			"round": "described option",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which database? → Postgres (Recommended)"
+			},
+			"asked": [
+				[
+					"select",
+					"Database: Which database?",
+					[
+						"Postgres (Recommended) — keeps the joins",
+						"SQLite",
+						"Write my own answer."
+					]
+				]
+			]
+		},
+		{
+			"round": "typed answer",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which cache? → Valkey (typed)"
+			},
+			"asked": [
+				[
+					"custom"
+				],
+				[
+					"input",
+					"Which cache?",
+					""
+				]
+			]
+		},
+		{
+			"round": "typed answer",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which cache? → Valkey (typed)"
+			},
+			"asked": [
+				[
+					"select",
+					"Which cache?",
+					[
+						"Redis",
+						"None",
+						"Write my own answer."
+					]
+				],
+				[
+					"input",
+					"Which cache?",
+					""
+				]
+			]
+		},
+		{
+			"round": "typed answer left blank",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"Which cache?\" without answering, and was asked nothing more."
+			},
+			"asked": [
+				[
+					"custom"
+				],
+				[
+					"input",
+					"Which cache?",
+					""
+				]
+			]
+		},
+		{
+			"round": "typed answer left blank",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"Which cache?\" without answering, and was asked nothing more."
+			},
+			"asked": [
+				[
+					"select",
+					"Which cache?",
+					[
+						"Redis",
+						"None",
+						"Write my own answer."
+					]
+				],
+				[
+					"input",
+					"Which cache?",
+					""
+				]
+			]
+		},
+		{
+			"round": "free answer",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- When should it back up? → every night"
+			},
+			"asked": [
+				[
+					"input",
+					"When should it back up?",
+					""
+				]
+			]
+		},
+		{
+			"round": "free answer",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- When should it back up? → every night"
+			},
+			"asked": [
+				[
+					"input",
+					"When should it back up?",
+					""
+				]
+			]
+		},
+		{
+			"round": "free answer dismissed",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"When should it back up?\" without answering, and was asked nothing more."
+			},
+			"asked": [
+				[
+					"input",
+					"When should it back up?",
+					""
+				]
+			]
+		},
+		{
+			"round": "free answer dismissed",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"When should it back up?\" without answering, and was asked nothing more."
+			},
+			"asked": [
+				[
+					"input",
+					"When should it back up?",
+					""
+				]
+			]
+		},
+		{
+			"round": "three questions",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which database? → Postgres (Recommended)\n- Which cache? → Valkey (typed)\n- When should it back up? → every night"
+			},
+			"asked": [
+				[
+					"custom"
+				],
+				[
+					"custom"
+				],
+				[
+					"input",
+					"(2/3) Which cache?",
+					""
+				],
+				[
+					"input",
+					"(3/3) When should it back up?",
+					""
+				]
+			]
+		},
+		{
+			"round": "three questions",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which database? → Postgres (Recommended)\n- Which cache? → Valkey (typed)\n- When should it back up? → every night"
+			},
+			"asked": [
+				[
+					"select",
+					"(1/3) Database: Which database?",
+					[
+						"Postgres (Recommended) — keeps the joins",
+						"SQLite",
+						"Write my own answer."
+					]
+				],
+				[
+					"select",
+					"(2/3) Which cache?",
+					[
+						"Redis",
+						"None",
+						"Write my own answer."
+					]
+				],
+				[
+					"input",
+					"(2/3) Which cache?",
+					""
+				],
+				[
+					"input",
+					"(3/3) When should it back up?",
+					""
+				]
+			]
+		},
+		{
+			"round": "multiple choice",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which checks? → unit; e2e (typed)"
+			},
+			"asked": [
+				[
+					"custom"
+				],
+				[
+					"custom"
+				],
+				[
+					"custom"
+				],
+				[
+					"custom"
+				],
+				[
+					"input",
+					"Which checks?",
+					""
+				],
+				[
+					"custom"
+				]
+			]
+		},
+		{
+			"round": "multiple choice",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which checks? → unit; e2e (typed)"
+			},
+			"asked": [
+				[
+					"select",
+					"Which checks?\n(pick any; Done when finished)",
+					[
+						"[ ] lint",
+						"[ ] unit — fast",
+						"[ ] types",
+						"Write my own answer.",
+						"Done"
+					]
+				],
+				[
+					"select",
+					"Which checks?\n(pick any; Done when finished)",
+					[
+						"[x] lint",
+						"[ ] unit — fast",
+						"[ ] types",
+						"Write my own answer.",
+						"Done"
+					]
+				],
+				[
+					"select",
+					"Which checks?\n(pick any; Done when finished)",
+					[
+						"[x] lint",
+						"[x] unit — fast",
+						"[ ] types",
+						"Write my own answer.",
+						"Done"
+					]
+				],
+				[
+					"select",
+					"Which checks?\n(pick any; Done when finished)",
+					[
+						"[ ] lint",
+						"[x] unit — fast",
+						"[ ] types",
+						"Write my own answer.",
+						"Done"
+					]
+				],
+				[
+					"input",
+					"Which checks?",
+					""
+				],
+				[
+					"select",
+					"Which checks?\n(pick any; Done when finished)",
+					[
+						"[ ] lint",
+						"[x] unit — fast",
+						"[ ] types",
+						"Write my own answer.",
+						"Done"
+					]
+				]
+			]
+		},
+		{
+			"round": "multiple choice, none chosen",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which checks? → (none chosen)"
+			},
+			"asked": [
+				[
+					"custom"
+				]
+			]
+		},
+		{
+			"round": "multiple choice, none chosen",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner answered:\n- Which checks? → (none chosen)"
+			},
+			"asked": [
+				[
+					"select",
+					"Which checks?\n(pick any; Done when finished)",
+					[
+						"[ ] lint",
+						"[ ] unit",
+						"Write my own answer.",
+						"Done"
+					]
+				]
+			]
+		},
+		{
+			"round": "multiple choice dismissed",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"Which checks?\" without answering, and was asked nothing more."
+			},
+			"asked": [
+				[
+					"custom"
+				],
+				[
+					"custom"
+				]
+			]
+		},
+		{
+			"round": "multiple choice dismissed",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"Which checks?\" without answering, and was asked nothing more."
+			},
+			"asked": [
+				[
+					"select",
+					"Which checks?\n(pick any; Done when finished)",
+					[
+						"[ ] lint",
+						"[ ] unit",
+						"Write my own answer.",
+						"Done"
+					]
+				],
+				[
+					"select",
+					"Which checks?\n(pick any; Done when finished)",
+					[
+						"[x] lint",
+						"[ ] unit",
+						"Write my own answer.",
+						"Done"
+					]
+				]
+			]
+		},
+		{
+			"round": "dismissed second",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"Second?\" without answering, and was asked nothing more. Answered before that:\n- First? → a"
+			},
+			"asked": [
+				[
+					"custom"
+				],
+				[
+					"custom"
+				]
+			]
+		},
+		{
+			"round": "dismissed second",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"Second?\" without answering, and was asked nothing more. Answered before that:\n- First? → a"
+			},
+			"asked": [
+				[
+					"select",
+					"(1/3) First?",
+					[
+						"a",
+						"b",
+						"Write my own answer."
+					]
+				],
+				[
+					"select",
+					"(2/3) Second?",
+					[
+						"c",
+						"d",
+						"Write my own answer."
+					]
+				]
+			]
+		},
+		{
+			"round": "dismissed first",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"First?\" without answering, and was asked nothing more."
+			},
+			"asked": [
+				[
+					"custom"
+				]
+			]
+		},
+		{
+			"round": "dismissed first",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"First?\" without answering, and was asked nothing more."
+			},
+			"asked": [
+				[
+					"select",
+					"First?",
+					[
+						"a",
+						"b",
+						"Write my own answer."
+					]
+				]
+			]
+		},
+		{
+			"round": "aborted",
+			"path": "view",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"First?\" without answering, and was asked nothing more."
+			},
+			"asked": [
+				[
+					"custom"
+				]
+			]
+		},
+		{
+			"round": "aborted",
+			"path": "dialog",
+			"outcome": {
+				"ok": true,
+				"text": "The owner dismissed \"First?\" without answering, and was asked nothing more."
+			},
+			"asked": [
+				[
+					"select",
+					"First?",
+					[
+						"a",
+						"b",
+						"Write my own answer."
+					]
+				]
+			]
+		},
+		{
+			"round": "child",
+			"path": "view",
+			"outcome": {
+				"ok": false,
+				"text": "ask_user: this is a sub-agent, and no one can answer it here; decide from the task, or end and report the open question to the session that started you"
+			},
+			"asked": []
+		},
+		{
+			"round": "child",
+			"path": "dialog",
+			"outcome": {
+				"ok": false,
+				"text": "ask_user: this is a sub-agent, and no one can answer it here; decide from the task, or end and report the open question to the session that started you"
+			},
+			"asked": []
+		},
+		{
+			"round": "headless",
+			"path": "view",
+			"outcome": {
+				"ok": false,
+				"text": "ask_user: this session is not interactive, so no one can answer; decide from what you have, or end and report the open question"
+			},
+			"asked": []
+		},
+		{
+			"round": "headless",
+			"path": "dialog",
+			"outcome": {
+				"ok": false,
+				"text": "ask_user: this session is not interactive, so no one can answer; decide from what you have, or end and report the open question"
+			},
+			"asked": []
+		},
+		{
+			"round": "no ui",
+			"path": "view",
+			"outcome": {
+				"ok": false,
+				"text": "ask_user: this session is not interactive, so no one can answer; decide from what you have, or end and report the open question"
+			},
+			"asked": []
+		},
+		{
+			"round": "no ui",
+			"path": "dialog",
+			"outcome": {
+				"ok": false,
+				"text": "ask_user: this session is not interactive, so no one can answer; decide from what you have, or end and report the open question"
+			},
+			"asked": []
+		}
+	],
+	"executions": [
+		{
+			"error": "ask_user needs 1 to 4 questions"
+		},
+		{
+			"error": "ask_user: this session is not interactive, so no one can answer; decide from what you have, or end and report the open question"
+		},
+		{
+			"ok": {
+				"content": [
+					{
+						"type": "text",
+						"text": "The owner answered:\n- Which? → soon"
+					}
+				]
+			}
+		},
+		{
+			"ok": {
+				"content": [
+					{
+						"type": "text",
+						"text": "The owner dismissed \"Which?\" without answering, and was asked nothing more."
+					}
+				]
+			}
+		}
+	]
+}

@@ -128,12 +128,12 @@ test("alt+j opens the change's detail as one overlay: the header names the chang
   await flush();
   let lines = panel.render(80);
   assert.match(lines[0]!, /^╭─+╮$/, "the border carries no title");
-  assert.match(lines[1]!, /^│ {3}LDD +│$/, "the view's one tab, as G's profiles view (L174)");
+  assert.match(lines[1]!, /^│ {2}LDD +│$/, "the view's one tab (design 10)");
   assert.match(lines[3]!, /^│ {2}LDD · abc-process-exercises +│$/, "named as LDD's (L174)");
   assert.doesNotMatch(lines.join("\n"), /Profiles|Grants|Audit|Memory/, "no other tabs");
   assert.equal(lines.length, 11, "the terminal's rows");
   assert.doesNotMatch(lines.join("\n"), /◆ abc-process-exercises/, "the header names the change once (L119)");
-  assert.match(lines[5]!, /^│ verified route · strict TDD +│$/, "the body starts with the route");
+  assert.match(lines[5]!, /^│ {2}verified route · strict TDD +│$/, "the body starts with the route, one cell in");
   assert.match(hintRow(lines), /↑\/↓ scroll {2}t tests {2}r refresh {2}esc close/);
   assert.match(lines.at(-1)!, /^╰─+╯$/);
   panel.handleInput("j");
@@ -165,7 +165,7 @@ test("the LDD detail takes the terminal's rows as G's profiles view (L174): the 
   assert.notEqual(next[5], first[5], "the body scrolled");
   const loading = make(30, () => new Promise(() => {})).render(80);
   assert.equal(loading.length, 30);
-  assert.ok(loading.slice(10, -1).every((line) => /^│ +│$/.test(line)), "blank rows below, as G pads its body");
+  assert.ok(loading.slice(10, -5).every((line) => /^│ +│$/.test(line)), "blank rows below the body, the keys at the bottom (design 10)");
 });
 
 test("Grants lists every class with its state in this project, and gives or revokes one only after a confirming key", async () => {
@@ -192,7 +192,7 @@ test("Grants lists every class with its state in this project, and gives or revo
   assert.match(text, /· gh-write +not granted/);
   assert.doesNotMatch(text, /bypass-session|never asks permission|no safety net/, "bypass-session is gone (S31)");
   // L175 (7): every live grant, its class, scope and expiry, before the classes.
-  assert.match(text, /│ Active grants · 2 +│\n│ {3}push +acme · this project +until \d\d:\d\d · 2[34] min +│\n│ {3}push +other · \/p\/other +until \d\d:\d\d · (9|10) min +│/);
+  assert.match(text, /│ {2}Active grants · 2 +│\n│ {4}push +acme · this project +until \d\d:\d\d · 2[34] min +│\n│ {4}push +other · \/p\/other +until \d\d:\d\d · (9|10) min +│/);
   assert.doesNotMatch(text, /deploy +[^\n]*until/, "an expired grant is not active");
   assert.doesNotMatch(text, /Other projects/, "the list says them");
   assert.match(text, /Duration +30 min/);
@@ -237,7 +237,7 @@ test("/jhon:grants with no live grant says so under Active grants (L175)", async
   panel.open();
   await flush();
   const text = panel.render(90).join("\n");
-  assert.match(text, /│ Active grants · 0 +│\n│ {3}No active grants: enter on a class below gives one\. +│/);
+  assert.match(text, /│ {2}Active grants · 0 +│\n│ {4}No active grants: enter on a class below gives one\. +│/);
   assert.match(text, /Grants · 1\/1/, "the classes still follow");
 });
 
@@ -273,7 +273,7 @@ test("t runs the change's tests in the background and the detail shows the run a
   now += 75_000;
   end();
   let lines = panel.render(100);
-  assert.match(lines.join("\n"), /Tests[^\n]*\n│ ◐ running 1m 15s of ~14 min · also in BACKGROUND/);
+  assert.match(lines.join("\n"), /Tests[^\n]*\n│ {2}◐ running 1m 15s of ~14 min · also in BACKGROUND/);
   assert.match(hintRow(lines), /s stop tests/);
   panel.handleInput("t");
   assert.equal(started.length, 1, "one run at a time");
@@ -378,8 +378,8 @@ test("a message with newlines stays one row inside the frame", async () => {
   await flush();
   const lines = panel.render(80);
   assert.ok(lines.every((l) => !l.includes("\n") && visibleWidth(l) <= 80), JSON.stringify(lines));
-  assert.match(lines[5]!, /^│ ✗ Could not read the change +│$/, "the error is a state block: what failed, bold bad");
-  assert.match(lines[6]!, /^│   \{ "ok": false, "change": null \} +│$/, "the cause on its own row, hanging");
+  assert.match(lines[5]!, /^│ {2}✗ Could not read the change +│$/, "the error is a state block: what failed, bold bad");
+  assert.match(lines[6]!, /^│ {4}\{ "ok": false, "change": null \} +│$/, "the cause on its own row, hanging");
   assert.match(hintRow(lines), /^│  r retry {2}esc close +│$/, "only the keys that act");
 });
 

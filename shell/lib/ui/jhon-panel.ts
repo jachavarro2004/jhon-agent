@@ -25,8 +25,9 @@ import { ProfilesCard, type ProfilesData } from "./jhon-panel-profiles.ts";
 import { changeCardLines } from "./jhon-panel-change.ts";
 import { GrantsCard, type GrantsData } from "./jhon-panel-grants.ts";
 import { TestsCard, type TestsData } from "./jhon-panel-tests.ts";
-import { asciiText, renderBox, renderStateBlock, themePainter, type KeyHint } from "./primitives/index.ts";
+import { asciiText, renderStateBlock, themePainter, type KeyHint } from "./primitives/index.ts";
 import { fullscreenBodyRows, renderFullscreenView } from "./fullscreen-view.ts";
+import { CARD_BODY_PADDING, renderOverlayCard } from "./overlay.ts";
 
 /** A key hint as G's footers write it, `<Key> <action>`: `esc` → `Esc`, `or` kept. */
 function hintText(hint: KeyHint): string {
@@ -234,7 +235,9 @@ export class JhonPanel {
 		// The LDD detail and the profiles are work views, near full screen as G's profiles view (L174); the grants are the small card.
 		const full = this.view !== "grants";
 		const rows = Math.floor(this.deps.rows?.() ?? this.deps.height());
-		const inner = Math.max(10, width - 4);
+		// The body's cells: the profiles draw their own frame (`│ ` … ` │`); the LDD detail's body
+		// sits one cell further in (fullscreen-view.ts); the grants card's two cells in (overlay.ts).
+		const inner = Math.max(10, width - (this.view === "profiles" ? 4 : full ? 5 : CARD_BODY_PADDING));
 		// G's detailSize: min(24, the rows available).
 		const height = Math.max(8, Math.min(MAX_HEIGHT, Math.floor(this.deps.height())));
 		// The card: the header row and a gap above the body; a gap and the footer below.
@@ -256,10 +259,9 @@ export class JhonPanel {
 					hints: keys.map((hint) => "key" in hint ? `${hint.key} ${hint.action}` : `${hint[0]} ${hint[1]}`), ...(feedback ? { feedback: [feedback.replace(/\s*[\r\n]+\s*/g, " ")] } : {}), ascii,
 				});
 			}
-			// As G's detail card: as tall as its body, never past the height.
-			const head = cut(title, Math.max(1, inner - 4), ascii);
+			// The card (design 12): as tall as its body, never past the height.
 			const footer = keys.map(hintText).join(" · ");
-			return renderBox([t.fg("accent", head + " ".repeat(Math.max(1, inner - visibleWidth(head) - 3)) + "esc"), "", ...fitted, "", t.fg("muted", fitRow(footer))], width, t, ascii);
+			return renderOverlayCard({ title, body: ["", ...fitted, "", t.fg("muted", fitRow(footer))], width, theme: t, ascii });
 		};
 		const close: KeyHint = ["esc", "close"];
 		const move = ascii ? "up/down" : "↑/↓";

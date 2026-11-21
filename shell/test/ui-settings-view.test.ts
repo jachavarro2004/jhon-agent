@@ -62,7 +62,7 @@ const plainLines = (v: SettingsView, width = 80) => v.render(width).map(stripAns
 /** The footer: the last row inside the card. */
 const footer = (v: SettingsView, width = 80) => plainLines(v, width).at(-2)!;
 
-test("Settings is G's Customization card: `Settings … esc`, CATEGORIES │ `<Category> · n/m`, the values inline, the Preview and `Click · <keys>`, 24 rows at most", () => {
+test("Customize is the overlay card: `Customize … esc`, CATEGORIES │ `<Category> · n/m`, the values inline, the Preview and `Click · <keys>`, 24 rows at most", () => {
 	const { settings } = view();
 	for (const width of [120, 80]) {
 		const lines = plainLines(settings, width);
@@ -70,15 +70,15 @@ test("Settings is G's Customization card: `Settings … esc`, CATEGORIES │ `<C
 		assert.equal(lines.length, 24, "G caps the card at 24 rows");
 		assert.match(lines[0]!, /^╭─+╮$/);
 		assert.match(lines[1]!, /^│ Customize +esc │$/);
-		assert.match(lines[2]!, /^│ CATEGORIES +│ Appearance · 1\/2 +│$/);
-		assert.match(lines[3]!, /^│ +│$/);
-		assert.match(lines[4]!, /^│ ▸ Appearance +│ {3}Animations  ● full  ○ off +│$/, `${width}: the selected category beside its first setting`);
-		assert.match(lines[5]!, /^│ {3}Behaviour +│ {3}Tool icons  ● geometric  ○ emoji +│$/);
-		assert.match(lines[6]!, /^│ {3}Keys +│ +│$/);
+		assert.match(lines[2]!, /^│  CATEGORIES +│ Appearance · 1\/2 +│$/);
+		assert.match(lines[3]!, /^│ +│ +│$/, "the divider runs through the gap");
+		assert.match(lines[4]!, /^│  ▸ Appearance +│ {3}Animations  ● full  ○ off +│$/, `${width}: the selected category beside its first setting`);
+		assert.match(lines[5]!, /^│ {4}Behaviour +│ {3}Tool icons  ● geometric  ○ emoji +│$/);
+		assert.match(lines[6]!, /^│ {4}Keys +│ +│$/);
 		assert.doesNotMatch(text, /Double Esc|Jhon panel/, "only the selected category's settings");
-		assert.match(text, /│ Preview · full · static animation sample +│/);
-		assert.match(text, /│ ◆ ◈ ◇ ◈ Working… +│/);
-		assert.match(footer(settings, width), /^│ Click · ←\/→ or Tab panes · ↑\/↓ moves · Enter applies · Esc closes +│$/);
+		assert.match(text, /│  Preview · full · static animation sample +│/);
+		assert.match(text, /│  ◆ ◈ ◇ ◈ Working… +│/);
+		assert.match(footer(settings, width), /^│  Click · ←\/→ or Tab panes · ↑\/↓ moves · Enter applies · Esc closes +│$/);
 		assert.match(lines.at(-3)!, /^│ +│$/);
 		assert.match(lines.at(-1)!, /^╰─+╯$/);
 		for (const line of settings.render(width)) assert.equal(visibleWidth(line), width, `${width}: ${stripAnsi(line)}`);
@@ -98,7 +98,7 @@ test("ASCII: the + - | card, radios * o, the cursor >, the divider |", () => {
 test("the colour roles, G's: the title row and CATEGORIES accent, the selected row on selectedBg with ▸ accent, ● accent, ○ muted", () => {
 	const settings = new SettingsView({ rows: rows([]), theme: tagged, height: () => 30, group: "appearance", onClose() {}, requestRender() {} });
 	const text = settings.render(400).join("\n");
-	assert.match(text, /<accent>Customize +/);
+	assert.match(text, /<accent><b>Customize<\/b><\/accent> +<accent>esc<\/accent>/);
 	assert.match(text, /<accent>CATEGORIES +<\/accent>/);
 	assert.match(text, /<accent>Appearance · 1\/2 +/);
 	assert.match(text, /\[selectedBg\]<accent>▸ <\/accent><text>Animations  <\/text><accent>● full<\/accent>  <muted>○ off<\/muted>/);
@@ -110,8 +110,8 @@ test("G's keys: ↑/↓ (j/k) wrap through the categories; →, Tab, Enter or Sp
 	const { settings } = view();
 	settings.handleInput(DOWN);
 	let text = plainLines(settings).join("\n");
-	assert.match(text, /│ ▸ Behaviour +│ {3}Compact at \(%\) +60/);
-	assert.match(text, /│ {3}Appearance +│ {3}Double Esc +○ on  ● off/);
+	assert.match(text, /│  ▸ Behaviour +│ {3}Compact at \(%\) +60/);
+	assert.match(text, /│ {4}Appearance +│ {3}Double Esc +○ on  ● off/);
 	assert.match(text, /Behaviour · 1\/2/);
 	settings.handleInput(UP); settings.handleInput(UP);
 	assert.match(plainLines(settings).join("\n"), /▸ Keys/, "up from the first wraps to the last, as G's");
@@ -119,7 +119,7 @@ test("G's keys: ↑/↓ (j/k) wrap through the categories; →, Tab, Enter or Sp
 	assert.match(plainLines(settings).join("\n"), /▸ Appearance/);
 	for (const into of [RIGHT, TAB, ENTER, " "]) {
 		settings.handleInput(into);
-		assert.match(footer(settings), /^│ Click · ↑\/↓ setting · ←\/→ changes it · Tab categories · Esc closes +│$/, "a setting focused");
+		assert.match(footer(settings), /^│  Click · ↑\/↓ setting · ←\/→ changes it · Tab categories · Esc closes +│$/, "a setting focused");
 		settings.handleInput(TAB);
 		assert.match(footer(settings), /Tab panes/);
 	}
@@ -156,7 +156,7 @@ test("Enter on a free value edits it in place, in the Preview's rows: typing, ba
 	const { settings, applied, closed } = view({ group: "behaviour" });
 	settings.handleInput(DOWN);
 	settings.handleInput(ENTER);
-	assert.match(plainLines(settings).join("\n"), /│ Compact at \(%\): 60▏ +│\n│ Enter applies · Esc cancels +│/);
+	assert.match(plainLines(settings).join("\n"), /│  Compact at \(%\): 60▏ +│\n│  Enter applies · Esc cancels +│/);
 	settings.handleInput(BACKSPACE);
 	type(settings, "5");
 	settings.handleInput(ENTER);
@@ -171,21 +171,21 @@ test("Enter on a free value edits it in place, in the Preview's rows: typing, ba
 
 test("the Preview's headline is a focused setting's `<label> — <note>`, else `Preview · <value> · <caption>`", () => {
 	const { settings } = view({ group: "appearance" });
-	assert.match(plainLines(settings).join("\n"), /│ Animations — The prompt's petal: full, or off +│\n│ ◆ ◈ ◇ ◈ Working… +│/);
+	assert.match(plainLines(settings).join("\n"), /│  Animations — The prompt's petal: full, or off +│\n│  ◆ ◈ ◇ ◈ Working… +│/);
 	const keys = view({ group: "keys" });
-	assert.match(plainLines(keys.settings).join("\n"), /│ Preview · alt\+j +│\n│ Applies at the next start; off turns it off +│/);
+	assert.match(plainLines(keys.settings).join("\n"), /│  Preview · alt\+j +│\n│  Applies at the next start; off turns it off +│/);
 });
 
 test(`under ${SETTINGS_TWO_PANES} columns the categories take the card until one is opened, as G's`, () => {
 	const { settings } = view();
 	const lines = plainLines(settings, 50);
-	assert.match(lines[2]!, /^│ Categories · pick one → +│$/);
-	assert.match(lines[4]!, /^│ ▸ Appearance +│$/);
-	assert.match(footer(settings, 50), /^│ Click · ↑\/↓ category · → opens it · Esc closes +│$/);
+	assert.match(lines[2]!, /^│  Categories · pick one → +│$/);
+	assert.match(lines[4]!, /^│  ▸ Appearance +│$/);
+	assert.match(footer(settings, 50), /^│  Click · ↑\/↓ category · → opens it · Esc clo…  │$/, "the body two cells in: the footer is cut at 50 columns");
 	settings.handleInput(RIGHT);
 	const open = plainLines(settings, 50);
-	assert.match(open[2]!, /^│ Appearance · 1\/2 +│$/);
-	assert.match(open[4]!, /^│ ▸ Animations  ● full  ○ off +│$/);
+	assert.match(open[2]!, /^│  Appearance · 1\/2 +│$/);
+	assert.match(open[4]!, /^│  ▸ Animations  ● full  ○ off +│$/);
 	for (const line of settings.render(50)) assert.equal(visibleWidth(line), 50);
 });
 
@@ -229,8 +229,8 @@ test("the real Settings at 186, 120, 80 and 60 columns: previews for animations,
 	const noop = () => {};
 	const real = settingsRows({ settings: memorySettings(), animations: noop, doubleEsc: noop, status: noop, redraw: noop });
 	for (const [cols, termRows] of [[186, 40], [120, 36], [80, 24], [60, 24]] as const) {
-		// G's card: 70% wide, at least 60 columns, 85% of the rows less the border, at most 24.
-		const width = Math.min(cols, Math.max(60, Math.floor(cols * 0.7)));
+		// The card (overlay.ts CARD_OVERLAY): 104 columns or the whole terminal, 85% of the rows less the border, at most 24.
+		const width = Math.min(cols, 104);
 		const height = Math.min(24, Math.floor(termRows * 0.85) - 2);
 		const open = (group: string, down = 0) => {
 			const v = new SettingsView({ rows: real, theme: plain, height: () => height, group, onClose() {}, requestRender() {} });

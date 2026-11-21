@@ -18,8 +18,7 @@ import type { ThemeLike as ShellBarTheme } from "../lib/ui/primitives/index.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
 import { CARD_STYLE, cardStyle, setCardStyle } from "../lib/ui/primitives/index.ts";
 import { chromeSurface, setChromeSurface } from "../lib/ui/shell-panel.ts";
-import { resolveVisualSettings, writeVisualSettings } from "../lib/ui/visual-customization-policy.ts";
-import { resolveAnimationPolicy } from "../lib/ui/animation-policy.ts";
+import { resolveAnimationPolicy, resolveVisualSettings, writeVisualSettings } from "../lib/ui/appearance-policy.ts";
 import { installShellSettings, type SettingValue } from "../lib/settings.ts";
 import { envOverrides, memorySettings } from "./fake-jhon-settings.ts";
 
@@ -2475,7 +2474,7 @@ test("/jhon:customize keys opens Customize on Keys", async (t) => {
 	ui.overlayView!.handleInput("\x1b");
 	await pending;
 	const text = lines.join("\n");
-	assert.match(text, /│ ▸ Keys +│/);
+	assert.match(text, /│ {2}▸ Keys +│/);
 	assert.match(text, /▸ LDD status +alt\+j/);
 	assert.doesNotMatch(text, /Animations|Runtimes|Integrations|Profile/);
 	assert.match(lines.at(-2)!, /Click · ←\/→ or Tab panes · ↑\/↓ moves · Enter applies · Esc closes/, "the footer");
