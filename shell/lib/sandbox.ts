@@ -53,7 +53,7 @@ import { accessSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { createBashToolDefinition, getAgentDir, getShellConfig, SettingsManager, type BashOperations } from "@earendil-works/pi-coding-agent";
 import { HOOK_TIMEOUT_MS, runAsync, type Started } from "./guards.ts";
-import { BASH_BACKGROUND_TOOL, MONITOR_TOOL } from "./ui/background-jobs.ts";
+import { BASH_BACKGROUND_TOOL, MONITOR_TOOL } from "./background-tasks.ts";
 import { SANDBOX_EVENT } from "./events.ts";
 
 /** `jhon sandbox status --json`, as the session keeps it; `unread` when it gave no answer. */

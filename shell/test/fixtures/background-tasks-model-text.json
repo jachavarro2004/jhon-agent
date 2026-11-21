@@ -1,0 +1,2172 @@
+{
+	"definitions": {
+		"tools": [
+			{
+				"name": "bash_background",
+				"label": "Bash (background)",
+				"description": "Run a shell command in the background; returns a task id at once. You are notified once when it exits (exit code, last lines, output file); do not poll, sleep, or delegate a subagent to wait. Use it for anything over about 30 seconds or of unknown duration (CI, builds, long tests, servers); quick checks stay in bash. Make the command's exit the event, e.g. `gh run watch <run-id> --exit-status`. Read its output file with the read tool. task_stop stops it. At most 25 run at once.",
+				"parameters": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": [
+						"command"
+					],
+					"properties": {
+						"command": {
+							"type": "string",
+							"description": "Shell command to run in the background, in the session working directory."
+						},
+						"label": {
+							"type": "string",
+							"maxLength": 80,
+							"description": "Short human-readable label, e.g. 'CI for PR 1834'."
+						}
+					}
+				}
+			},
+			{
+				"name": "monitor",
+				"label": "Monitor",
+				"description": "Run a command in the background and get each output line as an event while it runs. Do not poll or sleep between events. E.g. `tail -f app.log | grep --line-buffered ERROR`. For one result when a command ends, use bash_background instead. Lines within 200 ms arrive as one notice (at most 20). timeout_seconds is mandatory (1-1800); it stops at the timeout or past 120 lines in 60s, so filter the command's output. task_stop stops it.",
+				"parameters": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": [
+						"command",
+						"timeout_seconds"
+					],
+					"properties": {
+						"command": {
+							"type": "string",
+							"description": "Shell command whose output lines are events, run in the session working directory."
+						},
+						"timeout_seconds": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 1800,
+							"description": "Mandatory: stop the monitor after this many seconds."
+						},
+						"label": {
+							"type": "string",
+							"maxLength": 80,
+							"description": "Short human-readable label, e.g. 'CI checks for PR 1842'."
+						}
+					}
+				}
+			},
+			{
+				"name": "task_list",
+				"label": "List background tasks",
+				"description": "List this session's background tasks (commands, monitors, sub-agents) with status and output file.",
+				"parameters": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {}
+				}
+			},
+			{
+				"name": "task_result",
+				"label": "Task result",
+				"description": "Read a background task's status and result: a command's exit and last lines, or a sub-agent's answer. Its end arrives as a message anyway; do not poll.",
+				"parameters": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": [
+						"id"
+					],
+					"properties": {
+						"id": {
+							"type": "string",
+							"description": "The task's id, e.g. job-1 or agent-2."
+						}
+					}
+				}
+			},
+			{
+				"name": "task_stop",
+				"label": "Stop a task",
+				"description": "Stop a background task (a command with its process tree, or a sub-agent). A stopped task sends no notice.",
+				"parameters": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": [
+						"id"
+					],
+					"properties": {
+						"id": {
+							"type": "string",
+							"description": "The task's id, e.g. job-1 or agent-2."
+						}
+					}
+				}
+			}
+		],
+		"commands": [
+			{
+				"name": "jhon:agents",
+				"description": "Agents: sub-agents and their live threads; a shows every session's"
+			},
+			{
+				"name": "jhon:jobs",
+				"description": "Jobs: this session's background commands and monitors, running first"
+			}
+		],
+		"shortcuts": [
+			{
+				"key": "alt+s",
+				"description": "Opens the Agents view (the rail's AGENTS)"
+			},
+			{
+				"key": "alt+o",
+				"description": "Opens the Jobs view (the pane's Jobs)"
+			}
+		],
+		"renderers": [
+			"jhon-tasks.notice"
+		]
+	},
+	"log": [
+		{
+			"tool": "bash_background",
+			"params": {},
+			"error": "bash_background requires a non-empty command"
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "  "
+			},
+			"error": "bash_background requires a non-empty command"
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "make build",
+				"label": "build"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-1 (\"build\").\nOutput: <out>/job-1.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-1",
+						"kind": "command",
+						"label": "build",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-1.log"
+					}
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background job job-1 (\"build\") exited with code 0 after 4s.\nCommand: make build\nLast output:\ncompiled\nok\nFull output: <out>/job-1.log (read it with the read tool if you need more).",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-1",
+							"kind": "command",
+							"label": "build",
+							"status": "exited",
+							"succeeded": true,
+							"exitCode": 0,
+							"outputPath": "<out>/job-1.log"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "false"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-2 (\"false\").\nOutput: <out>/job-2.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-2",
+						"kind": "command",
+						"label": "false",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-2.log"
+					}
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background job job-2 (\"false\") exited with code 2 after 1m 5s.\nCommand: false\nNo output.\nFull output: <out>/job-2.log (read it with the read tool if you need more).",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-2",
+							"kind": "command",
+							"label": "false",
+							"status": "exited",
+							"succeeded": false,
+							"exitCode": 2,
+							"outputPath": "<out>/job-2.log"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "nope",
+				"label": "  "
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-3 (\"nope\").\nOutput: <out>/job-3.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-3",
+						"kind": "command",
+						"label": "nope",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-3.log"
+					}
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background job job-3 (\"nope\") could not run: Working directory does not exist: /missing after 0s.\nCommand: nope\nNo output.\nFull output: <out>/job-3.log (read it with the read tool if you need more).",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-3",
+							"kind": "command",
+							"label": "nope",
+							"status": "failed",
+							"succeeded": false,
+							"exitCode": null,
+							"outputPath": "<out>/job-3.log"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "killed"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-4 (\"killed\").\nOutput: <out>/job-4.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-4",
+						"kind": "command",
+						"label": "killed",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-4.log"
+					}
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background job job-4 (\"killed\") exited without an exit code after 1h 1m.\nCommand: killed\nNo output.\nFull output: <out>/job-4.log (read it with the read tool if you need more).",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-4",
+							"kind": "command",
+							"label": "killed",
+							"status": "exited",
+							"succeeded": false,
+							"exitCode": null,
+							"outputPath": "<out>/job-4.log"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "npm run dev",
+				"label": "dev"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-5 (\"dev\").\nOutput: <out>/job-5.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-5",
+						"kind": "command",
+						"label": "dev",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-5.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_list",
+			"params": {},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "job-1 · command · exited 0 · build · 4s · <out>/job-1.log\njob-2 · command · exited 2 · false · 1m 5s · <out>/job-2.log\njob-3 · command · failed · nope · 0s · <out>/job-3.log\njob-4 · command · exited ? · killed · 1h 1m · <out>/job-4.log\njob-5 · command · running · dev · 0s · <out>/job-5.log"
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"count": 5
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_result",
+			"params": {
+				"id": "job-5"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Background job job-5 (\"dev\") is running (0s).\nCommand: npm run dev\nLast output:\nlistening on 3000\npartial\nFull output: <out>/job-5.log (read it with the read tool if you need more)."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-5",
+						"kind": "command",
+						"label": "dev",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-5.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_result",
+			"params": {
+				"id": "job-1"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Background job job-1 (\"build\") exited with code 0 after 4s.\nCommand: make build\nLast output:\ncompiled\nok\nFull output: <out>/job-1.log (read it with the read tool if you need more)."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-1",
+						"kind": "command",
+						"label": "build",
+						"status": "exited",
+						"succeeded": true,
+						"exitCode": 0,
+						"outputPath": "<out>/job-1.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_result",
+			"params": {
+				"id": "job-404"
+			},
+			"error": "No background task job-404 in this session. task_list lists them."
+		},
+		{
+			"tool": "task_result",
+			"params": {},
+			"error": "No background task undefined in this session. task_list lists them."
+		},
+		{
+			"tool": "task_stop",
+			"params": {
+				"id": "job-5"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Stopped job-5 (\"dev\")."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-5",
+						"kind": "command",
+						"label": "dev",
+						"status": "stopped",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-5.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_stop",
+			"params": {
+				"id": "job-5"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "job-5 (\"dev\") had already been stopped."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-5",
+						"kind": "command",
+						"label": "dev",
+						"status": "stopped",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-5.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_stop",
+			"params": {
+				"id": "job-1"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "job-1 (\"build\") had already ended: exited with code 0."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-1",
+						"kind": "command",
+						"label": "build",
+						"status": "exited",
+						"succeeded": true,
+						"exitCode": 0,
+						"outputPath": "<out>/job-1.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_stop",
+			"params": {
+				"id": "job-3"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "job-3 (\"nope\") had already ended: could not run: Working directory does not exist: /missing."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-3",
+						"kind": "command",
+						"label": "nope",
+						"status": "failed",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-3.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "monitor",
+			"params": {
+				"timeout_seconds": 30
+			},
+			"error": "monitor requires a non-empty command"
+		},
+		{
+			"tool": "monitor",
+			"params": {
+				"command": "x",
+				"timeout_seconds": 0
+			},
+			"error": "timeout_seconds must be a whole number from 1 to 1800."
+		},
+		{
+			"tool": "monitor",
+			"params": {
+				"command": "x",
+				"timeout_seconds": 1801
+			},
+			"error": "timeout_seconds must be a whole number from 1 to 1800."
+		},
+		{
+			"tool": "monitor",
+			"params": {
+				"command": "x",
+				"timeout_seconds": 1.5
+			},
+			"error": "timeout_seconds must be a whole number from 1 to 1800."
+		},
+		{
+			"tool": "monitor",
+			"params": {
+				"command": "x",
+				"timeout_seconds": "30"
+			},
+			"error": "timeout_seconds must be a whole number from 1 to 1800."
+		},
+		{
+			"tool": "monitor",
+			"params": {
+				"command": "tail -f app.log | grep --line-buffered ERROR",
+				"timeout_seconds": 30,
+				"label": "errors"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started monitor job-6 (\"errors\") for up to 30s.\nOutput: <out>/job-6.log\nEach new output line reaches you as an event; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-6",
+						"kind": "monitor",
+						"label": "errors",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-6.log"
+					}
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Monitor job-6 (\"errors\") reported 2 new lines:\nERROR one\nERROR two",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-6",
+							"kind": "monitor",
+							"label": "errors",
+							"status": "running",
+							"succeeded": false,
+							"exitCode": null,
+							"outputPath": "<out>/job-6.log",
+							"event": "events"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Monitor job-6 (\"errors\") reported 20 new lines:\nline 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\n(5 more lines not shown; full output in <out>/job-6.log)",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-6",
+							"kind": "monitor",
+							"label": "errors",
+							"status": "running",
+							"succeeded": false,
+							"exitCode": null,
+							"outputPath": "<out>/job-6.log",
+							"event": "events"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Monitor job-6 (\"errors\") reached its 30s timeout after 27 events and was stopped. Start a new monitor if you still need to watch it.\nFull output: <out>/job-6.log",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-6",
+							"kind": "monitor",
+							"label": "errors",
+							"status": "stopped",
+							"succeeded": false,
+							"exitCode": null,
+							"outputPath": "<out>/job-6.log",
+							"event": "timeout"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"tool": "monitor",
+			"params": {
+				"command": "yes",
+				"timeout_seconds": 600
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started monitor job-7 (\"yes\") for up to 600s.\nOutput: <out>/job-7.log\nEach new output line reaches you as an event; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-7",
+						"kind": "monitor",
+						"label": "yes",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-7.log"
+					}
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Monitor job-7 (\"yes\") reported 20 new lines:\nspam 0\nspam 1\nspam 2\nspam 3\nspam 4\nspam 5\nspam 6\nspam 7\nspam 8\nspam 9\nspam 10\nspam 11\nspam 12\nspam 13\nspam 14\nspam 15\nspam 16\nspam 17\nspam 18\nspam 19\n(101 more lines not shown; full output in <out>/job-7.log)",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-7",
+							"kind": "monitor",
+							"label": "yes",
+							"status": "running",
+							"succeeded": false,
+							"exitCode": null,
+							"outputPath": "<out>/job-7.log",
+							"event": "events"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Monitor job-7 (\"yes\") was stopped: it printed more than 120 lines within 60s (121 events). Narrow the command's filter before watching it again.\nFull output: <out>/job-7.log",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-7",
+							"kind": "monitor",
+							"label": "yes",
+							"status": "stopped",
+							"succeeded": false,
+							"exitCode": null,
+							"outputPath": "<out>/job-7.log",
+							"event": "flood"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"tool": "monitor",
+			"params": {
+				"command": "gh run watch 7",
+				"timeout_seconds": 1800,
+				"label": "CI"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started monitor job-8 (\"CI\") for up to 1800s.\nOutput: <out>/job-8.log\nEach new output line reaches you as an event; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-8",
+						"kind": "monitor",
+						"label": "CI",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-8.log"
+					}
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Monitor job-8 (\"CI\") reported 2 new lines:\nlint: pass\ntest: pass",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-8",
+							"kind": "monitor",
+							"label": "CI",
+							"status": "exited",
+							"succeeded": true,
+							"exitCode": 0,
+							"outputPath": "<out>/job-8.log",
+							"event": "events"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Monitor job-8 (\"CI\") exited with code 0 after 0s, 2 events.\nCommand: gh run watch 7\nLast output:\nlint: pass\ntest: pass\nFull output: <out>/job-8.log (read it with the read tool if you need more).",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-8",
+							"kind": "monitor",
+							"label": "CI",
+							"status": "exited",
+							"succeeded": true,
+							"exitCode": 0,
+							"outputPath": "<out>/job-8.log"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"tool": "task_list",
+			"params": {},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "job-1 · command · exited 0 · build · 4s · <out>/job-1.log\njob-2 · command · exited 2 · false · 1m 5s · <out>/job-2.log\njob-3 · command · failed · nope · 0s · <out>/job-3.log\njob-4 · command · exited ? · killed · 1h 1m · <out>/job-4.log\njob-5 · command · stopped · dev · 0s · <out>/job-5.log\njob-6 · monitor · stopped · errors · 30s · <out>/job-6.log\njob-7 · monitor · stopped · yes · 0s · <out>/job-7.log\njob-8 · monitor · exited 0 · CI · 0s · <out>/job-8.log"
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"count": 8
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_result",
+			"params": {
+				"id": "agent-1"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Background sub-agent agent-1 (worker) is running (0s).\nRecent activity:\ngrep parse(\n✗ grep failed\n» Found xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…"
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "agent-1",
+						"kind": "agent",
+						"label": "worker: find the callers of parse",
+						"status": "running",
+						"succeeded": false
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_list",
+			"params": {},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "job-1 · command · exited 0 · build · 4s · <out>/job-1.log\njob-2 · command · exited 2 · false · 1m 5s · <out>/job-2.log\njob-3 · command · failed · nope · 0s · <out>/job-3.log\njob-4 · command · exited ? · killed · 1h 1m · <out>/job-4.log\njob-5 · command · stopped · dev · 0s · <out>/job-5.log\njob-6 · monitor · stopped · errors · 30s · <out>/job-6.log\njob-7 · monitor · stopped · yes · 0s · <out>/job-7.log\njob-8 · monitor · exited 0 · CI · 0s · <out>/job-8.log\nagent-1 · agent · running · worker: find the callers of parse · 0s"
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"count": 9
+					}
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background sub-agent agent-1 (worker) completed after 0s.\n\nfound 3 callers",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "agent-1",
+							"kind": "agent",
+							"label": "worker: find the callers of parse",
+							"status": "completed",
+							"succeeded": true
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background sub-agent agent-2 (worker) failed after 0s.\n\njhon: the sub-agent \"worker\" exited 1",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "agent-2",
+							"kind": "agent",
+							"label": "worker: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb…",
+							"status": "failed",
+							"succeeded": false
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background sub-agent agent-3 (worker) failed after 0s.\n\njhon: the sub-agent \"worker\" could not run: spawn pi ENOENT",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "agent-3",
+							"kind": "agent",
+							"label": "worker: crash",
+							"status": "failed",
+							"succeeded": false
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background sub-agent agent-4 (worker) completed after 0s.\n\nrow 0 zzzzzzzzzzzzzzzzzzzz\nrow 1 zzzzzzzzzzzzzzzzzzzz\nrow 2 zzzzzzzzzzzzzzzzzzzz\nrow 3 zzzzzzzzzzzzzzzzzzzz\nrow 4 zzzzzzzzzzzzzzzzzzzz\nrow 5 zzzzzzzzzzzzzzzzzzzz\nrow 6 zzzzzzzzzzzzzzzzzzzz\nrow 7 zzzzzzzzzzzzzzzzzzzz\nrow 8 zzzzzzzzzzzzzzzzzzzz\nrow 9 zzzzzzzzzzzzzzzzzzzz\nrow 10 zzzzzzzzzzzzzzzzzzzz\nrow 11 zzzzzzzzzzzzzzzzzzzz\nrow 12 zzzzzzzzzzzzzzzzzzzz\nrow 13 zzzzzzzzzzzzzzzzzzzz\nrow 14 zzzzzzzzzzzzzzzzzzzz\nrow 15 zzzzzzzzzzzzzzzzzzzz\nrow 16 zzzzzzzzzzzzzzzzzzzz\nrow 17 zzzzzzzzzzzzzzzzzzzz\nrow 18 zzzzzzzzzzzzzzzzzzzz\nrow 19 zzzzzzzzzzzzzzzzzzzz\nrow 20 zzzzzzzzzzzzzzzzzzzz\nrow 21 zzzzzzzzzzzzzzzzzzzz\nrow 22 zzzzzzzzzzzzzzzzzzzz\nrow 23 zzzzzzzzzzzzzzzzzzzz\nrow 24 zzzzzzzzzzzzzzzzzzzz\nrow 25 zzzzzzzzzzzzzzzzzzzz\nrow 26 zzzzzzzzzzzzzzzzzzzz\nrow 27 zzzzzzzzzzzzzzzzzzzz\nrow 28 zzzzzzzzzzzzzzzzzzzz\nrow 29 zzzzzzzzzzzzzzzzzzzz\nrow 30 zzzzzzzzzzzzzzzzzzzz\nrow 31 zzzzzzzzzzzzzzzzzzzz\nrow 32 zzzzzzzzzzzzzzzzzzzz\nrow 33 zzzzzzzzzzzzzzzzzzzz\nrow 34 zzzzzzzzzzzzzzzzzzzz\nrow 35 zzzzzzzzzzzzzzzzzzzz\nrow 36 zzzzzzzzzzzzzzzzzzzz\nrow 37 zzzzzzzzzzzzzzzzzzzz\nrow 38 zzzzzzzzzzzzzzzzzzzz\nrow 39 zzzzzzzzzzzzzzzzzzzz\nrow 40 zzzzzzzzzzzzzzzzzzzz\nrow 41 zzzzzzzzzzzzzzzzzzzz\nrow 42 zzzzzzzzzzzzzzzzzzzz\nrow 43 zzzzzzzzzzzzzzzzzzzz\nrow 44 zzzzzzzzzzzzzzzzzzzz\nrow 45 zzzzzzzzzzzzzzzzzzzz\nrow 46 zzzzzzzzzzzzzzzzzzzz\nrow 47 zzzzzzzzzzzzzzzzzzzz\nrow 48 zzzzzzzzzzzzzzzzzzzz\nrow 49 zzzzzzzzzzzzzzzzzzzz\nrow 50 zzzzzzzzzzzzzzzzzzzz\nrow 51 zzzzzzzzzzzzzzzzzzzz\nrow 52 zzzzzzzzzzzzzzzzzzzz\n[1896 more characters not shown; task_result with id \"agent-4\" returns the full result.]",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "agent-4",
+							"kind": "agent",
+							"label": "worker: long",
+							"status": "completed",
+							"succeeded": true
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background sub-agent agent-5 (worker) completed after 0s.\n\nwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww\n[1500 more characters not shown; task_result with id \"agent-5\" returns the full result.]",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "agent-5",
+							"kind": "agent",
+							"label": "worker: unbroken",
+							"status": "completed",
+							"succeeded": true
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background sub-agent agent-6 (worker) completed after 0s.\n\nJSON result, summarized:\nfacet: risk\nok: false\ncount: 3\nnone: null\ninspection.status: completed\nfindings: 10 (WARNING 6, CRITICAL 1, info 1, odd 1)\n- CRITICAL b.ts:1: critical one\n- WARNING a.ts:0: warn 0 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- WARNING a.ts:1: warn 1 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- WARNING a.ts:2: warn 2 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- WARNING a.ts:3: warn 3 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq…\n- … 5 more not listed (WARNING 2, info 1, odd 1, unrated 1)\ntags: 2\nnotes: nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn…\n[Full JSON (4250 characters): task_result with id \"agent-6\" returns it.]",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "agent-6",
+							"kind": "agent",
+							"label": "worker: review",
+							"status": "completed",
+							"succeeded": true
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"tool": "task_result",
+			"params": {
+				"id": "agent-6"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Background sub-agent agent-6 (worker) completed after 0s.\n\n```json\n{\n  \"facet\": \"risk\",\n  \"ok\": false,\n  \"count\": 3,\n  \"none\": null,\n  \"inspection\": {\n    \"status\": \"completed\",\n    \"paths\": [\n      \"a\"\n    ]\n  },\n  \"findings\": [\n    {\n      \"severity\": \"WARNING\",\n      \"location\": \"a.ts:0\",\n      \"claim\": \"warn 0 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\"\n    },\n    {\n      \"severity\": \"WARNING\",\n      \"location\": \"a.ts:1\",\n      \"claim\": \"warn 1 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\"\n    },\n    {\n      \"severity\": \"WARNING\",\n      \"location\": \"a.ts:2\",\n      \"claim\": \"warn 2 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\"\n    },\n    {\n      \"severity\": \"WARNING\",\n      \"location\": \"a.ts:3\",\n      \"claim\": \"warn 3 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\"\n    },\n    {\n      \"severity\": \"WARNING\",\n      \"location\": \"a.ts:4\",\n      \"claim\": \"warn 4 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\"\n    },\n    {\n      \"severity\": \"WARNING\",\n      \"location\": \"a.ts:5\",\n      \"claim\": \"warn 5 qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\"\n    },\n    {\n      \"severity\": \"CRITICAL\",\n      \"location\": \"b.ts:1\",\n      \"message\": \"critical one\"\n    },\n    {\n      \"severity\": \"info\",\n      \"claim\": \"lower case\"\n    },\n    {\n      \"severity\": \"odd\"\n    },\n    {\n      \"location\": \"no severity\"\n    }\n  ],\n  \"tags\": [\n    \"x\",\n    \"y\"\n  ],\n  \"notes\": \"nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn\"\n}\n```"
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "agent-6",
+						"kind": "agent",
+						"label": "worker: review",
+						"status": "completed",
+						"succeeded": true
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_stop",
+			"params": {
+				"id": "agent-1"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "agent-1 (\"worker: find the callers of parse\") had already ended: completed."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "agent-1",
+						"kind": "agent",
+						"label": "worker: find the callers of parse",
+						"status": "completed",
+						"succeeded": true
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_stop",
+			"params": {
+				"id": "agent-7"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Stopped agent-7 (\"worker: stop me\")."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "agent-7",
+						"kind": "agent",
+						"label": "worker: stop me",
+						"status": "stopped",
+						"succeeded": false
+					}
+				}
+			}
+		},
+		{
+			"tool": "task_result",
+			"params": {
+				"id": "agent-7"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Background sub-agent agent-7 (worker) was stopped after 0s.\n\njhon: the sub-agent \"worker\" was stopped"
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "agent-7",
+						"kind": "agent",
+						"label": "worker: stop me",
+						"status": "stopped",
+						"succeeded": false
+					}
+				}
+			}
+		},
+		{
+			"wait": "sleep 3",
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "out"
+					},
+					{
+						"type": "text",
+						"text": "Standalone sleep while background work runs (1 background task): it only held the turn. Each task's end arrives as a message and starts a new turn, so end the turn instead."
+					}
+				]
+			}
+		},
+		{
+			"wait": "sleep 420",
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "out"
+					},
+					{
+						"type": "text",
+						"text": "Standalone sleep while background work runs (1 background task): it only held the turn. Each task's end arrives as a message and starts a new turn, so end the turn instead."
+					}
+				]
+			}
+		},
+		{
+			"wait": "gh run watch 9",
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "out"
+					},
+					{
+						"type": "text",
+						"text": "Foreground wait: `gh run watch` held the turn until it ended. Next time run a wait with bash_background, its condition inside the command (for example `until <check>; do sleep 5; done; <cmd>`), or watch the output with monitor; its end arrives as a message, so the turn can go on with other work or end."
+					}
+				]
+			}
+		},
+		{
+			"wait": "npm test"
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "make serve",
+				"label": "serve"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-9 (\"serve\").\nOutput: <out>/job-9.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-9",
+						"kind": "command",
+						"label": "serve",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-9.log"
+					}
+				}
+			}
+		},
+		{
+			"view": "jobs",
+			"rows": true
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background job job-9 (\"serve\") was stopped by the owner after 0s.\nCommand: make serve\nLast output:\nready\nFull output: <out>/job-9.log (read it with the read tool if you need more).",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-9",
+							"kind": "command",
+							"label": "serve",
+							"status": "stopped",
+							"succeeded": false,
+							"exitCode": null,
+							"outputPath": "<out>/job-9.log"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"tool": "monitor",
+			"params": {
+				"command": "tail -f x",
+				"timeout_seconds": 60,
+				"label": "watch"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started monitor job-10 (\"watch\") for up to 60s.\nOutput: <out>/job-10.log\nEach new output line reaches you as an event; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-10",
+						"kind": "monitor",
+						"label": "watch",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-10.log"
+					}
+				}
+			}
+		},
+		{
+			"view": "jobs",
+			"rows": true
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Monitor job-10 (\"watch\") reported 1 new line:\npending line",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-10",
+							"kind": "monitor",
+							"label": "watch",
+							"status": "running",
+							"succeeded": false,
+							"exitCode": null,
+							"outputPath": "<out>/job-10.log",
+							"event": "events"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Monitor job-10 (\"watch\") was stopped by the owner after 0s, 1 event.\nCommand: tail -f x\nLast output:\npending line\nFull output: <out>/job-10.log (read it with the read tool if you need more).",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "job-10",
+							"kind": "monitor",
+							"label": "watch",
+							"status": "stopped",
+							"succeeded": false,
+							"exitCode": null,
+							"outputPath": "<out>/job-10.log"
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"view": "agents",
+			"rows": true
+		},
+		{
+			"sent": {
+				"message": {
+					"customType": "jhon-tasks.notice",
+					"content": "Background sub-agent agent-8 (worker) was stopped by the owner after 0s.\n\njhon: the sub-agent \"worker\" was stopped",
+					"display": true,
+					"details": {
+						"jhonTasks": {
+							"id": "agent-8",
+							"kind": "agent",
+							"label": "worker: keep running",
+							"status": "stopped",
+							"succeeded": false
+						}
+					}
+				},
+				"options": {
+					"triggerTurn": true,
+					"deliverAs": "followUp"
+				}
+			}
+		},
+		{
+			"tool": "task_result",
+			"params": {
+				"id": "agent-8"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Background sub-agent agent-8 (worker) was stopped after 0s.\n\njhon: the sub-agent \"worker\" was stopped"
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "agent-8",
+						"kind": "agent",
+						"label": "worker: keep running",
+						"status": "stopped",
+						"succeeded": false
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c0"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-11 (\"c0\").\nOutput: <out>/job-11.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-11",
+						"kind": "command",
+						"label": "c0",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-11.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c1"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-12 (\"c1\").\nOutput: <out>/job-12.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-12",
+						"kind": "command",
+						"label": "c1",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-12.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c2"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-13 (\"c2\").\nOutput: <out>/job-13.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-13",
+						"kind": "command",
+						"label": "c2",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-13.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c3"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-14 (\"c3\").\nOutput: <out>/job-14.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-14",
+						"kind": "command",
+						"label": "c3",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-14.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c4"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-15 (\"c4\").\nOutput: <out>/job-15.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-15",
+						"kind": "command",
+						"label": "c4",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-15.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c5"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-16 (\"c5\").\nOutput: <out>/job-16.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-16",
+						"kind": "command",
+						"label": "c5",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-16.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c6"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-17 (\"c6\").\nOutput: <out>/job-17.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-17",
+						"kind": "command",
+						"label": "c6",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-17.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c7"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-18 (\"c7\").\nOutput: <out>/job-18.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-18",
+						"kind": "command",
+						"label": "c7",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-18.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c8"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-19 (\"c8\").\nOutput: <out>/job-19.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-19",
+						"kind": "command",
+						"label": "c8",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-19.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c9"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-20 (\"c9\").\nOutput: <out>/job-20.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-20",
+						"kind": "command",
+						"label": "c9",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-20.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c10"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-21 (\"c10\").\nOutput: <out>/job-21.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-21",
+						"kind": "command",
+						"label": "c10",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-21.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c11"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-22 (\"c11\").\nOutput: <out>/job-22.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-22",
+						"kind": "command",
+						"label": "c11",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-22.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c12"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-23 (\"c12\").\nOutput: <out>/job-23.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-23",
+						"kind": "command",
+						"label": "c12",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-23.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c13"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-24 (\"c13\").\nOutput: <out>/job-24.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-24",
+						"kind": "command",
+						"label": "c13",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-24.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c14"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-25 (\"c14\").\nOutput: <out>/job-25.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-25",
+						"kind": "command",
+						"label": "c14",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-25.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c15"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-26 (\"c15\").\nOutput: <out>/job-26.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-26",
+						"kind": "command",
+						"label": "c15",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-26.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c16"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-27 (\"c16\").\nOutput: <out>/job-27.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-27",
+						"kind": "command",
+						"label": "c16",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-27.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c17"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-28 (\"c17\").\nOutput: <out>/job-28.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-28",
+						"kind": "command",
+						"label": "c17",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-28.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c18"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-29 (\"c18\").\nOutput: <out>/job-29.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-29",
+						"kind": "command",
+						"label": "c18",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-29.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c19"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-30 (\"c19\").\nOutput: <out>/job-30.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-30",
+						"kind": "command",
+						"label": "c19",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-30.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c20"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-31 (\"c20\").\nOutput: <out>/job-31.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-31",
+						"kind": "command",
+						"label": "c20",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-31.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c21"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-32 (\"c21\").\nOutput: <out>/job-32.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-32",
+						"kind": "command",
+						"label": "c21",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-32.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c22"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-33 (\"c22\").\nOutput: <out>/job-33.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-33",
+						"kind": "command",
+						"label": "c22",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-33.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c23"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-34 (\"c23\").\nOutput: <out>/job-34.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-34",
+						"kind": "command",
+						"label": "c23",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-34.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c24"
+			},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "Started background job job-35 (\"c24\").\nOutput: <out>/job-35.log\nYou will be notified once when it exits; keep working or end your turn. task_stop stops it."
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"id": "job-35",
+						"kind": "command",
+						"label": "c24",
+						"status": "running",
+						"succeeded": false,
+						"exitCode": null,
+						"outputPath": "<out>/job-35.log"
+					}
+				}
+			}
+		},
+		{
+			"tool": "bash_background",
+			"params": {
+				"command": "c25"
+			},
+			"error": "25 background tasks are already running; stop one with task_stop first."
+		},
+		{
+			"tool": "task_list",
+			"params": {},
+			"result": {
+				"content": [
+					{
+						"type": "text",
+						"text": "job-1 · command · exited 0 · build · 4s · <out>/job-1.log\njob-2 · command · exited 2 · false · 1m 5s · <out>/job-2.log\njob-3 · command · failed · nope · 0s · <out>/job-3.log\njob-4 · command · exited ? · killed · 1h 1m · <out>/job-4.log\njob-5 · command · stopped · dev · 0s · <out>/job-5.log\njob-6 · monitor · stopped · errors · 30s · <out>/job-6.log\njob-7 · monitor · stopped · yes · 0s · <out>/job-7.log\njob-8 · monitor · exited 0 · CI · 0s · <out>/job-8.log\nagent-1 · agent · completed · worker: find the callers of parse · 0s\nagent-2 · agent · failed · worker: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb… · 0s\nagent-3 · agent · failed · worker: crash · 0s\nagent-4 · agent · completed · worker: long · 0s\nagent-5 · agent · completed · worker: unbroken · 0s\nagent-6 · agent · completed · worker: review · 0s\nagent-7 · agent · stopped · worker: stop me · 0s\nagent-8 · agent · stopped · worker: keep running · 0s\njob-9 · command · stopped · serve · 0s · <out>/job-9.log\njob-10 · monitor · stopped · watch · 0s · <out>/job-10.log\njob-11 · command · running · c0 · 0s · <out>/job-11.log\njob-12 · command · running · c1 · 0s · <out>/job-12.log\njob-13 · command · running · c2 · 0s · <out>/job-13.log\njob-14 · command · running · c3 · 0s · <out>/job-14.log\njob-15 · command · running · c4 · 0s · <out>/job-15.log\njob-16 · command · running · c5 · 0s · <out>/job-16.log\njob-17 · command · running · c6 · 0s · <out>/job-17.log\njob-18 · command · running · c7 · 0s · <out>/job-18.log\njob-19 · command · running · c8 · 0s · <out>/job-19.log\njob-20 · command · running · c9 · 0s · <out>/job-20.log\njob-21 · command · running · c10 · 0s · <out>/job-21.log\njob-22 · command · running · c11 · 0s · <out>/job-22.log\njob-23 · command · running · c12 · 0s · <out>/job-23.log\njob-24 · command · running · c13 · 0s · <out>/job-24.log\njob-25 · command · running · c14 · 0s · <out>/job-25.log\njob-26 · command · running · c15 · 0s · <out>/job-26.log\njob-27 · command · running · c16 · 0s · <out>/job-27.log\njob-28 · command · running · c17 · 0s · <out>/job-28.log\njob-29 · command · running · c18 · 0s · <out>/job-29.log\njob-30 · command · running · c19 · 0s · <out>/job-30.log\njob-31 · command · running · c20 · 0s · <out>/job-31.log\njob-32 · command · running · c21 · 0s · <out>/job-32.log\njob-33 · command · running · c22 · 0s · <out>/job-33.log\njob-34 · command · running · c23 · 0s · <out>/job-34.log\njob-35 · command · running · c24 · 0s · <out>/job-35.log"
+					}
+				],
+				"details": {
+					"jhonTasks": {
+						"count": 43
+					}
+				}
+			}
+		},
+		{
+			"cards": [
+				[
+					"╭─ ⧗ Background job · build ─────────────────────────────────────────── expand ╮",
+					"│ Background job job-1 (\"build\") exited with code 0 after 4s.                  │",
+					"│ Command: make build                                                          │",
+					"│ Last output:                                                                 │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Background job · build ───────────────────────────────────────── collapse ╮",
+					"│ Background job job-1 (\"build\") exited with code 0 after 4s.                  │",
+					"│ Command: make build                                                          │",
+					"│ Last output:                                                                 │",
+					"│ compiled                                                                     │",
+					"│ ok                                                                           │",
+					"│ Full output: <out>/job-1.log (read it with  │",
+					"│ the read tool if you need more).                                             │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Background job · false ─────────────────────────────────────────── expand ╮",
+					"│ Background job job-2 (\"false\") exited with code 2 after 1m 5s.               │",
+					"│ Command: false                                                               │",
+					"│ No output.                                                                   │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Background job · false ───────────────────────────────────────── collapse ╮",
+					"│ Background job job-2 (\"false\") exited with code 2 after 1m 5s.               │",
+					"│ Command: false                                                               │",
+					"│ No output.                                                                   │",
+					"│ Full output: <out>/job-2.log (read it with  │",
+					"│ the read tool if you need more).                                             │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Background job · nope ──────────────────────────────────────────── expand ╮",
+					"│ Background job job-3 (\"nope\") could not run: Working directory does not      │",
+					"│ exist: /missing after 0s.                                                    │",
+					"│ Command: nope                                                                │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Background job · nope ────────────────────────────────────────── collapse ╮",
+					"│ Background job job-3 (\"nope\") could not run: Working directory does not      │",
+					"│ exist: /missing after 0s.                                                    │",
+					"│ Command: nope                                                                │",
+					"│ No output.                                                                   │",
+					"│ Full output: <out>/job-3.log (read it with  │",
+					"│ the read tool if you need more).                                             │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Monitor · errors ───────────────────────────────────────────────── expand ╮",
+					"│ Monitor job-6 (\"errors\") reported 2 new lines:                               │",
+					"│ ERROR one                                                                    │",
+					"│ ERROR two                                                                    │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Monitor · errors ─────────────────────────────────────────────── collapse ╮",
+					"│ Monitor job-6 (\"errors\") reported 2 new lines:                               │",
+					"│ ERROR one                                                                    │",
+					"│ ERROR two                                                                    │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Monitor · errors ───────────────────────────────────────────────── expand ╮",
+					"│ Monitor job-6 (\"errors\") reported 20 new lines:                              │",
+					"│ line 0                                                                       │",
+					"│ line 1                                                                       │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Monitor · errors ─────────────────────────────────────────────── collapse ╮",
+					"│ Monitor job-6 (\"errors\") reported 20 new lines:                              │",
+					"│ line 0                                                                       │",
+					"│ line 1                                                                       │",
+					"│ line 2                                                                       │",
+					"│ line 3                                                                       │",
+					"│ line 4                                                                       │",
+					"│ line 5                                                                       │",
+					"│ line 6                                                                       │",
+					"│ line 7                                                                       │",
+					"│ line 8                                                                       │",
+					"│ line 9                                                                       │",
+					"│ line 10                                                                      │",
+					"│ line 11                                                                      │",
+					"│ line 12                                                                      │",
+					"│ line 13                                                                      │",
+					"│ line 14                                                                      │",
+					"│ line 15                                                                      │",
+					"│ line 16                                                                      │",
+					"│ line 17                                                                      │",
+					"│ line 18                                                                      │",
+					"│ line 19                                                                      │",
+					"│ (5 more lines not shown; full output in                                      │",
+					"│ <out>/job-6.log)                            │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Monitor · errors ───────────────────────────────────────────────── expand ╮",
+					"│ Monitor job-6 (\"errors\") reached its 30s timeout after 27 events and was     │",
+					"│ stopped. Start a new monitor if you still need to watch it.                  │",
+					"│ Full output: <out>/job-6.log                │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Monitor · errors ─────────────────────────────────────────────── collapse ╮",
+					"│ Monitor job-6 (\"errors\") reached its 30s timeout after 27 events and was     │",
+					"│ stopped. Start a new monitor if you still need to watch it.                  │",
+					"│ Full output: <out>/job-6.log                │",
+					"╰──────────────────────────────────────────────────────────────────────────────╯"
+				],
+				[
+					"╭─ ⧗ Background job ─────────────────────────────── expand ╮",
+					"│ ared                                                     │",
+					"╰──────────────────────────────────────────────────────────╯"
+				],
+				[
+					"<success>╭</><success>─ </><success>⧗ Monitor</> <muted>·</> <muted>l</><success> ──────────────</> <dim>expand</> <success>╮</>",
+					"<success>│</> <text>x</>                           <success>│</>",
+					"<success>╰</><success>──────────────────────────────────────╯</>"
+				],
+				[
+					"<error>╭</><error>─ </><error>⧗ Monitor</> <muted>·</> <muted>l</><error> ──────────────</> <dim>expand</> <error>╮</>",
+					"<error>│</> <text>x</>                           <error>│</>",
+					"<error>╰</><error>──────────────────────────────────────╯</>"
+				],
+				[
+					"<border>╭</><border>─ </><accent>⧗ Monitor</> <muted>·</> <muted>l</><border> ──────────────</> <dim>expand</> <border>╮</>",
+					"<border>│</> <text>x</>                           <border>│</>",
+					"<border>╰</><border>──────────────────────────────────────╯</>"
+				],
+				[
+					"<border>╭</><border>─ </><accent>⧗ Monitor</> <muted>·</> <muted>l</><border> ──────────────</> <dim>expand</> <border>╮</>",
+					"<border>│</> <text>x</>                           <border>│</>",
+					"<border>╰</><border>──────────────────────────────────────╯</>"
+				],
+				[
+					"<success>╭</><success>─ </><success>⧗ Monitor</> <muted>·</> <muted>l</><success> ──────────────</> <dim>expand</> <success>╮</>",
+					"<success>│</> <text>x</>                           <success>│</>",
+					"<success>╰</><success>──────────────────────────────────────╯</>"
+				],
+				[
+					"<error>╭</><error>─ </><error>⧗ Monitor</> <muted>·</> <muted>l</><error> ──────────────</> <dim>expand</> <error>╮</>",
+					"<error>│</> <text>x</>                           <error>│</>",
+					"<error>╰</><error>──────────────────────────────────────╯</>"
+				]
+			]
+		},
+		{
+			"statuses": [],
+			"notes": []
+		},
+		{
+			"headless": [
+				{
+					"message": {
+						"customType": "jhon-tasks.notice",
+						"content": "Headless session: stopped waiting after 0s for 2 background tasks (worker: one, worker: two); their results are lost.",
+						"display": true
+					},
+					"options": {
+						"triggerTurn": false
+					}
+				}
+			],
+			"warned": [
+				"Headless session: stopped waiting after 0s for 2 background tasks (worker: one, worker: two); their results are lost."
+			]
+		}
+	]
+}

@@ -15,7 +15,7 @@ import test, { after } from "node:test";
 import { backgroundTasksKey, registerBackgroundTasks, TASK_NOTICE_TYPE, type BackgroundTasksDeps } from "../lib/background-tasks-tools.ts";
 import { OPEN_TASKS_EVENT, TASKS_EVENT } from "../lib/events.ts";
 import { UI_USE_ENTRY } from "../lib/ui-use.ts";
-import type { JobExecOperations } from "../lib/ui/background-jobs.ts";
+import type { JobExecOperations } from "../lib/background-tasks.ts";
 import type { AgentDef, ChildResult } from "../lib/agents.ts";
 import { envOverrides, memorySettings } from "./fake-jhon-settings.ts";
 
