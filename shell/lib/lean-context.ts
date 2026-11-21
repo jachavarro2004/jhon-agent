@@ -8,30 +8,45 @@
  * message, when `jhon status` says the change is not small or a sub-agent is
  * launched (T3); the system prompt never changes, so its cached prefix holds
  * (T115d). Until then Jhon's own tools and the skills list wait behind
- * tools_more (L3); todo, ask_user, inspect and codegraph stay. The todo
- * extension reads the session's level to skip its start rule and nudge (L4).
+ * tools_more (L3); todo, ask_user, inspect, codegraph and the delegation
+ * tools stay (T192 S3: a lean start never takes delegation away, on any
+ * provider; pi-claude-bridge reads the tool list only when a prompt starts,
+ * so a tool held back at the start would miss the rest of that prompt). The
+ * todo extension reads the session's level to skip its start rule and nudge (L4).
  */
 
 /** The custom message that carries the full context into a lean session. */
 export const FULL_MESSAGE = "jhon-full";
 
-/** Jhon's own tools a lean session defers until the full context loads. */
-export const LEAN_DEFERRED = new Set(["jhon_review", "subagent", "subagent_continue", "m365_read", "bash_background", "monitor", "task_list", "task_result", "task_stop"]);
+/** T192 S3: the delegation tools, offered from a main session's first request, lean or full. */
+export const DELEGATION_TOOLS: ReadonlySet<string> = new Set(["subagent", "subagent_continue", "task_list", "task_result", "task_stop", "bash_background", "monitor"]);
 
-/** Whether a lean main session defers name: Jhon's own tools above, and every Engram tool. */
+/** Jhon's own tools a lean session defers until the full context loads; never a delegation tool. */
+export const LEAN_DEFERRED = new Set(["jhon_review", "m365_read"]);
+
+/** Whether a lean main session defers name: Jhon's own tools above, and every Engram tool; a delegation tool never. */
 export function leanDeferred(name: string): boolean {
-	return LEAN_DEFERRED.has(name) || name.startsWith("mcp__engram__");
+	return !DELEGATION_TOOLS.has(name) && (LEAN_DEFERRED.has(name) || name.startsWith("mcp__engram__"));
 }
 
 /** The line `jhon status` prints for a change that is not small (engine/internal/ldd NotSmallNote). */
 const NOT_SMALL = "not small: read ";
 const STATUS = /(?:^|[;&|(]\s*|\s)jhon\s+status\b/;
 
-/** Whether a tool result is the moment the full context is due: status's not-small line, or a sub-agent launch. */
+/** The jhon MCP server's status tool as pi names it (`mcp__<server>__<tool>`): `jhon status --json`. */
+export const MCP_STATUS = "mcp__jhon__status";
+
+/**
+ * Whether a tool result is the moment the full context is due: status's
+ * not-small line, read through bash, inspect or the jhon MCP server's status
+ * tool (T192 S5), or a sub-agent launch.
+ */
 export function fullTrigger(toolName: string, input: Record<string, unknown> | undefined, output: string): boolean {
 	if (toolName === "subagent" || toolName === "subagent_continue") return true;
+	if (!output.includes(NOT_SMALL)) return false;
+	if (toolName === MCP_STATUS) return true;
 	const command = typeof input?.command === "string" ? input.command : "";
-	return toolName === "bash" && STATUS.test(command) && output.includes(NOT_SMALL);
+	return (toolName === "bash" || toolName === "inspect") && STATUS.test(command);
 }
 
 /** Whether the session's branch already holds the full message (a resumed session). */

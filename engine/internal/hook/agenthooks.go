@@ -175,22 +175,36 @@ func markFull(session string) bool {
 	return false
 }
 
+// mcpStatusTools are the jhon MCP server's status tool (`jhon status
+// --json`) as Claude Code names it: from the plugin's server, and from a
+// server registered by hand (T192 S5).
+var mcpStatusTools = map[string]bool{"mcp__plugin_jhon_jhon__status": true, "mcp__jhon__status": true}
+
 // fullPointer is PostToolUse's pointer to the full context (T146h T4), for
 // the main agent's call that shows the work is not small: `jhon status`
-// printing its not-small line, or a sub-agent launch. Once per session; ""
-// for any other call, or a session that has the full context already. The
-// full text exceeds the 10,000 characters a hook's context shows, so the
-// pointer names the file.
+// printing its not-small line, through Bash or the jhon MCP server's status
+// tool (T192 S5), or a sub-agent launch. Once per session; "" for any other
+// call, or a session that has the full context already. The full text
+// exceeds the 10,000 characters a hook's context shows, so the pointer
+// names the file.
 func fullPointer(p Payload, home string) string {
 	tool := p.Str("tool_name")
-	trigger := ""
-	switch tool {
-	case "Agent", "Task":
-		trigger = "before a sub-agent"
-	case "Bash":
-		cmd, _ := p.Obj("tool_input")["command"].(string)
+	notSmall := func() bool {
 		resp, _ := json.Marshal(p["tool_response"])
-		if !strings.Contains(cmd, "jhon status") || !strings.Contains(string(resp), "not small: read ") {
+		return strings.Contains(string(resp), "not small: read ")
+	}
+	trigger := ""
+	switch {
+	case tool == "Agent" || tool == "Task":
+		trigger = "before a sub-agent"
+	case tool == "Bash":
+		cmd, _ := p.Obj("tool_input")["command"].(string)
+		if !strings.Contains(cmd, "jhon status") || !notSmall() {
+			return ""
+		}
+		trigger = "this change is not small"
+	case mcpStatusTools[tool]:
+		if !notSmall() {
 			return ""
 		}
 		trigger = "this change is not small"

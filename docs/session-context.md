@@ -41,11 +41,14 @@ Sub-agents keep the full always-on layer in every case.
     orchestrator (`orchestrator`) to match.
 - **pi, mid-session.** The full context arrives as one persisted
   `jhon-full` message, once per session. Two calls trigger it: a
-  `jhon status` whose output carries the not-small line, and a `subagent`
-  call. The system prompt is never swapped, so its cached prefix holds.
+  `jhon status` whose output carries the not-small line, whatever route
+  read it (`bash`, `inspect`, or the jhon MCP server's `mcp__jhon__status`
+  tool), and a `subagent` call. The system prompt is never swapped, so its
+  cached prefix holds.
 - **Claude Code, mid-session.** PostToolUse adds a pointer to the full
   file, once per session. It fires on the same two triggers, `jhon status`
-  and an `Agent` launch. The full text exceeds the 10,000 characters a
+  (through Bash or the jhon MCP server's status tool,
+  `mcp__plugin_jhon_jhon__status`) and an `Agent` launch. The full text exceeds the 10,000 characters a
   hook's context shows, so the pointer names the file instead.
 
 ## pi's tools on a lean session
@@ -53,13 +56,24 @@ Sub-agents keep the full always-on layer in every case.
 Until the full context loads, the following tools are registered but
 deferred behind `tools_more`:
 
-- `jhon_review`, `subagent`, `subagent_continue` and `m365_read`;
-- the background tools (`bash_background`, `monitor`, `task_*`);
+- `jhon_review` and `m365_read`;
 - every Engram tool.
 
 The skills list is deferred too; the `jhon-full` message carries it.
 
-These stay available: `todo`, `ask_user`, `inspect` and codegraph. A lean
+The delegation tools are never deferred: `subagent`, `subagent_continue`,
+`task_list`, `task_result`, `task_stop`, `bash_background` and `monitor`
+are offered from the first request of every main session, lean or full, on
+every provider. pi-claude-bridge reads the tool list only when a prompt
+starts, so a tool held back at the start would stay out of reach for the
+rest of that prompt.
+
+`tools_more` asked for a tool the session already has answers
+`Already enabled: <names>.`; on claude-bridge it adds `On claude-bridge the
+tool list is read when a prompt starts, so it reaches the model at the next
+prompt.`
+
+These stay available too: `todo`, `ask_user`, `inspect` and codegraph. A lean
 session gets no todo start rule and no start nudge, and the todo tool's
 guideline says a small change keeps no list.
 

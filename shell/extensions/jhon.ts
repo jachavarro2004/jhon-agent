@@ -922,7 +922,8 @@ export default function jhon(pi: any): void {
     const rules = brief && "lead" in brief ? brief : undefined;
     const split = rules ? splitRoute(rules.brief) : undefined;
     // T146h T2: no change, or a small one, starts with the lean prompt; Jhon's own tools and the
-    // skills list wait for the full context (L3). A failed brief, or no lean file, starts full.
+    // skills list wait for the full context (L3), but the delegation tools are offered from the
+    // first request (T192 S3). A failed brief, or no lean file, starts full.
     if (lean === undefined) {
       const on = brief?.context === "lean" && typeof config.lean === "string" && existsSync(config.lean);
       lean = { on, loaded: on && fullBefore };
@@ -974,8 +975,8 @@ export default function jhon(pi: any): void {
   };
 
   // T146h T3: a lean session's full context loads once, when `jhon status` says the change is not
-  // small or a sub-agent is launched: one persisted message, never a system-prompt swap (T115d),
-  // and Jhon's deferred tools come back.
+  // small (through bash, inspect or the jhon MCP server's status tool, T192 S5) or a sub-agent is
+  // launched: one persisted message, never a system-prompt swap (T115d), and Jhon's deferred tools come back.
   if (!child && config) pi.on("tool_result", async (event: any, ctx: any) => {
     if (!lean?.on || lean.loaded) return undefined;
     const output = (event.content ?? []).map((c: any) => (c?.type === "text" && typeof c.text === "string" ? c.text : "")).join("\n");

@@ -168,6 +168,30 @@ func TestPostToolUsePointsToTheFullContextOnce(t *testing.T) {
 			t.Errorf("%s %v: want nothing, got %q", c.tool, c.input, out)
 		}
 	}
+	// T192 S5: the jhon MCP server's status tool (`jhon status --json`), as
+	// Claude Code names it from the plugin (and from a user-registered
+	// server), is a route to the same not-small line; its response is the
+	// tool's content blocks, the status JSON as text.
+	statusJSON := func(note string) []any {
+		text, _ := json.Marshal(map[string]any{"ok": true, "notes": []string{note}})
+		return []any{map[string]any{"type": "text", "text": string(text)}}
+	}
+	for i, tool := range []string{"mcp__plugin_jhon_jhon__status", "mcp__jhon__status"} {
+		session := fmt.Sprintf("s-mcp-%d", i)
+		got := pointer(postToolUse(t, session, tool, map[string]any{}, statusJSON("not small: read "+full+" before the next edit")))
+		if !strings.Contains(got, full) || !strings.Contains(got, "this change is not small") {
+			t.Errorf("%s not small: want the pointer to %s, got %q", tool, full, got)
+		}
+		if again := postToolUse(t, session, tool, map[string]any{}, statusJSON("not small: read "+full+" before the next edit")); again != "" {
+			t.Errorf("%s: the pointer came twice in one session: %q", tool, again)
+		}
+		if out := postToolUse(t, session+"-small", tool, map[string]any{"change": "c"}, statusJSON("small change (no folder, ...)")); out != "" {
+			t.Errorf("%s small: want nothing, got %q", tool, out)
+		}
+	}
+	if out := postToolUse(t, "s-mcp-audit", "mcp__plugin_jhon_jhon__audit", map[string]any{"session": "x"}, statusJSON("not small: read "+full+" before the next edit")); out != "" {
+		t.Errorf("the audit tool is no status route: %q", out)
+	}
 	// A session that started full needs no pointer.
 	sessionStart(t, changeRepo(t, true), "startup")
 	if out := postToolUse(t, "s-start", "Agent", map[string]any{"subagent_type": "worker"}, map[string]any{}); out != "" {
