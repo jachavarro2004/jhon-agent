@@ -20,9 +20,9 @@ https://github.com/user-attachments/assets/21ccf36a-740a-4eaa-af5b-de0c047599e5
 
 </details>
 
-Full resolution: [English](docs/assets/video/jhon-explainer.mp4) · [Spanish subtitles](docs/assets/video/jhon-explainer.es.mp4)
+Full resolution: [English](https://jachavarro2004.github.io/jhon-site/assets/video/jhon-explainer.mp4) · [Spanish subtitles](https://jachavarro2004.github.io/jhon-site/assets/video/jhon-explainer.es.mp4)
 
-The teaser (1:13): [English](docs/assets/video/jhon-teaser.mp4) · [Spanish subtitles](docs/assets/video/jhon-teaser.es.mp4)
+The teaser (1:13): [English](https://jachavarro2004.github.io/jhon-site/assets/video/jhon-teaser.mp4) · [Spanish subtitles](https://jachavarro2004.github.io/jhon-site/assets/video/jhon-teaser.es.mp4)
 
 ---
 
