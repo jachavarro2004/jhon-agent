@@ -5,12 +5,12 @@
 			"name": "todo",
 			"label": "Todo",
 			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
-			"promptSnippet": "Track multi-step work",
+			"promptSnippet": "Track a multi-step plan",
 			"promptGuidelines": [
 				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
-				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never with failing tests or partial work (the blocker becomes a new task).",
 				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
-				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+				"Set blocked only for a wait outside the list (a person, an authorization), with a note that names it; a prerequisite inside the list keeps the task pending. When the condition is met, back to pending."
 			],
 			"parameters": {
 				"type": "object",
@@ -28,11 +28,11 @@
 							"clear",
 							"list"
 						],
-						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+						"description": "write sets the whole list, add puts one task at the end, update edits a task by id, clear removes every task, list shows them."
 					},
 					"tasks": {
 						"type": "array",
-						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"description": "For write: every task, in order. Give a kept task its id back so its history stays; leave id out for new tasks.",
 						"items": {
 							"type": "object",
 							"additionalProperties": false,
@@ -42,11 +42,11 @@
 							"properties": {
 								"id": {
 									"type": "integer",
-									"description": "Existing task id to keep."
+									"description": "Id of a task you keep."
 								},
 								"title": {
 									"type": "string",
-									"description": "Short imperative title, e.g. 'Write the parser'."
+									"description": "A short command as title, like 'Write the parser'."
 								},
 								"status": {
 									"type": "string",
@@ -57,22 +57,22 @@
 										"done",
 										"dropped"
 									],
-									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+									"description": "pending when omitted. blocked: still open, held by something beyond the list; dropped: deliberately left undone."
 								},
 								"note": {
 									"type": "string",
-									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+									"description": "The current activity, shown during in_progress, like 'writing tests'. A blocked task needs one that says what it waits for, like 'waiting for an admin'."
 								}
 							}
 						}
 					},
 					"id": {
 						"type": "integer",
-						"description": "Task id for update."
+						"description": "Id of the task to update."
 					},
 					"title": {
 						"type": "string",
-						"description": "Title for add, or a new title for update."
+						"description": "add: its title; update: a new title."
 					},
 					"status": {
 						"type": "string",
@@ -83,11 +83,11 @@
 							"done",
 							"dropped"
 						],
-						"description": "Status for add or update."
+						"description": "add or update: its status."
 					},
 					"note": {
 						"type": "string",
-						"description": "Note for add or update; required for blocked."
+						"description": "add or update: its note; blocked needs one."
 					}
 				}
 			},
@@ -100,12 +100,12 @@
 			"name": "todo",
 			"label": "Todo",
 			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
-			"promptSnippet": "Track multi-step work",
+			"promptSnippet": "Track a multi-step plan",
 			"promptGuidelines": [
 				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
-				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never with failing tests or partial work (the blocker becomes a new task).",
 				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
-				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+				"Set blocked only for a wait outside the list (a person, an authorization), with a note that names it; a prerequisite inside the list keeps the task pending. When the condition is met, back to pending."
 			],
 			"parameters": {
 				"type": "object",
@@ -123,11 +123,11 @@
 							"clear",
 							"list"
 						],
-						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+						"description": "write sets the whole list, add puts one task at the end, update edits a task by id, clear removes every task, list shows them."
 					},
 					"tasks": {
 						"type": "array",
-						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"description": "For write: every task, in order. Give a kept task its id back so its history stays; leave id out for new tasks.",
 						"items": {
 							"type": "object",
 							"additionalProperties": false,
@@ -137,11 +137,11 @@
 							"properties": {
 								"id": {
 									"type": "integer",
-									"description": "Existing task id to keep."
+									"description": "Id of a task you keep."
 								},
 								"title": {
 									"type": "string",
-									"description": "Short imperative title, e.g. 'Write the parser'."
+									"description": "A short command as title, like 'Write the parser'."
 								},
 								"status": {
 									"type": "string",
@@ -152,22 +152,22 @@
 										"done",
 										"dropped"
 									],
-									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+									"description": "pending when omitted. blocked: still open, held by something beyond the list; dropped: deliberately left undone."
 								},
 								"note": {
 									"type": "string",
-									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+									"description": "The current activity, shown during in_progress, like 'writing tests'. A blocked task needs one that says what it waits for, like 'waiting for an admin'."
 								}
 							}
 						}
 					},
 					"id": {
 						"type": "integer",
-						"description": "Task id for update."
+						"description": "Id of the task to update."
 					},
 					"title": {
 						"type": "string",
-						"description": "Title for add, or a new title for update."
+						"description": "add: its title; update: a new title."
 					},
 					"status": {
 						"type": "string",
@@ -178,11 +178,11 @@
 							"done",
 							"dropped"
 						],
-						"description": "Status for add or update."
+						"description": "add or update: its status."
 					},
 					"note": {
 						"type": "string",
-						"description": "Note for add or update; required for blocked."
+						"description": "add or update: its note; blocked needs one."
 					}
 				}
 			},
@@ -195,12 +195,12 @@
 			"name": "todo",
 			"label": "Todo",
 			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
-			"promptSnippet": "Track multi-step work",
+			"promptSnippet": "Track a multi-step plan",
 			"promptGuidelines": [
 				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
-				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never with failing tests or partial work (the blocker becomes a new task).",
 				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
-				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+				"Set blocked only for a wait outside the list (a person, an authorization), with a note that names it; a prerequisite inside the list keeps the task pending. When the condition is met, back to pending."
 			],
 			"parameters": {
 				"type": "object",
@@ -218,11 +218,11 @@
 							"clear",
 							"list"
 						],
-						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+						"description": "write sets the whole list, add puts one task at the end, update edits a task by id, clear removes every task, list shows them."
 					},
 					"tasks": {
 						"type": "array",
-						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"description": "For write: every task, in order. Give a kept task its id back so its history stays; leave id out for new tasks.",
 						"items": {
 							"type": "object",
 							"additionalProperties": false,
@@ -232,11 +232,11 @@
 							"properties": {
 								"id": {
 									"type": "integer",
-									"description": "Existing task id to keep."
+									"description": "Id of a task you keep."
 								},
 								"title": {
 									"type": "string",
-									"description": "Short imperative title, e.g. 'Write the parser'."
+									"description": "A short command as title, like 'Write the parser'."
 								},
 								"status": {
 									"type": "string",
@@ -247,22 +247,22 @@
 										"done",
 										"dropped"
 									],
-									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+									"description": "pending when omitted. blocked: still open, held by something beyond the list; dropped: deliberately left undone."
 								},
 								"note": {
 									"type": "string",
-									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+									"description": "The current activity, shown during in_progress, like 'writing tests'. A blocked task needs one that says what it waits for, like 'waiting for an admin'."
 								}
 							}
 						}
 					},
 					"id": {
 						"type": "integer",
-						"description": "Task id for update."
+						"description": "Id of the task to update."
 					},
 					"title": {
 						"type": "string",
-						"description": "Title for add, or a new title for update."
+						"description": "add: its title; update: a new title."
 					},
 					"status": {
 						"type": "string",
@@ -273,11 +273,11 @@
 							"done",
 							"dropped"
 						],
-						"description": "Status for add or update."
+						"description": "add or update: its status."
 					},
 					"note": {
 						"type": "string",
-						"description": "Note for add or update; required for blocked."
+						"description": "add or update: its note; blocked needs one."
 					}
 				}
 			},
@@ -290,12 +290,12 @@
 			"name": "todo",
 			"label": "Todo",
 			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
-			"promptSnippet": "Track multi-step work",
+			"promptSnippet": "Track a multi-step plan",
 			"promptGuidelines": [
 				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
-				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never with failing tests or partial work (the blocker becomes a new task).",
 				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
-				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+				"Set blocked only for a wait outside the list (a person, an authorization), with a note that names it; a prerequisite inside the list keeps the task pending. When the condition is met, back to pending."
 			],
 			"parameters": {
 				"type": "object",
@@ -313,11 +313,11 @@
 							"clear",
 							"list"
 						],
-						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+						"description": "write sets the whole list, add puts one task at the end, update edits a task by id, clear removes every task, list shows them."
 					},
 					"tasks": {
 						"type": "array",
-						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"description": "For write: every task, in order. Give a kept task its id back so its history stays; leave id out for new tasks.",
 						"items": {
 							"type": "object",
 							"additionalProperties": false,
@@ -327,11 +327,11 @@
 							"properties": {
 								"id": {
 									"type": "integer",
-									"description": "Existing task id to keep."
+									"description": "Id of a task you keep."
 								},
 								"title": {
 									"type": "string",
-									"description": "Short imperative title, e.g. 'Write the parser'."
+									"description": "A short command as title, like 'Write the parser'."
 								},
 								"status": {
 									"type": "string",
@@ -342,22 +342,22 @@
 										"done",
 										"dropped"
 									],
-									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+									"description": "pending when omitted. blocked: still open, held by something beyond the list; dropped: deliberately left undone."
 								},
 								"note": {
 									"type": "string",
-									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+									"description": "The current activity, shown during in_progress, like 'writing tests'. A blocked task needs one that says what it waits for, like 'waiting for an admin'."
 								}
 							}
 						}
 					},
 					"id": {
 						"type": "integer",
-						"description": "Task id for update."
+						"description": "Id of the task to update."
 					},
 					"title": {
 						"type": "string",
-						"description": "Title for add, or a new title for update."
+						"description": "add: its title; update: a new title."
 					},
 					"status": {
 						"type": "string",
@@ -368,11 +368,11 @@
 							"done",
 							"dropped"
 						],
-						"description": "Status for add or update."
+						"description": "add or update: its status."
 					},
 					"note": {
 						"type": "string",
-						"description": "Note for add or update; required for blocked."
+						"description": "add or update: its note; blocked needs one."
 					}
 				}
 			},
@@ -385,12 +385,12 @@
 			"name": "todo",
 			"label": "Todo",
 			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
-			"promptSnippet": "Track multi-step work",
+			"promptSnippet": "Track a multi-step plan",
 			"promptGuidelines": [
 				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
-				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never with failing tests or partial work (the blocker becomes a new task).",
 				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
-				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+				"Set blocked only for a wait outside the list (a person, an authorization), with a note that names it; a prerequisite inside the list keeps the task pending. When the condition is met, back to pending."
 			],
 			"parameters": {
 				"type": "object",
@@ -408,11 +408,11 @@
 							"clear",
 							"list"
 						],
-						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+						"description": "write sets the whole list, add puts one task at the end, update edits a task by id, clear removes every task, list shows them."
 					},
 					"tasks": {
 						"type": "array",
-						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"description": "For write: every task, in order. Give a kept task its id back so its history stays; leave id out for new tasks.",
 						"items": {
 							"type": "object",
 							"additionalProperties": false,
@@ -422,11 +422,11 @@
 							"properties": {
 								"id": {
 									"type": "integer",
-									"description": "Existing task id to keep."
+									"description": "Id of a task you keep."
 								},
 								"title": {
 									"type": "string",
-									"description": "Short imperative title, e.g. 'Write the parser'."
+									"description": "A short command as title, like 'Write the parser'."
 								},
 								"status": {
 									"type": "string",
@@ -437,22 +437,22 @@
 										"done",
 										"dropped"
 									],
-									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+									"description": "pending when omitted. blocked: still open, held by something beyond the list; dropped: deliberately left undone."
 								},
 								"note": {
 									"type": "string",
-									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+									"description": "The current activity, shown during in_progress, like 'writing tests'. A blocked task needs one that says what it waits for, like 'waiting for an admin'."
 								}
 							}
 						}
 					},
 					"id": {
 						"type": "integer",
-						"description": "Task id for update."
+						"description": "Id of the task to update."
 					},
 					"title": {
 						"type": "string",
-						"description": "Title for add, or a new title for update."
+						"description": "add: its title; update: a new title."
 					},
 					"status": {
 						"type": "string",
@@ -463,11 +463,11 @@
 							"done",
 							"dropped"
 						],
-						"description": "Status for add or update."
+						"description": "add or update: its status."
 					},
 					"note": {
 						"type": "string",
-						"description": "Note for add or update; required for blocked."
+						"description": "add or update: its note; blocked needs one."
 					}
 				}
 			},
@@ -480,12 +480,12 @@
 			"name": "todo",
 			"label": "Todo",
 			"description": "Plan and track your own next steps for this request; start the list yourself, without being asked, before the first edit of multi-step work. A change's tasks are in `jhon status`: never copy them here. Actions: write (whole list), update, add, clear, list.",
-			"promptSnippet": "Track multi-step work",
+			"promptSnippet": "Track a multi-step plan",
 			"promptGuidelines": [
 				"Use todo for three or more steps or a list the user hands you; skip trivial requests. A small change keeps no list.",
-				"Keep exactly one task in_progress; mark it done right after it is verified, never while tests fail or the work is partial (add a task for the blocker).",
+				"Keep exactly one task in_progress; mark it done right after it is verified, never with failing tests or partial work (the blocker becomes a new task).",
 				"When the plan changes, write the complete list and keep ids of existing tasks; mark obsolete tasks dropped, never done.",
-				"Mark a task blocked with a note naming what it waits for only when that is outside the list (a person, an authorization); a prerequisite in the list keeps it pending. Back to pending once the condition holds."
+				"Set blocked only for a wait outside the list (a person, an authorization), with a note that names it; a prerequisite inside the list keeps the task pending. When the condition is met, back to pending."
 			],
 			"parameters": {
 				"type": "object",
@@ -503,11 +503,11 @@
 							"clear",
 							"list"
 						],
-						"description": "write replaces the whole list; add appends one task; update changes one task by id; clear empties the list; list reports it."
+						"description": "write sets the whole list, add puts one task at the end, update edits a task by id, clear removes every task, list shows them."
 					},
 					"tasks": {
 						"type": "array",
-						"description": "For write: the complete ordered list. Keep the id of tasks that already exist so their history survives; omit it for new ones.",
+						"description": "For write: every task, in order. Give a kept task its id back so its history stays; leave id out for new tasks.",
 						"items": {
 							"type": "object",
 							"additionalProperties": false,
@@ -517,11 +517,11 @@
 							"properties": {
 								"id": {
 									"type": "integer",
-									"description": "Existing task id to keep."
+									"description": "Id of a task you keep."
 								},
 								"title": {
 									"type": "string",
-									"description": "Short imperative title, e.g. 'Write the parser'."
+									"description": "A short command as title, like 'Write the parser'."
 								},
 								"status": {
 									"type": "string",
@@ -532,22 +532,22 @@
 										"done",
 										"dropped"
 									],
-									"description": "Defaults to pending. blocked: open but waiting on something outside the list; dropped: will not be done, on purpose."
+									"description": "pending when omitted. blocked: still open, held by something beyond the list; dropped: deliberately left undone."
 								},
 								"note": {
 									"type": "string",
-									"description": "What is happening right now, shown while in_progress, e.g. 'writing tests'; required for blocked, naming what it waits for, e.g. 'waiting for an admin'."
+									"description": "The current activity, shown during in_progress, like 'writing tests'. A blocked task needs one that says what it waits for, like 'waiting for an admin'."
 								}
 							}
 						}
 					},
 					"id": {
 						"type": "integer",
-						"description": "Task id for update."
+						"description": "Id of the task to update."
 					},
 					"title": {
 						"type": "string",
-						"description": "Title for add, or a new title for update."
+						"description": "add: its title; update: a new title."
 					},
 					"status": {
 						"type": "string",
@@ -558,11 +558,11 @@
 							"done",
 							"dropped"
 						],
-						"description": "Status for add or update."
+						"description": "add or update: its status."
 					},
 					"note": {
 						"type": "string",
-						"description": "Note for add or update; required for blocked."
+						"description": "add or update: its note; blocked needs one."
 					}
 				}
 			},
@@ -684,7 +684,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Read the spec\n2. [in_progress] Write the parser — writing tests\n3. [pending] Ship it",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [in_progress] Write the parser — writing tests\n3. [pending] Ship it",
 							"display": false
 						}
 					}
@@ -1047,7 +1047,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs",
 							"display": false
 						}
 					}
@@ -1071,7 +1071,7 @@
 				{
 					"sent": {
 						"customType": "jhon-todo-reminder",
-						"content": "[Harness reminder from the Jhon shell, not a message from the owner] The todo plan has not been reviewed during several tool-use turns. Check whether it still matches the work performed and update tasks where needed. Do not mark work done without verification.",
+						"content": "[Harness reminder from the Jhon shell, not a message from the owner] Several tool-use turns went by without a look at the todo list. Compare it with the work done so far and update any task that no longer matches. Mark nothing done until it is verified.",
 						"display": false
 					},
 					"options": {
@@ -1089,7 +1089,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: 2 turns without an update — bring the list up to date now)",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: no update for 2 turns — update the list now)",
 							"display": false
 						}
 					}
@@ -1098,7 +1098,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: 3 turns without an update — bring the list up to date now)",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: no update for 3 turns — update the list now)",
 							"display": false
 						}
 					}
@@ -1107,7 +1107,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: 4 turns without an update — bring the list up to date now)",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Read the spec\n2. [done] Write the parser — writing tests\n3. [pending] Ship the parser — tagging\n4. [blocked] Wait for review — an admin\n5. [done] Docs\n(stale: no update for 4 turns — update the list now)",
 							"display": false
 						}
 					}
@@ -1189,7 +1189,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Ship the parser\n2. [pending] dup id\n3. [dropped] zero id\n4. [dropped] later",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Ship the parser\n2. [pending] dup id\n3. [dropped] zero id\n4. [dropped] later",
 							"display": false
 						}
 					}
@@ -1198,7 +1198,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] Ship the parser\n2. [pending] dup id\n3. [dropped] zero id\n4. [dropped] later\n(stale: 2 turns without an update — bring the list up to date now)",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] Ship the parser\n2. [pending] dup id\n3. [dropped] zero id\n4. [dropped] later\n(stale: no update for 2 turns — update the list now)",
 							"display": false
 						}
 					}
@@ -1298,7 +1298,7 @@
 						"content": [
 							{
 								"type": "text",
-								"text": "Error: unknown status \"soon\" (use pending, in_progress, blocked, done, or dropped)"
+								"text": "Error: unknown status \"soon\"; the statuses are pending, in_progress, blocked, done and dropped"
 							}
 						],
 						"details": {
@@ -1307,17 +1307,17 @@
 								"nextId": 1,
 								"updatedTurn": null
 							},
-							"error": "unknown status \"soon\" (use pending, in_progress, blocked, done, or dropped)"
+							"error": "unknown status \"soon\"; the statuses are pending, in_progress, blocked, done and dropped"
 						}
 					},
 					"card": [
 						"力 todo · write                                                                                                                                                                                         "
 					],
 					"folded": [
-						"Error: unknown status \"soon\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                      "
+						"Error: unknown status \"soon\"; the statuses are pending, in_progress, blocked, done and dropped                                                                                                          "
 					],
 					"open": [
-						"Error: unknown status \"soon\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                      "
+						"Error: unknown status \"soon\"; the statuses are pending, in_progress, blocked, done and dropped                                                                                                          "
 					]
 				},
 				{
@@ -1334,7 +1334,7 @@
 						"content": [
 							{
 								"type": "text",
-								"text": "Error: blocked needs a note naming what it waits for"
+								"text": "Error: a blocked task needs a note saying what it waits for"
 							}
 						],
 						"details": {
@@ -1343,17 +1343,17 @@
 								"nextId": 1,
 								"updatedTurn": null
 							},
-							"error": "blocked needs a note naming what it waits for"
+							"error": "a blocked task needs a note saying what it waits for"
 						}
 					},
 					"card": [
 						"力 todo · write                                                                                                                                                                                         "
 					],
 					"folded": [
-						"Error: blocked needs a note naming what it waits for                                                                                                                                                    "
+						"Error: a blocked task needs a note saying what it waits for                                                                                                                                             "
 					],
 					"open": [
-						"Error: blocked needs a note naming what it waits for                                                                                                                                                    "
+						"Error: a blocked task needs a note saying what it waits for                                                                                                                                             "
 					]
 				},
 				{
@@ -1396,7 +1396,7 @@
 						"content": [
 							{
 								"type": "text",
-								"text": "Error: unknown status \"7\" (use pending, in_progress, blocked, done, or dropped)"
+								"text": "Error: unknown status \"7\"; the statuses are pending, in_progress, blocked, done and dropped"
 							}
 						],
 						"details": {
@@ -1405,17 +1405,17 @@
 								"nextId": 1,
 								"updatedTurn": null
 							},
-							"error": "unknown status \"7\" (use pending, in_progress, blocked, done, or dropped)"
+							"error": "unknown status \"7\"; the statuses are pending, in_progress, blocked, done and dropped"
 						}
 					},
 					"card": [
 						"力 todo · add                                                                                                                                                                                           "
 					],
 					"folded": [
-						"Error: unknown status \"7\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                         "
+						"Error: unknown status \"7\"; the statuses are pending, in_progress, blocked, done and dropped                                                                                                             "
 					],
 					"open": [
-						"Error: unknown status \"7\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                         "
+						"Error: unknown status \"7\"; the statuses are pending, in_progress, blocked, done and dropped                                                                                                             "
 					]
 				},
 				{
@@ -1499,7 +1499,7 @@
 						"content": [
 							{
 								"type": "text",
-								"text": "Error: nothing to update: pass status, title, or note"
+								"text": "Error: update needs a status, title or note to change"
 							}
 						],
 						"details": {
@@ -1514,17 +1514,17 @@
 								"nextId": 2,
 								"updatedTurn": 0
 							},
-							"error": "nothing to update: pass status, title, or note"
+							"error": "update needs a status, title or note to change"
 						}
 					},
 					"card": [
 						"力 todo · update                                                                                                                                                                                        "
 					],
 					"folded": [
-						"Error: nothing to update: pass status, title, or note                                                                                                                                                   "
+						"Error: update needs a status, title or note to change                                                                                                                                                   "
 					],
 					"open": [
-						"Error: nothing to update: pass status, title, or note                                                                                                                                                   "
+						"Error: update needs a status, title or note to change                                                                                                                                                   "
 					]
 				},
 				{
@@ -1537,7 +1537,7 @@
 						"content": [
 							{
 								"type": "text",
-								"text": "Error: blocked needs a note naming what it waits for"
+								"text": "Error: a blocked task needs a note saying what it waits for"
 							}
 						],
 						"details": {
@@ -1552,17 +1552,17 @@
 								"nextId": 2,
 								"updatedTurn": 0
 							},
-							"error": "blocked needs a note naming what it waits for"
+							"error": "a blocked task needs a note saying what it waits for"
 						}
 					},
 					"card": [
 						"力 todo · update                                                                                                                                                                                        "
 					],
 					"folded": [
-						"Error: blocked needs a note naming what it waits for                                                                                                                                                    "
+						"Error: a blocked task needs a note saying what it waits for                                                                                                                                             "
 					],
 					"open": [
-						"Error: blocked needs a note naming what it waits for                                                                                                                                                    "
+						"Error: a blocked task needs a note saying what it waits for                                                                                                                                             "
 					]
 				},
 				{
@@ -1575,7 +1575,7 @@
 						"content": [
 							{
 								"type": "text",
-								"text": "Error: unknown status \"nope\" (use pending, in_progress, blocked, done, or dropped)"
+								"text": "Error: unknown status \"nope\"; the statuses are pending, in_progress, blocked, done and dropped"
 							}
 						],
 						"details": {
@@ -1590,17 +1590,17 @@
 								"nextId": 2,
 								"updatedTurn": 0
 							},
-							"error": "unknown status \"nope\" (use pending, in_progress, blocked, done, or dropped)"
+							"error": "unknown status \"nope\"; the statuses are pending, in_progress, blocked, done and dropped"
 						}
 					},
 					"card": [
 						"力 todo · update                                                                                                                                                                                        "
 					],
 					"folded": [
-						"Error: unknown status \"nope\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                      "
+						"Error: unknown status \"nope\"; the statuses are pending, in_progress, blocked, done and dropped                                                                                                          "
 					],
 					"open": [
-						"Error: unknown status \"nope\" (use pending, in_progress, blocked, done, or dropped)                                                                                                                      "
+						"Error: unknown status \"nope\"; the statuses are pending, in_progress, blocked, done and dropped                                                                                                          "
 					]
 				},
 				{
@@ -1611,7 +1611,7 @@
 						"content": [
 							{
 								"type": "text",
-								"text": "Error: unknown action \"rename\" (use write, add, update, clear, or list)"
+								"text": "Error: unknown action \"rename\"; the actions are write, add, update, clear and list"
 							}
 						],
 						"details": {
@@ -1626,17 +1626,17 @@
 								"nextId": 2,
 								"updatedTurn": 0
 							},
-							"error": "unknown action \"rename\" (use write, add, update, clear, or list)"
+							"error": "unknown action \"rename\"; the actions are write, add, update, clear and list"
 						}
 					},
 					"card": [
 						"力 todo · rename                                                                                                                                                                                        "
 					],
 					"folded": [
-						"Error: unknown action \"rename\" (use write, add, update, clear, or list)                                                                                                                                 "
+						"Error: unknown action \"rename\"; the actions are write, add, update, clear and list                                                                                                                      "
 					],
 					"open": [
-						"Error: unknown action \"rename\" (use write, add, update, clear, or list)                                                                                                                                 "
+						"Error: unknown action \"rename\"; the actions are write, add, update, clear and list                                                                                                                      "
 					]
 				},
 				{
@@ -1924,7 +1924,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [pending] Fix the bug",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [pending] Fix the bug",
 							"display": false
 						}
 					}
@@ -2003,7 +2003,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [in_progress] Scout — reading",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] Scout — reading",
 							"display": false
 						}
 					}
@@ -2032,7 +2032,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [in_progress] Scout — reading\n(stale: 2 turns without an update — bring the list up to date now)",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] Scout — reading\n(stale: no update for 2 turns — update the list now)",
 							"display": false
 						}
 					}
@@ -2049,7 +2049,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [in_progress] old rpiv — porting",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] old rpiv — porting",
 							"display": false
 						}
 					}
@@ -2103,7 +2103,7 @@
 					"run": {
 						"message": {
 							"customType": "jhon-todo-list",
-							"content": "## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [in_progress] old rpiv — porting\n2. [pending] next",
+							"content": "## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [in_progress] old rpiv — porting\n2. [pending] next",
 							"display": false
 						}
 					}
@@ -2149,10 +2149,10 @@
 					8
 				],
 				"block": [
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d",
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d",
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d\n(stale: 2 turns without an update — bring the list up to date now)",
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d\n(stale: 5 turns without an update — bring the list up to date now)"
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d",
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d",
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d\n(stale: no update for 2 turns — update the list now)",
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [done] a\n2. [in_progress] b — doing b\n3. [blocked] c — a person\n4. [dropped] d\n(stale: no update for 5 turns — update the list now)"
 				],
 				"start": null,
 				"list": "[done] #1 a\n[in_progress] #2 b — doing b\n[blocked] #3 c — a person\n[dropped] #4 d"
@@ -2171,10 +2171,10 @@
 					9
 				],
 				"block": [
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [pending] only",
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [pending] only",
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [pending] only\n(stale: 2 turns without an update — bring the list up to date now)",
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [pending] only\n(stale: 5 turns without an update — bring the list up to date now)"
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [pending] only",
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [pending] only",
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [pending] only\n(stale: no update for 2 turns — update the list now)",
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [pending] only\n(stale: no update for 5 turns — update the list now)"
 				],
 				"start": null,
 				"list": "[pending] #1 only"
@@ -2193,10 +2193,10 @@
 					0
 				],
 				"block": [
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [blocked] wait — x",
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [blocked] wait — x",
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [blocked] wait — x\n(stale: 2 turns without an update — bring the list up to date now)",
-					"## Todo list\nKeep it current with the `todo` tool: mark a task in_progress before starting it, done right after finishing it, and rewrite the whole list with `write` whenever the plan changes. Update it before you end the turn.\nA blocked task waits on something outside the list: do not work on it until its condition holds. When the plan changes, mark the tasks it made obsolete dropped instead of leaving them pending or marking them done.\n1. [blocked] wait — x\n(stale: 5 turns without an update — bring the list up to date now)"
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [blocked] wait — x",
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [blocked] wait — x",
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [blocked] wait — x\n(stale: no update for 2 turns — update the list now)",
+					"## Todo list\nMaintain it with the `todo` tool: set a task in_progress when you start it and done as soon as it is finished; when the plan changes, `write` the whole list again. Bring it up to date before your turn ends.\nA blocked task depends on something outside the list: leave it alone until that condition is met. Tasks a plan change made obsolete are marked dropped, neither left pending nor marked done.\n1. [blocked] wait — x\n(stale: no update for 5 turns — update the list now)"
 				],
 				"start": null,
 				"list": "[blocked] #1 wait — x"

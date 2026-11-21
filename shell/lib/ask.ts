@@ -20,10 +20,13 @@ import { AskView, type AskItem, type AskViewOptions } from "./ui/ask-view.ts";
 import { DockedView } from "./ui/overlay.ts";
 import { shellSettings } from "./settings.ts";
 
-export const MAX_QUESTIONS = 4;
-export const MIN_OPTIONS = 2;
-export const MAX_OPTIONS = 4;
-export const MAX_HEADER = 12;
+/** One call's limits: questions per call, options per question (a range), characters in a header. */
+export const {
+	questions: MAX_QUESTIONS,
+	fewestOptions: MIN_OPTIONS,
+	mostOptions: MAX_OPTIONS,
+	headerChars: MAX_HEADER,
+} = { questions: 4, fewestOptions: 2, mostOptions: 4, headerChars: 12 } as const;
 /** The row that takes a typed answer (T170). */
 export const OTHER = "Write my own answer.";
 export const DONE = "Done";

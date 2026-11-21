@@ -388,7 +388,7 @@ export function createTaskRegistry(deps: TaskRegistryDeps) {
 		return n;
 	};
 	const admit = () => {
-		if (runningCount() >= MAX_RUNNING_TASKS) throw new Error(`${MAX_RUNNING_TASKS} background tasks are already running; stop one with task_stop first.`);
+		if (runningCount() >= MAX_RUNNING_TASKS) throw new Error(`${MAX_RUNNING_TASKS} background tasks are running, the most allowed; stop one with task_stop first.`);
 	};
 	const register = (task: TaskRecord) => {
 		const cancel = new AbortController();

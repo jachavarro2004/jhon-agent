@@ -573,7 +573,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		name: "session_worktree_register",
 		label: "Add a session worktree",
 		description: "Add a worktree of this Git clone to the session: the LDD section reads the change there too.",
-		parameters: { type: "object", required: ["path"], additionalProperties: false, properties: { path: { type: "string", description: "Worktree path to include in this session." } } },
+		parameters: { type: "object", required: ["path"], additionalProperties: false, properties: { path: { type: "string", description: "A worktree path to add to this session." } } },
 	};
 	pi.registerTool({
 		...WORKTREE_TOOL,

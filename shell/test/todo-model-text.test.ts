@@ -29,5 +29,5 @@ test("every result, refusal, run block and nudge reads as before, byte for byte"
 	assert.deepEqual(now.appended, snapshot.appended);
 	assert.equal(JSON.stringify(now), JSON.stringify(snapshot));
 	const text = JSON.stringify(snapshot);
-	for (const needle of ["jhon-todo-reminder", "jhon-todo-start", "Error: blocked needs a note", "stale: "]) assert.ok(text.includes(needle), `the snapshot holds ${needle}`);
+	for (const needle of ["jhon-todo-reminder", "jhon-todo-start", "Error: a blocked task needs a note", "stale: "]) assert.ok(text.includes(needle), `the snapshot holds ${needle}`);
 });

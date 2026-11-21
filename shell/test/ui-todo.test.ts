@@ -29,7 +29,7 @@ interface TodoTool {
 const plain = { fg: (_role: string, text: string) => text, strikethrough: (text: string) => `~${text}~`, bold: (text: string) => text };
 
 const FRAME = "[Harness reminder from the Jhon shell, not a message from the owner] ";
-const REMINDER = `${FRAME}The todo plan has not been reviewed during several tool-use turns. Check whether it still matches the work performed and update tasks where needed. Do not mark work done without verification.`;
+const REMINDER = `${FRAME}Several tool-use turns went by without a look at the todo list. Compare it with the work done so far and update any task that no longer matches. Mark nothing done until it is verified.`;
 const START_NUDGE = `${FRAME}This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in \`jhon status\`.`;
 const START_RULE = "## Todo list\nInside an LDD change or not, the todo list holds your own next steps for this request; the change's tasks stay in `jhon status` and tasks.md, never copied here. For work of three or more steps, write it with `todo write` before the first edit and keep it current: one task in_progress, mark it done right after it is verified. A question, a single read or a one-line fix needs no list; a small change (`jhon status` says so) keeps no tasks.md, archive, light verify or todo list.";
 
@@ -259,7 +259,7 @@ test("with no list a run starts with the start rule; open tasks replace it with 
 	assert.equal(await runStart(r, s.ctx), "", "the same rule is not sent twice");
 	await r.call(s.ctx, { action: "write", tasks: [{ title: "Fix the bug" }] });
 	const open = await runStart(r, s.ctx);
-	assert.match(open, /^## Todo list\nKeep it current with the `todo` tool/);
+	assert.match(open, /^## Todo list\nMaintain it with the `todo` tool/);
 	assert.match(open, /1\. \[pending\] Fix the bug/);
 	assert.doesNotMatch(open, /before the first edit/);
 	await r.call(s.ctx, { action: "clear" });
@@ -346,14 +346,14 @@ test("the description tells the agent to start the list unasked, as its own next
 	for (const said of [/multi-step work/, /before the first edit/, /without being asked/, /your own next steps for this request/, /A change's tasks are in `jhon status`: never copy them here/]) assert.match(description, said);
 	assert.doesNotMatch(description, /tasks\.md is the list/);
 	assert.ok(description.length <= 258, String(description.length));
-	assert.equal(promptSnippet, "Track multi-step work");
+	assert.equal(promptSnippet, "Track a multi-step plan");
 });
 
 // T42c: short, and every rule still there.
 test("the tool's whole text stays within 900 characters and keeps each rule", () => {
 	const tool = rig().tool();
 	const text = [tool.description, tool.promptSnippet, ...tool.promptGuidelines].join("\n");
-	for (const rule of [/three or more steps/, /exactly one task in_progress/, /done right after/, /complete list/, /keep ids/, /tests fail or the work is partial/, /task for the blocker/, /pending once the condition holds/, /write.*update.*add.*clear.*list/s]) {
+	for (const rule of [/three or more steps/, /exactly one task in_progress/, /done right after/, /complete list/, /keep ids/, /failing tests or partial work/, /the blocker becomes a new task/, /When the condition is met, back to pending/, /write.*update.*add.*clear.*list/s]) {
 		assert.match(text, rule);
 	}
 	assert.ok(text.length <= 900, String(text.length));
@@ -370,7 +370,7 @@ test("the list reaches the model when it changes and, untouched for two runs, sa
 	assert.match(fresh, /^## Todo list/);
 	assert.match(fresh, /1\. \[pending\] Fix the bug/);
 	assert.doesNotMatch(fresh, /stale/);
-	assert.match(await runStart(r, s.ctx), /\(stale: 2 turns without an update — bring the list up to date now\)$/);
+	assert.match(await runStart(r, s.ctx), /\(stale: no update for 2 turns — update the list now\)$/);
 	const rows = s.section()!;
 	assert.match(rows[0]!, /TODOS +alt\+t {2}stale · 2 turns · 0\/1$/, "T174-S5b");
 	assert.equal(rows[1]!.trim(), "· Fix the bug");
@@ -441,8 +441,8 @@ test("blocked and dropped are in the schema and the guidelines", () => {
 	const statuses = ["pending", "in_progress", "blocked", "done", "dropped"];
 	assert.deepEqual(tool.parameters.properties.status!.enum, statuses);
 	assert.deepEqual(tool.parameters.properties.tasks!.items!.properties.status!.enum, statuses);
-	assert.match(tool.parameters.properties.tasks!.items!.properties.note!.description!, /required for blocked/);
-	assert.ok(tool.promptGuidelines.some((line) => /blocked with a note naming what it waits for/.test(line)));
+	assert.match(tool.parameters.properties.tasks!.items!.properties.note!.description!, /A blocked task needs one that says what it waits for/);
+	assert.ok(tool.promptGuidelines.some((line) => /Set blocked only for a wait outside the list .* with a note that names it/.test(line)));
 	assert.ok(tool.promptGuidelines.some((line) => /dropped/.test(line) && /obsolete/.test(line)));
 });
 

@@ -178,7 +178,7 @@ test("a standalone sleep while a job runs still runs, and its result says the wa
 	for (const command of ["sleep 3", "sleep 30"]) {
 		const { call, notes } = await ran(h, command);
 		assert.equal(call, undefined, command);
-		assert.deepEqual(notes, ["Standalone sleep while background work runs (1 background task): it only held the turn. Each task's end arrives as a message and starts a new turn, so end the turn instead."], command);
+		assert.deepEqual(notes, ["Standalone sleep while background work runs (1 background task): it only held the turn. Each task's end comes in a message that opens a new turn, so end the turn instead."], command);
 	}
 	assert.deepEqual(await ran(h, "npm test"), { call: undefined, notes: [] });
 });

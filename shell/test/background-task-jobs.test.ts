@@ -161,8 +161,8 @@ test("25 tasks run at once at most, sub-agents counted; one that ends frees its 
 	j.registry.startAgent(worker, "review", "/", "s");
 	for (let i = 1; i < 25; i++) j.registry.start({ command: `c${i}`, cwd: "/", ownerSessionId: i % 2 ? "s" : "t" });
 	assert.equal(j.registry.running(), 25);
-	assert.throws(() => j.registry.start({ command: "more", cwd: "/", ownerSessionId: "s" }), { message: "25 background tasks are already running; stop one with task_stop first." });
-	assert.throws(() => j.registry.startAgent(worker, "more", "/", "s"), { message: "25 background tasks are already running; stop one with task_stop first." });
+	assert.throws(() => j.registry.start({ command: "more", cwd: "/", ownerSessionId: "s" }), { message: "25 background tasks are running, the most allowed; stop one with task_stop first." });
+	assert.throws(() => j.registry.startAgent(worker, "more", "/", "s"), { message: "25 background tasks are running, the most allowed; stop one with task_stop first." });
 	assert.equal(j.execs.length, 24, "a refused job never runs");
 	j.execs[0]!.exit(0);
 	for (const deadline = Date.now() + 3000; j.settled.length === 0; await new Promise((r) => setTimeout(r, 5))) if (Date.now() > deadline) throw new Error("no end");

@@ -12,7 +12,7 @@
 			"properties": {
 				"path": {
 					"type": "string",
-					"description": "Worktree path to include in this session."
+					"description": "A worktree path to add to this session."
 				}
 			}
 		},
