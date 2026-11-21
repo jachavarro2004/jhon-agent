@@ -32,7 +32,8 @@ import { setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { recentSessionRoots, SessionChanges } from "../lib/ui/session-changes.ts";
 import type { ProfilesJson } from "../lib/session-profile.ts";
 import { installSessionChangeCapture } from "../lib/ui/session-change-capture.ts";
-import { SelectionEngine } from "../lib/ui/selection-engine.ts";
+import { PromptSelection } from "../lib/ui/prompt-selection.ts";
+import { drawnInputRows } from "../lib/ui/editor-access.ts";
 import { HOST_EVENT, hostShowsPath } from "../lib/host.ts";
 import { counted } from "../lib/ui-use.ts";
 import { installUsage } from "../lib/ui/usage-shell.ts";
@@ -148,14 +149,14 @@ export { extractQueuedText };
  * The prompt (design/shell-tui 01, T174-S8): the working line, a rule, the
  * input behind `❯`, a rule (lib/ui/shell-prompt.ts draws them around pi's
  * editor). It adds to pi's editor the esc gate (lib/ui/double-esc-cancel-policy.ts),
- * the selection keys (lib/ui/selection-engine.ts) and the rows above the line.
+ * the selection (lib/ui/prompt-selection.ts) and the rows above the line.
  */
 export class JhonPromptEditor extends CustomEditor {
 	private readonly deps: PromptEditorDeps;
 	private readonly host: TUI;
 	// CustomEditor keeps its keybindings private; the esc gate needs app.interrupt's match.
 	private readonly keys: KeybindingsManager;
-	private readonly selectionEngine: SelectionEngine;
+	private readonly selection: PromptSelection;
 	private readonly esc: ReturnType<typeof createEscGate>;
 	private working = false;
 	private startedAt = 0;
@@ -173,7 +174,7 @@ export class JhonPromptEditor extends CustomEditor {
 		this.host = tui;
 		this.keys = keybindings;
 		this.deps = deps;
-		this.selectionEngine = new SelectionEngine(this);
+		this.selection = new PromptSelection(this);
 		this.esc = createEscGate(() => deps.now());
 	}
 
@@ -205,7 +206,7 @@ export class JhonPromptEditor extends CustomEditor {
 	override handleInput(data: string): void {
 		if (!this.keys.matches(data, "app.interrupt")) this.esc.other();
 		// The selection keys come first; an extension's own shortcut still wins its chord.
-		this.selectionEngine.handleInput(data, (key) => this.handleKey(key), (key) => this.onExtensionShortcut?.(key) === true);
+		this.selection.input(data, (key) => this.handleKey(key), (key) => this.onExtensionShortcut?.(key) === true);
 	}
 
 	private handleKey(data: string): void {
@@ -278,11 +279,10 @@ export class JhonPromptEditor extends CustomEditor {
 		const ascii = this.deps.ascii ? this.deps.ascii() : shellSettings().ascii();
 		const theme = { fg: this.deps.fg, bold: this.deps.bold, ...(this.deps.italic ? { italic: this.deps.italic } : {}) };
 		const inner = Math.max(1, width - PROMPT_INDENT);
-		const rows = this.selectionEngine.decorateRows(super.render(inner), inner, 0);
+		const rows = this.selection.paint(super.render(inner), inner);
 		const text = this.getText();
-		// SAFETY: renderedVisibleLineCount is pi's own count of the input rows it just drew; anything else falls back to all rows between the rules.
-		const counted = (this as unknown as { renderedVisibleLineCount?: number }).renderedVisibleLineCount;
-		const inputRows = Number.isInteger(counted) && counted! >= 1 && counted! + 2 <= rows.length ? counted! : Math.max(0, rows.length - 2);
+		// pi's own count of the input rows it just drew; without it, every row between the rules.
+		const inputRows = drawnInputRows(this, rows.length) ?? Math.max(0, rows.length - 2);
 		if (text === "" && inputRows === 1) rows[1] = withPlaceholder(rows[1]!, PROMPT_HINT, (hint) => this.deps.fg("dim", hint));
 		const state = !this.working ? PROMPT_STATE.IDLE : this.deps.pending() ? PROMPT_STATE.QUEUED : PROMPT_STATE.WORKING;
 		const hint = this.esc.hint(this.working, text);
@@ -303,7 +303,7 @@ export class JhonPromptEditor extends CustomEditor {
 			border: (rule) => this.borderColor(rule),
 			theme,
 			ascii,
-			decorateBottom: (rule) => this.selectionEngine.decorateBottomRule(rule, width, this.borderColor(glyph("rule", ascii))),
+			decorateBottom: (rule) => this.selection.hint(rule, width, this.borderColor(glyph("rule", ascii))),
 		});
 		const top = this.deps.topRows?.(width, this.hoveredTopRow) ?? [];
 		if (this.hoveredTopRow !== undefined && this.hoveredTopRow >= top.length) this.hoveredTopRow = undefined;

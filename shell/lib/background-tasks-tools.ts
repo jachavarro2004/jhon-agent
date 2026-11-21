@@ -39,7 +39,7 @@ export const TASK_NOTICE_TYPE = "jhon-tasks.notice";
 export const TASK_GLYPH = "⧗";
 const TASKS_STATUS_KEY = "jhon-tasks";
 // The rail's BACKGROUND key (L96). alt+a is the prompt's select-all alias
-// (selection-engine.ts, advertised in its bottom rule), and pi binds
+// (prompt-selection.ts, advertised in its bottom rule), and pi binds
 // alt+b/d/f/p/q/v/y/z: alt+s is free.
 
 /** The key that opens /jhon:agents, shell.keys.agents: alt+s, another (JHON_SHELL_TASKS_KEY overrides it), or off. */

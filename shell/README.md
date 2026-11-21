@@ -265,7 +265,13 @@ message waits), with `esc esc interrupts` (or `esc interrupts`, with
 `shell.behaviour.double_esc_cancel` off) at its right end, or the open esc
 confirmation (`esc again stops it`, `esc again clears it`). Under it a rule,
 `❯ <input>` (`write, or / for a command` while empty) and a rule; pi's scroll
-note and a selection's count ride the rules. With
+note and a selection's count ride the rules. `shift+home` and `shift+end`
+select to the line's start or end and `alt+a` or `alt+e` selects it all
+(`lib/ui/prompt-selection.ts`): the cells invert, the bottom rule says
+`N chars selected, Del deletes them, alt+a selects all`, and Del, backspace,
+a typed character or a paste replace the selection in one undo step; any
+other key drops it first. Another extension's shortcut on one of those keys
+wins it. Dragging with the mouse and copying are pi's own. With
 `shell.appearance.animations` full a light crosses `Working…` and the 力
 turns its tone; off, the line stands still. In a fullscreen terminal without the pane
 (under 140 columns, Status hidden, or no layout hook) the Running block sits
