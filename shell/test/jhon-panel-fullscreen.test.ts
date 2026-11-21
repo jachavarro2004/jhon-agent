@@ -98,3 +98,16 @@ test("/jhon:profile opens near full screen as G's profiles view; /jhon:grants st
 	assert.ok(card.length < 30, "the grants are not full screen");
 	assert.match(card[1]!, /^│ Grants +esc │$/, "the card's title row, as Customize's");
 });
+
+// pi's theme throws on a colour it does not know (the live crash on alt+j,
+// "Unknown theme color: faint"): every colour the full-screen view asks for
+// must be one of pi's own theme keys, never a shell role name.
+test("the full-screen view asks pi's theme only for colours pi knows", async () => {
+	const { readFileSync } = await import("node:fs");
+	const dark = JSON.parse(readFileSync(new URL("../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/dark.json", import.meta.url), "utf8")) as { colors: Record<string, unknown> };
+	const known = new Set(Object.keys(dark.colors));
+	const strict = { fg: (color: string, text: string) => { if (!known.has(color)) throw new Error(`Unknown theme color: ${color}`); return text; }, bold: (t: string) => t };
+	for (const ascii of [false, true]) {
+		assert.doesNotThrow(() => renderFullscreenView({ theme: strict, width: 120, rows: 30, tab: "LDD", title: "LDD · x", sentence: "the change", body: ["one"], hints: ["t tests", "esc close"], feedback: ["saved", "ok"], ascii }));
+	}
+});
