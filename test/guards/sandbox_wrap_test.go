@@ -8,6 +8,7 @@ package guards
 // cannot be pinned or sandboxed is refused, never run as it came.
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -84,13 +85,24 @@ func TestSandboxModeAbsentIsOnOnLinuxWhereItCanRun(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
 	support.Write(t, s.scratch, map[string]string{"settings-empty.toml": ""})
-	empty := append(append([]string{}, s.env...), "JHON_SETTINGS="+filepath.Join(s.scratch, "settings-empty.toml"))
+	// Where it can run is pinned, not the machine's: a bubblewrap whose
+	// empty sandbox starts, first on PATH, in a folder no sandboxed command
+	// may write (the caches are the scratch's). Whether a real one starts
+	// is the host's: Ubuntu 24.04's AppArmor stops it (a CI runner), and
+	// there the default is off, as the no-bwrap case below proves; the real
+	// start is test/sandbox's.
+	starts := outsideTemp(t)
+	support.Write(t, starts, map[string]string{"bwrap": "#!/bin/sh\nexit 0\n"})
+	if err := os.Chmod(filepath.Join(starts, "bwrap"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	empty := append(append([]string{}, s.env...), "JHON_SETTINGS="+filepath.Join(s.scratch, "settings-empty.toml"), "XDG_CACHE_HOME="+filepath.Join(s.scratch, "cache"))
 	same := "off"
 	if runtime.GOOS == "linux" {
 		same = "on"
 	}
 	for _, c := range wrapCalls {
-		for i, extra := range [][]string{nil, {"JHON_SANDBOX_PROJECT=" + s.p, "PATH=" + mkdir(t, filepath.Join(s.scratch, "no-bwrap"))}} {
+		for i, extra := range [][]string{{"PATH=" + starts + string(os.PathListSeparator) + os.Getenv("PATH")}, {"JHON_SANDBOX_PROJECT=" + s.p, "PATH=" + mkdir(t, filepath.Join(s.scratch, "no-bwrap"))}} {
 			// Where the sandbox cannot run (no bubblewrap on PATH) the default
 			// is off (T128f slice 8, L1375): an absent setting answers as off.
 			like := same
@@ -98,7 +110,7 @@ func TestSandboxModeAbsentIsOnOnLinuxWhereItCanRun(t *testing.T) {
 				like = "off"
 			}
 			got := hook(t, append(append([]string{}, empty...), extra...), "pre-tool", claudeGuards, claudePayload(s, c.tool, c.input))
-			if want := hook(t, sandboxEnv(t, s, like, extra...), "pre-tool", claudeGuards, claudePayload(s, c.tool, c.input)); got != want {
+			if want := hook(t, sandboxEnv(t, s, like, append([]string{"XDG_CACHE_HOME=" + filepath.Join(s.scratch, "cache")}, extra...)...), "pre-tool", claudeGuards, claudePayload(s, c.tool, c.input)); got != want {
 				t.Errorf("%s %v: with no settings %+v, with the mode %s %+v", c.name, extra, got, like, want)
 			}
 		}
@@ -166,7 +178,9 @@ func TestSandboxModeOnRefusesACallItCannotPin(t *testing.T) {
 	}
 	on := sandboxEnv(t, s, "on")
 	// The guards judge first: their refusal is the answer, as it was.
-	refusal := claudePayload(s, "Bash", cmd("cat .env"))
+	// Reading a credentials file is no guard's refusal since T128f slice 6
+	// (L1366); deleting one is.
+	refusal := claudePayload(s, "Bash", cmd("rm .env"))
 	if got, was := hook(t, on, "pre-tool", claudeGuards, refusal), hook(t, s.env, "pre-tool", claudeGuards, refusal); got != was || got.Code != 2 {
 		t.Errorf("a guard's refusal: %+v, was %+v", got, was)
 	}
