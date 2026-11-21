@@ -98,6 +98,9 @@ func recheckRun(o *Options, dir, tasksDir string) (bool, *Metrics, error) {
 		}
 	}
 	check := m.treeFacts(o, r, start, env, ignore)
+	if m.Orchestrated != nil {
+		m.setOrchestrated() // the record's light verify is a tree fact
+	}
 	if t, err := os.ReadFile(m.Transcript); err == nil && m.Transcript != "" {
 		m.fromTranscript(t, r.Task.TestCommand)
 	} else {

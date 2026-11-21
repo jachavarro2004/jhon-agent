@@ -240,9 +240,10 @@ func TestTheReportGroupsByVariantAndShowsTheOverheadVsClean(t *testing.T) {
 	}
 }
 
-// By default a run takes every task: the six short ones and the three long
-// ones (T46), 135 runs at 3 repeats, and the one-time set-up once per Jhon
-// runtime (T146 FB2), 137; the six short ones by name are 90.
+// By default a run takes every task: the six short ones, the three long
+// ones (T46) and the workspace one (T192), 150 runs at 3 repeats, and the
+// one-time set-up once per Jhon runtime (T146 FB2), 152; the six short ones
+// by name are 90.
 func TestTheNextFullRunIsEveryTaskByDefault(t *testing.T) {
 	newFake(t)
 	t.Setenv("HOME", t.TempDir())
@@ -251,8 +252,8 @@ func TestTheNextFullRunIsEveryTaskByDefault(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errOut.String())
 	}
-	for _, s := range []string{"plan: 137 runs", "run 1/137 account-import-plain-jhon-1", "run 45/137 two-modules-ldd-pi-jhon-1", "run 46/137 ldd-setup-plain-jhon-1",
-		"run 47/137 ldd-setup-plain-pi-jhon-1", "run 137/137 two-modules-ldd-pi-jhon-3"} {
+	for _, s := range []string{"plan: 152 runs", "run 1/152 account-import-plain-jhon-1", "run 45/152 two-modules-ldd-pi-jhon-1",
+		"run 50/152 workspace-budgets-ldd-pi-jhon-1", "run 51/152 ldd-setup-plain-jhon-1", "run 52/152 ldd-setup-plain-pi-jhon-1", "run 152/152 workspace-budgets-ldd-pi-jhon-3"} {
 		if !strings.Contains(out.String(), s) {
 			t.Errorf("dry run lacks %q", s)
 		}

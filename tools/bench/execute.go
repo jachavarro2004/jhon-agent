@@ -58,7 +58,7 @@ func execute(o *Options, r *Run) (*Metrics, error) {
 		return nil, err
 	}
 	if r.Steady {
-		if err := writeSteadySetup(r.Repo); err != nil {
+		if err := writeSteadySetup(r.Task, r.Repo); err != nil {
 			return nil, err
 		}
 	}

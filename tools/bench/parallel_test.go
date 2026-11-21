@@ -179,7 +179,7 @@ func TestSmokeIsOnePlainRunPerTaskAndJhonCondition(t *testing.T) {
 	for _, r := range runs {
 		got = append(got, r.Name())
 	}
-	if len(want) != 18 || !slices.Equal(got, want) {
+	if len(want) != 20 || !slices.Equal(got, want) {
 		t.Errorf("smoke plan %v\nwant %v", got, want)
 	}
 	o, _ = options(t, f, "pagination-bug", []string{"clean"}, 1)

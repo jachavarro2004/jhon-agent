@@ -65,6 +65,15 @@ type Metrics struct {
 	Utilization      *float64       `json:"utilization"`
 	QuotaPoints      *float64       `json:"quota_points"`
 	Transcript       string         `json:"transcript"`
+	// Launches are the sub-agents launched by agent type (jhon-scout,
+	// jhon-builder, jhon-checker …), summed over the session's changes, and
+	// VerifyRecorded the verify runs whose verdict (pass or fail) the audit
+	// read (T192, S6).
+	Launches       map[string]int `json:"launches,omitempty"`
+	VerifyRecorded int            `json:"verify_recorded"`
+	// Orchestrated is whether the session launched a sub-agent and recorded
+	// an independent verify (setOrchestrated); nil when the run has no audit.
+	Orchestrated *bool `json:"orchestrated"`
 	// The process-quality metrics (process.go); nil is unknown.
 	TestChanged          *bool    `json:"test_changed"`
 	TestsRunBeforeEnd    *bool    `json:"tests_run_before_end"`
@@ -242,9 +251,23 @@ func piStream(b []byte) StreamFacts {
 	return f
 }
 
+// setOrchestrated sets Orchestrated: the session launched a verify sub-agent
+// (VerifyRuns > 0, the jhon-checker) and its verdict is on record, read by
+// the audit (VerifyRecorded > 0) or written to the change's execution
+// record (LddLayout.LightVerify, `jhon executions verify`). The record
+// counts because the audit reads a verdict from the verify's own report or
+// result, and a pi sub-agent's result can arrive as a background notice it
+// does not read (T192).
+func (m *Metrics) setOrchestrated() {
+	recorded := m.VerifyRecorded > 0 || m.LddLayout != nil && m.LddLayout.LightVerify != ""
+	o := m.VerifyRuns > 0 && recorded
+	m.Orchestrated = &o
+}
+
 // fromAudit fills m from `jhon audit --json`: tokens summed over the
 // session's threads, active and elapsed time, the main thread's cache hit,
-// agents launched and verify runs over its changes, and findings by check.
+// agents launched (by type) and verify runs over its changes, the verify
+// runs with a verdict, whether it orchestrated, and findings by check.
 func (m *Metrics) fromAudit(b []byte) error {
 	var a map[string]any
 	if err := json.Unmarshal(b, &a); err != nil {
@@ -270,7 +293,17 @@ func (m *Metrics) fromAudit(b []byte) error {
 	for _, c := range list(at(a, "outcomes", "changes")) {
 		m.AgentsLaunched += int(num(at(c, "agents")))
 		m.VerifyRuns += int(num(at(c, "verify_runs")))
+		m.VerifyRecorded += int(num(at(c, "verify_verdicts", "pass")) + num(at(c, "verify_verdicts", "fail")))
+		if l, ok := at(c, "launches").(map[string]any); ok {
+			for agent, n := range l {
+				if m.Launches == nil {
+					m.Launches = map[string]int{}
+				}
+				m.Launches[agent] += int(num(n))
+			}
+		}
 	}
+	m.setOrchestrated()
 	m.Findings = map[string]int{}
 	for _, f := range list(a["findings"]) {
 		if c := str(at(f, "check")); c != "" {

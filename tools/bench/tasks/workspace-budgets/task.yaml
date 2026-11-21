@@ -1,0 +1,41 @@
+id: workspace-budgets
+kind: long
+size: large
+model: sonnet
+max_turns: 90
+timeout: 45m
+hidden: hidden
+check: node --test packages/core/test/budget.acceptance.test.ts packages/api/test/budget.acceptance.test.ts apps/cli/test/budget.acceptance.test.ts
+tests: *.test.ts
+test_command: node --test
+scope: |
+  packages/core/src/*.ts
+  packages/api/src/*.ts
+  apps/cli/src/*.ts
+  README.md
+  docs/*.md
+prompt: |
+  The ledger needs monthly budgets per category, across the workspace:
+  - packages/core: summarizeBudgets(budgets, transactions, month) in a new
+    src/budget.ts, exported from the package's index. budgets maps a
+    category to its monthly limit in cents. It returns one row per budgeted
+    category, sorted by category: { category, limitCents, spentCents,
+    remainingCents, percentUsed, over }. spentCents is what the category
+    spent in the month (YYYY-MM) as docs/LEDGER.md defines spending, never
+    below zero; remainingCents is the limit minus it (negative when over);
+    percentUsed is spent over limit as a whole percent, rounded half up;
+    over is whether spent is above the limit. A month that is not a valid
+    YYYY-MM throws a RangeError.
+  - packages/api: Ledger.setBudget(category, limitCents), where the limit is
+    a positive whole number of cents (else a RangeError, and nothing is
+    written), kept in the ledger's file beside the transactions; setting a
+    category again replaces its limit. Ledger.budgets() returns them, and
+    Ledger.budgetReport(month) returns core's rows for the ledger.
+  - apps/cli: `budget set <category> <amount>`, which prints
+    "budget <category> <limit>", and `budget report <YYYY-MM>`, which prints
+    one line per row, "<category> <spent> / <limit> (<percent>%)", with
+    " OVER" at the end of a row over its limit. Amounts are written and
+    printed as everywhere else in the CLI. A bad amount or month prints an
+    error and exits 2, changing nothing.
+  Add tests in each package.
+  Run the tests with: node --test

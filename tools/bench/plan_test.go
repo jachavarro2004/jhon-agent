@@ -42,14 +42,14 @@ func TestCertifyPlanPrintsTheMatrixAndItsEstimate(t *testing.T) {
 	}
 	for _, s := range []string{
 		"short tasks: account-import, contacts-migration, late-fee, pagination-bug, search-accents, shipping-rules",
-		"long tasks: invoice-slices, slow-suite, two-modules",
+		"long tasks: invoice-slices, slow-suite, two-modules, workspace-budgets",
 		"conditions: jhon, pi-jhon", "variants: plain, ldd, ldd-native, ldd-ask", "repeats: 3",
-		"baseline of the installed build: 108 runs\n  $ go run ./tools/bench prepare --ref 752cb382\n  $ go run ./tools/bench login-check\n" +
+		"baseline of the installed build: 120 runs\n  $ go run ./tools/bench prepare --ref 752cb382\n  $ go run ./tools/bench login-check\n" +
 			"  $ go run ./tools/bench run --conditions jhon,pi-jhon --variants plain,ldd --repeats 3 --model opus --expect-commit 752cb382 --results " + filepath.Join(results, "baseline-752cb382") + "\n",
-		"≈ 54 quota points", "≈ 1h48m0s",
-		"candidate: 216 runs\n  $ go run ./tools/bench prepare --ref abcdef12\n  $ go run ./tools/bench login-check\n" +
+		"≈ 60 quota points", "≈ 2h0m0s",
+		"candidate: 240 runs\n  $ go run ./tools/bench prepare --ref abcdef12\n  $ go run ./tools/bench login-check\n" +
 			"  $ go run ./tools/bench run --conditions jhon,pi-jhon --variants plain,ldd,ldd-native,ldd-ask --repeats 3 --model opus --expect-commit abcdef12 --results " + filepath.Join(results, "candidate-abcdef12") + "\n",
-		"≈ 108 quota points", "≈ 3h36m0s",
+		"≈ 120 quota points", "≈ 4h0m0s",
 		"$ go run ./tools/bench certify --baseline " + filepath.Join(results, "baseline-752cb382") + " --candidate " + filepath.Join(results, "candidate-abcdef12") + " --gates <checkout>",
 		"method:", "1 batch", "20261110T000000Z",
 		"runs nothing",
@@ -68,7 +68,7 @@ func TestCertifyPlanPrintsTheMatrixAndItsEstimate(t *testing.T) {
 
 func TestCertifyPlanWithNoRecordsSaysSo(t *testing.T) {
 	code, out, _ := certify(t, nil, "--plan", "--results-root", filepath.Join(t.TempDir(), "absent"), "--baseline-ref", "752cb382", "--candidate-ref", "abcdef12")
-	if code != 0 || !strings.Contains(out, "candidate: 216 runs") || !strings.Contains(out, "no estimate: no runs with a weekly reading under") {
+	if code != 0 || !strings.Contains(out, "candidate: 240 runs") || !strings.Contains(out, "no estimate: no runs with a weekly reading under") {
 		t.Fatalf("exit %d\n%s", code, out)
 	}
 }
