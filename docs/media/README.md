@@ -35,6 +35,10 @@ engine to ask it for rose ink), `resvg`, `ffmpeg`, the shell's
 | --- | --- |
 | `video/jhon-explainer.mp4` | the presentation: about 3.4 minutes, 1920×1080, 30 fps, narrated in English (AAC) |
 | `video/jhon-explainer.es.mp4` | the same video and narration, with Spanish subtitles |
+
+The films are rendered into `docs/assets/video/` but not kept in git (`.gitignore`);
+they are published on the landing page (github.com/jachavarro2004/jhon-site) and in
+the README's players.
 | `video/stills/*.png` | six of its shots, decoded from the English video |
 
 It is made and rendered with HyperFrames, not by `build.ts`: its script, its

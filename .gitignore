@@ -2,13 +2,6 @@ node_modules
 *.log
 .DS_Store
 
-# Agent bodies that earlier renders generated from prose/agents/templates/. The
-# renderer no longer writes them (it expands each template in memory); these entries keep
-# leftover copies out of git. Edit the template, never the file.
-prose/agents/review-risk.md
-prose/agents/review-resilience.md
-prose/agents/review-readability.md
-prose/agents/review-reliability.md
 build/
 odd/
 
@@ -21,3 +14,12 @@ __pycache__/
 
 # Designs stay on the owner's disk, never in git (owner, L129).
 /design/
+
+# Local tool state: the harness's skill registry and the CodeGraph index.
+.atl/
+.codegraph/
+
+# The films are rendered here (docs/media) but kept out of git: each render
+# would add ~28 MB to every clone. They are published on the landing page
+# (github.com/jachavarro2004/jhon-site) and in the README's players.
+/docs/assets/video/*.mp4
