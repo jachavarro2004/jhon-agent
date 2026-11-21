@@ -79,8 +79,12 @@ func fromCommandLine(s spec, raw string) any {
 		if n, err := strconv.ParseInt(raw, 10, 64); err == nil {
 			return n
 		}
-	case kPaths:
-		// Comma-separated; an empty entry is one, and check refuses it.
+	case kPaths, kNames:
+		// Comma-separated; an empty entry is one, and check refuses it. A
+		// list of names takes "" (or blanks) as none: the reset.
+		if s.kind == kNames && strings.TrimSpace(raw) == "" {
+			return []string{}
+		}
 		items := strings.Split(raw, ",")
 		for i := range items {
 			items[i] = strings.TrimSpace(items[i])

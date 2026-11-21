@@ -622,7 +622,7 @@ func TestT128h2VerifierRows(t *testing.T) {
 		}
 	}
 	for _, line := range []string{"git clone https://x/y.git ~/y", "git clone https://x/y.git ~root/y"} {
-		if got := ProfileAt(line, "/home/u/project", []string{"/home/u/project"}, machine.stat); got != Work {
+		if got := ProfileAt(line, "/home/u/project", []string{"/home/u/project"}, machine.stat, nil); got != Work {
 			t.Errorf("ProfileAt(%q) = %q, want work", line, got)
 		}
 	}
@@ -656,7 +656,7 @@ func TestATildeWordGivesWork(t *testing.T) {
 		"git clone https://x/y.git y":         Unsandboxed,
 		"git clone https://x/y.git a~/y":      Unsandboxed,
 	} {
-		if got := ProfileAt(line, "/home/u/project", []string{"/home/u/project"}, machine.stat); got != want {
+		if got := ProfileAt(line, "/home/u/project", []string{"/home/u/project"}, machine.stat, nil); got != want {
 			t.Errorf("ProfileAt(%q) = %q, want %q", line, got, want)
 		}
 	}
@@ -713,7 +713,7 @@ func TestProfileAtTakesALeadingCdIntoTheRootsAndALoneBraceWord(t *testing.T) {
 		{"/home/u/project", "gh api {own'er,x}", Work},
 		{"/home/u/project", `gh api {a\,b}`, Work},
 	} {
-		if got := ProfileAt(c.line, c.cwd, roots, d.stat); got != c.want {
+		if got := ProfileAt(c.line, c.cwd, roots, d.stat, nil); got != c.want {
 			t.Errorf("ProfileAt(%q in %s) = %q, want %q", c.line, c.cwd, got, c.want)
 		}
 	}

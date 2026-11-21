@@ -36,7 +36,8 @@ import (
 // nothing, says why and the fix on one line, and exits 126. The one
 // exception is the runtimes' --profile unsandboxed, which runs `<shell> -c
 // <line>` with no sandbox only when the line is a git or gh network line,
-// or a docker one (T128h), of trusted programs (sandbox.RunsOutside), and anything else with the work
+// or a docker one (T128h) or one of the owner's sandbox.deploy_tools, of
+// trusted programs (sandbox.RunsOutside), and anything else with the work
 // profile; a work run that fails and holds git over SSH or gh ends with a
 // note that they run outside the sandbox only on a line of their own
 // (sandbox.DeliveryNote, T181). The delivery profile is gone (L1503). sandbox.mode in the settings is for the callers (the shell, the
@@ -89,7 +90,7 @@ func runSandbox(argv []string) (int, error) {
 			return 2, nil
 		}
 		in := sandboxInput(pinned)
-		fmt.Println(sandbox.ProfileAt(rest[1], in.Cwd, in.Roots, in.Stat))
+		fmt.Println(sandbox.ProfileAt(rest[1], in.Cwd, in.Roots, in.Stat, in.DeployTools))
 		return 0, nil
 	case "status":
 		asJSON, pinned := false, ""
@@ -189,6 +190,7 @@ func sandboxInput(pinned string) sandbox.Input {
 func sandboxInputAt(dir, pinned string) sandbox.Input {
 	in := sandbox.Current(dir, pinned)
 	in.AllowWrite = settings.Paths("sandbox.allow_write")
+	in.DeployTools = settings.Names("sandbox.deploy_tools")
 	in.Protected = []string{settings.Path(), filepath.Dir(grant.Dir())}
 	if os.Getenv("JHON_SETTINGS") == "" {
 		in.Protected = append(in.Protected, filepath.Dir(settings.Path()))

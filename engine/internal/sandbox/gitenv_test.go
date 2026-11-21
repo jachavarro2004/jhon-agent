@@ -103,7 +103,7 @@ func TestProfileAtKeepsGitInsideTheProject(t *testing.T) {
 		{"/home/u/project", "gh issue develop 3 --checkout", Work},
 		{"/home/u/project", "gh run list", Unsandboxed},
 	} {
-		if got := ProfileAt(c.line, c.cwd, roots, d.stat); got != c.want {
+		if got := ProfileAt(c.line, c.cwd, roots, d.stat, nil); got != c.want {
 			t.Errorf("ProfileAt(%q in %s) = %q, want %q", c.line, c.cwd, got, c.want)
 		}
 	}

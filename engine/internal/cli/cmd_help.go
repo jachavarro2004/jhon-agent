@@ -266,8 +266,21 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            the folders such a command may write besides the
                            project's, separated by commas, each absolute or
                            under ~/, never /, the home folder or one above
-                           it (an empty list is written in the file: []).
-                           Both are the owner's: the file is read-only
+                           it (an empty list is written in the file: []);
+                           sandbox.deploy_tools is the owner's deploy tools
+                           (empty by default; for example aws,cdk,sam),
+                           program names separated by commas, each bare (no
+                           / and no whitespace), "" for none: a line of
+                           them runs outside the sandbox as docker's does
+                           (jhon sandbox profile). The shells, wrappers,
+                           terminals, editors, interpreters, remote shells
+                           and script runners Jhon knows (bash, env, sudo,
+                           xargs, python, node, ssh, make, npx and the
+                           like, in any case and with any version suffix)
+                           are refused: with one, any line would run
+                           outside. A name Jhon does not know is taken:
+                           list only deploy tools.
+                           All three are the owner's: the file is read-only
                            inside the sandbox.
                            shell.keys.* are the shell's shortcuts, each a
                            key or off: panel (alt+j, the LDD status), agents
@@ -520,10 +533,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            runtimes' --profile unsandboxed runs <shell> -c
                            <line> with no sandbox when jhon sandbox profile
                            names the line unsandboxed and the shell, git,
-                           gh, ssh, docker and docker-compose are not files
-                           a sandboxed command may write (the owner's
-                           environment kept: DOCKER_HOST, the docker
-                           context); anything else runs with the work
+                           gh, ssh, docker, docker-compose and each of
+                           sandbox.deploy_tools are not files a sandboxed
+                           command may write (the owner's environment kept:
+                           DOCKER_HOST, the docker context, AWS_PROFILE);
+                           anything else runs with the work
                            profile. Its git runs with the repository's
                            hooks, ssh command, fsmonitor and credential
                            helpers overridden (GIT_CONFIG_COUNT entries
@@ -567,8 +581,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            docker or docker-compose (the owner's deployment
                            tool, volume mounts not judged) but docker
                            login, logout and context create, use, rm,
-                           update, import and export, and the line
-                           redirects to no file; work for any other line,
+                           update, import and export, or a program
+                           sandbox.deploy_tools lists (the owner's deploy
+                           tools, such as aws or cdk, by its bare name, any
+                           arguments), and the line redirects to no file;
+                           work for any other line,
                            and for one it cannot read or whose words the
                            shell would still rewrite (a $, a backtick, an
                            unquoted glob or brace but a lone {word} such as
@@ -576,9 +593,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            names a home folder; a single-quoted word,
                            or a double-quoted one with no $ or backtick, is
                            literal: --format '{{.Names}}'). git over SSH,
-                           gh and the owner's docker cannot run inside the
-                           sandbox; the guards judge these lines as any
-                           other.
+                           gh, the owner's docker and deploy tools cannot
+                           run inside the sandbox (~/.aws, ~/.kube and
+                           ~/.config/gcloud are not there); the guards judge
+                           these lines as any other.
                            --project as for run. exit 0, 2 on a usage
                            error
   jhon sandbox status [--json] [--project <folder>]

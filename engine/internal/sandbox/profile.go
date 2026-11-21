@@ -30,17 +30,18 @@ var shells = []string{"sh", "bash", "zsh", "dash"}
 // writes its new folder inside them; anything else gives work. A leading
 // `cd <folder> &&` (leadingCd) is taken as -C (T181, L1503): the line
 // stays unsandboxed only when the folder is inside the roots, and its
-// programs then work there.
-func ProfileAt(command, cwd string, roots []string, stat func(string) (string, bool, bool)) string {
-	return profileAt(command, cwd, roots, stat, false)
+// programs then work there. tools are sandbox.deploy_tools (Input.DeployTools):
+// programs the owner lists, which a line runs as it runs docker.
+func ProfileAt(command, cwd string, roots []string, stat func(string) (string, bool, bool), tools []string) string {
+	return profileAt(command, cwd, roots, stat, false, tools)
 }
 
 // profileAt is ProfileAt for a line zsh runs when zsh is set: a relative
 // cd folder gives work, as zsh may find it through a cdpath ~/.zshenv sets
 // (bash and sh take CDPATH only from the environment, which an unsandboxed
 // line runs without, UnsandboxedEnv).
-func profileAt(command, cwd string, roots []string, stat func(string) (string, bool, bool), zsh bool) string {
-	if classify(command, zsh) != Unsandboxed || !filepath.IsAbs(cwd) {
+func profileAt(command, cwd string, roots []string, stat func(string) (string, bool, bool), zsh bool, tools []string) string {
+	if classify(command, zsh, tools) != Unsandboxed || !filepath.IsAbs(cwd) {
 		return Work
 	}
 	programs, err := sh.JudgeString(command, nil, nil, sh.Opts{})
@@ -171,12 +172,13 @@ func cloneTarget(args []string) string {
 // shell named by an absolute path, the line one ProfileAt leaves
 // unsandboxed in in's working directory and project, and none of the
 // programs it may start is one a sandboxed command could have written: the
-// shell's file, and the git, gh, ssh, docker and docker-compose the shell
-// finds first on PATH, lie outside every writable area of in, and
+// shell's file, and the git, gh, ssh, docker, docker-compose and each of
+// in.DeployTools the shell finds first on PATH, lie outside every writable
+// area of in, and
 // PATH has no relative folder (L888, F1, as for bubblewrap). Anything else
 // runs with the work profile.
 func RunsOutside(h Host, in Input, argv []string) bool {
-	if len(argv) != 3 || argv[1] != "-c" || !filepath.IsAbs(argv[0]) || !slices.Contains(shells, filepath.Base(argv[0])) || profileAt(argv[2], in.Cwd, in.Roots, in.Stat, filepath.Base(argv[0]) == "zsh") != Unsandboxed {
+	if len(argv) != 3 || argv[1] != "-c" || !filepath.IsAbs(argv[0]) || !slices.Contains(shells, filepath.Base(argv[0])) || profileAt(argv[2], in.Cwd, in.Roots, in.Stat, filepath.Base(argv[0]) == "zsh", in.DeployTools) != Unsandboxed {
 		return false
 	}
 	open := writable(in)
@@ -196,7 +198,7 @@ func RunsOutside(h Host, in Input, argv []string) bool {
 			return false
 		}
 	}
-	for _, name := range []string{"git", "gh", "ssh", "docker", "docker-compose"} {
+	for _, name := range slices.Concat([]string{"git", "gh", "ssh", "docker", "docker-compose"}, in.DeployTools) {
 		for _, dir := range in.Path {
 			file := filepath.Join(dir, name)
 			if _, isDir, ok := in.Stat(file); !ok || isDir {
@@ -379,8 +381,9 @@ func dockerDelivers(args []string) bool {
 // one of ghSubcommands that runs no git and reads no local file
 // (ghDelivers), or docker or docker-compose with any command but docker's
 // login, logout and a change of contexts (dockerDelivers, T128h, L1332
-// K1), and the line writes no file through the shell; Work for any other
-// line. The pi shell asks it through `jhon sandbox profile` and
+// K1), or a program the owner lists in sandbox.deploy_tools (aws, cdk:
+// a deploy tool, run as docker is, ProfileAt's tools), and the line writes
+// no file through the shell; Work for any other line. The pi shell asks it through `jhon sandbox profile` and
 // Claude Code's wrap calls it, so both runtimes take the same answer; `jhon
 // sandbox run --profile unsandboxed` asks it again before it runs a line
 // with no sandbox.
@@ -406,12 +409,13 @@ func dockerDelivers(args []string) bool {
 // So does a redirect but a descriptor's copy (2>&1) and a write to
 // /dev/null (quiet): outside the sandbox, `gh api ... > <file>` would write
 // what gh fetched anywhere (T128g).
-func ProfileFor(command string) string { return classify(command, false) }
+func ProfileFor(command string) string { return classify(command, false, nil) }
 
 // classify is ProfileFor for a line zsh runs when zsh is set: any unquoted
 // brace gives work, as zsh expands a lone {word} under BRACE_CCL, an
-// option ~/.zshenv may set for zsh -c.
-func classify(command string, zsh bool) string {
+// option ~/.zshenv may set for zsh -c. tools are the deploy tools
+// (ProfileAt).
+func classify(command string, zsh bool, tools []string) string {
 	cmds, err := sh.Parse(command)
 	if err != nil || sh.DefinesFunction(command) || !literal(command, zsh) {
 		return Work
@@ -441,7 +445,7 @@ func classify(command string, zsh bool) string {
 		return Work
 	}
 	for _, p := range programs {
-		if !networkProgram(p) {
+		if !networkProgram(p, tools) {
 			return Work
 		}
 	}
@@ -461,9 +465,10 @@ func quiet(r *sh.Redirect) bool {
 }
 
 // networkProgram is whether p is git with a network subcommand and only
-// listed options, gh with a listed subcommand, or docker or docker-compose
-// (dockerDelivers), run as its bare name.
-func networkProgram(p sh.Program) bool {
+// listed options, gh with a listed subcommand, docker or docker-compose
+// (dockerDelivers), or one of tools, the owner's deploy tools, run as its
+// bare name. git, gh and docker keep their own rules when tools name them.
+func networkProgram(p sh.Program, tools []string) bool {
 	if len(p.Via) > 0 || len(p.Env) > 0 || p.Chdir != nil || p.Code != nil || p.StdinOpaque != "" || len(p.Argv) < 2 {
 		return false
 	}
@@ -477,7 +482,7 @@ func networkProgram(p sh.Program) bool {
 	case "docker-compose":
 		return true
 	}
-	return false
+	return slices.Contains(tools, p.Argv[0])
 }
 
 // gitDelivers is whether git's arguments are allowed globals, a network

@@ -171,7 +171,16 @@ the sandbox, and when such a line fails it ends with a note saying so. A line
 of docker or docker-compose, the owner's deployment tool, also runs outside
 the sandbox, with the owner's environment (`DOCKER_HOST`, the docker context) and its volume
 mounts not judged; `docker login`, `docker logout` and a change of docker
-contexts keep the sandbox. That git
+contexts keep the sandbox. The programs you list in `sandbox.deploy_tools`
+(empty by default; `jhon settings set sandbox.deploy_tools aws,cdk,sam`,
+`""` empties it; the shells, wrappers, terminals, editors, interpreters,
+remote shells and script runners Jhon knows, such as `bash`, `env`, `sudo`,
+`python3.12`, `ssh`, `vim` or `npx`, are refused, and a name it does not know is
+taken, so list only deploy tools) run outside the sandbox the same way, so a deploy finds
+your cloud credentials (the AWS ones) and the rest of your environment: on a line of their own, or with
+other programs that run outside, with no pipe to another program, redirect to a file, `$` or
+backtick, and taken from a PATH folder a sandboxed command cannot write;
+anything else on the line keeps it in the sandbox. That git
 runs with the repository's hooks (configured hooks included), ssh command,
 fsmonitor and credential helpers overridden; `url.*.insteadOf` and `include.*` in the repository's
 configuration are not, an accepted residual risk. uv's tools go to a

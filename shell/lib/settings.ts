@@ -72,11 +72,11 @@ export const SETTINGS_DEFAULTS: Readonly<Record<string, SettingValue>> = Object.
  * set with `jhon settings set` (engine/internal/setupui, Elsewhere).
  * `sandbox.mode` reaches the shell only through `jhon sandbox status --json`,
  * pinned per session (lib/sandbox.ts), so no default here can stand in for it;
- * `sandbox.allow_write` is a list of folders, which a SettingValue does not hold;
+ * `sandbox.allow_write` is a list of folders, and `sandbox.deploy_tools` a list of program names, which a SettingValue does not hold;
  * `integrations.context7` is read by the render and doctor alone (T133e);
  * `agents.act_on_announce` by `jhon hook announce-stop`, which pi's shell runs (T135, lib/announce-stop.ts).
  */
-export const ENGINE_ONLY_SETTINGS: readonly string[] = Object.freeze(["integrations.context7", "agents.act_on_announce", "sandbox.mode", "sandbox.allow_write"]);
+export const ENGINE_ONLY_SETTINGS: readonly string[] = Object.freeze(["integrations.context7", "agents.act_on_announce", "sandbox.mode", "sandbox.allow_write", "sandbox.deploy_tools"]);
 
 export type SettingsKey = keyof typeof SETTINGS_DEFAULTS & string;
 export type ShellKey = "panel" | "agents" | "jobs" | "usage" | "todos";

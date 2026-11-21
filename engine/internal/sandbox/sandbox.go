@@ -65,6 +65,9 @@ type Input struct {
 	SocketFolders []string
 	// AllowWrite is sandbox.allow_write, each folder absolute.
 	AllowWrite []string
+	// DeployTools is sandbox.deploy_tools: the programs, by bare name, a
+	// line runs outside the sandbox as it runs docker (ProfileAt).
+	DeployTools []string
 	// Protected are Jhon's own files besides the framework paths under the
 	// home: the settings, and the state folder with the grants and modes.
 	Protected []string
@@ -484,7 +487,8 @@ func remembered(stat func(string) (string, bool, bool)) func(string) (string, bo
 // (project.ReadRepo): a command may remove its project's `.git` entry, and
 // the walk would then take an enclosing repository. In a workspace the
 // primary and the joined members are roots too (workspace.DiskRoots). The caller adds what the
-// settings and the integrations know: AllowWrite, Protected, Telemetry.
+// settings and the integrations know: AllowWrite, DeployTools, Protected,
+// Telemetry.
 func Current(cwd, pinned string) Input {
 	repo := project.ReadRepo(cwd)
 	if pinned != "" {

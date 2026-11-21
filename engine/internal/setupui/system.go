@@ -254,6 +254,7 @@ var Elsewhere = func() map[string]string {
 		"agents.act_on_announce": "jhon settings set agents.act_on_announce true|false",
 		"sandbox.mode":           "jhon settings set sandbox.mode on|off (on by default where the sandbox can run)",
 		"sandbox.allow_write":    "jhon settings set sandbox.allow_write <folder>,<folder>",
+		"sandbox.deploy_tools":   "jhon settings set sandbox.deploy_tools <program>,<program>",
 	}
 	for _, m := range manifests.Optional() {
 		e[m.Setting] = "jhon settings set " + m.Setting + " true|false"

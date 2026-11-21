@@ -260,9 +260,8 @@ func events(t *testing.T, b box) []map[string]any {
 func TestEveryRunRecordsItsProfileAndExitCode(t *testing.T) {
 	b := newBox(t)
 	b.settings(t, "schema = 1\n\n[integrations]\ntelemetry = true\n")
-	on := append(append([]string{}, b.env...), "JHON_TELEMETRY=on")
 	originOverSSH(t, &b, filepath.Join(b.base, "ssh-ran"))
-	on = append(append([]string{}, b.env...), "JHON_TELEMETRY=on")
+	on := append(append([]string{}, b.env...), "JHON_TELEMETRY=on")
 	sh := realShell(t, "sh")
 	if r := support.Jhon(t, b.proj, on, "sandbox", "run", "--", sh, "-c", "exit 3"); r.Code != 3 {
 		t.Fatalf("a work run: exit %d, stderr %q", r.Code, r.Stderr)
