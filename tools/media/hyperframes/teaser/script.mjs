@@ -9,8 +9,9 @@
 //   node tools/media/hyperframes/presentation/narrate.mjs "$(mktemp -d)" tools/media/hyperframes/teaser
 //   node tools/media/hyperframes/presentation/compose.mjs tools/media/hyperframes/teaser
 //
-// Only screens that exist in docs/assets (no shot of the new shell, which does not exist yet);
-// a proof's crop and marks reuse the presentation's geometry where it shows the same screen.
+// Only screens that exist in docs/assets, built by tools/media/build.ts from the current shell,
+// engine and dashboard (the Prism review card, the dashboard's audit of a session); a proof's
+// crop and marks reuse the presentation's geometry where it shows the same screen.
 // Used by tools/media/test/teaser.test.ts.
 import { SHOTS as FILM, cells, lines as filmLines, panel, spoken } from "../presentation/script.mjs";
 
@@ -65,7 +66,7 @@ const shots = [
 
   // 5. Guards: the refused tool call, then the engine's whole reason.
   { id: "guards", kind: "proof", chapter: "Safety", src: F("guard-refusal"), crop: panel(112, 10),
-    marks: [{ at: "Guards stop", r: cells(3, 3, 94) }, { at: "a write outside", r: film("refusal").marks[2].r }],
+    marks: [{ at: "Guards stop", r: cells(2, 0, 108) }, { at: "a write outside", r: film("refusal").marks[2].r }],
     en: "Guards stop only what can't be undone: a destructive command, a write outside the project.",
     es: "Los guards frenan solo lo que no se puede deshacer: un comando destructivo, una escritura fuera del proyecto." },
 
@@ -74,16 +75,17 @@ const shots = [
     en: "Everything else runs free, inside a sandbox.",
     es: "Todo lo demás corre libre, dentro de un sandbox." },
 
-  // 7. Prism: the agents diagram's Prism review, close (its facets, the challenger, the arbiter).
-  { id: "prism", kind: "proof", src: D("agents-launch-context"), crop: [724, 344, 548, 156],
-    marks: [{ at: "the Prism review", r: [736, 347, 518, 143] }, { at: "four facets", r: [750, 388, 365, 40] },
-      { at: "a challenger", r: [750, 432, 120, 40] }, { at: "an arbiter", r: [888, 432, 94, 40] }],
+  // 7. Prism: the shell's Prism review card (its verdict, the four facets, the challenger, the arbiter).
+  { id: "prism", kind: "proof", src: F("prism-review"), crop: panel(96, 5),
+    marks: [{ at: "the Prism review", r: cells(2, 0, 92) }, { at: "four facets", r: cells(4, 1, 67) },
+      { at: "a challenger", r: cells(4, 2, 32) }, { at: "an arbiter", r: cells(39, 2, 14) }],
     en: "Risky changes get the Prism review: four facets, a challenger, an arbiter.",
     es: "Los cambios riesgosos pasan por la revisión Prism: cuatro facetas, un retador, un árbitro." },
 
-  // 8. Claude Code or pi, your model, an audit of every session: jhon audit on a Claude Code session.
-  { id: "audit", kind: "proof", src: F("audit"), crop: panel(112, 20),
-    marks: [{ at: "Claude Code", r: cells(45, 1, 21) }, { at: "an audit", r: cells(0, 0, 94) }, { at: "every session", r: cells(0, 1, 66, 2) }],
+  // 8. Claude Code or pi, your model, an audit of every session: the dashboard's audit of a Claude Code
+  // session (tools/media/dashboard.ts, 3200x1520): its runtime, its verdict, what to look at.
+  { id: "audit", kind: "proof", src: F("dashboard-audit"), crop: [0, 0, 3200, 1520],
+    marks: [{ at: "Claude Code", r: [600, 346, 320, 56] }, { at: "an audit", r: [62, 146, 1560, 200] }, { at: "every session", r: [62, 830, 1750, 610] }],
     en: "Claude Code or pi. Your model. And an audit of every session.",
     es: "Claude Code o pi. Tu modelo. Y una auditoría de cada sesión." },
 

@@ -1,10 +1,10 @@
 /**
  * tools/media/build.ts — rebuild the README's images from code.
  *
- *   node --experimental-strip-types tools/media/build.ts [--out <dir>] [--only features,banner]
+ *   node --experimental-strip-types tools/media/build.ts [--out <dir>] [--only features,banner,dashboard]
  *
- * Writes docs/assets/features/*.png and docs/assets/brand/jhon-banner.gif (or
- * the same tree under --out). The presentation video is not built here: it is
+ * Writes docs/assets/features/*.png (the dashboard's audit page among them) and
+ * docs/assets/brand/jhon-banner.gif (or the same tree under --out). The presentation video is not built here: it is
  * a HyperFrames composition, tools/media/hyperframes/presentation (its README
  * says how to render it). Frames and the engine binary live in a fresh temp
  * folder removed at the end. Two runs give the same bytes.
@@ -20,6 +20,7 @@ import { captures, loadTheme, type Capture } from "./captures.ts";
 import { featureSvg } from "./frames.ts";
 import { encodeGif, framesToPngs, svgToPng } from "./raster.ts";
 import { BANNER, bannerSvg } from "./banner.ts";
+import { auditPage, screenshot } from "./dashboard.ts";
 
 /** What each feature capture shows, under it. */
 export const FEATURE_CAPTIONS: Record<string, string> = {
@@ -29,13 +30,14 @@ export const FEATURE_CAPTIONS: Record<string, string> = {
   "ldd-question": "A repo with no LDD yet: at the first code change, the session asks once how to deliver and test.",
   "guard-refusal": "A writer's edit outside its edit surfaces, refused by scope-guard: the shell's tool card, then the engine's whole reason.",
   "route-refusal": "Under delivery: change, route-guard refuses the pull request while a task is unchecked: the card, then the reason.",
+  "prism-review": "The Prism review of a risky change: four facets, a challenger and an arbiter, the verdict and its record.",
   "executions-red-green": "jhon executions records the run: the test fails first (RED), then passes (GREEN), on record.",
   "mode-grant": "The mode and the grants are yours: jhon mode reads it, jhon grant widens one class for a time.",
   audit: "jhon audit reads a session afterwards: here, a push to main with no test run on record.",
 };
 
-export type Part = "features" | "banner";
-export const PARTS: readonly Part[] = ["features", "banner"];
+export type Part = "features" | "banner" | "dashboard";
+export const PARTS: readonly Part[] = ["features", "banner", "dashboard"];
 
 export interface Built { files: string[] }
 
@@ -68,6 +70,14 @@ export async function buildBanner(c: Colors, caps: Capture[], out: string, scrat
   return gif;
 }
 
+/** The dashboard's audit of the invented session (dashboard.ts), drawn by headless Chrome. */
+export async function buildDashboard(bin: string, out: string, scratch: string): Promise<string> {
+  mkdirSync(join(out, "features"), { recursive: true });
+  const png = join(out, "features", "dashboard-audit.png");
+  await screenshot(auditPage(bin, scratch), scratch, png);
+  return png;
+}
+
 /** Rebuild the chosen parts into `out` (docs/assets by default). */
 export async function build(o: { out?: string; only?: readonly Part[]; scratch?: string } = {}): Promise<Built> {
   const out = o.out ?? ASSETS;
@@ -80,6 +90,7 @@ export async function build(o: { out?: string; only?: readonly Part[]; scratch?:
     const files: string[] = [];
     if (only.has("features")) files.push(...(await buildFeatures(c, caps, out)));
     if (only.has("banner")) files.push(await buildBanner(c, caps, out, scratch));
+    if (only.has("dashboard")) files.push(await buildDashboard(ink.bin, out, scratch));
     return { files };
   } finally {
     if (!o.scratch) rmSync(scratch, { recursive: true, force: true });

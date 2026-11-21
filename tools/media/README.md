@@ -19,15 +19,21 @@ rebuilds the images into `docs/assets/`:
 | asset | what |
 | --- | --- |
 | `brand/jhon-banner.gif` | the animated banner: the wordmark, one line saying what Jhon is, the LDD status typing itself |
-| `features/*.png` | the shell's views and the engine's real output: `shell-bar`, `ldd-status`, `agents-jobs`, `ldd-question`, `guard-refusal`, `route-refusal`, `executions-red-green`, `mode-grant`, `audit` |
+| `features/*.png` | the shell's views and the engine's real output: `shell-bar`, `ldd-status`, `agents-jobs`, `ldd-question`, `guard-refusal`, `route-refusal`, `prism-review`, `executions-red-green`, `mode-grant`, `audit` |
+| `features/dashboard-audit.png` | the dashboard's page for one session: the engine's audit of an invented Claude Code session (`dashboard.ts`), drawn by headless Chrome at 1600×760, 2× |
 
-Options: `--out <dir>` writes the same tree elsewhere; `--only features,banner`
+Options: `--out <dir>` writes the same tree elsewhere; `--only features,banner,dashboard`
 builds some parts. Two runs give byte-identical files (fixed clock and data,
-the engine's fixed palette, no metadata, one encoder thread).
+the engine's fixed palette, no metadata, one encoder thread; the dashboard's
+page from the same session, the same Chrome and the same fonts).
 
 Needs: Node 22+ (`--experimental-strip-types`), Go (the build compiles the
-engine to ask it for rose ink), `resvg`, `ffmpeg`, the shell's
-`node_modules` (`npm ci` in `shell/`), and the fonts named below installed.
+engine to ask it for rose ink and to audit the dashboard's session), `resvg`,
+`ffmpeg`, the shell's `node_modules` (`npm ci` in `shell/`, or
+`sh tools/shell-deps.sh`), and the fonts named below installed. The
+`dashboard` part also needs chrome-headless-shell: `$JHON_MEDIA_CHROME`, else
+the one the HyperFrames CLI keeps in `~/.cache/hyperframes/chrome`
+(`npx --yes hyperframes@0.9.58 browser ensure`, `hyperframes/README.md`).
 
 ## The presentation video
 
@@ -45,10 +51,12 @@ It is made and rendered with HyperFrames, not by `build.ts`: its script, its
 composition, its narration and how to render it are in
 `hyperframes/README.md`.
 
-Tests (the ANSI-to-SVG conversion, the determinism of the image build, the
+Tests (the ANSI-to-SVG conversion, the determinism of the image build and of
+the dashboard's capture (skipped without chrome-headless-shell), the
 diagrams' tokens and bytes, the presentation's narration cache and
-Spanish subtitles covering every line, and the motion engine: its eases,
-seek-order independence and HyperFrames contract):
+Spanish subtitles covering every line, the compositions' screens loading
+from `docs/assets`, and the motion engine: its eases, seek-order
+independence and HyperFrames contract):
 
 ```sh
 node --experimental-strip-types --test tools/media/test/*.test.ts
@@ -126,7 +134,11 @@ video draw from it; nothing here imitates another project's media.
 - `palette.ts` — rose ink from the engine.
 - `captures.ts` — the shell's views rendered with fake data (invented
   project, files and times; the shell's default settings; a fixed clock),
-  painted by pi's own `Theme` loaded from rose ink in truecolor.
+  painted by pi's own `Theme` loaded from rose ink in truecolor; the Prism
+  review card from `jhon_review`'s result details.
+- `dashboard.ts` — the dashboard's page for one invented Claude Code session:
+  its transcript and project written in a sandbox, `jhon audit <session>
+  --html` (this checkout's engine and `dashboard/`), headless Chrome.
 - `ansi-svg.ts` — painted terminal rows (SGR escapes) to SVG text on a cell
   grid: each ASCII character placed on its cell (so no ligature forms and no
   font advance drifts), wide glyphs on two cells.

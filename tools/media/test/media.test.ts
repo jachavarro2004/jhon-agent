@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseAnsiLine, runsToSvg } from "../ansi-svg.ts";
 import { build } from "../build.ts";
+import { SESSION, VIEWPORT, chromePath } from "../dashboard.ts";
 
 const ROSE = "\x1b[38;2;231;187;200m";
 const INK = "\x1b[38;2;233;224;225m";
@@ -35,6 +36,25 @@ test("the runs become SVG: a rect per background, each ASCII character on its ce
     + `<text x="28 34" y="30.08" fill="#e9e0e1" font-weight="700">ok</text>`
     + `<text x="46" y="30.08" fill="#e9e0e1">x</text>`
     + `</g>`);
+});
+
+test("the dashboard capture is the engine's audit of the invented session in the dashboard's page, and two builds draw the same bytes", async (t) => {
+  if (!chromePath()) {
+    t.skip("no chrome-headless-shell (JHON_MEDIA_CHROME, or npx hyperframes browser ensure)");
+    return;
+  }
+  const dirs = [0, 1].map((i) => mkdtempSync(join(tmpdir(), `jhon-media-dash-${i}-`)));
+  t.after(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
+  for (const d of dirs) await build({ out: join(d, "out"), only: ["dashboard"], scratch: d });
+  const page = readFileSync(join(dirs[0]!, "dashboard.html"), "utf8");
+  assert.match(page, new RegExp(SESSION), "the page holds the session");
+  assert.match(page, /delivered-untested/, "and its audit's finding");
+  assert.match(page, /"modified":"2026-11-16T09:42:20/, "the transcript's fixed time, not the build's");
+  assert.ok(!page.includes(dirs[0]!), "no scratch path on the page");
+  const [a, b] = dirs.map((d) => readFileSync(join(d, "out", "features", "dashboard-audit.png")));
+  assert.equal(a!.readUInt32BE(16), VIEWPORT.width * VIEWPORT.scale, "the PNG's width");
+  assert.equal(a!.readUInt32BE(20), VIEWPORT.height * VIEWPORT.scale, "the PNG's height");
+  assert.ok(a!.equals(b!), "dashboard-audit.png differs between two builds");
 });
 
 test("the build is deterministic: the feature captures and the banner rendered twice are the same bytes", async (t) => {

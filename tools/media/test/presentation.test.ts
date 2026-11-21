@@ -6,9 +6,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { MEDIA } from "../paths.ts";
+import { ASSETS, MEDIA } from "../paths.ts";
 
 const DIR = join(MEDIA, "hyperframes", "presentation");
 const { SHOTS, lines, spoken } = await import(join(DIR, "script.mjs"));
@@ -67,4 +67,16 @@ test("every cue has its Spanish subtitle: declared, translated, in the tú form,
     assert.ok(html.includes(`data-var-text="c_${s.id}"`), `${s.id}: no subtitle clip shows c_${s.id}`);
   }
   assert.ok(typeof spoken("jhon start pi") === "string" && spoken("jhon start pi") === "John start pie");
+});
+
+test("the composition's screens are docs/assets: every proof's image loads through assets/screens, as the renderer reads it", () => {
+  for (const dir of ["features", "diagrams"]) {
+    assert.equal(realpathSync(join(DIR, "assets", "screens", dir)), realpathSync(join(ASSETS, dir)), `assets/screens/${dir} is not docs/assets/${dir}`);
+  }
+  for (const comp of [DIR, join(MEDIA, "hyperframes", "teaser")]) {
+    const page = readFileSync(join(comp, "index.html"), "utf8");
+    const srcs = [...page.matchAll(/src="(assets\/screens\/[^"]+)"/g)].map((m) => m[1]!);
+    assert.ok(srcs.length >= 4, `${comp}: its proofs' images`);
+    for (const src of srcs) assert.ok(existsSync(join(comp, src)), `${comp}: ${src} does not load`);
+  }
 });

@@ -73,7 +73,7 @@ const LDD = lddFromStatus("invoice-csv-export", {
 const JOBS: RunningJobDisplay[] = [
   { id: "agent-1", kind: "agent", label: "jhon-builder: stream to the response", startedAt: NOW - 252_000, tokens: 48_200, step: "bash · go test ./export/..." },
   { id: "agent-2", kind: "agent", label: "jhon-scout: where invoices are read", startedAt: NOW - 95_000, tokens: 12_900 },
-  { id: "agent-3", kind: "agent", label: "reviewer: slice 1", startedAt: NOW - 900_000, endedAt: NOW - 30_000, status: "completed", exitCode: 0 },
+  { id: "agent-3", kind: "agent", label: "jhon-checker: slice 1", startedAt: NOW - 900_000, endedAt: NOW - 30_000, status: "completed", exitCode: 0 },
   { id: "job-1", kind: "command", label: "go test ./... -run Export", startedAt: NOW - 41_000 },
   { id: "job-2", kind: "monitor", label: "watch: tail -f logs/export.log", startedAt: NOW - 600_000 },
 ];
@@ -85,27 +85,51 @@ const JOBS: RunningJobDisplay[] = [
  * invented project ~/src/lumen (a Go module, `export.Row`, its change
  * invoice-csv-export under `delivery: change`, two slices, 2.1 unchecked). The
  * scratch folder's path is written as /home/dev, and the grant's times are set
- * to the media clock (NOW); nothing else is changed. Recorded 2026-11-16:
+ * to the media clock (NOW); nothing else is changed. Recorded 2026-11-16, and again
+ * 2026-11-21 (T190: ROUTE_REFUSAL and AUDIT_OUT changed, the rest printed the same
+ * shown lines; JHON_ROOT the checkout, main holding go.mod and export/csv.go, the
+ * branch feat/csv-export adding the change's folder, export/csv_test.go uncommitted):
  *   EXEC_RED / EXEC_GREEN  `jhon executions run invoice-csv-export --affected main`,
  *                          the test failing (Row without the amount), then passing
  *   SCOPE_REFUSAL          `jhon hook scope-guard --agent jhon-builder` on a jhon-builder's Edit of
  *                          api/invoices.go, its launch prompt allowing export/stream.go
  *                          and export/stream_test.go (as test/guards/scope_guard_test.go)
  *   ROUTE_REFUSAL          `jhon hook route-guard` on the session's `gh pr create --fill`
- *   AUDIT_OUT              `jhon audit <session>.jsonl` of an invented Claude Code session
- *                          that edits export/csv.go, commits and pushes to main with no run
+ *   AUDIT_OUT              `jhon audit <session>.jsonl` of the invented Claude Code session
+ *                          dashboard.ts writes (sessionTranscript), in the project above:
+ *                          it edits export/csv.go, commits and pushes to main with no run
  * When the engine's wording changes, record them again the same way.
  */
 const EXEC_RED: readonly string[] = ["==> .: go test ./...","--- FAIL: TestRowHasTheAmount (0.00s)","    csv_test.go:7: Row = \"INV-7,Acme Ltd\", want the amount in the last column","FAIL","FAIL\texample.com/lumen/export\t0.001s","FAIL","<== .: exit 1","==> . (lint): go vet ./...","<== . (lint): exit 0","==> . (format): ! gofmt -l . | grep .","<== . (format): exit 0","","record     openspec/changes/invoice-csv-export/execution-record.json","scope      full (affected since main)","candidate  50e3ff2daea42318fbca2eec33f512f9220c946e  tree 93227b3d782a53d509ea19fdc43d2c75447322b9  clean false","fail       .","pass       . (lint)","pass       . (format)","note       1 changed file(s) under openspec/ ignored: the change's record is not project input","note       every project selected: export/csv_test.go is outside every project (root configuration, a lockfile, CI, or a shared file)","jhon executions: fail, exit 1 (2 of 3 passed; record openspec/changes/invoice-csv-export/execution-record.json)"];
 const EXEC_GREEN: readonly string[] = ["==> .: go test ./...","ok  \texample.com/lumen/export\t0.001s","<== .: exit 0","==> . (lint): go vet ./...","<== . (lint): exit 0","==> . (format): ! gofmt -l . | grep .","<== . (format): exit 0","","record     openspec/changes/invoice-csv-export/execution-record.json","scope      full (affected since main)","candidate  50e3ff2daea42318fbca2eec33f512f9220c946e  tree 93227b3d782a53d509ea19fdc43d2c75447322b9  clean false","pass       .","pass       . (lint)","pass       . (format)","note       2 changed file(s) under openspec/ ignored: the change's record is not project input","note       every project selected: export/csv.go is outside every project (root configuration, a lockfile, CI, or a shared file)","note       every project selected: export/csv_test.go is outside every project (root configuration, a lockfile, CI, or a shared file)","note       the last recorded test run took: . 4 s; a run that narrows takes less","jhon executions: pass, exit 0 (3 of 3 passed; record openspec/changes/invoice-csv-export/execution-record.json)"];
-const AUDIT_OUT: readonly string[] = ["audit  5e7c1a90-0000-4000-8000-00000000c5a1  (claude-code 2.1.304)","  session  sessionKind: interactive","  suspect    delivered-untested [heuristic]              5e7c1a90-0000-4000-8000-00000000c5a1.jsonl:8  main (main)  indeterminate","             a push no change can be tied to: no launch block or openspec path names one, and no earlier jhon executions run or jhon deliver check in this agent does, so no test run can be read for it","             evidence: git push origin HEAD:main","  timing  main  turns 4  model 1m (20s/turn)  tools 1m  cache 88%","  dialogue  owner answers 0","  dialogue  ask-tool calls 0  questions per call 1:0 2:0 3:0 4+:0  prose questions 0 (lower bound)","  integrations  orchestrator  launches 1  memory read 0  memory write 0  codegraph 0  plain reads 1  codegraph share 0.0%  todo 0","  outcomes  change              elapsed  active  agent-time  main-time  main-files  launches  verify  replans  relaunches  tests","    invoice-csv-export  2m       2m      0s          2m         1           0         0       0        0           0","  session  elapsed 3m  active 3m  unattributed 20s  resumes 0","  ldd  invoice-csv-export  slices 2  owner messages 0  per slice 0","0 violation(s), 1 suspect(s)"];
+const AUDIT_OUT: readonly string[] = ["audit  5e7c1a90-0000-4000-8000-00000000c5a1  (claude-code 2.1.304)","  session  sessionKind: interactive","  suspect    delivered-untested [heuristic]              5e7c1a90-0000-4000-8000-00000000c5a1.jsonl:8  main (main)  indeterminate","             a push no change can be tied to: no launch block or openspec path names one, and no earlier jhon executions run or jhon deliver check in this agent does, so no test run can be read for it","             evidence: git push origin HEAD:main","  timing  main  turns 6  model 2m (22s/turn)  tools 6s  cache 84%","  dialogue  owner answers 0","  dialogue  ask-tool calls 0  questions per call 1:0 2:0 3:0 4+:0  prose questions 0 (lower bound)","  dialogue  corrections 0 of 1 owner messages  keep-going 0  repeat 0  unrequested 0  decision 0","  integrations  orchestrator  launches 1  memory read 0  memory write 0  codegraph 0  plain reads 2  codegraph share 0.0%  todo 0","  outcomes  change              elapsed  active  agent-time  main-time  main-files  launches  verify  replans  relaunches  tests","    invoice-csv-export  5s       5s      0s          5s         0           0         0       0        0           0","  session  elapsed 2m  active 2m  unattributed 2m  resumes 0","  ldd  invoice-csv-export  slices 2  owner messages 0  per slice 0","0 violation(s), 1 suspect(s)"];
 const SCOPE_REFUSAL: readonly string[] = ["scope-guard: Edit /home/dev/src/lumen/api/invoices.go is outside the allowed edit surfaces (export/stream.go, export/stream_test.go); stop and return status: blocked naming the file and why the change needs it, so the orchestrator can widen the list (contracts/efficiency.md, \"Writer scope\")"];
-const ROUTE_REFUSAL: readonly string[] = ["route-guard: delivery: change opens one PR per change, after its last slice: invoice-csv-export has 1 unchecked task(s) (2.1 chunked reader). Commit each slice on the branch and open the PR when every task is done."];
+const ROUTE_REFUSAL: readonly string[] = ["route-guard: invoice-csv-export: delivery: change in openspec/config.yaml merges the change once, after its last slice; 1 task(s) of tasks.md are unchecked (2.1 chunked reader): commit each slice on the change's branch and merge when every slice is done."];
 const MODE_GRANT: Array<[string, string[]]> = [
   ["jhon mode", ["normal for /home/dev/src/lumen"]],
   ["jhon grant push --for 30m", ["granted push for /home/dev/src/lumen until 2026-11-16T10:28:00.000Z"]],
   ["jhon grant --list", ["push           /home/dev/src/lumen  live until 2026-11-16T10:28:00.000Z"]],
 ];
+
+/*
+ * The Prism review of slice 2, as jhon_review's result carries it to the card
+ * (shell/lib/review-tool.ts's details, the shape shell/test/ui-agent-cards-rows.test.ts
+ * draws): the four facets, one finding the challenger kept and the arbiter
+ * confirmed, one it refuted, the verdict and the record. The findings are
+ * invented, for the invented project.
+ */
+const PRISM_RECORD = "openspec/changes/invoice-csv-export/review-prism.md";
+const PRISM = {
+  status: "recorded", record: PRISM_RECORD, verdict: "fail", change: "invoice-csv-export",
+  facets: [{ facet: "safety", status: "completed" }, { facet: "clarity", status: "completed" }, { facet: "behavior", status: "completed" }, { facet: "failure", status: "completed" }],
+  findings: [
+    { id: "failure-1", facet: "failure", severity: "CRITICAL", location: "export/stream.go:41", claim: "a client that hangs up mid-export leaves the reader open", set: "correction_set" },
+    { id: "safety-1", facet: "safety", severity: "WARNING", location: "api/invoices.go:27", claim: "the export reads every tenant's invoices", set: "refuted" },
+  ],
+  challenger: { findings: 2, refuted: 1 },
+  arbiter: { asked: 1, confirmed: 1 },
+};
+const PRISM_TEXT = `Prism native review: verdict fail · facets safety, clarity, behavior, failure · record ${PRISM_RECORD}`;
 
 /** Tabs to spaces at the terminal's 8-column stops. */
 function untab(line: string): string {
@@ -167,6 +191,30 @@ async function refusedCard(theme: MediaTheme, tool: "edit" | "bash", args: Recor
   return [...call.render(width), ...result.render(width)];
 }
 
+/**
+ * The Prism review card (shell/lib/ui/review-card.ts, jhon_review's renderers):
+ * the change, the verdict at the right, the facets, the challenger and the
+ * arbiter, each kept finding and the record, collapsed as pi first draws it.
+ */
+async function prismCard(theme: MediaTheme, width: number): Promise<string[]> {
+  const pi = join(SHELL, "node_modules/@earendil-works");
+  const keys = (await import(pathToFileURL(join(pi, "pi-coding-agent/dist/core/keybindings.js")).href)) as { KeybindingsManager: new () => unknown };
+  const tui = (await import(pathToFileURL(join(pi, "pi-tui/dist/index.js")).href)) as { setKeybindings(k: unknown): void };
+  const themes = (await import(pathToFileURL(join(pi, "pi-coding-agent/dist/modes/interactive/theme/theme.js")).href)) as { setThemeInstance(t: unknown): void };
+  tui.setKeybindings(new keys.KeybindingsManager());
+  themes.setThemeInstance(theme);
+  const { reviewRenderers } = await import("../../shell/lib/ui/review-card.ts");
+  const r = reviewRenderers() as unknown as {
+    renderCall(args: unknown, theme: unknown, ctx: unknown): { render(w: number): string[] };
+    renderResult(result: unknown, options: unknown, theme: unknown, ctx: unknown): { render(w: number): string[] };
+  };
+  const ctx = { toolCallId: "media-review", args: {}, isPartial: false, isError: false, executionStarted: true, argsComplete: true, expanded: false, state: {} };
+  // As pi does: both components first, then their rows, so the call's header names the change the result reports.
+  const call = r.renderCall({}, theme, ctx);
+  const result = r.renderResult({ content: [{ type: "text", text: PRISM_TEXT }], details: PRISM }, { isPartial: false, expanded: false }, theme, ctx);
+  return [...call.render(width), ...result.render(width)];
+}
+
 /** Every feature capture, rendered through the shell's own functions. */
 export async function captures(theme: MediaTheme): Promise<Capture[]> {
   defaultSettings();
@@ -222,6 +270,9 @@ export async function captures(theme: MediaTheme): Promise<Capture[]> {
     lines: [...await refusedCard(theme, "bash", { command: "gh pr create --fill" }, ROUTE_REFUSAL.join("\n"), wide),
       "", ...terminal(theme, wide, "jhon hook route-guard < call.json", ROUTE_REFUSAL)],
   });
+
+  // The Prism review's verdict, as the shell's card draws jhon_review's result.
+  out.push({ name: "prism-review", title: "the Prism review", cols: 96, lines: await prismCard(theme, 96) });
 
   // The engine's commands in a terminal: what each printed, the lint and
   // format checks, the candidate commit and the notes of a run left out (…).
