@@ -1,29 +1,41 @@
 /**
- * shell/lib/background-tasks.ts — the main session's background work, in one
- * registry: commands and monitors (`bash_background`, `monitor`) and
- * sub-agents (`subagent` with `background: true`). Every task has an id in
- * one space, belongs to the session that started it, and is listed, read,
- * and stopped the same way (lib/background-tasks-tools.ts).
+ * shell/lib/background-tasks.ts — what the main session runs in the
+ * background, kept in one place: shell commands (`bash_background`), monitors
+ * (`monitor`, lib/ui/task-monitor.ts) and sub-agents (`subagent`). The tools
+ * that start, list, read and stop them live in lib/background-tasks-tools.ts.
  *
- * A task that ends on its own settles exactly once through `onSettled`. A
- * stop settles nothing: whoever stopped it decides who is told. stopAll, at
- * session end, stops the rest silently.
+ * Every task gets an id (`job-N` or `agent-N`), names the session that
+ * started it, and is running until it ends on its own, which is reported
+ * once through `onSettled`, or is stopped, which reports nothing: the one who
+ * stopped it says who hears of it. `stopAll` ends the rest at session end.
  *
- * A command runs through pi's own shell operations (`createLocalBashOperations`;
- * the sandbox's with sandbox.mode on, lib/sandbox.ts),
- * so the configured shell, process groups, and process-tree kill match native
- * Bash; its output goes to a log file and a tail. A sub-agent is a child pi
- * process (lib/agents.ts, runAgent) whose JSON events become its activity.
+ * A command runs through the shell operations it is handed (pi's own Bash,
+ * or the sandbox's, lib/sandbox.ts); its bytes go to `<id>.log` and its last
+ * lines to the record. A sub-agent is a child pi (lib/agents.ts) whose JSON
+ * events become its activity, its thread, its tokens and its cost.
  */
-import { createWriteStream, readFileSync, type WriteStream } from "node:fs";
+import { createWriteStream, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, ChildEvent, ChildResult, ChildSession, RunOptions } from "./agents.ts";
-import { createOutputTail, MAX_TAIL_LINE_CHARS, type JobExecOperations } from "./ui/background-jobs.ts";
+import type { AgentDef, ChildEvent, ChildResult, RunOptions } from "./agents.ts";
 
-/** Running tasks allowed at once across the process. */
+/** The tool that runs a command in the background, beside pi's `bash`. */
+export const BASH_BACKGROUND_TOOL = "bash_background";
+/** The tool whose command's output lines reach the agent while it runs. */
+export const MONITOR_TOOL = "monitor";
+
+/** How many tasks may run at once in the process. */
 export const MAX_RUNNING_TASKS = 25;
+/** The output lines a job keeps for its notice and for task_result. */
+export const TAIL_LINES = 20;
+/** The characters kept of one output line: its newest, after an ellipsis. */
+export const MAX_TAIL_LINE_CHARS = 2000;
 
-/** exited: a command ended, with its exit code; completed: an agent answered; failed: it could not run or finish. */
+/** What a job needs of pi's `BashOperations`. */
+export interface JobExecOperations {
+	exec(command: string, cwd: string, options: { onData: (data: Buffer) => void; signal?: AbortSignal }): Promise<{ exitCode: number | null }>;
+}
+
+/** exited: a command ended with its exit code; completed: a sub-agent answered; failed: it could not run or finish. */
 export type TaskStatus = "running" | "exited" | "completed" | "failed" | "stopped";
 
 interface TaskBase {
@@ -42,79 +54,51 @@ export interface JobRecord extends TaskBase {
 	readonly outputPath: string;
 	exitCode?: number | null;
 	error?: string;
-	/** Last output lines; refreshed until the job ends. */
+	/** Its last output lines, kept current until it ends. */
 	tail: string[];
-	/** Monitor only: output lines reported as events so far. */
+	/** A monitor's output lines reported so far. */
 	events?: number;
-	/** Monitor only: the mandatory timeout it was started with. */
+	/** A monitor's timeout, as started. */
 	timeoutSeconds?: number;
-	/** The owner started it, not the agent (JobStartRequest.byOwner). */
+	/** Started by the owner (JobStartRequest.byOwner). */
 	readonly byOwner?: boolean;
-	/** A `jhon executions run` job: the result its records hold, read at exit (executionsResult). */
+	/** What the records of a `jhon executions run` say, read when it ends (executionsResult). */
 	executions?: ExecutionsResult;
 }
 
-/** What the records a job's `jhon executions run` wrote say: failed when any is incomplete, unreadable, or holds a non-pass. */
+/** The records one `jhon executions run` wrote: failed when one cannot be read, is incomplete, or holds an execution that did not pass. */
 export interface ExecutionsResult {
 	records: string[];
 	failed: boolean;
-	/** Executions that did not pass, and all of them, across the records. */
+	/** Executions that did not pass, and all executions, over every record. */
 	failures: number;
 	total: number;
 }
-
-/** A command that runs `jhon executions run`; its job learns which records the run wrote (T108, L671). */
-export const runsExecutions = (command: string) => /\bjhon\s+executions\s+run\b/.test(command);
-
-/**
- * The result in the records `jhon executions run` named in `report` (one
- * absolute path per line, JHON_EXECUTIONS_REPORT), or undefined when it named
- * none. A pipe through tail exits with tail's code; the record does not.
- */
-export function executionsResult(report: string): ExecutionsResult | undefined {
-	let text: string;
-	try { text = readFileSync(report, "utf8"); } catch { return undefined; }
-	const records = [...new Set(text.split("\n").map((l) => l.trim()).filter(Boolean))];
-	if (records.length === 0) return undefined;
-	const result: ExecutionsResult = { records, failed: false, failures: 0, total: 0 };
-	for (const path of records) {
-		let record: { complete?: unknown; executions?: Array<{ status?: unknown }> };
-		try { record = JSON.parse(readFileSync(path, "utf8")); } catch { result.failed = true; continue; }
-		const executions = Array.isArray(record.executions) ? record.executions : [];
-		const failures = executions.filter((e) => e?.status !== "pass").length;
-		result.total += executions.length;
-		result.failures += failures;
-		if (record.complete !== true || failures > 0) result.failed = true;
-	}
-	return result;
-}
-
-const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
 export interface AgentRun extends TaskBase {
 	readonly kind: "agent";
 	/** The sub-agent's name. */
 	readonly agent: string;
 	readonly task: string;
-	/** The child's saved session id, when it has one. */
+	/** The id of its saved session, when it is saved. */
 	readonly childSessionId?: string;
-	/** The sub-agent's final answer, or why it did not finish. */
+	/** Its final answer, or why it has none. */
 	result?: string;
-	/** Its latest activity, oldest first: the tools it runs, their failures, and what it says. */
+	/** Its latest steps, oldest first: each tool it starts, each that fails, the first line of what it says. */
 	activity: string[];
-	/** Tokens its assistant messages reported so far (usage.totalTokens, summed); 0 while none. */
+	/** The tokens its assistant messages reported (usage.totalTokens), added up. */
 	tokens: number;
-	/** What its assistant messages cost so far (usage.cost.total, summed). */
+	/** What its assistant messages cost (usage.cost.total), added up. */
 	cost: number;
-	/** The model it runs on, as its definition names it. */
+	/** The model its definition names. */
 	readonly model?: string;
-	/** Where its saved session lives (the child's `<…>/subagents` directory); absent when unsaved. */
+	/** The directory of its saved session (`<…>/subagents`), when it is saved. */
 	readonly sessionDir?: string;
-	/** Its live thread, oldest first, as the Agents view draws it: thinking, text and each tool call with its output (G's ThreadItem). */
+	/** What the Agents view draws, oldest first: thinking, text, and each tool call with its output. */
 	thread: ThreadItem[];
 }
 
-/** One item of a sub-agent's thread. */
+/** One entry of a sub-agent's thread. */
 export type ThreadItem =
 	| { kind: "thinking" | "text"; text: string }
 	| { kind: "tool"; callId: string; name: string; /** What it works on (activityLine's pick), when its args name it. */ subject?: string; output: string; running: boolean; isError: boolean };
@@ -127,133 +111,242 @@ export interface JobStartRequest {
 	ownerSessionId: string;
 	label?: string;
 	kind?: "command" | "monitor";
-	/** The owner started it (the change detail's `t`), not the agent: no notice reaches the agent, and its tools never see it. */
+	/** The owner started it (the change detail's `t`): the agent hears nothing of it and its tools never see it. */
 	byOwner?: boolean;
-	/** Called with each complete output line, and the last partial one at exit. */
+	/** Receives each complete output line, and what is left of the last one when the command ends. */
 	onLine?: (line: string) => void;
 }
 
+/** A background sub-agent's run options: runAgent's, less the two the registry supplies. */
+export type AgentStartOptions = Omit<RunOptions, "signal" | "onEvent">;
+
+export interface TaskRegistryDeps {
+	/** Where each job's `<id>.log` goes; asked at every start. */
+	outputDir(): string;
+	now(): number;
+	/** The shell a job runs in, asked at every start so a changed setting applies to the next job; `byOwner` for the owner's own command, which no sandbox wraps (lib/sandbox.ts). */
+	shell(cwd: string, byOwner?: boolean): { operations: JobExecOperations; commandPrefix?: string };
+	/** Runs a sub-agent's child, handing each JSON event to onEvent as it comes. */
+	runAgent(agent: AgentDef, task: string, cwd: string, options: RunOptions & { signal: AbortSignal; onEvent: (event: ChildEvent) => void }): Promise<ChildResult>;
+	/** Called once for a task that ends on its own; never for a stop. */
+	onSettled(task: TaskRecord): void;
+	/** Called when a running sub-agent's record changes, so a view can repaint. */
+	onActivity?(run: AgentRun): void;
+}
+
+// ---------------------------------------------------------------- output
+
+const STANDALONE_SLEEP = /^sleep\s+\d+(?:\.\d+)?[smhd]?$/;
+
+/**
+ * Whether `command` does nothing but sleep: literal `sleep <number>[smhd]`
+ * steps joined by `&&` or `;`. A sleep inside a loop, a pipe or beside any
+ * other command is real work.
+ */
+export function isStandaloneSleep(command: string): boolean {
+	const steps = command.split(/&&|;/).map((step) => step.trim()).filter((step) => step !== "");
+	return steps.length > 0 && steps.every((step) => STANDALONE_SLEEP.test(step));
+}
+
+/** `line` without a trailing carriage return, cut to its newest characters after `…` when too long or already cut. */
+function boundLine(line: string, cut: boolean): string {
+	const text = line.endsWith("\r") ? line.slice(0, -1) : line;
+	if (text.length > MAX_TAIL_LINE_CHARS) return `…${text.slice(-MAX_TAIL_LINE_CHARS)}`;
+	return cut ? `…${text}` : text;
+}
+
+/**
+ * A command's decoded output split into lines: every complete line once
+ * (bounded), the newest TAIL_LINES of them, and the line still being written.
+ */
+export function createOutputTail() {
+	const kept: string[] = [];
+	let open = "";
+	let openCut = false;
+	const keep = (line: string) => {
+		kept.push(line);
+		if (kept.length > TAIL_LINES) kept.splice(0, kept.length - TAIL_LINES);
+	};
+	return {
+		/** Adds output; returns the lines it completed. */
+		push(text: string): string[] {
+			const pieces = `${open}${text}`.split("\n");
+			open = pieces.pop()!;
+			const done = pieces.map((piece, i) => boundLine(piece, i === 0 && openCut));
+			if (done.length > 0) openCut = false;
+			for (const line of done) keep(line);
+			// A line that never ends keeps only its newest characters.
+			if (open.length > MAX_TAIL_LINE_CHARS) {
+				open = open.slice(-MAX_TAIL_LINE_CHARS);
+				openCut = true;
+			}
+			return done;
+		},
+		/** The line still being written, bounded; undefined when none is. */
+		pending(): string | undefined {
+			return open === "" ? undefined : boundLine(open, openCut);
+		},
+		/** The newest TAIL_LINES lines, the one still being written last. */
+		lines(): string[] {
+			const last = this.pending();
+			return (last === undefined ? kept : [...kept, last]).slice(-TAIL_LINES);
+		},
+	};
+}
+
+// ---------------------------------------------------------------- jhon executions
+
+/** Whether a command runs `jhon executions run`, whose records then decide its result (T108, L671). */
+export const runsExecutions = (command: string) => /\bjhon\s+executions\s+run\b/.test(command);
+
+/**
+ * The result of the records named in `report` (JHON_EXECUTIONS_REPORT: one
+ * absolute path per line), or undefined when it names none. A pipeline exits
+ * with its last command's code; the records say what the run found.
+ */
+export function executionsResult(report: string): ExecutionsResult | undefined {
+	let listed: string;
+	try { listed = readFileSync(report, "utf8"); } catch { return undefined; }
+	const records = [...new Set(listed.split("\n").map((line) => line.trim()).filter((line) => line !== ""))];
+	if (records.length === 0) return undefined;
+	let failed = false;
+	let failures = 0;
+	let total = 0;
+	for (const record of records) {
+		let body: { complete?: unknown; executions?: unknown };
+		try { body = JSON.parse(readFileSync(record, "utf8")); } catch { failed = true; continue; }
+		const executions: Array<{ status?: unknown } | null> = Array.isArray(body.executions) ? body.executions : [];
+		const notPassed = executions.reduce((n, execution) => n + (execution?.status === "pass" ? 0 : 1), 0);
+		total += executions.length;
+		failures += notPassed;
+		if (notPassed > 0 || body.complete !== true) failed = true;
+	}
+	return { records, failed, failures, total };
+}
+
+/** `value` as one single-quoted shell word. */
+const shellWord = (value: string) => `'${value.split("'").join(`'\\''`)}'`;
+
+// ---------------------------------------------------------------- sub-agent events
+
+/** Activity lines a sub-agent keeps. */
 const ACTIVITY_LINES = 30;
-/** Thread items kept per sub-agent, and characters kept of each tool's output (its tail). */
+/** Thread entries a sub-agent keeps, and the characters kept of a tool's output (its end). */
 const THREAD_ITEMS = 200;
 const TOOL_OUTPUT_CHARS = 4000;
 
-/** The text of a tool result's content blocks. */
-function resultText(result: unknown): string {
-	const content = (result as { content?: unknown } | undefined)?.content;
-	if (typeof content === "string") return content;
-	return Array.isArray(content) ? content.filter((b: any) => b?.type === "text" && typeof b.text === "string").map((b: any) => b.text).join("\n") : "";
+/** `text` on one line, cut at `width` characters with `…`. */
+function oneLine(text: string, width = 100): string {
+	const flat = text.replace(/\s+/g, " ").trim();
+	return flat.length <= width ? flat : `${flat.slice(0, width - 1)}…`;
 }
 
-/** Grow `thread` by one child event: a tool's start and end, an assistant message's thinking and text. */
+/** The assistant message a `message_end` event carries, or undefined. */
+function assistantMessage(event: ChildEvent): { content: any[]; usage?: Record<string, any> } | undefined {
+	if (event.type !== "message_end") return undefined;
+	const message = event.message as { role?: unknown; content?: unknown; usage?: unknown } | undefined;
+	if (message?.role !== "assistant") return undefined;
+	return { content: Array.isArray(message.content) ? message.content : [], usage: message.usage && typeof message.usage === "object" ? message.usage as Record<string, any> : undefined };
+}
+
+/** The first string among a tool start's command, path, pattern and agent arguments; undefined when it is none or empty. */
+function toolSubject(event: ChildEvent): string | undefined {
+	const args = (event.args ?? {}) as Record<string, unknown>;
+	for (const value of [args.command, args.path, args.pattern, args.agent]) if (typeof value === "string") return value === "" ? undefined : value;
+	return undefined;
+}
+
+/** The text blocks of a tool result's content, joined by newlines. */
+function toolOutput(result: unknown): string {
+	const content = (result as { content?: unknown } | undefined)?.content;
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content.filter((block) => block?.type === "text" && typeof block.text === "string").map((block) => block.text).join("\n");
+}
+
+/** Adds one child event to `thread`: a tool's start or end, an assistant message's thinking and text. */
 export function applyThreadEvent(thread: ThreadItem[], event: ChildEvent): void {
 	const callId = typeof event.toolCallId === "string" ? event.toolCallId : "";
 	const name = typeof event.toolName === "string" ? event.toolName : "tool";
 	if (event.type === "tool_execution_start") {
 		const subject = toolSubject(event);
-		thread.push({ kind: "tool", callId, name, ...(subject ? { subject } : {}), output: "", running: true, isError: false });
+		thread.push(subject === undefined ? { kind: "tool", callId, name, output: "", running: true, isError: false } : { kind: "tool", callId, name, subject, output: "", running: true, isError: false });
 	} else if (event.type === "tool_execution_end") {
-		const item = thread.findLast((i) => i.kind === "tool" && i.callId === callId && i.running);
-		const output = resultText(event.result).trim();
-		const subject = item?.kind === "tool" ? item.subject : undefined;
-		const done = { kind: "tool" as const, callId, name, ...(subject ? { subject } : {}), output: output.length > TOOL_OUTPUT_CHARS ? `…${output.slice(-TOOL_OUTPUT_CHARS)}` : output, running: false, isError: event.isError === true };
-		if (item) Object.assign(item, done);
-		else thread.push(done);
-	} else if (event.type === "message_end") {
-		const message = event.message as { role?: unknown; content?: unknown } | undefined;
-		if (message?.role !== "assistant" || !Array.isArray(message.content)) return;
-		for (const block of message.content as any[]) {
-			if (block?.type === "thinking" && typeof block.thinking === "string" && block.thinking.trim()) thread.push({ kind: "thinking", text: block.thinking.trim() });
-			else if (block?.type === "text" && typeof block.text === "string" && block.text.trim()) thread.push({ kind: "text", text: block.text.trim() });
+		const output = toolOutput(event.result).trim();
+		let open: ThreadItem | undefined;
+		for (let i = thread.length - 1; i >= 0 && !open; i--) {
+			const item = thread[i]!;
+			if (item.kind === "tool" && item.running && item.callId === callId) open = item;
+		}
+		const subject = open?.kind === "tool" ? open.subject : undefined;
+		const ended: ThreadItem = { kind: "tool", callId, name, ...(subject === undefined ? {} : { subject }), output: output.length > TOOL_OUTPUT_CHARS ? `…${output.slice(-TOOL_OUTPUT_CHARS)}` : output, running: false, isError: event.isError === true };
+		if (open) Object.assign(open, ended);
+		else thread.push(ended);
+	} else {
+		for (const block of assistantMessage(event)?.content ?? []) {
+			if (block?.type === "thinking" && typeof block.thinking === "string" && block.thinking.trim() !== "") thread.push({ kind: "thinking", text: block.thinking.trim() });
+			else if (block?.type === "text" && typeof block.text === "string" && block.text.trim() !== "") thread.push({ kind: "text", text: block.text.trim() });
 		}
 	}
 	if (thread.length > THREAD_ITEMS) thread.splice(0, thread.length - THREAD_ITEMS);
 }
 
-/** The cost one child event reports: an assistant message's usage.cost.total, 0 for any other event. */
-export function messageCost(event: ChildEvent): number {
-	if (event.type !== "message_end") return 0;
-	const message = event.message as { role?: unknown; usage?: { cost?: { total?: unknown } } } | undefined;
-	const total = message?.role === "assistant" ? message.usage?.cost?.total : undefined;
-	return typeof total === "number" && Number.isFinite(total) && total > 0 ? total : 0;
-}
-const one = (text: string, width = 100) => { const line = text.replace(/\s+/g, " ").trim(); return line.length > width ? `${line.slice(0, width - 1)}…` : line; };
-const firstLine = (text: string) => one(text.trim().split("\n")[0] ?? "", 60);
-
-/** What a tool's start works on: its command, path, pattern or agent, the first its args name. */
-function toolSubject(event: ChildEvent): string | undefined {
-	const args = (event.args ?? {}) as Record<string, unknown>;
-	return [args.command, args.path, args.pattern, args.agent].find((v) => typeof v === "string") as string | undefined;
-}
-
-/** The activity line one child event adds, or undefined for events that add none. */
+/** The activity line one child event adds: a tool's start, a tool's failure, the first line an assistant message says. */
 export function activityLine(event: ChildEvent): string | undefined {
 	const tool = typeof event.toolName === "string" ? event.toolName : "tool";
 	if (event.type === "tool_execution_start") {
 		const subject = toolSubject(event);
-		return one(subject ? `${tool} ${subject}` : tool);
+		return oneLine(subject === undefined ? tool : `${tool} ${subject}`);
 	}
-	if (event.type === "tool_execution_end" && event.isError === true) return `✗ ${tool} failed`;
-	if (event.type === "message_end") {
-		const message = event.message as { role?: unknown; content?: unknown } | undefined;
-		if (message?.role !== "assistant" || !Array.isArray(message.content)) return undefined;
-		const text = message.content.filter((b: any) => b?.type === "text" && typeof b.text === "string").map((b: any) => b.text).join("").trim();
-		return text ? `» ${one(text.split("\n")[0] ?? "")}` : undefined;
-	}
-	return undefined;
+	if (event.type === "tool_execution_end") return event.isError === true ? `✗ ${tool} failed` : undefined;
+	const said = (assistantMessage(event)?.content ?? []).filter((block) => block?.type === "text" && typeof block.text === "string").map((block) => block.text).join("").trim();
+	return said === "" ? undefined : `» ${oneLine(said.split("\n")[0]!)}`;
 }
 
-/** The tokens one child event reports: an assistant message's usage, 0 for any other event. */
+const positive = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0);
+
+/** The tokens an assistant message's usage reports: its totalTokens, else its parts added; 0 for any other event. */
 export function messageTokens(event: ChildEvent): number {
-	if (event.type !== "message_end") return 0;
-	const message = event.message as { role?: unknown; usage?: { totalTokens?: unknown; input?: unknown; output?: unknown; cacheRead?: unknown; cacheWrite?: unknown } } | undefined;
-	if (message?.role !== "assistant" || !message.usage) return 0;
-	const n = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
-	const u = message.usage;
-	return n(u.totalTokens) || n(u.input) + n(u.output) + n(u.cacheRead) + n(u.cacheWrite);
+	const usage = assistantMessage(event)?.usage;
+	if (!usage) return 0;
+	return positive(usage.totalTokens) || positive(usage.input) + positive(usage.output) + positive(usage.cacheRead) + positive(usage.cacheWrite);
 }
 
-/** A background sub-agent's run options: all of runAgent's but the ones the registry owns. */
-export type AgentStartOptions = Omit<RunOptions, "signal" | "onEvent">;
-
-export interface TaskRegistryDeps {
-	/** Directory receiving one `<id>.log` file per job; read at each start. */
-	outputDir(): string;
-	now(): number;
-	/** Resolved at each start so a changed shell setting applies to the next job. */
-	/** The shell a job runs in; `byOwner` for a command the owner started, which no sandbox wraps (lib/sandbox.ts). */
-	shell(cwd: string, byOwner?: boolean): { operations: JobExecOperations; commandPrefix?: string };
-	/** Runs a sub-agent's child; onEvent receives its JSON events as they arrive. */
-	runAgent(agent: AgentDef, task: string, cwd: string, options: RunOptions & { signal: AbortSignal; onEvent: (event: ChildEvent) => void }): Promise<ChildResult>;
-	/** Called once when a task ends on its own, never for a stop. */
-	onSettled(task: TaskRecord): void;
-	/** Called when a running sub-agent's activity grows, so a view can repaint. */
-	onActivity?(run: AgentRun): void;
+/** What an assistant message's usage says it cost (usage.cost.total); 0 for any other event. */
+export function messageCost(event: ChildEvent): number {
+	return positive(assistantMessage(event)?.usage?.cost?.total);
 }
+
+// ---------------------------------------------------------------- the registry
 
 export function createTaskRegistry(deps: TaskRegistryDeps) {
 	const tasks = new Map<string, TaskRecord>();
-	const aborts = new Map<string, AbortController>();
-	// Every job's run, until its log file is closed and its exit reported.
-	const runs = new Set<Promise<void>>();
-	const counters = { job: 0, agent: 0 };
+	const cancels = new Map<string, AbortController>();
+	// Each job until its log is closed and its end reported.
+	const closing = new Set<Promise<void>>();
+	let jobs = 0;
+	let agents = 0;
 
-	const running = () => [...tasks.values()].filter((task) => task.status === "running").length;
+	const runningCount = () => {
+		let n = 0;
+		for (const task of tasks.values()) if (task.status === "running") n++;
+		return n;
+	};
 	const admit = () => {
-		if (running() >= MAX_RUNNING_TASKS) throw new Error(`${MAX_RUNNING_TASKS} background tasks are already running; stop one with task_stop first.`);
+		if (runningCount() >= MAX_RUNNING_TASKS) throw new Error(`${MAX_RUNNING_TASKS} background tasks are already running; stop one with task_stop first.`);
+	};
+	const register = (task: TaskRecord) => {
+		const cancel = new AbortController();
+		tasks.set(task.id, task);
+		cancels.set(task.id, cancel);
+		return cancel.signal;
 	};
 
-	const finish = async (job: JobRecord, output: WriteStream, update: () => void) => {
-		update();
-		await new Promise<void>((resolve) => output.end(resolve));
-		aborts.delete(job.id);
-	};
-
-	/** Run a command in the background. */
+	/** Runs a command in the background. */
 	const start = (request: JobStartRequest): JobRecord => {
 		admit();
 		const { operations, commandPrefix } = deps.shell(request.cwd, request.byOwner === true);
-		const id = `job-${++counters.job}`;
+		const id = `job-${++jobs}`;
 		const job: JobRecord = {
 			id,
 			kind: request.kind ?? "command",
@@ -267,121 +360,124 @@ export function createTaskRegistry(deps: TaskRegistryDeps) {
 			tail: [],
 			...(request.byOwner ? { byOwner: true } : {}),
 		};
-		const output = createWriteStream(job.outputPath);
-		output.on("error", () => { /* A lost log must not crash the session; the tail survives. */ });
-		const tail = createOutputTail();
-		// Streaming decode keeps a multibyte character split across chunks intact.
+		const log = createWriteStream(job.outputPath);
+		// The log is a convenience: losing it must not take the session down; the tail stays.
+		log.on("error", () => {});
+		const output = createOutputTail();
+		// One decoder for the whole stream, so a character split across chunks arrives whole.
 		const decoder = new TextDecoder("utf-8");
-		const abort = new AbortController();
-		tasks.set(id, job);
-		aborts.set(id, abort);
-		// A `jhon executions run` names each record it writes here, so its end reads the record.
-		const report = runsExecutions(request.command) ? `${job.outputPath}.executions` : undefined;
-		const command = report ? `export JHON_EXECUTIONS_REPORT=${shellQuote(report)}\n${request.command}` : request.command;
-		const execCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
-		let linePartial = "";
-		const emitLines = (text: string, end: boolean) => {
-			if (!request.onLine) return;
-			const parts = (linePartial + text).split("\n");
-			linePartial = end ? "" : parts.pop() ?? "";
-			// Keep one extra character so a cut partial still reads as cut.
-			if (linePartial.length > MAX_TAIL_LINE_CHARS) linePartial = linePartial.slice(-(MAX_TAIL_LINE_CHARS + 1));
-			for (const part of parts) {
-				const line = part.endsWith("\r") ? part.slice(0, -1) : part;
-				request.onLine(line.length > MAX_TAIL_LINE_CHARS ? `…${line.slice(-MAX_TAIL_LINE_CHARS)}` : line);
-			}
+		const signal = register(job);
+		const read = (text: string) => {
+			const lines = output.push(text);
+			job.tail = output.lines();
+			if (request.onLine) for (const line of lines) request.onLine(line);
 		};
-		const flushDecoder = () => {
+		const drain = () => {
 			const rest = decoder.decode();
-			if (rest) {
-				tail.push(rest);
-				job.tail = tail.lines();
+			if (rest !== "") read(rest);
+			const last = output.pending();
+			if (last !== undefined) request.onLine?.(last);
+		};
+		// A `jhon executions run` lists the records it writes in this file, read when it ends.
+		const report = runsExecutions(request.command) ? `${job.outputPath}.executions` : undefined;
+		let script = report ? `export JHON_EXECUTIONS_REPORT=${shellWord(report)}\n${request.command}` : request.command;
+		if (commandPrefix) script = `${commandPrefix}\n${script}`;
+		const end = async (change: () => void) => {
+			drain();
+			if (job.status === "running") {
+				change();
+				job.endedAt = deps.now();
 			}
-			emitLines(rest, true);
+			await new Promise<void>((resolve) => log.end(resolve));
+			cancels.delete(id);
+			if (job.status === "exited" || job.status === "failed") deps.onSettled(job);
 		};
-		const onData = (data: Buffer) => {
-			output.write(data);
-			const text = decoder.decode(data, { stream: true });
-			tail.push(text);
-			job.tail = tail.lines();
-			emitLines(text, false);
-		};
-		const run = operations.exec(execCommand, request.cwd, { onData, signal: abort.signal }).then(
-			({ exitCode }) => finish(job, output, () => {
-				flushDecoder();
-				if (job.status !== "running") return;
+		const run = operations.exec(script, request.cwd, {
+			signal,
+			onData: (data) => {
+				log.write(data);
+				read(decoder.decode(data, { stream: true }));
+			},
+		}).then(
+			({ exitCode }) => end(() => {
 				job.status = "exited";
 				job.exitCode = exitCode;
 				const executions = report ? executionsResult(report) : undefined;
 				if (executions) job.executions = executions;
-				job.endedAt = deps.now();
 			}),
-			(error: unknown) => finish(job, output, () => {
-				flushDecoder();
-				if (job.status !== "running") return;
+			(error: unknown) => end(() => {
 				job.status = "failed";
 				job.error = error instanceof Error ? error.message : String(error);
-				job.endedAt = deps.now();
 			}),
-		).then(() => {
-			if (job.status === "exited" || job.status === "failed") deps.onSettled(job);
-		}).finally(() => runs.delete(run));
-		runs.add(run);
+		).finally(() => closing.delete(run));
+		closing.add(run);
 		return job;
 	};
 
-	/** Run a sub-agent in the background: saved in `session`, keeping a continued one's `scope`, stopped past `timeoutSeconds`. */
+	/** Runs a sub-agent in the background: saved in `session`, keeping a continued one's `scope`, stopped past `timeoutSeconds`. */
 	const startAgent = (agent: AgentDef, task: string, cwd: string, ownerSessionId: string, options: AgentStartOptions = {}): AgentRun => {
-		const { session } = options;
 		admit();
-		const run: AgentRun = { id: `agent-${++counters.agent}`, kind: "agent", label: `${agent.name}: ${firstLine(task)}`, agent: agent.name, task, ownerSessionId, childSessionId: session?.id, startedAt: deps.now(), status: "running", activity: [], tokens: 0, cost: 0, thread: [], model: agent.model, ...(session ? { sessionDir: session.dir } : {}) };
-		const abort = new AbortController();
-		tasks.set(run.id, run);
-		aborts.set(run.id, abort);
-		const settle = (status: TaskStatus, result: string) => {
+		const session = options.session;
+		const run: AgentRun = {
+			id: `agent-${++agents}`,
+			kind: "agent",
+			label: `${agent.name}: ${oneLine(task.trim().split("\n")[0] ?? "", 60)}`,
+			agent: agent.name,
+			task,
+			ownerSessionId,
+			childSessionId: session?.id,
+			startedAt: deps.now(),
+			status: "running",
+			activity: [],
+			tokens: 0,
+			cost: 0,
+			thread: [],
+			model: agent.model,
+			...(session ? { sessionDir: session.dir } : {}),
+		};
+		const signal = register(run);
+		const onEvent = (event: ChildEvent) => {
+			// A stopped run's last events change nothing.
+			if (run.status !== "running") return;
+			const tokens = messageTokens(event);
+			run.tokens += tokens;
+			run.cost += messageCost(event);
+			const items = run.thread.length;
+			applyThreadEvent(run.thread, event);
+			const line = activityLine(event);
+			if (line !== undefined) {
+				run.activity.push(line);
+				if (run.activity.length > ACTIVITY_LINES) run.activity.splice(0, run.activity.length - ACTIVITY_LINES);
+			}
+			// A tool's end rewrites its thread entry in place.
+			const changed = line !== undefined || tokens > 0 || run.thread.length !== items || event.type === "tool_execution_end";
+			if (changed) deps.onActivity?.(run);
+		};
+		const settle = (status: "completed" | "failed", result: string) => {
 			if (run.status !== "running") return;
 			run.status = status;
 			run.result = result;
 			run.endedAt = deps.now();
-			aborts.delete(run.id);
+			cancels.delete(run.id);
 			deps.onSettled(run);
 		};
-		const onEvent = (event: ChildEvent) => {
-			const used = run.status === "running" ? messageTokens(event) : 0;
-			if (used) run.tokens += used;
-			const before = run.thread.length;
-			if (run.status === "running") {
-				run.cost += messageCost(event);
-				applyThreadEvent(run.thread, event);
-			}
-			// A tool's end changes its thread item in place.
-			const grew = run.status === "running" && (run.thread.length !== before || event.type === "tool_execution_end");
-			const line = run.status === "running" ? activityLine(event) : undefined;
-			if (!line) {
-				if (used || grew) deps.onActivity?.(run);
-				return;
-			}
-			run.activity.push(line);
-			if (run.activity.length > ACTIVITY_LINES) run.activity.splice(0, run.activity.length - ACTIVITY_LINES);
-			deps.onActivity?.(run);
-		};
-		deps.runAgent(agent, task, cwd, { ...options, signal: abort.signal, onEvent }).then(
-			(r) => settle(r.ok ? "completed" : "failed", r.text),
-			(e) => settle("failed", `jhon: the sub-agent "${agent.name}" could not run: ${e instanceof Error ? e.message : String(e)}`),
+		deps.runAgent(agent, task, cwd, { ...options, signal, onEvent }).then(
+			(answer) => settle(answer.ok ? "completed" : "failed", answer.text),
+			(error: unknown) => settle("failed", `jhon: the sub-agent "${agent.name}" could not run: ${error instanceof Error ? error.message : String(error)}`),
 		);
 		return run;
 	};
 
+	/** Stops a running task; reports nothing. Returns the task, or undefined for an unknown id. */
 	const stop = (id: string): TaskRecord | undefined => {
 		const task = tasks.get(id);
-		if (!task) return undefined;
-		if (task.status === "running") {
-			task.status = "stopped";
-			task.endedAt = deps.now();
-			if (task.kind === "agent") task.result = `jhon: the sub-agent "${task.agent}" was stopped`;
-			aborts.get(id)?.abort();
-			if (task.kind === "agent") aborts.delete(id);
-		}
+		if (task?.status !== "running") return task;
+		task.status = "stopped";
+		task.endedAt = deps.now();
+		if (task.kind === "agent") task.result = `jhon: the sub-agent "${task.agent}" was stopped`;
+		cancels.get(id)?.abort();
+		// A job lets go of its controller once its log is closed.
+		if (task.kind === "agent") cancels.delete(id);
 		return task;
 	};
 
@@ -390,15 +486,15 @@ export function createTaskRegistry(deps: TaskRegistryDeps) {
 		startAgent,
 		stop,
 		get: (id: string) => tasks.get(id),
-		/** Tasks in start order, optionally only those one session owns. */
+		/** Every task in start order, or only those `ownerSessionId` started. */
 		list: (ownerSessionId?: string) => [...tasks.values()].filter((task) => ownerSessionId === undefined || task.ownerSessionId === ownerSessionId),
-		running,
-		/** Job runs not yet finished: still executing or closing their log. */
-		pending: () => runs.size,
-		/** Stops every running task and resolves once every job's log file is closed. */
+		running: runningCount,
+		/** Jobs still running or closing their log. */
+		pending: () => closing.size,
+		/** Stops every running task; resolves once every job's log is closed. */
 		stopAll: async () => {
-			for (const id of tasks.keys()) stop(id);
-			await Promise.allSettled([...runs]);
+			for (const id of [...tasks.keys()]) stop(id);
+			await Promise.allSettled([...closing]);
 		},
 	};
 }

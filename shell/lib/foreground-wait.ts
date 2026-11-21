@@ -7,7 +7,7 @@
 // main session's guard (lib/background-tasks-tools.ts) lets it run and adds
 // a note to its result. bash_background and monitor commands are never judged here.
 
-import { BASH_BACKGROUND_TOOL, MONITOR_TOOL } from "./ui/background-jobs.ts";
+import { BASH_BACKGROUND_TOOL, MONITOR_TOOL } from "./background-tasks.ts";
 
 /** A leading sleep up to this many seconds still runs in the foreground. */
 export const FOREGROUND_SLEEP_SECONDS = 5;
