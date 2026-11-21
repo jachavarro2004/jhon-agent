@@ -1,82 +1,121 @@
+/**
+ * shell/lib/ui/double-esc-cancel-policy.ts — what esc does in the prompt (T174-S8).
+ *
+ * shell.behaviour.double_esc_cancel (lib/settings.ts; off by default, the
+ * owner's settings or JHON_SHELL_DOUBLE_ESC_CANCEL as `jhon settings`
+ * resolves it; no project layer, so the same key never stops a turn in one
+ * repository and not in another) decides whether a running turn stops on the
+ * first esc or on a second one within DOUBLE_ESC_CANCEL_WINDOW_MS. Idle, a
+ * draft clears on a second esc within IDLE_ESC_CLEAR_WINDOW_MS, and only
+ * while it still reads as it did at the first press.
+ *
+ * The gate decides; the prompt (extensions/ui.ts) acts and shows the hint.
+ */
 import { shellSettings, type ShellSettings } from "../settings.ts";
-
-// ---------------------------------------------------------------------------
-// Double-esc-cancel policy — shell.behaviour.double_esc_cancel in the owner's
-// settings (lib/settings.ts): default off < settings.toml <
-// JHON_SHELL_DOUBLE_ESC_CANCEL, resolved by `jhon settings` (S38).
-//
-// Deliberately global-only (no project layer): this preference changes what
-// a keypress does while the agent is working, and a per-project override for
-// a personal habit like this would make the same key do two different things
-// depending on which repo happens to be open.
-// ---------------------------------------------------------------------------
 
 export type DoubleEscCancelPolicy = "on" | "off";
 
-/** Which of the three sources decided the effective policy. */
-export type DoubleEscCancelSource = "global_file" | "environment" | "default";
-
-export interface DoubleEscCancelResolution {
-	policy: DoubleEscCancelPolicy;
-	source: DoubleEscCancelSource;
-	/** The settings could not be read, so the policy is off. */
-	malformed: boolean;
-	/** The settings file. */
-	globalFile: string;
-	/** settings.toml holds the key. */
-	globalFileExists: boolean;
-	/** JHON_SHELL_DOUBLE_ESC_CANCEL's value when it decided ("on" or "off"); the engine ignores any other. */
-	envValue: DoubleEscCancelPolicy | undefined;
-}
-
-export interface LoadDoubleEscCancelOptions {
-	/** The settings to read (tests); the process's by default. */
-	settings?: ShellSettings;
-}
-
 export const DOUBLE_ESC_CANCEL_KEY = "shell.behaviour.double_esc_cancel";
-
-// Pi's own idle double-Esc (empty editor -> /tree or /fork, interactive-mode.js
-// `lastEscapeTime`) uses a 500ms window. Canceling a running turn throws away
-// in-flight work and is harder to undo than switching prompts, so this
-// confirmation deliberately gets double that time to land the second press.
+/** Stopping a turn throws its work away, so the second press gets a full second: twice pi's own idle esc-esc window. */
 export const DOUBLE_ESC_CANCEL_WINDOW_MS = 1000;
+/** Clearing a draft keeps it in the history: pi's own idle esc-esc window. */
+export const IDLE_ESC_CLEAR_WINDOW_MS = 500;
 
-/** The double-esc-cancel policy AND the source that decided it. */
-export function resolveDoubleEscCancelPolicy(
-	options: LoadDoubleEscCancelOptions = {},
-): DoubleEscCancelResolution {
+interface PolicyOptions { settings?: ShellSettings }
+
+/** The policy the settings hold now; off when they cannot be read. */
+export function loadDoubleEscCancelPolicy(options: PolicyOptions = {}): DoubleEscCancelPolicy {
 	const settings = options.settings ?? shellSettings();
-	const source = settings.source(DOUBLE_ESC_CANCEL_KEY);
-	const policy: DoubleEscCancelPolicy = settings.doubleEscCancel() ? "on" : "off";
+	return settings.doubleEscCancel() ? "on" : "off";
+}
+
+/** Saves the policy with `jhon settings set` (Customize -> Behaviour); returns the settings file, throws when jhon refuses. */
+export function writeDoubleEscCancelPolicy(policy: DoubleEscCancelPolicy, options: PolicyOptions = {}): string {
+	const settings = options.settings ?? shellSettings();
+	const saved = settings.set(DOUBLE_ESC_CANCEL_KEY, policy === "on");
+	if (!saved.ok) throw new Error(saved.error);
+	return settings.path;
+}
+
+// --- the gate -----------------------------------------------------------------------
+
+/**
+ * What one esc press does:
+ * - `pass`: pi handles it (autocomplete, bash mode, an empty idle prompt's tree/fork).
+ * - `stop`: the turn stops now.
+ * - `arm`: the first press of a pair; the hint shows until the window closes.
+ * - `clear`: the draft goes (into the history).
+ */
+export type EscOutcome = "pass" | "stop" | "arm" | "clear";
+
+export interface EscPress {
+	working: boolean;
+	/** pi shows its completion list: esc closes it. */
+	completing: boolean;
+	doubleEsc: boolean;
+	/** The draft as it reads now. */
+	text: string;
+}
+
+export interface EscGate {
+	press(press: EscPress): EscOutcome;
+	/** Any other key: an armed clear disarms (its draft is about to change). */
+	other(): void;
+	/** A turn started or ended: every armed press disarms. */
+	reset(): void;
+	/** The hint for the line's right end while a window is open, with the draft as it reads now. */
+	hint(working: boolean, text: string): "stop" | "clear" | undefined;
+	/** The open window's length in ms after an `arm`, for the repaint that takes the hint away. */
+	window(): number;
+}
+
+export function createEscGate(now: () => number): EscGate {
+	let stopUntil: number | undefined;
+	let clearUntil: number | undefined;
+	let clearText: string | undefined;
+	let lastWindow = 0;
+	const stopOpen = () => stopUntil !== undefined && now() < stopUntil;
+	const clearOpen = (text: string) => clearUntil !== undefined && now() < clearUntil && clearText === text;
+	const disarm = () => { stopUntil = undefined; clearUntil = undefined; clearText = undefined; };
 	return {
-		policy,
-		source: source === "env" ? "environment" : source === "file" ? "global_file" : "default",
-		malformed: settings.unreadable,
-		globalFile: settings.where,
-		globalFileExists: source === "file",
-		envValue: source === "env" ? policy : undefined,
+		press({ working, completing, doubleEsc, text }) {
+			if (completing) return "pass";
+			if (working) {
+				clearUntil = undefined; clearText = undefined;
+				if (!doubleEsc || stopOpen()) { stopUntil = undefined; return "stop"; }
+				stopUntil = now() + DOUBLE_ESC_CANCEL_WINDOW_MS;
+				lastWindow = DOUBLE_ESC_CANCEL_WINDOW_MS;
+				return "arm";
+			}
+			stopUntil = undefined;
+			// pi owns esc on an empty prompt (tree/fork) and in bash mode (`!`).
+			if (text.trim() === "" || text.trimStart().startsWith("!")) return "pass";
+			if (clearOpen(text)) { disarm(); return "clear"; }
+			clearUntil = now() + IDLE_ESC_CLEAR_WINDOW_MS;
+			clearText = text;
+			lastWindow = IDLE_ESC_CLEAR_WINDOW_MS;
+			return "arm";
+		},
+		other() { clearUntil = undefined; clearText = undefined; },
+		reset: disarm,
+		hint(working, text) {
+			if (working) return stopOpen() ? "stop" : undefined;
+			return clearOpen(text) ? "clear" : undefined;
+		},
+		window: () => lastWindow,
 	};
 }
 
 /**
- * The effective policy alone, for callers that do not report a source.
- * It delegates so the loader and the resolver can never disagree.
+ * pi's esc-abort puts its queued messages back in the editor ahead of the
+ * draft, joined by a blank line (`[queued, draft].filter(nonblank).join("\n\n")`).
+ * This takes the queued part back out: "" when nothing was queued, undefined
+ * when the editor holds something else (then pi's text stays as it is).
  */
-export function loadDoubleEscCancelPolicy(options: LoadDoubleEscCancelOptions = {}): DoubleEscCancelPolicy {
-	return resolveDoubleEscCancelPolicy(options).policy;
-}
-
-/**
- * Save the policy with `jhon settings set`.
- * Used by both `/jhon:double-esc-cancel enable` and `... disable`.
- */
-export function writeDoubleEscCancelPolicy(
-	policy: DoubleEscCancelPolicy,
-	options: { settings?: ShellSettings } = {},
-): string {
-	const settings = options.settings ?? shellSettings();
-	const result = settings.set(DOUBLE_ESC_CANCEL_KEY, policy === "on");
-	if (!result.ok) throw new Error(result.error);
-	return settings.path;
+export function extractQueuedText(combined: string, draft: string): string | undefined {
+	if (combined === draft) return "";
+	if (draft.trim() === "") return combined;
+	const tail = `\n\n${draft}`;
+	if (!combined.endsWith(tail)) return undefined;
+	return combined.slice(0, -tail.length);
 }

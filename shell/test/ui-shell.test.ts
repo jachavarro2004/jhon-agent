@@ -432,7 +432,7 @@ interface MutablePromptThemeHost {
 	theme: ExtensionContext["ui"]["theme"];
 }
 
-test("the installed prompt says the Esc hints at its rule's right end and queued in its rule; its last row stays blank (T15.12d)", () => {
+test("the installed prompt says the Esc hints at the working line's right end and queued on it; it ends on its rule (T174-S8)", () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, { JHON_SHELL_DOUBLE_ESC_CANCEL: "on" });
 	const { ctx, ui } = fakeContext({ pending: true });
@@ -442,16 +442,16 @@ test("the installed prompt says the Esc hints at its rule's right end and queued
 		assert.doesNotMatch(editor.render(80).join("\n"), /\x1b\[4\dm/, "the prompt paints no background");
 		editor.setText("draft");
 		editor.handleInput("\x1b");
-		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 ready for you ─+ esc again clears it ─$/);
-		assert.equal(editor.render(80).at(-1), " ".repeat(80), "no hint row: G's blank last row");
+		assert.match(stripAnsi(editor.render(80)[0]!), /^ 力 ready for you +esc again clears it $/);
+		assert.equal(stripAnsi(editor.render(80).at(-1)!), "─".repeat(80), "the prompt ends on its rule");
 		for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 queued ─+$/);
+		assert.match(stripAnsi(editor.render(80)[0]!), /^ 力 Working…  thinking · \d+s · queued +esc esc interrupts $/);
 		editor.handleInput("\x1b");
-		assert.match(stripAnsi(editor.render(80)[0]!), /^─ 力 queued ─+ esc again stops it ─$/);
+		assert.match(stripAnsi(editor.render(80)[0]!), /^ 力 Working…  thinking · \d+s · queued +esc again stops it $/);
 	} finally { editor.dispose(); }
 });
 
-// The prompt's petal frame says «working…»; pi's own loader row would say it twice,
+// The working line says «Working…»; pi's own loader row would say it twice,
 // whatever the environment names (no multiplexer keeps it, T24b).
 test("shellUi hides Pi's native Working row whatever multiplexer it runs in", () => {
 	const { pi, handlers } = fakePi();
@@ -471,7 +471,7 @@ test("the prompt never names the LDD phase: the Status card says it, once", asyn
 	assert.doesNotMatch(editor.render(80).map(stripAnsi).join("\n"), /APPLY|launch/);
 });
 
-test("shellUi takes over the prompt: pi's Working row hidden, the petal in its rule, a hint while empty", () => {
+test("shellUi takes over the prompt: pi's Working row hidden, the working line over the rule, a hint while empty", () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
 	const { ctx, ui } = fakeContext();
@@ -479,11 +479,12 @@ test("shellUi takes over the prompt: pi's Working row hidden, the petal in its r
 	assert.equal(ui.workingVisible, false, "pi's own Working row must be hidden");
 	editor.focused = true;
 	const lines = editor.render(60).map(stripAnsi);
-	assert.match(lines[0], /^─ 力 ready for you ─+$/);
+	assert.match(lines[0], /^ 力 ready for you +$/);
+	assert.match(lines[1], /^─+$/);
 	assert.doesNotMatch(editor.render(60).join("\n"), /\x1b\[44m/, "prompt must not paint passive backgrounds");
-	assert.match(lines[1], /^› .*write, or \/ for a command/);
+	assert.match(lines[2], /^ ❯ .*write, or \/ for a command/);
 	editor.setText("hola");
-	assert.doesNotMatch(editor.render(60).map(stripAnsi)[1], /write, or/);
+	assert.doesNotMatch(editor.render(60).map(stripAnsi)[2], /write, or/);
 	editor.dispose();
 });
 
@@ -497,11 +498,11 @@ test("sections, the default: the prompt under a rule line, one status line at th
 	try {
 		editor.focused = true;
 		const lines = editor.render(60).map(stripAnsi);
-		assert.match(lines[0], /^─ 力 ready for you ─+$/);
-		assert.match(lines[1], /^› .*write, or \/ for a command/);
+		assert.match(lines[0], /^ 力 ready for you +$/);
+		assert.match(lines[2], /^ ❯ .*write, or \/ for a command/);
 		assert.ok(lines.every((line) => visibleWidth(line) === 60), lines.join("\n"));
 		editor.setText("hola");
-		assert.match(editor.render(60).map(stripAnsi)[1], /^› hola +$/);
+		assert.match(editor.render(60).map(stripAnsi)[2], /^ ❯ hola +$/);
 		const footer = renderFooter(ui);
 		assert.match(footer, /^ ⎇ main +claude-opus-5-5 · medium │ ctx ▰▰▰▰▱▱▱▱ 45% │ \$0\.000 sub $/, "the cost closes the bar");
 		assert.equal(handlers.has("after_provider_response"), true, "T174-S5b: the subscription windows are read from the replies again");
@@ -662,7 +663,7 @@ test("without the rail the editor rule carries no [ Panel ], and a click at its 
 	const { ctx, ui, footer, editor, handlers } = narrowShell();
 	try {
 		const lines = editor.render(100).map(stripAnsi);
-		assert.match(lines[0]!, /^─ 力 ready for you ─+$/);
+		assert.match(lines[0]!, /^ 力 ready for you +$/);
 		editor.handleMouse({ type: "click", button: "left", x: 93, y: 0, width: 100, height: lines.length } as never);
 		assert.equal(ui.overlayView, undefined, "no sheet");
 	} finally { editor.dispose(); footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
@@ -673,7 +674,7 @@ test("without the pane the Running block sits above the editor rule while agents
 	const opened: Array<{ view?: string }> = [];
 	pi.events.on("jhon-shell:open-tasks", (payload: unknown) => opened.push(payload as { view?: string }));
 	try {
-		assert.match(stripAnsi(editor.render(100)[0]!), /^─ 力 ready for you ─+$/, "nothing runs: no block, the rule first");
+		assert.match(stripAnsi(editor.render(100)[0]!), /^ 力 ready for you +$/, "nothing runs: no block, the working line first");
 		const now = Date.now();
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [{ id: "agent-1", kind: "agent", label: "jhon-builder: slice 3", startedAt: now - 5_000 }, { id: "job-1", kind: "command", label: "npm test", startedAt: now - 3_000 }] });
 		const lines = editor.render(100).map(stripAnsi);
@@ -681,7 +682,8 @@ test("without the pane the Running block sits above the editor rule while agents
 		assert.match(lines[1]!, /^ {2}◐ jhon-builder {2}slice 3 +\d+s +$/);
 		assert.match(lines[2]!, /^ {2}⧗ job-1 npm test +\d+s +$/);
 		assert.equal(lines[3]!.trim(), "", "a blank row before the prompt");
-		assert.match(lines[4]!, /^─ 力 ready for you ─+$/, "the rule under it, no [ Panel ] (T169)");
+		assert.match(lines[4]!, /^ 力 ready for you +$/, "the working line under it, no [ Panel ] (T169)");
+		assert.match(lines[5]!, /^─+$/, "then the rule");
 		for (const line of lines.slice(0, 4)) assert.equal(visibleWidth(line), 100);
 		assert.equal(state.wide?.() ?? false, false, "no pane: the block carries the work");
 		const click = (y: number) => editor.handleMouse({ type: "click", button: "left", x: 3, y, width: 100, height: lines.length } as never);
@@ -694,11 +696,11 @@ test("without the pane the Running block sits above the editor rule while agents
 		assert.doesNotMatch(editor.render(100).map(stripAnsi).join("\n"), /Running/, "beside the pane the work is the pane's");
 		state.wide = undefined;
 		pi.events.emit("jhon-shell:tasks", { sessionId: ctx.sessionManager.getSessionId(), tasks: [] });
-		assert.match(stripAnsi(editor.render(100)[0]!), /^─ 力 ready for you ─+$/, "the work ended: no block");
+		assert.match(stripAnsi(editor.render(100)[0]!), /^ 力 ready for you +$/, "the work ended: no block");
 	} finally { editor.dispose(); footer.dispose(); await fire(handlers, "session_shutdown", ctx); }
 });
 
-test("a regular (not fullscreen) terminal draws G's card prompt, neon without a theme background, and no work row nor [ Panel ] (T15.12e)", () => {
+test("a regular (not fullscreen) terminal draws the same prompt as the full screen (design 01), and no work row nor [ Panel ] (T174-S8)", () => {
 	const { pi, handlers } = fakePi();
 	shellUi(pi, {});
 	const { ctx, ui } = fakeContext();
@@ -707,9 +709,10 @@ test("a regular (not fullscreen) terminal draws G's card prompt, neon without a 
 	const editor = factory(fakeTui, editorTheme, fakeKeybindings);
 	try {
 		const rows = editor.render(100).map(stripAnsi);
-		assert.match(rows[0]!, /^╭─ 力 ─+╮$/);
-		assert.match(rows[1]!, /^│.*write, or \/ for a command.*│$/);
-		assert.match(rows.at(-1)!, /^╰─+╯$/);
+		assert.match(rows[0]!, /^ 力 ready for you +$/);
+		assert.match(rows[1]!, /^─+$/);
+		assert.match(rows[2]!, /^ ❯ .*write, or \/ for a command/);
+		assert.match(rows.at(-1)!, /^─+$/);
 		assert.doesNotMatch(rows.join("\n"), /Panel/);
 	} finally { editor.dispose(); }
 });
@@ -721,7 +724,7 @@ test("an unknown or unreported phase falls back to the generic working label", (
 	const editor = installedPrompt(ctx, ui, handlers);
 	try {
 		for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-		assert.match(editor.render(60).map(stripAnsi)[0], /^─ .+ working… ─+$/);
+		assert.match(editor.render(60).map(stripAnsi)[0], /^ 力 Working…  thinking · \d+s +esc interrupts $/);
 	} finally {
 		editor.dispose();
 	}
@@ -836,14 +839,14 @@ test("shellUi shows working while the agent runs and queued when messages wait",
 	const editor = installedPrompt(ctx, ui, handlers);
 
 	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
-	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 working… ─+$/);
+	assert.match(stripAnsi(editor.render(60)[0]), /^ 力 Working…  thinking · \d+s +esc interrupts $/);
 	pending.value = true;
-	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 queued ─+$/);
+	assert.match(stripAnsi(editor.render(60)[0]), /^ 力 Working…  thinking · \d+s · queued/);
 	for (const handler of handlers.get("agent_end") ?? []) handler({}, ctx);
 	assert.match(stripAnsi(editor.render(60)[0]), /queued/, "low-level run end is not settled");
 	pending.value = false;
 	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
-	assert.match(stripAnsi(editor.render(60)[0]), /^─ 力 ready for you ─+$/);
+	assert.match(stripAnsi(editor.render(60)[0]), /^ 力 ready for you +$/);
 	editor.dispose();
 });
 
@@ -859,25 +862,25 @@ test("after 60 s with no stream event and no tool running, the working line says
 		on("agent_start");
 		on("turn_start");
 		now += 59_999;
-		assert.match(top(), /^─ 力 working… ─+$/);
+		assert.match(top(), /^ 力 Working…  (?!waiting)\S+ · \d+(m\d+)?s +esc interrupts $/);
 		now += 1;
-		assert.match(top(), /^─ 力 waiting for Claude API · 60s ─+$/);
+		assert.match(top(), /^ 力 Working…  waiting for Claude API · 60s +esc interrupts $/);
 		now += 12_400;
-		assert.match(top(), /^─ 力 waiting for Claude API · 72s ─+$/);
+		assert.match(top(), /^ 力 Working…  waiting for Claude API · 72s +esc interrupts $/);
 		// The next stream event clears it, and the wait counts again from there.
 		on("message_start");
-		assert.match(top(), /^─ 力 working… ─+$/);
+		assert.match(top(), /^ 力 Working…  (?!waiting)\S+ · \d+(m\d+)?s +esc interrupts $/);
 		now += 60_000;
 		assert.match(top(), /waiting for Claude API · 60s/);
 		on("message_update");
-		assert.match(top(), /^─ 力 working… ─+$/);
+		assert.match(top(), /^ 力 Working…  (?!waiting)\S+ · \d+(m\d+)?s +esc interrupts $/);
 		// A running tool, however long, is not a wait on the API.
 		on("tool_execution_start");
 		now += 300_000;
-		assert.match(top(), /^─ 力 working… ─+$/);
+		assert.match(top(), /^ 力 Working…  (?!waiting)\S+ · \d+(m\d+)?s +esc interrupts $/);
 		on("tool_execution_end");
 		now += 59_999;
-		assert.match(top(), /working…/);
+		assert.match(top(), /Working…  (?!waiting)/);
 		now += 1;
 		assert.match(top(), /waiting for Claude API · 60s/);
 		// The turn's end clears it, and an idle prompt never shows it.
@@ -885,10 +888,10 @@ test("after 60 s with no stream event and no tool running, the working line says
 		assert.doesNotMatch(top(), /waiting/);
 		on("agent_settled");
 		now += 600_000;
-		assert.match(top(), /^─ 力 ready for you ─+$/);
+		assert.match(top(), /^ 力 ready for you +$/);
 		// The next turn starts its own count.
 		on("agent_start");
-		assert.match(top(), /^─ 力 working… ─+$/);
+		assert.match(top(), /^ 力 Working…  (?!waiting)\S+ · \d+(m\d+)?s +esc interrupts $/);
 	} finally {
 		editor.dispose();
 	}
@@ -1250,7 +1253,7 @@ test("the Animations setting switches the live pulse", async (t) => {
 	assert.equal(active, 3);
 	await setViaSettings(commands, ctx, ui, "Animations", "off");
 	assert.equal(active, 2, "the pulse stops; the polls stay");
-	assert.match(stripAnsi(editor.render(60)[0]), /working/);
+	assert.match(stripAnsi(editor.render(60)[0]), /Working…/);
 	assert.equal(savedPolicy(configHome, "animations"), "potato");
 	await setViaSettings(commands, ctx, ui, "Animations", "full");
 	assert.deepEqual(delays, [2000, 60_000, 80, 80]);
@@ -1278,7 +1281,7 @@ test("potato repaints start/settle and shows queued state on the host's next ren
 	let before = renders.mock.callCount();
 	for (const handler of handlers.get("agent_start") ?? []) handler({}, ctx);
 	assert.ok(renders.mock.callCount() > before);
-	assert.match(stripAnsi(editor.render(60)[0]), /力 working/);
+	assert.match(stripAnsi(editor.render(60)[0]), /力 Working…/);
 	before = renders.mock.callCount();
 	pending.value = true;
 	assert.equal(renders.mock.callCount(), before, "changing the queue flag is not a shell repaint event");
@@ -1287,11 +1290,11 @@ test("potato repaints start/settle and shows queued state on the host's next ren
 	// this proves next-render visibility, not real Pi enqueue-to-paint latency.
 	fakeTui.requestRender();
 	assert.equal(renders.mock.callCount(), before + 1);
-	assert.match(stripAnsi(editor.render(60)[0]), /力 queued/);
+	assert.match(stripAnsi(editor.render(60)[0]), /· queued/);
 	before = renders.mock.callCount();
 	for (const handler of handlers.get("agent_settled") ?? []) handler({}, ctx);
 	assert.ok(renders.mock.callCount() > before);
-	assert.doesNotMatch(stripAnsi(editor.render(60)[0]), /working|queued/);
+	assert.doesNotMatch(stripAnsi(editor.render(60)[0]), /Working|queued/);
 	for (const handler of handlers.get("session_shutdown") ?? []) handler({}, ctx);
 	assert.equal(intervals.mock.callCount(), 2, "the profile poll and STATUS's minute re-read; no animation");
 });
@@ -2022,7 +2025,7 @@ test("the shell replaces its retained factory on reload so new lifecycle handler
 	try {
 		assert.notEqual(ui.editorFactory, previousFactory);
 		for (const handler of next.handlers.get("agent_start") ?? []) handler({}, ctx);
-		assert.match(stripAnsi(editor.render(60)[0]), /working/);
+		assert.match(stripAnsi(editor.render(60)[0]), /Working…/);
 	} finally {
 		oldEditor.dispose();
 		editor.dispose();

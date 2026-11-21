@@ -257,17 +257,23 @@ and `alt+PgDn` (or the wheel over it) scroll it three rows and a row says where 
 sits above the prompt as the Running block does: `── ▾ Todos  alt+t · 0/2 ──`,
 its rows two columns in, then a blank row.
 
-In a fullscreen terminal the prompt is a ruled editor:
-`─ 力 ready for you ── <hint> ─`, the petal's tone turning while the agent works, the esc hint
-(`esc again clears it`, `esc again stops it`) at the rule's right end, then
-`› <input>`. A regular terminal draws it as a card in
-`shell.appearance.cards`' style. In a fullscreen terminal without the pane
+The prompt is a working line over a ruled editor, in every terminal
+(design 01): `力 ready for you` while idle, `力 Working…  thinking · 38s` while
+the agent works (what it does: thinking, writing or the tool that runs; past
+a minute with no reply, `waiting for Claude API · 72s`; `· queued` while a
+message waits), with `esc esc interrupts` (or `esc interrupts`, with
+`shell.behaviour.double_esc_cancel` off) at its right end, or the open esc
+confirmation (`esc again stops it`, `esc again clears it`). Under it a rule,
+`❯ <input>` (`write, or / for a command` while empty) and a rule; pi's scroll
+note and a selection's count ride the rules. With
+`shell.appearance.animations` full a light crosses `Working…` and the 力
+turns its tone; off, the line stands still. In a fullscreen terminal without the pane
 (under 140 columns, Status hidden, or no layout hook) the Running block sits
-above the rule while agents or jobs run (design 04): `── Running  2 agents ·
+above the working line while agents or jobs run (design 04): `── Running  2 agents ·
 1 job ──`, then their rows (the finished ones of the last minute too); the
 pointer paints the row under it and a click opens its view. With
 no pane, `alt+j` (the LDD status), `alt+s` (the agents), `alt+o` (the jobs),
-`alt+u` (the usage) and `alt+t` (the todo list, above the rule) remain. `ask_user` asks in the dock between two accent
+`alt+u` (the usage) and `alt+t` (the todo list, above the working line) remain. `ask_user` asks in the dock between two accent
 rules, never an overlay.
 
 Every tool call's header starts with its family's icon, geometric by default:

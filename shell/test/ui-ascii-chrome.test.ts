@@ -16,7 +16,7 @@ import { renderAgentsSection, renderJobsSection, renderLddPanel, renderRunningBl
 import type { LddStatus } from "../lib/ui/ldd-status.ts";
 import { renderStatusBar, renderTopRow, type BarModel } from "../lib/ui/bars.ts";
 import { CARD_STYLE, renderCard, setCardStyle, cardStyle, CARD_TONE } from "../lib/ui/primitives/index.ts";
-import { framePromptLines, PROMPT_STATE, resolvePromptLayout } from "../lib/ui/shell-prompt.ts";
+import { framePrompt, PROMPT_STATE, renderWorkingLine } from "../lib/ui/shell-prompt.ts";
 import { renderTodoRail } from "../extensions/todo.ts";
 import type { TodoState } from "../lib/todo.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
@@ -63,23 +63,22 @@ const todos = { tasks: [
 	{ id: 5, title: "Gone", status: "dropped" },
 ], nextId: 6, updatedTurn: 1 } as TodoState;
 
-test("the prompt rule, the neon card prompt and the float card prompt draw in ASCII, idle and working", (t) => {
+test("the working line, the prompt's rules and its mark draw in ASCII, idle, working and queued (T174-S8)", (t) => {
 	ascii(t);
-	const previous = cardStyle();
-	t.after(() => setCardStyle(previous));
 	for (const width of WIDTHS) {
-		const lines = ["─".repeat(width), "hello → there", "─".repeat(width)];
 		for (const state of [PROMPT_STATE.IDLE, PROMPT_STATE.WORKING, PROMPT_STATE.QUEUED]) {
-			const options = { state, tick: 1, borderColor: (s: string) => s, fg: plain.fg, bold: plain.bold, bg: plain.bg };
-			const panel = framePromptLines(lines, width, options, resolvePromptLayout(width, undefined, undefined, true));
-			pureAscii(`prompt rule ${state} ${width}`, panel.slice(0, 1));
-			assert.match(stripAnsi(panel[1]!), /^> hello/, "the mark reads >");
-			assert.match(stripAnsi(panel[0]!), /^- \* /, "the petal reads * (L165)");
-			const neon = framePromptLines(lines, width, { ...options, style: CARD_STYLE.NEON });
-			pureAscii(`neon prompt chrome ${state} ${width}`, [neon[0]!, neon.at(-1)!, stripAnsi(neon[1]!).replace("hello → there", "")]);
-			const float = framePromptLines(lines, width, { ...options, style: CARD_STYLE.FLOAT }, resolvePromptLayout(width, CARD_STYLE.FLOAT, plain.bg));
-			pureAscii(`float prompt chrome ${state} ${width}`, [float[0]!, float.at(-1)!, stripAnsi(float[1]!).replace("hello → there", "")]);
+			for (const wait of [undefined, "waiting for Claude API · 72s"]) {
+				const line = renderWorkingLine(width, { state, tick: 1, animate: true, elapsedMs: 65_000, activity: "thinking", wait, doubleEsc: true, ascii: true }, plain);
+				pureAscii(`working line ${state} ${width}`, [line]);
+				assert.match(stripAnsi(line), /^ \* /, "the petal reads * (L165)");
+				assert.equal(visibleWidth(line), width);
+			}
 		}
+		const inner = width - 3;
+		const rows = framePrompt(width, { rows: [`─── ↑ 2 more ${"─".repeat(inner - 13)}`, "hello → there", `─── ↓ 1 more ${"─".repeat(inner - 13)}`], inputRows: 1, border: (s) => s, theme: plain, ascii: true });
+		pureAscii(`prompt rules ${width}`, [rows[0]!, rows.at(-1)!]);
+		assert.match(stripAnsi(rows[1]!), /^ > hello/, "the mark reads >");
+		assert.match(stripAnsi(rows[0]!), /-+ \^ 2 more -$/);
 	}
 });
 

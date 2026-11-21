@@ -12,7 +12,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { BAND_ROLE } from "../lib/ui/primitives/index.ts";
 import { renderStatusBar } from "../lib/ui/bars.ts";
 import { setChromeSurface } from "../lib/ui/shell-panel.ts";
-import { framePromptLines, resolvePromptLayout, PROMPT_STATE } from "../lib/ui/shell-prompt.ts";
+import { framePrompt, PROMPT_INDENT } from "../lib/ui/shell-prompt.ts";
 
 const plain = { fg: (_c: string, t: string) => t, bold: (t: string) => t, strikethrough: (t: string) => t };
 const BG_OPEN = "\x1b[48;5;236m";
@@ -21,21 +21,15 @@ const BG_CLOSE = "\x1b[49m";
 // The top row and the status bar are lib/ui/bars.ts's (T174-S3):
 // test/ui-bars.test.ts holds them.
 
-test("the prompt in sections: a rule-line header with the petal and state, then › and the input", () => {
-	const layout = resolvePromptLayout(40, undefined, undefined, true);
-	assert.equal(layout.panel, true);
-	assert.equal(layout.prefixWidth, 2);
-	assert.equal(layout.nativeWidth, 38);
-	const lines = framePromptLines(["─".repeat(38), "hello", "─".repeat(38)], 40, { state: PROMPT_STATE.IDLE, tick: 0, borderColor: (t) => t, fg: (_c, t) => t }, layout);
+test("the prompt in sections: a rule, ❯ and the input, a rule; continuation rows keep the input's column (T174-S8)", () => {
+	assert.equal(PROMPT_INDENT, 3, "a space, the mark, a space");
+	const plainTheme = { fg: (_c: string, t: string) => t, bold: (t: string) => t };
+	const lines = framePrompt(40, { rows: ["─".repeat(37), "hello", "─".repeat(37)], inputRows: 1, border: (t) => t, theme: plainTheme });
 	assert.deepEqual(lines.map((l) => visibleWidth(l)), [40, 40, 40]);
-	assert.equal(lines[0], `─ 力 ready for you ${"─".repeat(21)}`, "力 is two cells");
-	assert.equal(lines[1], `› hello${" ".repeat(33)}`);
-	assert.equal(lines[2].trim(), "");
-	const working = framePromptLines(["─".repeat(38), "a", "b", "─".repeat(38)], 40, { state: PROMPT_STATE.QUEUED, tick: 1, borderColor: (t) => t, fg: (_c, t) => t }, layout);
-	assert.match(working[0], /^─ 力 queued ─+$/, "the brand petal, Jhon's state words");
-	assert.match(working[2], /^ {2}b/, "continuation rows keep the input's column");
-	assert.equal(resolvePromptLayout(3, undefined, undefined, true).panel, undefined, "under 4 columns the prompt keeps a frame, as G's");
-	assert.equal(resolvePromptLayout(40).panel, undefined, "outside the fullscreen chrome the prompt is a card, as G's");
+	assert.deepEqual(lines, ["─".repeat(40), ` ❯ hello${" ".repeat(32)}`, "─".repeat(40)]);
+	const two = framePrompt(40, { rows: ["─".repeat(37), "a", "b", "─".repeat(37)], inputRows: 2, border: (t) => t, theme: plainTheme });
+	assert.match(two[2]!, /^ {3}b/, "continuation rows keep the input's column");
+	assert.deepEqual(framePrompt(4, { rows: ["────", "ab", "────"], inputRows: 1, border: (t) => t, theme: plainTheme }), ["────", "ab", "────"], "too narrow for the mark: pi's rows alone");
 });
 
 // T34 (L98): the band is darker than the page (rose ink's `band`, Mix(page,

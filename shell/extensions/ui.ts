@@ -16,9 +16,9 @@ import { backgroundTasksKey } from "../lib/background-tasks-tools.ts";
 import { changeMode, type ModeData } from "../lib/ui/jhon-panel-grants.ts";
 import { laneReads, lddLanes, lddOfSession, lddWatchTargets, permissionMode, readLddStatus, selectChange, shareSelection, type LddStatus } from "../lib/ui/ldd-status.ts";
 import { SessionWorktreeRegistry, resolveSessionWorktree, type WorktreeResolver } from "../lib/ui/session-worktree-registry.ts";
-import { cardStyle, renderCard, setCardStyle, type Card, type CardTheme } from "../lib/ui/primitives/index.ts";
+import { glyph, renderCard, setCardStyle, type Card, type CardTheme } from "../lib/ui/primitives/index.ts";
 import { resolveVisualSettings } from "../lib/ui/visual-customization-policy.ts";
-import { DOUBLE_ESC_CANCEL_HINT, floatPromptRow, framePromptLines, panelPromptRow, resolvePromptLayout, IDLE_ESC_CLEAR_HINT, PROMPT_HINT, PROMPT_STATE, SHELL_PULSE_MS, withPromptHint, type PromptState } from "../lib/ui/shell-prompt.ts";
+import { createWorkingActivity, DOUBLE_ESC_CANCEL_HINT, framePrompt, IDLE_ESC_CLEAR_HINT, PROMPT_HINT, PROMPT_INDENT, PROMPT_STATE, renderWorkingLine, SHELL_PULSE_MS, withPlaceholder } from "../lib/ui/shell-prompt.ts";
 import { createApiWait } from "../lib/ui/api-wait.ts";
 import { createStallRecovery, stallContinueText, stallNotice, stallSeconds, stallThreshold, type Schedule } from "../lib/ui/stall-recovery.ts";
 import { activeProfileName } from "../lib/profiles.ts";
@@ -26,11 +26,7 @@ import { SESSION_PROFILE_CHANGED, sessionMark, sessionProfileOnBranch } from "..
 import { OPEN_TASKS_EVENT, SANDBOX_EVENT, TASKS_EVENT, VISUAL_SETTINGS_CHANGED } from "../lib/events.ts";
 import { retiredNotice, shellSettings } from "../lib/settings.ts";
 import { resolveAnimationPolicy, type AnimationPolicy } from "../lib/ui/animation-policy.ts";
-import {
-	DOUBLE_ESC_CANCEL_WINDOW_MS,
-	resolveDoubleEscCancelPolicy,
-	type DoubleEscCancelPolicy,
-} from "../lib/ui/double-esc-cancel-policy.ts";
+import { createEscGate, extractQueuedText, loadDoubleEscCancelPolicy, type DoubleEscCancelPolicy } from "../lib/ui/double-esc-cancel-policy.ts";
 import { foldablePart, installPane, invalidatePane, paneSlot, paneState, renderStrip, setPaneHover, stripModel } from "../lib/ui/pane.ts";
 import { setChromeSurface } from "../lib/ui/shell-panel.ts";
 import { recentSessionRoots, SessionChanges } from "../lib/ui/session-changes.ts";
@@ -122,369 +118,205 @@ const defaultShellDeps: Omit<ShellDeps, "activeProfile"> = { now: () => Date.now
 
 interface PromptEditorDeps {
 	fg: (color: string, text: string) => string;
-	bg?: (color: string, text: string) => string;
 	bold: (text: string) => string;
+	italic?: (text: string) => string;
 	requestRender(): void;
+	/** A message waits for the turn to end: the working line says queued. */
 	pending(): boolean;
 	now(): number;
-	/** Read fresh on every keypress: the command handler updates this in-memory, the editor never re-reads the file. */
+	/** shell.behaviour.double_esc_cancel, read on every press (Customize changes it in memory). */
 	doubleEscCancelEnabled(): boolean;
-	/** Hand off text reconstructed from Pi's Esc-abort restore so it is sent as the next turn instead of sitting in the editor. */
+	/** The messages pi put back in the editor when esc stopped the turn: sent as the next turn instead. */
 	dispatchQueuedText(text: string): void;
 	/** Run fn after ms, returning its cancel; a timer by default. */
 	schedule?: (fn: () => void, ms: number) => () => void;
-	/** The working line's words in place of "working…" (lib/ui/api-wait.ts), read on every frame. */
+	/** The wait on the Claude API in place of what the agent does (lib/ui/api-wait.ts), read on every frame. */
 	workingLabel?: () => string | undefined;
-	/** The fullscreen chrome: the editor is G's panel editor (a titled rule over `›` rows); elsewhere the float or neon card. */
-	panelChrome?: () => boolean;
-	/** Rows the shell draws above the rule (the narrow form's Running block), with the hovered one's index. */
+	/** What the agent does now (thinking, writing, a tool's name), read on every frame. */
+	activity?: () => string | undefined;
+	/** shell.appearance.ascii; the settings' by default. */
+	ascii?: () => boolean;
+	/** Rows the shell draws above the working line (the narrow form's Running block), with the hovered one's index. */
 	topRows?: (width: number, hovered?: number) => string[];
 	/** A left click on one of the top rows (index into topRows). */
 	onTopRowClick?: (index: number) => void;
 }
 
-const PROMPT_FRAME_ROLE = "border";
-// Matches Pi's own idle double-Esc window (empty editor -> /tree or /fork);
-// this is the same muscle memory applied to clearing a non-empty draft.
-const IDLE_ESC_CLEAR_WINDOW_MS = 500;
+export { extractQueuedText };
 
 /**
- * Pi's own Esc-abort handler (`restoreQueuedMessagesToEditor({ abort: true
- * })`) rebuilds the editor text as
- * `[queuedText, currentText].filter((t) => t.trim()).join("\n\n")`, where
- * `currentText` is the draft captured just before the abort. Reverse that
- * join to recover the queued text alone, so the draft can be restored by
- * itself and the queued text dispatched as the next turn. `draft` is empty
- * (including whitespace-only) whenever `.trim() === ""`, matching the
- * `filter` predicate above exactly.
- *
- * Returns `""` only for the genuine no-queue case (`combined === draft`, or
- * both empty). Returns `undefined` when `combined` does not match Pi's join
- * shape at all — a future Pi change, or anything else that touched the
- * editor during the abort. That distinction matters to the caller: an empty
- * queue means "nothing to restore," while an unrecognized shape means "do
- * not touch what Pi already wrote," so a mismatch is never silently treated
- * as an empty queue.
+ * The prompt (design/shell-tui 01, T174-S8): the working line, a rule, the
+ * input behind `❯`, a rule (lib/ui/shell-prompt.ts draws them around pi's
+ * editor). It adds to pi's editor the esc gate (lib/ui/double-esc-cancel-policy.ts),
+ * the selection keys (lib/ui/selection-engine.ts) and the rows above the line.
  */
-export function extractQueuedText(combined: string, draft: string): string | undefined {
-	if (combined === draft) return "";
-	if (draft.trim() === "") return combined;
-	const suffix = `\n\n${draft}`;
-	return combined.endsWith(suffix) ? combined.slice(0, combined.length - suffix.length) : undefined;
-}
-
 export class JhonPromptEditor extends CustomEditor {
-	private promptState: PromptState = PROMPT_STATE.IDLE;
+	private readonly deps: PromptEditorDeps;
+	private readonly host: TUI;
+	// CustomEditor keeps its keybindings private; the esc gate needs app.interrupt's match.
+	private readonly keys: KeybindingsManager;
+	private readonly selectionEngine: SelectionEngine;
+	private readonly esc: ReturnType<typeof createEscGate>;
+	private working = false;
+	private startedAt = 0;
 	private tick = 0;
 	private animationPolicy: AnimationPolicy = "quality";
-	private pulse: NodeJS.Timeout | undefined;
-	private readonly deps: PromptEditorDeps;
-	private frameMouseLayout?: ReturnType<typeof resolvePromptLayout>;
-	// The Gentle Shell's narrow editor (T15.12c): rows above the rule (the work
-	// row), each a control with its hover.
-	private readonly pointerTui: TUI;
+	private timer: NodeJS.Timeout | undefined;
+	private hintRepaint: (() => void) | undefined;
+	/** Rows above pi's editor in the last frame: the top rows and the working line. */
+	private shellRows = 0;
 	private topRowCount = 0;
 	private hoveredTopRow: number | undefined;
-	// Native selection engine (shift+home/end, alt+a, replace-on-key): ported
-	// from pi-select-del so the petal prompt owns the feature without factory
-	// composition. Constructed with `this`; the internals probe degrades to
-	// passthrough on pi drift, costing only the selection features.
-	private readonly selectionEngine: SelectionEngine;
-	// CustomEditor keeps its own `keybindings` private, so this class holds
-	// its own reference to run the same app.interrupt match before deciding
-	// whether to swallow the keystroke.
-	private readonly keybindingsManager: KeybindingsManager;
-	private pendingEscapeCancelDeadline: number | undefined;
-	private pendingIdleClearDeadline: number | undefined;
-	// Repaints when an Esc confirmation window closes, so its hint leaves the screen.
-	private cancelHintExpiry: (() => void) | undefined;
-	// Snapshot of the draft at the first Esc; the second Esc only clears when
-	// the text is still exactly this, so an edit in between never gets
-	// silently discarded.
-	private pendingIdleClearText: string | undefined;
 
 	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, deps: PromptEditorDeps) {
 		super(tui, theme, keybindings);
-		this.pointerTui = tui;
-		this.selectionEngine = new SelectionEngine(this);
+		this.host = tui;
+		this.keys = keybindings;
 		this.deps = deps;
-		this.keybindingsManager = keybindings;
+		this.selectionEngine = new SelectionEngine(this);
+		this.esc = createEscGate(() => deps.now());
 	}
 
 	setAnimationPolicy(policy: AnimationPolicy): void {
 		if (this.animationPolicy === policy) return;
 		this.animationPolicy = policy;
-		this.stopPulse();
-		if (this.promptState === PROMPT_STATE.WORKING) this.startPulse();
+		this.restartTimer();
 		this.deps.requestRender();
-	}
-
-	private startPulse(): void {
-		if (this.animationPolicy === "potato") return;
-		this.pulse = setInterval(() => {
-			this.tick += 1;
-			this.deps.requestRender();
-		}, SHELL_PULSE_MS);
-		this.pulse.unref();
 	}
 
 	setWorking(working: boolean): void {
-		this.promptState = working ? PROMPT_STATE.WORKING : PROMPT_STATE.IDLE;
-		this.stopPulse();
-		if (!working) {
-			this.pendingEscapeCancelDeadline = undefined;
-		} else {
-			this.pendingIdleClearDeadline = undefined;
-			this.pendingIdleClearText = undefined;
-			this.startPulse();
-		}
+		this.working = working;
+		if (working) this.startedAt = this.deps.now();
+		this.esc.reset();
+		this.restartTimer();
 		this.deps.requestRender();
 	}
 
-	/**
-	 * Swallow the first Esc while working, opt-in via
-	 * doubleEscCancelEnabled(). `pi.registerShortcut("escape")` is not viable
-	 * here: Pi reserves app.interrupt and skips colliding extension
-	 * shortcuts, so this has to sit in front of CustomEditor's own
-	 * handleInput instead. The Esc that actually aborts the turn (the single
-	 * Esc when double-esc-cancel is off, or the confirming second Esc when
-	 * it is on) always goes through abortAndDispatchQueued so the queued
-	 * text Pi would otherwise dump back into the editor is sent as the next
-	 * turn instead. Idle double-Esc (tree/fork), bash-mode
-	 * Esc, and autocomplete cancel are all decided by CustomEditor/onEscape
-	 * and never reach this branch.
-	 */
-	override handleInput(data: string): void {
-		// The selection handler can consume input before the native chain;
-		// any intervening key invalidates an idle Esc confirmation.
-		if (this.pendingIdleClearDeadline !== undefined && !this.keybindingsManager.matches(data, "app.interrupt")) {
-			this.pendingIdleClearDeadline = undefined;
-			this.pendingIdleClearText = undefined;
-		}
-		// Native selection runs before the prompt's existing input chain, but
-		// a registered extension shortcut still owns its chord.
-		this.selectionEngine.handleInput(data, (d) => this.handleInputNative(d), (d) => this.onExtensionShortcut?.(d) === true);
+	/** While working with animations on, the line moves every frame; off, it starts no timer and moves with pi's own repaints. */
+	private restartTimer(): void {
+		if (this.timer) clearInterval(this.timer);
+		this.timer = undefined;
+		this.tick = 0;
+		if (!this.working || this.animationPolicy === "potato") return;
+		this.timer = setInterval(() => { this.tick += 1; this.deps.requestRender(); }, SHELL_PULSE_MS);
+		this.timer.unref?.();
 	}
 
-	private handleInputNative(data: string): void {
-		if (
-			this.promptState === PROMPT_STATE.WORKING &&
-			!this.isShowingAutocomplete() &&
-			this.keybindingsManager.matches(data, "app.interrupt")
-		) {
-			if (!this.deps.doubleEscCancelEnabled()) {
-				this.abortAndDispatchQueued(data);
-				return;
-			}
-			if (this.isPendingEscapeCancel()) {
-				this.pendingEscapeCancelDeadline = undefined;
-				this.abortAndDispatchQueued(data);
-				return;
-			}
-			// Pi's own idle double-Esc (empty editor -> /tree or /fork) uses a
-			// 500ms window; canceling a running turn is a heavier, harder-to-undo
-			// action, so this confirmation deliberately gets double that time.
-			this.pendingEscapeCancelDeadline = this.deps.now() + DOUBLE_ESC_CANCEL_WINDOW_MS;
-			this.expireHintAfter(DOUBLE_ESC_CANCEL_WINDOW_MS);
+	override handleInput(data: string): void {
+		if (!this.keys.matches(data, "app.interrupt")) this.esc.other();
+		// The selection keys come first; an extension's own shortcut still wins its chord.
+		this.selectionEngine.handleInput(data, (key) => this.handleKey(key), (key) => this.onExtensionShortcut?.(key) === true);
+	}
+
+	private handleKey(data: string): void {
+		if (!this.keys.matches(data, "app.interrupt")) { super.handleInput(data); return; }
+		const text = this.getText();
+		const outcome = this.esc.press({ working: this.working, completing: this.isShowingAutocomplete(), doubleEsc: this.deps.doubleEscCancelEnabled(), text });
+		if (outcome === "stop") { this.stopTurn(data); return; }
+		if (outcome === "clear") {
+			this.addToHistory(text);
+			this.setText("");
 			this.deps.requestRender();
 			return;
 		}
-		// Idle with a non-empty draft: Pi's own idle double-Esc only acts on an
-		// empty editor (tree/fork), so a draft's first Esc would otherwise do
-		// nothing. Mirror the same swallow-then-confirm shape as the
-		// working-cancel gate above, on the same 500ms window as Pi's own idle
-		// double-Esc. Bash-mode drafts ("!...", the same rule
-		// Pi's own interactive-mode uses to detect bash mode) are Pi's own
-		// bash-mode Esc territory and must never reach this gate.
-		if (
-			this.promptState === PROMPT_STATE.IDLE &&
-			!this.isShowingAutocomplete() &&
-			this.keybindingsManager.matches(data, "app.interrupt")
-		) {
-			const text = this.getText();
-			if (text.trim() !== "" && !text.trimStart().startsWith("!")) {
-				// The second Esc only clears when the text is still exactly what
-				// it was at the first Esc; an edit in between starts a fresh
-				// first press on the new text instead of silently discarding it.
-				if (this.isPendingIdleClear() && this.pendingIdleClearText === text) {
-					this.pendingIdleClearDeadline = undefined;
-					this.pendingIdleClearText = undefined;
-					this.addToHistory(text);
-					this.setText("");
-					this.deps.requestRender();
-					return;
-				}
-				this.pendingIdleClearDeadline = this.deps.now() + IDLE_ESC_CLEAR_WINDOW_MS;
-				this.pendingIdleClearText = text;
-				this.expireHintAfter(IDLE_ESC_CLEAR_WINDOW_MS);
-				this.deps.requestRender();
-				return;
-			}
-		}
+		if (outcome === "arm") { this.repaintAfter(this.esc.window()); this.deps.requestRender(); return; }
 		super.handleInput(data);
 	}
 
-	/**
-	 * Runs the Esc that actually aborts the turn. Pi's own onEscape (invoked
-	 * synchronously by `super.handleInput`) restores `queuedText + draft`
-	 * into the editor and aborts; snapshot the draft first, reconstruct the
-	 * queued text from what comes back, restore the draft alone, and hand
-	 * the queued text to the dispatcher so it is sent once the aborted run
-	 * settles (see the `agent_settled` handler in `jhonShellUi`). Images
-	 * inside queued messages are already dropped by Pi's own restore, before
-	 * this code ever sees the text.
-	 *
-	 * `extractQueuedText` returning `undefined` means the restored text does
-	 * not match Pi's own join shape; Pi's own text wins and is left exactly
-	 * as it is, nothing is dispatched. An empty string means a genuine empty
-	 * queue: there is nothing to restore, so `setText` is not called at all
-	 * on the common no-queue path. Only a recognized, non-empty queue
-	 * restores the draft and dispatches.
-	 */
-	private abortAndDispatchQueued(data: string): void {
+	/** pi stops the turn and puts its queued messages back ahead of the draft; the draft stays, the queue goes out as the next turn. */
+	private stopTurn(data: string): void {
 		const draft = this.getText();
 		super.handleInput(data);
 		const queued = extractQueuedText(this.getText(), draft);
-		// undefined: unrecognized shape, Pi's own text stays untouched.
-		if (queued === undefined) return;
-		// "": nothing was queued, and the editor already holds the draft, so no
-		// redundant write. Anything else was recognized: the draft comes back
-		// alone, and only real text (not whitespace) is worth a turn.
-		if (queued !== "") this.setText(draft);
-		if (queued.trim() === "") return;
-		this.deps.dispatchQueuedText(queued);
+		if (queued === undefined || queued === "") return;
+		this.setText(draft);
+		if (queued.trim() !== "") this.deps.dispatchQueuedText(queued);
 	}
 
-	private clearEditorHover(): void {
-		const changed = this.hoveredTopRow !== undefined;
-		this.hoveredTopRow = undefined;
-		if (changed) this.deps.requestRender();
-	}
-
-	handleMouse(event: Parameters<CustomEditor["handleMouse"]>[0]): ReturnType<CustomEditor["handleMouse"]> {
-		if (event.type === "move" && event.button === "none") {
-			if (event.y >= 0 && event.y < this.topRowCount) setPaneHover(this.pointerTui, this, () => this.clearEditorHover());
-			else setPaneHover(this.pointerTui);
-		}
-		// Rows drawn above the rule belong to the shell, not to pi's editor.
-		if (this.topRowCount > 0) {
-			if (event.y < this.topRowCount) {
-				if (event.type === "move" && event.button === "none") {
-					if (this.hoveredTopRow === event.y) return { handled: true };
-					this.hoveredTopRow = event.y;
-					this.deps.requestRender();
-					return { handled: true, render: true };
-				}
-				// pi makes a click only for the component that took its press.
-				if (event.type === "press" && event.button === "left") return { handled: true };
-				if (event.type !== "click" || event.button !== "left") return undefined;
-				this.deps.onTopRowClick?.(event.y);
-				return { handled: true, render: true };
-			}
-			if (this.hoveredTopRow !== undefined) { this.hoveredTopRow = undefined; this.deps.requestRender(); }
-			event = { ...event, y: event.y - this.topRowCount, height: event.height - this.topRowCount };
-		}
-		const layout = this.frameMouseLayout;
-		if (!layout) return super.handleMouse(event);
-		// Row coordinates stay native: rule (or float hint)=0, content=1…N, the last row N+1; x is translated past the lead.
-		if (event.x < layout.prefixWidth || event.x >= (layout.panel ? layout.prefixWidth + layout.nativeWidth : layout.width - 1)) return undefined;
-		return super.handleMouse({ ...event, x: event.x - layout.prefixWidth, width: layout.nativeWidth });
-	}
-
-	render(width: number): string[] {
-		const layout = resolvePromptLayout(width, cardStyle(), this.deps.bg, this.deps.panelChrome?.() ?? false);
-		this.frameMouseLayout = layout.background || layout.panel ? layout : undefined;
-		const inner = layout.nativeWidth;
-		const lines = super.render(inner);
-		if (this.getText() === "" && lines.length === 3) lines[1] = withPromptHint(lines[1], PROMPT_HINT, this.deps.fg);
-		const state = this.promptState === PROMPT_STATE.WORKING && this.deps.pending() ? PROMPT_STATE.QUEUED : this.promptState;
-		// The rule follows Pi's live public borderColor callback so thinking/bash
-		// mode accents survive; the narrow frame keeps the shell's border role.
-		// Selection is applied only to the owned Pi editor rows, before the
-		// frames them. No second editor factory or private layout mutation.
-		const editorLines = this.selectionEngine.decorateRows(lines, inner, 0);
-		// SAFETY: this optional host hint is accepted only as an integer within the
-		// rendered row bounds below; absent/invalid hints fall back to all rows.
-		const visibleCount = (this as unknown as { renderedVisibleLineCount?: number }).renderedVisibleLineCount;
-		const borderEnd = Number.isInteger(visibleCount) && visibleCount! >= 1 && visibleCount! + 2 <= editorLines.length
-			? visibleCount! + 2 : editorLines.length;
-		const framed = framePromptLines(editorLines.slice(0, borderEnd), width, {
-			state,
-			tick: this.tick,
-			workingLabel: this.promptState === PROMPT_STATE.WORKING ? this.deps.workingLabel?.() : undefined,
-			borderColor: (text) => layout.background || layout.panel ? this.borderColor(text) : this.deps.fg(PROMPT_FRAME_ROLE, text),
-			fg: this.deps.fg,
-			bold: this.deps.bold,
-			escHint: this.promptState === PROMPT_STATE.WORKING && this.isPendingEscapeCancel()
-				? DOUBLE_ESC_CANCEL_HINT
-				: this.promptState === PROMPT_STATE.IDLE && this.isPendingIdleClear()
-					? IDLE_ESC_CLEAR_HINT
-					: undefined,
-		}, layout);
-		framed[framed.length - 1] = layout.panel
-			? panelPromptRow(this.selectionEngine.decorateBottomRule("", layout.nativeWidth, ""), layout)
-			: layout.background
-				? floatPromptRow(this.selectionEngine.decorateBottomRule("", layout.nativeWidth, ""), layout, (text) => this.borderColor(text))
-				: this.selectionEngine.decorateBottomRule(framed[framed.length - 1] ?? "", width, "╯");
-		// Pi places autocomplete after its bottom border. Keep those rows below
-		// the shell's frame and preserve their terminal width and row coordinates.
-		for (const line of editorLines.slice(borderEnd)) {
-			if (layout.panel) {
-				framed.push(panelPromptRow(line, layout));
-				continue;
-			}
-			if (layout.background) {
-				framed.push(floatPromptRow(line, layout, (text) => this.borderColor(text)));
-				continue;
-			}
-			const available = Math.max(0, width);
-			const border = available >= 2 ? "│" : "";
-			const inner = available - border.length * 2;
-			const clipped = truncateToWidth(line, inner, "");
-			framed.push(this.deps.fg(PROMPT_FRAME_ROLE, border) + clipped +
-				" ".repeat(Math.max(0, inner - visibleWidth(clipped))) + this.deps.fg(PROMPT_FRAME_ROLE, border));
-		}
-		// What the shell draws above the rule (the narrow form's Running block).
-		const topRows = this.deps.topRows?.(width, this.hoveredTopRow) ?? [];
-		if (this.hoveredTopRow !== undefined && this.hoveredTopRow >= topRows.length) this.hoveredTopRow = undefined;
-		this.topRowCount = topRows.length;
-		framed.unshift(...topRows);
-		return framed;
-	}
-
-	dispose(): void {
-		this.stopPulse();
-		this.cancelHintExpiry?.();
-	}
-
-	/** Repaint once the window closes, so an "esc again" hint never outlives it. */
-	private expireHintAfter(ms: number): void {
-		this.cancelHintExpiry?.();
+	/** One repaint just after the window closes, so its hint leaves the screen. */
+	private repaintAfter(ms: number): void {
+		this.hintRepaint?.();
 		const schedule = this.deps.schedule ?? ((fn: () => void, wait: number) => {
 			const timer = setTimeout(fn, wait);
 			timer.unref?.();
 			return () => clearTimeout(timer);
 		});
-		// One millisecond past the deadline, when the pending check reads it as closed.
-		this.cancelHintExpiry = schedule(() => { this.cancelHintExpiry = undefined; this.deps.requestRender(); }, ms + 1);
+		this.hintRepaint = schedule(() => { this.hintRepaint = undefined; this.deps.requestRender(); }, ms + 1);
 	}
 
-	private isPendingEscapeCancel(): boolean {
-		return this.pendingEscapeCancelDeadline !== undefined && this.deps.now() < this.pendingEscapeCancelDeadline;
+	private clearTopHover(): void {
+		if (this.hoveredTopRow === undefined) return;
+		this.hoveredTopRow = undefined;
+		this.deps.requestRender();
 	}
 
-	private isPendingIdleClear(): boolean {
-		return (
-			this.pendingIdleClearDeadline !== undefined &&
-			this.deps.now() < this.pendingIdleClearDeadline &&
-			this.pendingIdleClearText === this.getText()
-		);
+	handleMouse(event: Parameters<CustomEditor["handleMouse"]>[0]): ReturnType<CustomEditor["handleMouse"]> {
+		const moving = event.type === "move" && event.button === "none";
+		if (event.y < this.topRowCount) {
+			// The top rows are the shell's controls: hover, then a click opens the row's view.
+			if (moving) {
+				setPaneHover(this.host, this, () => this.clearTopHover());
+				if (this.hoveredTopRow === event.y) return { handled: true };
+				this.hoveredTopRow = event.y;
+				this.deps.requestRender();
+				return { handled: true, render: true };
+			}
+			// pi makes a click only for the component that took its press.
+			if (event.type === "press" && event.button === "left") return { handled: true };
+			if (event.type !== "click" || event.button !== "left") return undefined;
+			this.deps.onTopRowClick?.(event.y);
+			return { handled: true, render: true };
+		}
+		if (moving) setPaneHover(this.host);
+		this.clearTopHover();
+		// The working line takes no pointer; below it, pi's rows past the `❯` lead.
+		if (event.y < this.shellRows || event.x < PROMPT_INDENT) return undefined;
+		return super.handleMouse({ ...event, y: event.y - this.shellRows, height: event.height - this.shellRows, x: event.x - PROMPT_INDENT, width: Math.max(1, event.width - PROMPT_INDENT) });
 	}
 
-	private stopPulse(): void {
-		if (this.pulse) clearInterval(this.pulse);
-		this.pulse = undefined;
-		this.tick = 0;
+	render(width: number): string[] {
+		const ascii = this.deps.ascii ? this.deps.ascii() : shellSettings().ascii();
+		const theme = { fg: this.deps.fg, bold: this.deps.bold, ...(this.deps.italic ? { italic: this.deps.italic } : {}) };
+		const inner = Math.max(1, width - PROMPT_INDENT);
+		const rows = this.selectionEngine.decorateRows(super.render(inner), inner, 0);
+		const text = this.getText();
+		// SAFETY: renderedVisibleLineCount is pi's own count of the input rows it just drew; anything else falls back to all rows between the rules.
+		const counted = (this as unknown as { renderedVisibleLineCount?: number }).renderedVisibleLineCount;
+		const inputRows = Number.isInteger(counted) && counted! >= 1 && counted! + 2 <= rows.length ? counted! : Math.max(0, rows.length - 2);
+		if (text === "" && inputRows === 1) rows[1] = withPlaceholder(rows[1]!, PROMPT_HINT, (hint) => this.deps.fg("dim", hint));
+		const state = !this.working ? PROMPT_STATE.IDLE : this.deps.pending() ? PROMPT_STATE.QUEUED : PROMPT_STATE.WORKING;
+		const hint = this.esc.hint(this.working, text);
+		const line = renderWorkingLine(width, {
+			state,
+			tick: this.tick,
+			animate: this.animationPolicy !== "potato",
+			elapsedMs: this.deps.now() - this.startedAt,
+			activity: this.working ? this.deps.activity?.() : undefined,
+			wait: this.working ? this.deps.workingLabel?.() : undefined,
+			escHint: hint === "stop" ? DOUBLE_ESC_CANCEL_HINT : hint === "clear" ? IDLE_ESC_CLEAR_HINT : undefined,
+			doubleEsc: this.deps.doubleEscCancelEnabled(),
+			ascii,
+		}, theme);
+		const framed = framePrompt(width, {
+			rows,
+			inputRows,
+			border: (rule) => this.borderColor(rule),
+			theme,
+			ascii,
+			decorateBottom: (rule) => this.selectionEngine.decorateBottomRule(rule, width, this.borderColor(glyph("rule", ascii))),
+		});
+		const top = this.deps.topRows?.(width, this.hoveredTopRow) ?? [];
+		if (this.hoveredTopRow !== undefined && this.hoveredTopRow >= top.length) this.hoveredTopRow = undefined;
+		this.topRowCount = top.length;
+		this.shellRows = top.length + 1;
+		return [...top, line, ...framed];
+	}
+
+	dispose(): void {
+		if (this.timer) clearInterval(this.timer);
+		this.timer = undefined;
+		this.hintRepaint?.();
+		this.hintRepaint = undefined;
 	}
 }
 
@@ -505,22 +337,22 @@ function narrowChrome(tui: TUI): boolean {
 function installPrompt(
 	ctx: ExtensionContext,
 	onCreated: (prompt: JhonPromptEditor) => void,
-	promptDeps: { now: () => number; doubleEscCancelEnabled: () => boolean; dispatchQueuedText: (text: string) => void; workingLabel?: () => string | undefined; panelChrome?: (tui: TUI) => boolean; topRows?: (tui: TUI, width: number, hovered?: number) => string[]; onTopRowClick?: (tui: TUI, index: number) => void },
+	promptDeps: { now: () => number; doubleEscCancelEnabled: () => boolean; dispatchQueuedText: (text: string) => void; workingLabel?: () => string | undefined; activity?: () => string | undefined; topRows?: (tui: TUI, width: number, hovered?: number) => string[]; onTopRowClick?: (tui: TUI, index: number) => void },
 ): boolean {
 	const previous = ctx.ui.getEditorComponent() as PromptFactory | undefined;
 	if (previous && !previous[PROMPT_OWNER]) return false;
 	const factory: PromptFactory = (tui, theme, keybindings) => {
 		const prompt = new JhonPromptEditor(tui, theme, keybindings, {
 			fg: (color, text) => ctx.ui.theme.fg(color as Parameters<typeof ctx.ui.theme.fg>[0], text),
-			bg: (color, text) => ctx.ui.theme.bg(color as Parameters<typeof ctx.ui.theme.bg>[0], text),
 			bold: (text) => ctx.ui.theme.bold(text),
+			italic: (text) => typeof ctx.ui.theme.italic === "function" ? ctx.ui.theme.italic(text) : text,
 			requestRender: () => tui.requestRender(),
 			pending: () => ctx.hasPendingMessages(),
 			now: promptDeps.now,
 			doubleEscCancelEnabled: promptDeps.doubleEscCancelEnabled,
 			dispatchQueuedText: promptDeps.dispatchQueuedText,
 			workingLabel: promptDeps.workingLabel,
-			panelChrome: promptDeps.panelChrome ? () => promptDeps.panelChrome!(tui) : undefined,
+			activity: promptDeps.activity,
 			topRows: promptDeps.topRows ? (width, hovered) => promptDeps.topRows!(tui, width, hovered) : undefined,
 			onTopRowClick: promptDeps.onTopRowClick ? (index) => promptDeps.onTopRowClick!(tui, index) : undefined,
 		});
@@ -651,8 +483,9 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		renderHost?.invalidatePane?.();
 		renderHost?.requestRender();
 	};
-	let doubleEscCancelPolicy: DoubleEscCancelPolicy = resolveDoubleEscCancelPolicy({ settings }).policy;
+	let doubleEscCancelPolicy: DoubleEscCancelPolicy = loadDoubleEscCancelPolicy({ settings });
 	const apiWait = createApiWait(() => deps.now());
+	const activity = createWorkingActivity();
 	// Stall recovery (lib/ui/stall-recovery.ts): past the threshold the turn is
 	// aborted as Esc does, and the continue rides the queued-text path above,
 	// sent once the aborted run settles.
@@ -995,9 +828,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				prompt = created;
 				prompt.setAnimationPolicy(animationPolicy);
 			},
-			{ now: () => deps.now(), doubleEscCancelEnabled: () => doubleEscCancelPolicy === "on", dispatchQueuedText: queueAfterSettle, workingLabel: () => apiWait.label(),
-				// The editor joins the fullscreen chrome, rail or not; a regular terminal keeps the float or neon card, as G's.
-				panelChrome: (tui) => (tui as TUI & { mode?: string }).mode === "fullscreen" && Boolean(tui.terminal),
+			{ now: () => deps.now(), doubleEscCancelEnabled: () => doubleEscCancelPolicy === "on", dispatchQueuedText: queueAfterSettle, workingLabel: () => apiWait.label(), activity: () => activity.current(),
 				// The narrow form's Running block (04): the agents and jobs while they run.
 				topRows: (tui, width, hovered) => narrowChrome(tui) ? renderRunningBlock(runningJobs, ctx.ui.theme, width, { now: deps.now(), ascii: shellSettings().ascii(), ...(hovered !== undefined ? { hover: hovered } : {}) }).rows : [],
 				// A click on one of its rows opens the agents view or the jobs view.
@@ -1007,8 +838,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 					if (view) openTasks(ctx, view);
 				} },
 		);
-		// Hide native feedback only when our petal replaces it. Native transcript
-		// thinking blocks remain Pi-owned; this changes only the supported loader UI.
+		// The working line says what pi's Working row would; the thinking blocks stay pi's.
 		if (ownsPrompt) ctx.ui.setWorkingVisible(false);
 	});
 	pi.on("session_shutdown", (_event, ctx) => {
@@ -1090,7 +920,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 				mode,
 				settings,
 				animations: (policy) => { animationPolicy = policy; prompt?.setAnimationPolicy(policy); },
-				doubleEsc: () => { doubleEscCancelPolicy = resolveDoubleEscCancelPolicy({ settings }).policy; },
+				doubleEsc: () => { doubleEscCancelPolicy = loadDoubleEscCancelPolicy({ settings }); },
 				status: () => { refreshVisual(); pi.events.emit(VISUAL_SETTINGS_CHANGED, { settings: settings.path }); },
 				appearance: () => { refreshVisual(); pi.events.emit(VISUAL_SETTINGS_CHANGED, { settings: settings.path }); },
 				redraw: () => { renderHost?.invalidatePane?.(); renderHost?.requestRender(); },
@@ -1148,6 +978,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		// is mid-turn, so the text simply waits and goes out, once, when that
 		// turn settles. It is never dropped.
 		prompt?.setWorking(true);
+		activity.start();
 		apiWait.start();
 		stall.sync();
 	});
@@ -1156,10 +987,10 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	// change re-arms or clears the stall recovery's timer.
 	pi.on("turn_start", () => { apiWait.start(); stall.sync(); });
 	pi.on("message_start", () => { apiWait.event(); stall.sync(); });
-	pi.on("message_update", () => { apiWait.event(); stall.sync(); });
+	pi.on("message_update", (event) => { activity.stream(event.assistantMessageEvent?.type); apiWait.event(); stall.sync(); });
 	pi.on("message_end", () => { apiWait.event(); stall.sync(); });
-	pi.on("tool_execution_start", () => { apiWait.toolStart(); stall.sync(); });
-	pi.on("tool_execution_end", () => { apiWait.toolEnd(); stall.sync(); });
+	pi.on("tool_execution_start", (event) => { activity.toolStart(event.toolCallId, event.toolName); apiWait.toolStart(); stall.sync(); });
+	pi.on("tool_execution_end", (event) => { activity.toolEnd(event.toolCallId); apiWait.toolEnd(); stall.sync(); });
 	pi.on("ui_prompt_start", () => { openPrompts += 1; stall.sync(); });
 	pi.on("ui_prompt_end", () => { openPrompts = Math.max(0, openPrompts - 1); stall.sync(); });
 	// Recovery runs once per owner message: the continue it sent is not one.
