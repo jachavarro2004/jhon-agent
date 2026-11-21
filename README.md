@@ -11,12 +11,12 @@
 
 ### ▶ The presentation (3:39)
 
-https://github.com/user-attachments/assets/0f45b0f3-97e8-4e86-b59b-fe75ac0670a8
+https://github.com/user-attachments/assets/e5d924c2-0a05-4a5f-82a9-1ab303276258
 
 <details>
 <summary>With Spanish subtitles</summary>
 
-https://github.com/user-attachments/assets/9c4ffc95-60b9-42db-8cc5-fbe1f2e4d436
+https://github.com/user-attachments/assets/0ae10efb-b546-4f5c-be7d-87e6415f27fa
 
 </details>
 
