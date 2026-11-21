@@ -19,6 +19,7 @@
 
 import { CODEGRAPH_TOOL } from "./codegraph.ts";
 import { leanDeferred } from "./lean-context.ts";
+import { CLAUDE_BRIDGE } from "./ui/usage.ts";
 
 /** The Engram tools the orchestrator keeps declared (L707: the ones it calls; mem_session_summary for its handoff). */
 export const KEPT_ENGRAM = new Set(["mem_search", "mem_save", "mem_get_observation", "mem_context", "mem_judge", "mem_judge_many", "mem_session_summary"].map((t) => `mcp__engram__${t}`));
@@ -122,14 +123,24 @@ interface ToolsHost {
 
 const text = (t: string) => ({ content: [{ type: "text", text: t }], details: {} });
 
+/**
+ * T192 S4: the answer for requested tools the session already has. On
+ * claude-bridge, which reads the tool list only when a prompt starts, a tool
+ * that joined mid-prompt reaches the model at the next prompt.
+ */
+export function alreadyEnabled(names: readonly string[], provider: string | undefined): string {
+	const next = provider === CLAUDE_BRIDGE ? ` On claude-bridge the tool list is read when a prompt starts, so ${names.length === 1 ? "it reaches" : "they reach"} the model at the next prompt.` : "";
+	return `Already enabled: ${names.join(", ")}.${next}`;
+}
+
 /** tools_more: lists the deferred tools, or enables named ones for the rest of the session. */
 export function toolsMoreTool(pi: ToolsHost, policy: ToolPolicy) {
 	return {
 		name: TOOLS_MORE,
 		label: "More tools",
-		description: "Lists the deferred tools (memory tools such as mem_update, mem_review; web search and fetch; on a small task, subagent and the rest), or, given names, enables them for the session. Call with no names to list.",
+		description: "Lists the deferred tools (memory tools such as mem_update, mem_review; web search and fetch; on a small task, jhon_review and the rest), or, given names, enables them for the session. Call with no names to list.",
 		parameters: { type: "object", additionalProperties: false, properties: { names: { type: "array", items: { type: "string" }, description: "Tools to enable, from the list." } } },
-		async execute(_id: string, params: { names?: unknown }, _signal?: unknown, _onUpdate?: unknown, ctx?: { cwd?: string }) {
+		async execute(_id: string, params: { names?: unknown }, _signal?: unknown, _onUpdate?: unknown, ctx?: { cwd?: string; model?: { provider?: string } }) {
 			const cwd = ctx?.cwd ?? process.cwd();
 			const deferred = (pi.getAllTools?.() ?? []).filter((t) => policy.deferred(t.name) && policy.held(t.name, cwd));
 			const names = Array.isArray(params?.names) ? params.names.filter((n): n is string => typeof n === "string") : [];
@@ -137,14 +148,17 @@ export function toolsMoreTool(pi: ToolsHost, policy: ToolPolicy) {
 				return text(deferred.length ? `Deferred tools (enable with names):\n${deferred.map((t) => `- ${t.name}: ${(t.description ?? "").trim().split(/\r?\n/)[0]}`).join("\n")}` : "No deferred tools.");
 			}
 			const known = new Set(deferred.map((t) => t.name));
-			const ok = names.filter((n) => known.has(n)), bad = names.filter((n) => !known.has(n));
+			const before = new Set(pi.getActiveTools?.() ?? []);
+			const ok = names.filter((n) => known.has(n));
+			const has = names.filter((n) => !known.has(n) && before.has(n));
+			const bad = names.filter((n) => !known.has(n) && !before.has(n));
 			if (ok.length) {
 				policy.enable(ok);
 				const active = pi.getActiveTools?.() ?? [];
 				pi.setActiveTools?.([...active, ...ok.filter((n) => !active.includes(n))]);
 				pi.appendEntry?.(TOOLS_MORE_ENTRY, { names: ok });
 			}
-			return text([ok.length ? `Enabled: ${ok.join(", ")} (callable from the next step on).` : "", bad.length ? `Unknown or not deferred: ${bad.join(", ")}.` : ""].filter(Boolean).join("\n"));
+			return text([ok.length ? `Enabled: ${ok.join(", ")} (callable from the next step on).` : "", has.length ? alreadyEnabled(has, ctx?.model?.provider) : "", bad.length ? `Unknown or not deferred: ${bad.join(", ")}.` : ""].filter(Boolean).join("\n"));
 		},
 	};
 }
