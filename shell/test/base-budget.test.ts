@@ -51,7 +51,8 @@ test("the orchestrator declares only the tools it uses: the rest of Engram, the 
 
 // Measured at T115c: jhon.ts's own tools declare 8,027 bytes (inspect, subagent with its skills,
 // ask_user, background tasks, m365_read, tools_more); the session prose ~450 plus its path.
-const JHON_TOOLS_BUDGET = 8_300;
+// T195 (L1607): 8,291 before the `label` of subagent and subagent_continue, 8,559 with it.
+const JHON_TOOLS_BUDGET = 8_600;
 const SESSION_PROSE_BUDGET = 650;
 const SKILL_DESCRIPTION_MAX = 200;
 

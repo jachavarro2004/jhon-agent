@@ -474,3 +474,19 @@ test("while a task runs the view repaints each second, and stops after dispose",
 	assert.equal(h.renders(), 1);
 	t.mock.timers.reset();
 });
+
+// T195 (L1607, L1609): a row names the agent and what it does by its label,
+// never the first line of its brief ("## Why delegated").
+test("an agent's rows show its label beside its name, never its brief's heading (T195)", () => {
+	const brief = "## Why delegated\nWriter rule.\n\n## Task\nBuild the categories page.";
+	const live = agent({ id: "agent-1", agent: "jhon-builder", label: "jhon-builder: web: categories page", task: brief });
+	const done = agent({ id: "agent-2", agent: "jhon-builder", label: "jhon-builder: api: categories route", task: brief, endedAt: NOW - 1_000, status: "completed", result: "ok" });
+	const h = harness("agents", { tasks: [live, done] });
+	try {
+		const left = h.screen().map((row) => row.slice(2, 36));
+		assert.ok(left.some((row) => /^▸ ◐ jhon-builder +\d/.test(row)), left.join("\n"));
+		assert.ok(left.some((row) => /^ {4}web: categories page/.test(row)), left.join("\n"));
+		assert.ok(left.some((row) => /^ {2}✓ jhon-builder · api: cat/.test(row)), left.join("\n"));
+		assert.ok(!left.some((row) => row.includes("##")), "no heading in the list");
+	} finally { h.view.dispose(); }
+});

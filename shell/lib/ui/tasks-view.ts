@@ -19,7 +19,7 @@
  * goes back or closes; a move paints the hover; the wheel scrolls the thread.
  */
 import { Key, matchesKey, visibleWidth, wrapTextWithAnsi, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
-import type { AgentRun, JobRecord, TaskRecord, ThreadItem } from "../background-tasks.ts";
+import { agentDoes, type AgentRun, type JobRecord, type TaskRecord, type ThreadItem } from "../background-tasks.ts";
 import { taskOutcome, taskSucceeded } from "../background-tasks-tools.ts";
 import { formatCost, formatTokens } from "./bars.ts";
 import { sanitizeTerminalText } from "./terminal-theme.ts";
@@ -187,7 +187,6 @@ function layoutParts(parts: readonly string[], first: number, rest: number): { l
 }
 
 const clean = (text: string) => sanitizeTerminalText(text).replace(/\s+/g, " ").trim();
-const firstLine = (text: string) => clean(text.trim().split("\n")[0] ?? "");
 const running = (task: TaskRecord) => task.status === "running";
 const canOpen = (task: TaskRecord | undefined): task is AgentRun => task?.kind === "agent" && Boolean(task.sessionDir && task.childSessionId);
 
@@ -480,14 +479,16 @@ export class TasksView {
 		const ascii = this.deps.ascii ?? false;
 		const [mark, role] = this.mark(task);
 		const live = running(task);
-		const name = task.kind === "agent" ? (live ? clean(task.agent) : `${clean(task.agent)} · ${firstLine(task.task)}`) : clean(task.label);
+		// T195: an agent's rows say what it does by its label, never its brief's first line.
+		const does = task.kind === "agent" ? clean(agentDoes(task)) : "";
+		const name = task.kind === "agent" ? (live || does === "" ? clean(task.agent) : `${clean(task.agent)} · ${does}`) : clean(task.label);
 		const nameRole: Role = chosen || live ? "ink" : "soft";
 		const paintName: Paint = (t) => (this.hovered === `row:${task.id}` ? this.deps.theme.fg(HOVER_ROLE, t) : chosen ? this.bold(this.fg(nameRole, t)) : this.fg(nameRole, t));
 		const cursor = chosen ? this.fg("accent", glyph("cursor", ascii)) : " ";
 		const first = compose([[`${chosen ? glyph("cursor", ascii) : " "} `, () => `${cursor} `], [`${mark} `, (t) => this.fg(role, t)], [name, paintName]], [[this.time(task), (t) => this.fg(chosen ? "ink" : live ? "soft" : "dim", t)]], cells, ascii);
 		const rows = [first];
 		if (live) {
-			const what = task.kind === "agent" ? firstLine(task.task) : [task.id, task.kind === "monitor" ? "monitor" : "", clean(task.command) !== clean(task.label) ? clean(task.command) : ""].filter(Boolean).join(" · ");
+			const what = task.kind === "agent" ? does : [task.id, task.kind === "monitor" ? "monitor" : "", clean(task.command) !== clean(task.label) ? clean(task.command) : ""].filter(Boolean).join(" · ");
 			rows.push(compose([["    ", (t) => t], [what, (t) => this.fg(chosen ? "soft" : "dim", t)]], [], cells, ascii));
 		}
 		return chosen ? rows.map((text) => this.sel(text)) : rows;

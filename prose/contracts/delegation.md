@@ -39,7 +39,10 @@ another scout only for a question it does not answer, and it extends
 that file.
 
 A delegation prompt carries the owner's request verbatim, beside your
-reading of it. For a child session, or before a fresh session, include
+reading of it. Give each launch a short label of what the sub-agent does, a
+few words such as `web: categories page`, in the launching tool's label or
+description, never a heading of its brief: the agents rail and the task list
+name it so. For a child session, or before a fresh session, include
 `jhon context <change> --phase none --handoff`: the change's risk tier and
 the ids of the decisions already recorded for its areas, which the receiver
 reads before deciding anything they cover. A scout or builder task
