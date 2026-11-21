@@ -4,9 +4,8 @@
  * density, and the status line (T15.15: one file per category, registry.ts in order).
  */
 import { SETTINGS_DEFAULTS } from "../../settings.ts";
-import { writeAnimationPolicy, type AnimationPolicy } from "../animation-policy.ts";
+import { writeAnimationPolicy, writeVisualSettings, type AnimationPolicy } from "../appearance-policy.ts";
 import { TOOL_ICONS, type ToolFamily } from "../primitives/index.ts";
-import { writeVisualSettings } from "../visual-customization-policy.ts";
 import { attempt, boolRow, type CustomizeCategory, type CustomizeHooks } from "./row.ts";
 import { jhonThemes, themePreview } from "./themes.ts";
 

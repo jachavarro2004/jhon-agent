@@ -18,28 +18,18 @@ Sources:
 - `shell/extensions/pretty.ts`: `extensions/pi-pretty.ts` (gentle-pi 4.1.0)
 - `shell/extensions/todo.ts`: `extensions/gentle-todo.ts` (gentle-pi 4.1.0)
 - `shell/extensions/ui.ts`: `extensions/ui.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/animation-policy.ts`: `lib/animation-policy.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/append-system-prompt.ts`: `lib/append-system-prompt.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/ask-view.ts`: the layout of `lib/questionnaire/questionnaire-view.ts` (gentle-pi 4.6.0)
-- `shell/lib/ui/native-fullscreen-interaction.ts`: `lib/native-fullscreen-interaction.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/native-pointer-region.ts`: `lib/native-pointer-region.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/overlay-repaint.ts`: `lib/overlay-repaint.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/session-change-capture.ts`: `lib/session-change-capture.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/session-changes.ts`: `lib/session-changes.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/session-worktree-registry.ts`: `lib/session-worktree-registry.ts` (gentle-pi 4.1.0)
 - `shell/lib/todo.ts`: `lib/shell-todo.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/terminal-theme.ts`: `lib/terminal-theme.ts` (gentle-pi 4.1.0)
 - `shell/lib/ui/user-directories.ts`: `lib/bounded-writer-admission.ts` (gentle-pi 4.1.0)
-- `shell/lib/ui/visual-customization-policy.ts`: `lib/visual-customization-policy.ts` (gentle-pi 4.1.0)
 
 Tests:
 
 - `shell/test/card-text.ts`: `tests/gentle-card-text.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-animation-policy.test.ts`: `tests/animation-policy.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-append-system-prompt.test.ts`: `tests/append-system-prompt.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-native-fullscreen-interaction.test.ts`: `tests/native-fullscreen-interaction.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-native-pointer-region.test.ts`: `tests/native-pointer-region.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-overlay-repaint.test.ts`: `tests/overlay-repaint.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-pretty.test.ts`: `tests/pi-pretty.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-quiet-bash-runtime.test.ts`: `tests/quiet-bash-runtime.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-session-change-capture.test.ts`: `tests/session-change-capture.test.ts` (gentle-pi 4.1.0)
@@ -49,7 +39,6 @@ Tests:
 - `shell/test/ui-shell.test.ts`: `tests/gentle-shell.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-terminal-theme.test.ts`: `tests/terminal-theme.test.ts` (gentle-pi 4.1.0)
 - `shell/test/ui-todo.test.ts`: `tests/gentle-todo.test.ts` (gentle-pi 4.1.0)
-- `shell/test/ui-visual-customization-policy.test.ts`: `tests/visual-customization-policy.test.ts` (gentle-pi 4.1.0)
 
 ```text
 MIT License

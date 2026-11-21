@@ -17,7 +17,8 @@ import { changeMode, type ModeData } from "../lib/ui/jhon-panel-grants.ts";
 import { laneReads, lddLanes, lddOfSession, lddWatchTargets, permissionMode, readLddStatus, selectChange, shareSelection, type LddStatus } from "../lib/ui/ldd-status.ts";
 import { SessionWorktreeRegistry, resolveSessionWorktree, type WorktreeResolver } from "../lib/ui/session-worktree-registry.ts";
 import { glyph, renderCard, setCardStyle, type Card, type CardTheme } from "../lib/ui/primitives/index.ts";
-import { resolveVisualSettings } from "../lib/ui/visual-customization-policy.ts";
+import { resolveAnimationPolicy, resolveVisualSettings, type AnimationPolicy } from "../lib/ui/appearance-policy.ts";
+import { CARD_OVERLAY, closeWithRepaint } from "../lib/ui/overlay.ts";
 import { createWorkingActivity, DOUBLE_ESC_CANCEL_HINT, framePrompt, IDLE_ESC_CLEAR_HINT, PROMPT_HINT, PROMPT_INDENT, PROMPT_STATE, renderWorkingLine, SHELL_PULSE_MS, withPlaceholder } from "../lib/ui/shell-prompt.ts";
 import { createApiWait } from "../lib/ui/api-wait.ts";
 import { createStallRecovery, stallContinueText, stallNotice, stallSeconds, stallThreshold, type Schedule } from "../lib/ui/stall-recovery.ts";
@@ -25,7 +26,6 @@ import { activeProfileName } from "../lib/profiles.ts";
 import { SESSION_PROFILE_CHANGED, sessionMark, sessionProfileOnBranch } from "../lib/session-profile.ts";
 import { OPEN_TASKS_EVENT, SANDBOX_EVENT, TASKS_EVENT, VISUAL_SETTINGS_CHANGED } from "../lib/events.ts";
 import { retiredNotice, shellSettings } from "../lib/settings.ts";
-import { resolveAnimationPolicy, type AnimationPolicy } from "../lib/ui/animation-policy.ts";
 import { createEscGate, extractQueuedText, loadDoubleEscCancelPolicy, type DoubleEscCancelPolicy } from "../lib/ui/double-esc-cancel-policy.ts";
 import { foldablePart, installPane, invalidatePane, paneSlot, paneState, renderStrip, setPaneHover, stripModel } from "../lib/ui/pane.ts";
 import { setChromeSurface } from "../lib/ui/shell-panel.ts";
@@ -949,7 +949,9 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			});
 			try {
 				await ctx.ui.custom<null>((tui, theme, _keys, done) => {
-					finish = () => done(null);
+					// Closing writes every cell again, as every overlay's close does (overlay.ts).
+					const shut = closeWithRepaint(tui, done);
+					finish = () => shut(null);
 					if (closed) done(null);
 					const view = new SettingsView({
 						rows, theme, group: String(args ?? "").trim() || undefined, ascii: () => settings.ascii(),
@@ -967,7 +969,7 @@ export default function jhonShellUi(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 						invalidate: () => view.invalidate(),
 						dispose: close,
 					};
-				}, { overlay: true, overlayOptions: { anchor: "center", width: "70%", minWidth: 60, maxHeight: "85%" } });
+				}, CARD_OVERLAY);
 			} finally { close(); }
 		},
 	});

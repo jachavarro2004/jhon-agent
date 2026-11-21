@@ -1,7 +1,7 @@
 /**
  * shell/lib/ui/settings-view.ts — the Customize overlay (Settings until
- * L174), drawn as the Gentle Shell's Customization view (its lib/visual-customize-view.ts; L153 answer 6,
- * L154): G's Commands card with `Customize … esc` on top, CATEGORIES on the
+ * L174; design/shell-tui 05 and 07, the Gentle Shell's Customization view as
+ * a design reference): the overlay card (overlay.ts) titled `Customize … esc`, CATEGORIES on the
  * left and `<Category> · n/m` over the selected category's settings on the
  * right, each setting one line with its values inline (`● current  ○ other`,
  * `‹ value › n/m` when they do not fit), a Preview of the highlighted row,
@@ -14,7 +14,8 @@
  * over its rows: the shell wires what a change does (extensions/ui.ts).
  */
 import { matchesKey, sliceByColumn, truncateToWidth, visibleWidth, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
-import { BOX_PADDING, asciiText, glyph, paintHover, renderBox, renderPick } from "./primitives/index.ts";
+import { asciiText, glyph, paintHover, renderPick } from "./primitives/index.ts";
+import { CARD_BODY_PADDING, renderOverlayCard } from "./overlay.ts";
 import { stripAnsi } from "./terminal-theme.ts";
 
 export interface SettingRow {
@@ -248,11 +249,11 @@ export class SettingsView {
 		const theme = this.o.theme;
 		const text = (value: string) => ascii ? asciiText(value) : value;
 		const height = Math.max(0, Math.min(MAX_HEIGHT, Math.floor(this.o.height())));
-		if (width < BOX_PADDING + 1 || height < 4) {
+		if (width < CARD_BODY_PADDING + 1 || height < 4) {
 			this.frame = undefined;
 			return Array.from({ length: Math.min(height, 2) }, (_, i) => truncateToWidth(i ? "Terminal too small" : TITLE, Math.max(0, width), ""));
 		}
-		const inner = width - BOX_PADDING;
+		const inner = width - CARD_BODY_PADDING;
 		const category = this.category();
 		const rows = this.rows();
 		const cursor = this.cursor();
@@ -280,7 +281,8 @@ export class SettingsView {
 		const divider = glyph("side", ascii);
 		const join = (left: string, right: string) => leftWidth ? `${left}${" ".repeat(Math.max(0, leftWidth - visibleWidth(stripAnsi(left))))} ${paint(divider, 1, "border")} ${right}` : right;
 		const heading = navOnly ? "Categories · pick one →" : `${category} · ${rows.length ? `${cursor + 1}/${rows.length}` : "empty"}`;
-		const lines: string[] = [""];
+		// The card draws the title row (overlay.ts); these are the rows under it.
+		const lines: string[] = [];
 		const hits: Hit[] = [];
 		const fgOnly = { fg: theme.fg.bind(theme) };
 		const openCategory = (index: number) => {
@@ -288,13 +290,14 @@ export class SettingsView {
 			this.pane = narrow ? "controls" : "categories";
 		};
 		if (showHeading) lines.push(join(leftWidth ? paint("CATEGORIES", leftWidth, "accent") : "", paint(heading, rightWidth, "accent")));
-		if (showTopGap) lines.push("");
-		const rightX = 2 + (leftWidth ? leftWidth + 3 : 0);
+		// The divider runs through the gap under the headings, as artboard 05.
+		if (showTopGap) lines.push(join("", ""));
+		const rightX = 3 + (leftWidth ? leftWidth + 3 : 0);
 		for (let i = 0; i < contentHeight; i++) {
-			const y = lines.length + 1; // the card adds its top border
+			const y = lines.length + 2; // the card adds its top border and title row
 			const nav = this.categories[navStart + i];
 			const left = leftWidth && nav ? renderPick(nav, leftWidth, navStart + i === this.categoryIndex, this.pane === "categories" ? theme : fgOnly, ascii) : "";
-			if (leftWidth && nav) hits.push({ id: `category:${navStart + i}`, x: 4, end: 4 + Math.min(visibleWidth(nav), leftWidth - 2), y, activate: () => openCategory(navStart + i) });
+			if (leftWidth && nav) hits.push({ id: `category:${navStart + i}`, x: 5, end: 5 + Math.min(visibleWidth(nav), leftWidth - 2), y, activate: () => openCategory(navStart + i) });
 			let right: string;
 			if (navOnly) {
 				const name = this.categories[start + i];
@@ -332,9 +335,7 @@ export class SettingsView {
 		} else if (previewLines === 1) lines.push(paint(navOnly ? "→ the settings · Esc closes" : "No room for the preview", inner, "muted"));
 		if (showBottomGap) lines.push("");
 		if (showHeading) lines.push(paint(`Click · ${this.footer(navOnly, previewLines, focusedSetting !== undefined)}`, inner, "muted"));
-		// The top-right close hint mirrors Commands without consuming another row.
-		lines[0] = paint(TITLE + " ".repeat(Math.max(1, inner - visibleWidth(TITLE) - 3)) + "esc", inner, "accent");
-		const card = renderBox(lines.slice(0, height - 2), width, theme, ascii);
+		const card = renderOverlayCard({ title: TITLE, body: lines.slice(0, height - 3), width, theme, ascii });
 		return this.installFrame(card, { width, height: card.length, hits: hits.filter((hit) => hit.y < card.length - 1) });
 	}
 

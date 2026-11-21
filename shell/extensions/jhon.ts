@@ -106,7 +106,7 @@ import { lddFromStatus, lddLanes, lddOfSession, readLddStatus, refreshSelection,
 import { launchContext } from "../lib/launch-context.ts";
 import { recentSessionRoots } from "../lib/ui/session-changes.ts";
 import { registerSubagentWorktree } from "../lib/ui/session-worktree-registry.ts";
-import { withOverlayRepaint } from "../lib/ui/overlay-repaint.ts";
+import { closeWithRepaint, GRANTS_OVERLAY } from "../lib/ui/overlay.ts";
 import { openInExternalEditor } from "../lib/ui/jhon-panel-editor.ts";
 import { execFile } from "node:child_process";
 import { recordEvent } from "../lib/telemetry.ts";
@@ -649,7 +649,7 @@ export default function jhon(pi: any): void {
   // named: the change /jhon:status <change> asks for, read where pi is.
   const openPanel = (ctx: any, view: View, named?: string) => ctx.ui.custom((tui: any, theme: any, _keys: unknown, done: (r: null) => void) => {
     const cwd = ctx?.cwd ?? process.cwd();
-    const close = withOverlayRepaint(tui, done);
+    const close = closeWithRepaint(tui, done);
     // A model this session's registry does not list as available (provider not loaded, or no credential); an unreadable registry says nothing.
     const inSession = (model: string) => registryModels(() => ctx?.modelRegistry)?.includes(model) ?? true;
     const profileActions = profileModeActions({
@@ -737,7 +737,7 @@ export default function jhon(pi: any): void {
     });
     panel.open();
     return panel;
-  }, view === "grants" ? { overlay: true, overlayOptions: { anchor: "center", width: "70%", minWidth: 60, maxHeight: "85%" } } : FULLSCREEN_OVERLAY);
+  }, view === "grants" ? GRANTS_OVERLAY : FULLSCREEN_OVERLAY);
   if (!child) {
     // Each view its own /jhon:<option> (L194): the LDD detail, as alt+j, and the grants;
     // the permission mode changes only in Customize → Permissions (L214).

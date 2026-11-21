@@ -1,7 +1,7 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { glyph } from "./primitives/glyphs.ts";
 import { BAND_ROLE, HOVER_ROLE, paintHover, paintSurfaceRows, surfaceOpener, type CardTheme } from "./primitives/index.ts";
-import type { ChromeSurface } from "./visual-customization-policy.ts";
+import type { ChromeSurface } from "./appearance-policy.ts";
 
 // The rail's sections drawn as Gentle Shell's panel (its lib/shell-panel.ts,
 // T15.12b): a one-row header `▾ NAME … count` and dense rows indented under

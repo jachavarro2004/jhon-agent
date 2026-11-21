@@ -1,22 +1,17 @@
 /**
- * shell/lib/ui/fullscreen-view.ts — Jhon's work views near full screen, drawn
- * as the Gentle Shell draws its profiles view (gentle-ai.ts: RoutingTablePanel
- * renderFrame and tableLines, showRoutingTablePanel's overlay options; L174):
- * the whole terminal, a rounded frame in the border role with `│ ` margins;
- * inside, the view's tab and its rule (the active tab's `━` in the accent),
- * the title in the accent with a muted sentence, a blank row, the body, a
- * blank row, the key hints dim joined by two spaces, and two feedback rows;
- * blank rows fill what is left, as G pads its body. The LDD detail (alt+j)
- * and /jhon:profile use it; /jhon:grants and Customize stay small cards.
+ * shell/lib/ui/fullscreen-view.ts — the views that take the whole terminal
+ * (design/shell-tui 06 Profiles, 10 and 11 the LDD change, 13 its editor
+ * message; L1465): the LDD detail (alt+j, /jhon:status) and /jhon:profile.
+ * The grants and Customize are cards (overlay.ts).
  */
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { asciiText } from "./primitives/index.ts";
+import { asciiText, glyph } from "./primitives/index.ts";
 
-/** G's showRoutingTablePanel: the overlay takes the whole terminal. */
+/** The overlay takes every row and column. */
 export const FULLSCREEN_OVERLAY = { overlay: true, overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%", margin: 0 } } as const;
 
 export interface FullscreenViewOptions {
-	theme: { fg(role: string, text: string): string };
+	theme: { fg(role: string, text: string): string; bold?(text: string): string };
 	width: number;
 	/** The terminal's rows: the frame takes them all. */
 	rows: number;
@@ -42,45 +37,55 @@ export function fullscreenBodyRows(rows: number): number {
 }
 
 /** As many hints as fit, in order; the last one (`esc close`) is never dropped. */
-function fitHints(hints: string[], room: number): string {
+function fitHints(hints: string[], room: number): string[] {
 	const last = hints.at(-1);
 	const kept = hints.slice(0, -1);
-	const join = (list: string[]) => ` ${list.join("  ")}`;
-	while (kept.length && visibleWidth(join([...kept, ...(last ? [last] : [])])) > room) kept.pop();
-	return join([...kept, ...(last ? [last] : [])]);
+	const cells = (list: string[]) => visibleWidth(` ${list.join("  ")}`);
+	while (kept.length && cells([...kept, ...(last ? [last] : [])]) > room) kept.pop();
+	return [...kept, ...(last ? [last] : [])];
 }
 
+/**
+ * The view over the whole terminal (design/shell-tui 06, 10, 11, 13): the
+ * rounded frame, the tab one cell in with the heavy run under it, the title
+ * bold accent and its sentence muted two cells after, the body one cell in,
+ * and at the bottom the keys (each key muted, its action dim) and two
+ * feedback rows. Every row is exactly width.
+ */
 export function renderFullscreenView(o: FullscreenViewOptions): string[] {
 	const ascii = o.ascii ?? false;
 	const t = o.theme;
 	const width = Math.max(4, Math.floor(o.width));
 	const inner = Math.max(1, width - 4);
 	const plain = (text: string) => ascii ? asciiText(text) : text;
-	// One row is one terminal line, cut with G's ellipsis and padded to the inner width.
+	const bold = (text: string) => (t.bold ? t.bold(text) : text);
+	// One row is one terminal line, cut with the ellipsis and padded to the inner width.
 	const fit = (line: string) => {
 		const shown = visibleWidth(line) > inner ? truncateToWidth(line, inner, ascii ? "~" : "…") : line;
 		return shown + " ".repeat(Math.max(0, inner - visibleWidth(shown)));
 	};
-	const tab = ` ${plain(o.tab)} `;
-	const tabEnd = 1 + visibleWidth(tab);
-	const rule = t.fg("border", (ascii ? "-" : "─").repeat(Math.min(1, inner))) + t.fg("accent", (ascii ? "=" : "━").repeat(Math.max(0, Math.min(inner, tabEnd) - 1))) + t.fg("border", (ascii ? "-" : "─").repeat(Math.max(0, inner - tabEnd)));
+	const tab = plain(o.tab);
+	const heavy = Math.min(inner, visibleWidth(tab) + 2);
+	const rule = t.fg("accent", glyph("heavyRule", ascii).repeat(heavy)) + t.fg("faint", glyph("rule", ascii).repeat(Math.max(0, inner - heavy)));
 	const title = plain(o.title);
 	const sentence = o.sentence ? plain(o.sentence) : "";
-	const head = ` ${t.fg("accent", title)}${sentence && visibleWidth(` ${title}   ${sentence}`) <= inner ? `   ${t.fg("muted", sentence)}` : ""}`;
+	const head = ` ${t.fg("accent", bold(title))}${sentence && visibleWidth(` ${title}  ${sentence}`) <= inner ? `  ${t.fg("muted", sentence)}` : ""}`;
+	const keys = fitHints(o.hints.map(plain), inner).map((hint) => {
+		const [key = "", ...action] = hint.split(" ");
+		return `${t.fg("muted", key)}${action.length ? t.fg("dim", ` ${action.join(" ")}`) : ""}`;
+	});
 	const [first = "", second = ""] = o.feedback ?? [];
-	const lines = [
-		` ${t.fg("accent", tab)}`, rule, head, "",
-		...o.body.map((line) => ascii ? asciiText(line) : line), "",
-		t.fg("dim", plain(fitHints(o.hints, inner))),
-		first ? t.fg("muted", plain(first)) : "", second ? t.fg("muted", plain(second)) : "",
-	];
-	const rows = Math.max(1, Math.floor(o.rows) - 2);
-	const padded = lines.length < rows ? [...lines, ...Array<string>(rows - lines.length).fill("")] : lines.slice(0, rows);
-	const h = ascii ? "-" : "─";
-	const v = t.fg("border", ascii ? "|" : "│");
+	const room = Math.max(0, Math.floor(o.rows) - 2);
+	const top = [` ${t.fg("accent", bold(tab))}`, rule, head, ""];
+	const bottom = ["", ` ${keys.join("  ")}`, first ? t.fg("muted", plain(first)) : "", second ? t.fg("muted", plain(second)) : ""];
+	const bodyRoom = Math.max(0, room - top.length - bottom.length);
+	const body = o.body.slice(0, bodyRoom).map((line) => ` ${ascii ? asciiText(line) : line}`);
+	const lines = [...top, ...body, ...Array<string>(Math.max(0, bodyRoom - body.length)).fill(""), ...bottom];
+	const h = glyph("rule", ascii);
+	const v = t.fg("border", glyph("side", ascii));
 	return [
-		t.fg("border", `${ascii ? "+" : "╭"}${h.repeat(width - 2)}${ascii ? "+" : "╮"}`),
-		...padded.map((line) => `${v} ${fit(line)} ${v}`),
-		t.fg("border", `${ascii ? "+" : "╰"}${h.repeat(width - 2)}${ascii ? "+" : "╯"}`),
+		t.fg("border", `${glyph("topLeft", ascii)}${h.repeat(width - 2)}${glyph("topRight", ascii)}`),
+		...lines.slice(0, Math.max(1, room)).map((line) => `${v} ${fit(line)} ${v}`),
+		t.fg("border", `${glyph("bottomLeft", ascii)}${h.repeat(width - 2)}${glyph("bottomRight", ascii)}`),
 	];
 }

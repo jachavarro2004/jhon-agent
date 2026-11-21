@@ -30,7 +30,7 @@ import { NARROW_BELOW } from "./bars.ts";
 import { BOX_PADDING, clip, fit, glyph, paintSurface, renderBox, renderDivider, stateGlyph, STATES, themePainter, type Role, type ThemeLike } from "./primitives/index.ts";
 import { chromeSurface, paintPanelSurface, panelSurfaceOpener, RAIL_ORDER, sectionBoxes, sectionGap } from "./shell-panel.ts";
 import type { SectionView } from "./panel.ts";
-import type { Density, StatusPlacement } from "./visual-customization-policy.ts";
+import type { Density, StatusPlacement } from "./appearance-policy.ts";
 import type { LddStatus } from "./ldd-status.ts";
 
 /** Under this many columns the pane folds into the strip (design/system.md's breakpoint; the status bar's narrow form too). */

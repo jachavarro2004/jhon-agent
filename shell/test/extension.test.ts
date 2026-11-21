@@ -1034,7 +1034,7 @@ esac
   assert.equal(commands.get("jhon:grants").description, "The grants for this project: give, revoke, duration");
   await commands.get("jhon:status").handler("", ctx);
   const text = await drawn(panels[0], /standard route/);
-  assert.match(text, /LDD · c1 +│\n│ +│\n│ standard route +│\n│ risk medium · a\.txt \(code\) +│/, "the change named once, and the risk jhon risk --json gives");
+  assert.match(text, /LDD · c1 +│\n│ +│\n│ {2}standard route +│\n│ {2}risk medium · a\.txt \(code\) +│/, "the change named once, and the risk jhon risk --json gives");
   assert.match(text, /│ {2}LDD · c1 +│/, "the LDD detail, the change's name in the title row (L174)");
   assert.match(text, /t tests {2}o tasks\.md {2}r refresh {2}esc close/, "with its actions");
   await commands.get("jhon:status").handler(" other ", ctx);
@@ -1632,7 +1632,7 @@ esac
   assert.deepEqual(options[0], { overlay: true, overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%", margin: 0 } });
   await commands.get("jhon:grants").handler("", ctx);
   await commands.get("jhon:profile").handler("", ctx);
-  assert.deepEqual(options[1], { overlay: true, overlayOptions: { anchor: "center", width: "70%", minWidth: 60, maxHeight: "85%" } }, "/jhon:grants: the small card");
+  assert.deepEqual(options[1], { overlay: true, overlayOptions: { anchor: "center", width: 96, maxHeight: "85%" } }, "/jhon:grants: the card, 96 columns as design 12");
   assert.deepEqual(options[2], options[0], "/jhon:profile: full screen");
 });
 

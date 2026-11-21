@@ -27,7 +27,7 @@ import { foregroundWaitNote } from "./foreground-wait.ts";
 import { shellSettings, type ShellSettings } from "./settings.ts";
 import { recordUse } from "./ui-use.ts";
 import { openInExternalEditor } from "./ui/jhon-panel-editor.ts";
-import { withOverlayRepaint } from "./ui/overlay-repaint.ts";
+import { closeWithRepaint } from "./ui/overlay.ts";
 import { JOBS_FINISHED_TTL_MS, shellEnabled } from "./ui/panel.ts";
 import { CARD_TONE, renderCard, type CardTheme } from "./ui/primitives/index.ts";
 import { TasksView } from "./ui/tasks-view.ts";
@@ -560,7 +560,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 		let view: TasksView | undefined;
 		const overlay = { overlay: true, overlayOptions: { width: "100%", maxHeight: "100%", margin: 0, anchor: "center" } };
 		await ctx.ui.custom((tui: any, theme: any, _keybindings: unknown, done: (value: null) => void) => {
-			const close = withOverlayRepaint(tui, done);
+			const close = closeWithRepaint(tui, done);
 			repaintView = () => tui.requestRender();
 			view = new TasksView({
 				theme,
