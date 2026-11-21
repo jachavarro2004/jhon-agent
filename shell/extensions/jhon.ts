@@ -91,7 +91,8 @@ import { memoryDir, projectRoot } from "../lib/memory.ts";
 import { gitReadEnv } from "../lib/git-read.ts";
 import { nativeReviewDisabled, registryCompleter, runReview } from "../lib/review-tool.ts";
 import { m365Read } from "../lib/m365.ts";
-import { delegationRenderers, type DelegationProfile } from "../lib/ui/delegation-card.ts";
+import { delegationRenderers, type DelegationProfile, type DelegationStatus } from "../lib/ui/delegation-card.ts";
+import { reviewRenderers } from "../lib/ui/review-card.ts";
 import { createWorktree, sameRepoWorktree, worktreeNote } from "../lib/worktree.ts";
 import { completeWord, lddChanges, PROFILE_ACTIONS } from "../lib/ui/jhon-commands.ts";
 import { LDD_SKILL, lddCompletions, lddPrompt } from "../lib/ldd-command.ts";
@@ -1010,6 +1011,8 @@ export default function jhon(pi: any): void {
   if (!child) pi.registerTool({
     name: "jhon_review",
     label: "Prism review",
+    // T174-S7: the Prism review card, drawn from the result's details (lib/ui/review-card.ts).
+    ...reviewRenderers(),
     description: "Prism review in one call: facets, challenger, arbiter, record. Takes a few minutes. Returns the verdict, or which review agents to launch.",
     parameters: { type: "object", additionalProperties: false, properties: { base: { type: "string" }, change: { type: "string" } } },
     async execute(_id: string, params: { base?: unknown; change?: unknown }, signal: AbortSignal | undefined, _onUpdate: unknown, ctx: any) {
@@ -1157,6 +1160,8 @@ export default function jhon(pi: any): void {
   const profile: DelegationProfile = (name) => {
     try { const a = sessionProfile.agent(resolveAgent(agentDir, name)); return { model: a.model, thinking: a.thinking }; } catch { return undefined; }
   };
+  // T174-S7: the card's state follows the background agent a launch started.
+  const delegated: DelegationStatus | undefined = background ? (task, owner) => background.agentRun(task, owner)?.status : undefined;
 
   // A model trained on other harnesses may still ask for a foreground run
   // (background: false, mode: "foreground"/"default"/"task"): it runs in the background anyway, and says so (T119, L716).
@@ -1169,7 +1174,7 @@ export default function jhon(pi: any): void {
   pi.registerTool({
     name: "subagent",
     label: "Sub-agent",
-    ...delegationRenderers("Delegating", "agent", profile),
+    ...delegationRenderers("Delegating", "agent", profile, delegated),
     description: `Run a named sub-agent on a self-contained task. ${launch} Agents: ${agents.length ? agents.join(", ") : "(none installed)"}. A bounded agent's task needs a "## Allowed edit surfaces" section listing the files it may write. worktree: true gives a parallel writer its own git worktree on a new branch: integrate the branch afterwards. cwd: the change's worktree, from the main checkout.`,
     parameters: {
       // No additionalProperties: false: an old `background: false` or `mode` still validates, and runs in the background (T119).
@@ -1210,7 +1215,8 @@ export default function jhon(pi: any): void {
       const scope = params.task;
       if (background) {
         const run = background.startAgent(agent, task, cwd, sm?.getSessionId?.() ?? "", { session, scope, timeoutSeconds, skills, sessionProfile: sessionProfileName });
-        return text(`Started background sub-agent ${run.id} (${agent.name}).${forcedBackground(params)} Its answer arrives as a message when it finishes; task_result reads it, task_stop cancels it. ${PUSHED}${tree ? ` ${worktreeNote(tree)}` : ""}`);
+        const started = text(`Started background sub-agent ${run.id} (${agent.name}).${forcedBackground(params)} Its answer arrives as a message when it finishes; task_result reads it, task_stop cancels it. ${PUSHED}${tree ? ` ${worktreeNote(tree)}` : ""}`);
+        return { ...started, details: { task: run.id, owner: sm?.getSessionId?.() ?? "" } };
       }
       const r = await foreground(agent, task, cwd, { signal: signal ?? ctx?.signal, session, scope, timeoutSeconds, skills, sessionProfile: sessionProfileName }, onUpdate);
       const result = answered(r, session);
@@ -1222,7 +1228,7 @@ export default function jhon(pi: any): void {
   pi.registerTool({
     name: "subagent_continue",
     label: "Continue a sub-agent",
-    ...delegationRenderers("Continuing agent", "id", profile),
+    ...delegationRenderers("Continuing agent", "id", profile, delegated),
     description: `Continue a sub-agent that stopped short (a resolved refusal, an answered question) in its own session, keeping what it read and did: give the id subagent returned (task id or sub-agent id) and the message it needs. ${relaunch} Its scope carries over; one stopped at its context cap gets a fresh one with a handoff instead.`,
     parameters: {
       type: "object", required: ["id", "message"],
@@ -1248,7 +1254,8 @@ export default function jhon(pi: any): void {
       if (background) {
         const skills = childSkills(c.agent.body, resolvedSkills);
         const next = background.startAgent(agent, params.message, c.cwd, owner, { session: c.session, scope: continuedScope(c.scope, params.message), timeoutSeconds, skills, sessionProfile: sessionProfileName });
-        return text(`Continued sub-agent ${c.session.id} (${c.agent.name}) in the background as ${next.id}.${forcedBackground(params)} Its answer arrives as a message when it finishes; task_result reads it, task_stop cancels it. ${PUSHED}`);
+        const continued = text(`Continued sub-agent ${c.session.id} (${c.agent.name}) in the background as ${next.id}.${forcedBackground(params)} Its answer arrives as a message when it finishes; task_result reads it, task_stop cancels it. ${PUSHED}`);
+        return { ...continued, details: { task: next.id, owner } };
       }
       return answered(await foreground(agent, params.message, c.cwd, { signal: signal ?? ctx?.signal, session: c.session, scope: continuedScope(c.scope, params.message), timeoutSeconds, skills: childSkills(c.agent.body, resolvedSkills), sessionProfile: sessionProfileName }, onUpdate), c.session);
     },

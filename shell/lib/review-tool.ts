@@ -43,9 +43,24 @@ export interface ReviewDeps {
 	disabled?: string;
 }
 
+/** One facet's state: completed, or unavailable and why. */
+export interface ReviewFacetState { facet: string; status: string; reason?: string }
+
+/** One finding and the set the engine's reduction put it in: correction_set, for_verify, follow_ups, information or refuted. */
+export interface ReviewFindingRow { id: string; facet: string; severity: string; location: string; claim: string; set: string }
+
+/**
+ * What the review card (lib/ui/review-card.ts) draws, never sent to the
+ * model: the change, each facet's state, every finding and its set, the
+ * challenger's and the arbiter's counts, when a review was recorded.
+ */
 export interface ReviewOutcome {
 	text: string;
-	details: { status: "recorded" | "fallback" | "refused"; record?: string; verdict?: string; reviewers?: ReviewUsage };
+	details: {
+		status: "recorded" | "fallback" | "refused"; record?: string; verdict?: string; reviewers?: ReviewUsage;
+		change?: string; facets?: ReviewFacetState[]; findings?: ReviewFindingRow[];
+		challenger?: { findings: number; refuted: number }; arbiter?: { asked: number; confirmed: number };
+	};
 }
 
 /**
@@ -62,6 +77,9 @@ export const REVIEW_RESULT_MAX = 2_000;
 export const REVIEW_OUTPUT_MAX = 256 * 1024;
 const CLAIM_MAX = 160;
 const LISTED_MAX = 8;
+/** The card's findings: at most this many, each claim at most this long. */
+const CARD_FINDINGS_MAX = 100;
+const CARD_CLAIM_MAX = 1_000;
 const THINKING = new Set(["minimal", "low", "medium", "high", "xhigh", "max"]);
 
 /** A completion's time bound: 3 minutes plus 1.5 s per KiB of prompt, at most 30 minutes. */
@@ -213,7 +231,7 @@ async function review(params: { base?: string; change?: string }, deps: ReviewDe
 		return shaped ? v : unavailable(subject, l.facet, "its answer was not one line of JSON for this facet and subject");
 	}));
 	// The engine numbers findings <facet>-<n> in this order.
-	const findings = results.flatMap((r: any) => r.findings.map((f: any, i: number) => ({ ...f, id: `${r.facet}-${i + 1}` })));
+	const findings = results.flatMap((r: any) => r.findings.map((f: any, i: number) => ({ ...f, id: `${r.facet}-${i + 1}`, facet: r.facet })));
 
 	const role = async (name: "challenger" | "arbiter", sub: "refute" | "validate", input: unknown): Promise<any | ReviewOutcome> => {
 		const stdin = JSON.stringify(input);
@@ -254,6 +272,24 @@ async function review(params: { base?: string; change?: string }, deps: ReviewDe
 	if (rec.code !== 0 || !out) return refused("record", rec);
 	const n = (k: string) => (Array.isArray(out[k]) ? out[k].length : 0);
 	const correction = findings.filter((f) => (out.correction_set ?? []).includes(f.id));
+	const setOf = (id: string) => ["correction_set", "for_verify", "follow_ups", "information", "refuted"].find((k) => Array.isArray(out[k]) && out[k].includes(id)) ?? "";
+	const refutedIds = new Set<string>((challenger.results ?? []).filter((v: any) => v?.outcome === "refuted").map((v: any) => String(v.finding_id)));
+	const record = typeof out.record === "string" ? out.record : undefined;
+	const change = params.change || (record ? /(?:^|\/)odd\/changes\/([^/]+)\//.exec(record)?.[1] : undefined);
+	const order: string[] = Array.isArray(out.facets) ? out.facets.map(String) : results.map((r: any) => String(r.facet));
+	const card = {
+		...(change ? { change } : {}),
+		facets: order.map((name) => {
+			const r: any = results.find((x: any) => x.facet === name);
+			const unavailable = r?.inspection?.status === "unavailable";
+			return { facet: name, status: unavailable ? "unavailable" : "completed", ...(unavailable && r.inspection.reason ? { reason: clip(one(String(r.inspection.reason)), 300) } : {}) };
+		}),
+		findings: findings.slice(0, CARD_FINDINGS_MAX).map((f) => ({
+			id: f.id, facet: String(f.facet), severity: one(String(f.severity ?? "")), location: clip(one(String(f.location ?? "")), 200), claim: clip(one(String(f.claim ?? "")), CARD_CLAIM_MAX), set: setOf(f.id),
+		})),
+		...(findings.length ? { challenger: { findings: findings.length, refuted: findings.filter((f) => refutedIds.has(f.id)).length } } : {}),
+		...(arbiter.results?.length ? { arbiter: { asked: arbiter.results.length, confirmed: arbiter.results.filter((v: any) => v?.outcome === "confirmed").length } } : {}),
+	};
 	const lines = [
 		`Prism native review: verdict ${out.verdict} · facets ${(out.facets ?? []).join(", ")} · record ${out.record}`,
 		`correction set ${n("correction_set")} · for verify ${n("for_verify")} · follow-ups ${n("follow_ups")} · information ${n("information")} · refuted ${n("refuted")} · unavailable ${n("unavailable")}`,
@@ -261,5 +297,5 @@ async function review(params: { base?: string; change?: string }, deps: ReviewDe
 		...(out.for_verify?.length ? [`For verify: ${clip(out.for_verify.join(", "), 200)}`] : []),
 		...(out.unavailable?.length ? [`Unavailable: ${clip(one(out.unavailable.join("; ")), 300)}`] : []),
 	];
-	return { text: bounded(lines), details: { status: "recorded", record: out.record, verdict: out.verdict } };
+	return { text: bounded(lines), details: { status: "recorded", record: out.record, verdict: out.verdict, ...card } };
 }

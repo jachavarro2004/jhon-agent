@@ -227,3 +227,31 @@ test("a delegation's card: the heading names the agent, its model and its thinki
 	const unknown = tool.renderCall({ agent: "nobody" }, theme, { expanded: false, state: {} }).render(120).join("\n");
 	assert.match(unknown, /→ Delegating · nobody/);
 });
+
+// T174-S7: the card's state follows the background agent it launched.
+test("a delegation's card says `◐ running` while its agent runs and `✓ done` once it answered", async () => {
+	const s = setup();
+	await s.fire("session_start");
+	const theme = { fg: (_c: string, t: string) => t, bg: (_c: string, t: string) => t, bold: (t: string) => t };
+	const tool = s.tools.get("subagent");
+	await within({ ...s.vars, FAKE_PI_DELAY: "300" }, async () => {
+		const r = await s.run("subagent", { agent: "explore", task: "look" });
+		assert.match(r.details.task, /^agent-\d+$/);
+		assert.equal(r.details.owner, "parent");
+		const context = { isError: false, state: {}, expanded: false, isPartial: false };
+		const call = tool.renderCall({ agent: "explore", task: "look" }, theme, context);
+		const result = tool.renderResult(r, { expanded: false, isPartial: false }, theme, context);
+		const rows = () => [...call.render(120), ...result.render(120)].join("\n");
+		assert.match(rows(), /→ Delegating · explore · openai\/gpt-5 · high +◐ running/);
+		await until(() => s.sent.length > 0);
+		assert.match(rows(), /→ Delegating · explore · openai\/gpt-5 · high +✓ done/);
+	});
+});
+
+test("jhon_review draws the Prism review card", () => {
+	const s = setup();
+	const tool = s.tools.get("jhon_review");
+	const theme = { fg: (_c: string, t: string) => t, bg: (_c: string, t: string) => t, bold: (t: string) => t };
+	const context = { isError: false, state: {}, expanded: false, isPartial: true };
+	assert.match(tool.renderCall({}, theme, context).render(120).join("\n"), /◇ Prism review +◐ running/);
+});

@@ -15,12 +15,16 @@
  * call's own overflow rows), bodyRows the result's rows, and the outline's
  * closing edge goes with whichever component ends the card.
  *
- * Also here: the numbered diff (pi's edit diff as `86 − text` rows) and the
- * guard refusal read from a tool error's text.
+ * Also here: the numbered diff (pi's edit diff as `86 − text` rows), the
+ * guard refusal read from a tool error's text, and the split card a tool's
+ * own renderers draw with (the Prism review and delegation cards, T174-S7).
  */
-import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { keyHint } from "@earendil-works/pi-coding-agent";
+import { visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
+import { shellSettings } from "../settings.ts";
 import { renderTintedBlock, renderTintedBody, tintedBodyRoom, tintedTitleRoom, type BlockTheme } from "./primitives/block.ts";
-import { clip, fit } from "./primitives/fit.ts";
+import { CARD_STYLE, cardStyle } from "./primitives/card.ts";
+import { clip, fit, stripAnsi } from "./primitives/fit.ts";
 import { glyph } from "./primitives/glyphs.ts";
 
 export type CardForm = "tint" | "outline";
@@ -254,4 +258,108 @@ export function guardRefusal(text: string): GuardRefusal | undefined {
 	if (DECLINED.test(first)) return { guard: "permission", reason: first, fix: "", more };
 	if (SHELL.test(first) && /\brefused\b/.test(first)) return of(/sandbox/.test(first) ? "sandbox" : "jhon", first.replace(SHELL, ""));
 	return undefined;
+}
+
+// --- the split card --------------------------------------------------------------------
+
+/** The card's form and glyphs as the settings say now. */
+export function cardLook(theme: BlockTheme): CardLook {
+	let ascii = false;
+	try { ascii = shellSettings().ascii(); } catch { /* No settings: Unicode. */ }
+	return { form: cardStyle() === CARD_STYLE.NEON ? "outline" : "tint", ascii, theme };
+}
+
+/** What a result tells its card: the header's state and tone, and its body collapsed and expanded. */
+export interface SplitResult {
+	/** The state at the right of the header, painted; none leaves it empty. */
+	right?: string;
+	tone: "normal" | "error";
+	/** The body's rows at `cells` text cells: collapsed, and expanded (ctrl+o). */
+	rows(cells: number, look: CardLook, expanded: boolean): string[];
+}
+
+/** The context pi hands a tool's renderers; only what a split card reads. */
+export interface SplitContext {
+	state?: unknown;
+	isPartial?: boolean;
+	isError?: boolean;
+	expanded?: boolean;
+}
+
+interface SplitRow { result?: SplitResult }
+
+const SPLIT = Symbol.for("jhon-shell.split-card-row");
+
+function splitRow(state: unknown): SplitRow {
+	if (state === null || typeof state !== "object") return {};
+	const slot = state as Record<symbol, SplitRow | undefined>;
+	return (slot[SPLIT] ??= {});
+}
+
+/** Whether ctrl+o changes a result's body at width. */
+function expands(result: SplitResult, cells: number, look: CardLook): boolean {
+	const room = bodyCells(cells, look);
+	const collapsed = result.rows(room, look, false);
+	return collapsed.some((row) => visibleWidth(row) > room) || JSON.stringify(collapsed) !== JSON.stringify(result.rows(room, look, true));
+}
+
+/**
+ * A call's header for a tool whose result is a SplitResult: the icon and the
+ * title, at the right the result's state (and ctrl+o's hint while it changes
+ * the body), or `running` until a result exists, when an outline also closes here.
+ */
+export class SplitCall implements Component {
+	private readonly head: (look: CardLook) => { icon: string; title: string };
+	private readonly theme: BlockTheme;
+	private readonly context: SplitContext;
+
+	constructor(head: (look: CardLook) => { icon: string; title: string }, theme: BlockTheme, context: SplitContext) {
+		this.head = head;
+		this.theme = theme;
+		this.context = context;
+	}
+
+	render(width: number): string[] {
+		const cells = Math.max(0, Math.floor(width));
+		if (cells === 0) return [];
+		const look = cardLook(this.theme);
+		const t = this.theme;
+		const result = splitRow(this.context.state).result;
+		const { icon, title } = this.head(look);
+		let right: string | undefined;
+		if (result) {
+			const expanded = this.context.expanded === true;
+			const hint = expands(result, cells, look) ? t.fg("dim", stripAnsi(keyHint("app.tools.expand", expanded ? "to collapse" : "to expand"))) : "";
+			right = hint && result.right ? `${hint}  ${result.right}` : hint || result.right;
+		} else {
+			right = t.fg("warning", `${look.ascii ? "~" : "◐"} running`);
+		}
+		const tone = result?.tone ?? (this.context.isError ? "error" : "normal");
+		return headRows({ icon, title, right, tone }, [], cells, look, !result);
+	}
+
+	invalidate(): void {}
+}
+
+/** A result's body under a SplitCall; it hands the call its state through the row state pi shares between them. */
+export class SplitBody implements Component {
+	private readonly result: SplitResult;
+	private readonly expanded: boolean;
+	private readonly theme: BlockTheme;
+
+	constructor(result: SplitResult, context: SplitContext, theme: BlockTheme) {
+		this.result = result;
+		this.expanded = context.expanded === true;
+		this.theme = theme;
+		splitRow(context.state).result = result;
+	}
+
+	render(width: number): string[] {
+		const cells = Math.max(0, Math.floor(width));
+		if (cells === 0) return [];
+		const look = cardLook(this.theme);
+		return bodyRows(this.result.rows(bodyCells(cells, look), look, this.expanded), cells, look, this.result.tone);
+	}
+
+	invalidate(): void {}
 }
