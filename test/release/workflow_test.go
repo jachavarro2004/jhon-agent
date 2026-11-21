@@ -79,11 +79,11 @@ func TestReleaseWorkflow(t *testing.T) {
 
 	// Resolved with `gh api repos/<repo>/commits/<tag>` (T7b, L38).
 	tags := map[string]string{
-		"actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10":          "v6.0.3",
-		"actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e":          "v7.0.0",
+		"actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1":          "v7.0.1",
+		"actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5":          "v7.1.0",
 		"sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532": "v4.1.3",
-		"actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a":   "v7.0.1",
-		"actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c": "v8.0.1",
+		"actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9":   "v7.0.2",
+		"actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333": "v8.0.2",
 		"actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1":        "v7.1.0",
 	}
 
