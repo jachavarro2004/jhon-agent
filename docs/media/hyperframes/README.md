@@ -143,7 +143,7 @@ Spanish subtitles (neutral Spanish, tú, no voseo). The English video shows a
 caption only where the screen does not already say the line (`capEn`: one
 shot, the hard lines' "no grant covers").
 
-## Shot list (206.8 s)
+## Shot list (206.7 s)
 
 | time | chapter | kind | on screen | line |
 | --- | --- | --- | --- | --- |
@@ -178,7 +178,7 @@ shot, the hard lines' "no grant covers").
 | 175.3–180.4 s | | proof | `audit.png`: the finding → `git push origin HEAD:main` → no test run | Here, a push to main with no test run on record. |
 | 180.4–190.7 s | | numbers | *9 of 9* and *3.4×* (README's bench) | On seeded defects, the native Prism review found the same 9 of 9 as the facet agents, for about 3.4 times fewer weighted tokens. |
 | 190.7–200.4 s | Get started | list | Install → the one-line script; Set up → `jhon setup`; Check → `jhon doctor`; Start → `jhon start` | Install with the one-line script, then run jhon setup. jhon doctor runs the health checks. Then jhon start, inside your project. |
-| 200.4–206.8 s | close | | the band; the seal stamps; «Let the agent run. / Deliver only what is *proven.*»; github.com/jachavarro2004/jhon-agent | Jhon. Let the agent run. Deliver only what is proven. (the intro's audio again) |
+| 200.4–206.7 s | close | | the band; the seal stamps; «Let the agent run. / Deliver only what is *proven.*»; github.com/jachavarro2004/jhon-agent | Jhon. Let the agent run. Deliver only what is proven. (the intro's audio again) |
 
 Every feature capture appears once (nine) and every diagram at least once
 (`guards-tool-call` twice). `jhon doctor` is a list row, not a screen (it
@@ -316,21 +316,16 @@ build's renders).
     byte-identical. (The first engine's film had SSIM mean 0.9999, p05
     0.9991, min 0.9934 at frame 154, and its two renders differed in four
     frames of the first band seam, 242–243 and 246–247.)
-  - These renders lack `command-palette.png` (no longer built), so they are
-    not the published files; the published ones were rendered from the GSAP
-    build while it existed.
+  - These renders lack `command-palette.png` (no longer built), so they were
+    never published.
 
-- The published films show the command palette (`alt+k`: the `palette` card
-  and the `commands` proof, 136.8–145.9 s) and the changes view (the
-  `changes` proof, 145.9–152.6 s), which the shell no longer has (T169,
-  L1438; T174-S1). The script dropped those three shots (the "In the
-  terminal" chapter) and `build.ts` no longer renders `command-palette.png`
-  or `changes.png`, so the next render is about 16 s shorter and shows
-  neither; until then the published files keep them.
-- The bench shot's line names the Prism review and its facet agents
-  (T177); it was spoken again (8c507b1), and `index.html` and
-  `captions.es.json` carry it. The published films still say the 4R line
-  until they are rendered again.
+- The published films were rendered again from the motion build and the
+  current script (L1545), with the flags above and the cached narration:
+  6,201 frames, 206.70 s; English 13,730,355 bytes (9m 5s), Spanish
+  14,214,547 bytes (9m 19s), the same decoded audio. They no longer show the
+  command palette or the changes view (dropped with the shell's, T169, L1438;
+  T174-S1), the bench line names the Prism review and its facet agents
+  (T177), and the close reads github.com/jachavarro2004/jhon-agent (L1452).
 
 - The marks' timing follows each phrase's share of its line's characters,
   not measured word times; a mark can land a few tenths of a second before

@@ -33,7 +33,7 @@ engine to ask it for rose ink), `resvg`, `ffmpeg`, the shell's
 
 | asset | what |
 | --- | --- |
-| `video/jhon-explainer.mp4` | the presentation: about 3.7 minutes, 1920×1080, 30 fps, narrated in English (AAC) |
+| `video/jhon-explainer.mp4` | the presentation: about 3.4 minutes, 1920×1080, 30 fps, narrated in English (AAC) |
 | `video/jhon-explainer.es.mp4` | the same video and narration, with Spanish subtitles |
 | `video/stills/*.png` | six of its shots, decoded from the English video |
 
