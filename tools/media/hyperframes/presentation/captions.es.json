@@ -28,6 +28,8 @@
   "c_norepo": "Una carpeta que no es repo no tiene modo: sus llamadas se juzgan como en modo normal.",
   "c_audit": "jhon audit lee una sesión después, buscando lo que salió mal. Señala rechazos evitados, entregas sin probar y ediciones antes de RED.",
   "c_finding": "Aquí, un push a main sin ninguna ejecución de tests registrada.",
+  "c_dashboard": "El dashboard muestra la misma auditoría para cada sesión, con lo que hay que revisar primero.",
+  "c_prism": "Cada revisión Prism termina en un veredicto registrado, con cada hallazgo y dónde está.",
   "c_bench": "Con defectos sembrados, la revisión Prism nativa encontró los mismos 9 de 9 que los agentes de facetas, con unas 3,4 veces menos tokens ponderados.",
   "c_start": "Instala con el script de una línea y luego ejecuta jhon setup. jhon doctor ejecuta los chequeos de salud. Luego jhon start, dentro de tu proyecto.",
   "c_close": "Jhon. Deja correr al agente. Entrega solo lo probado."

@@ -51,7 +51,7 @@ presentation/
 ├── stage.js          # the 3D seal     ┘ with ../motion/motion.js
 ├── index.html        # GENERATED: the composition (every clip timed from the lines' real lengths)
 ├── captions.es.json  # GENERATED: the Spanish subtitles, one variable per line (c_<shot id>)
-├── narration/        # the cache: 31 lines, mono Opus 32 kb/s, with their text and seconds
+├── narration/        # the cache: 33 lines, mono Opus 32 kb/s, with their text and seconds
 ├── vendor -> ../vendor
 └── assets/
     ├── fonts/*.woff  # subsets (Latin, Latin-1, 力) of the OFL fonts identity.ts names
@@ -143,7 +143,7 @@ Spanish subtitles (neutral Spanish, tú, no voseo). The English video shows a
 caption only where the screen does not already say the line (`capEn`: one
 shot, the hard lines' "no grant covers").
 
-## Shot list (206.7 s)
+## Shot list (219.1 s)
 
 | time | chapter | kind | on screen | line |
 | --- | --- | --- | --- | --- |
@@ -176,13 +176,16 @@ shot, the hard lines' "no grant covers").
 | 159.5–165.4 s | | card | A folder that is no repo: No repo, *no mode.* | A folder that is no repo has no mode: its calls are judged as in normal mode. |
 | 165.4–175.3 s | Measured | card | `jhon audit` *reads a session.* | jhon audit reads a session afterwards, for what went wrong. It flags bypassed refusals, untested delivery and edits before RED. |
 | 175.3–180.4 s | | proof | `audit.png`: the finding → `git push origin HEAD:main` → no test run | Here, a push to main with no test run on record. |
-| 180.4–190.7 s | | numbers | *9 of 9* and *3.4×* (README's bench) | On seeded defects, the native Prism review found the same 9 of 9 as the facet agents, for about 3.4 times fewer weighted tokens. |
-| 190.7–200.4 s | Get started | list | Install → the one-line script; Set up → `jhon setup`; Check → `jhon doctor`; Start → `jhon start` | Install with the one-line script, then run jhon setup. jhon doctor runs the health checks. Then jhon start, inside your project. |
-| 200.4–206.7 s | close | | the band; the seal stamps; «Let the agent run. / Deliver only what is *proven.*»; github.com/jachavarro2004/jhon-agent | Jhon. Let the agent run. Deliver only what is proven. (the intro's audio again) |
+| 180.4–186.4 s | | proof | `dashboard-audit.png`: the session's verdict → the session → What to look at → its first item | The dashboard shows the same audit for every session, with what to look at first. |
+| 186.4–192.8 s | | proof | `prism-review.png`: the verdict (changes requested) → the record → the finding kept → its place (`export/stream.go:41`) | Every Prism review ends in a verdict on record, with each finding and where it is. |
+| 192.8–202.9 s | | numbers | *9 of 9* and *3.4×* (README's bench) | On seeded defects, the native Prism review found the same 9 of 9 as the facet agents, for about 3.4 times fewer weighted tokens. |
+| 202.9–212.6 s | Get started | list | Install → the one-line script; Set up → `jhon setup`; Check → `jhon doctor`; Start → `jhon start` | Install with the one-line script, then run jhon setup. jhon doctor runs the health checks. Then jhon start, inside your project. |
+| 212.6–219.1 s | close | | the band; the seal stamps; «Let the agent run. / Deliver only what is *proven.*»; github.com/jachavarro2004/jhon-agent | Jhon. Let the agent run. Deliver only what is proven. (the intro's audio again) |
 
-Every terminal capture but the Prism review appears once (nine) and every
-diagram at least once (`guards-tool-call` twice); the Prism review card and
-the dashboard's audit are the teaser's. `jhon doctor` is a list row, not a screen (it
+Every terminal capture appears once (ten, the Prism review card with them),
+the dashboard's audit once, and every diagram at least once
+(`guards-tool-call` twice); the Prism review and dashboard proofs (T191,
+L1584, L1586) show the teaser's two screens with the owner's lines. `jhon doctor` is a list row, not a screen (it
 cannot pass truthfully in a sandbox: see Known limits).
 
 ## The teaser (T141, a preview)
@@ -269,7 +272,7 @@ HYPERFRAMES_PLUGIN_CWD="$P" HYPERFRAMES_RENDER_DETACHED=1 nice -n 19 npx --yes h
   --quality looks --crf 32 --no-browser-gpu --variables-file "$P/captions.es.json" --strict-variables -o "$O/jhon-explainer.es.mp4"
 # Stills
 mkdir -p "$O/stills"
-for s in intro:4.6 problem:13.8 refusal:26.0 status:47.5 verdicts:93.5 close:205.7; do
+for s in intro:4.6 problem:13.8 refusal:26.0 status:47.5 verdicts:93.5 close:218.0; do
   ffmpeg -v error -y -ss "${s#*:}" -i "$O/jhon-explainer.mp4" -frames:v 1 "$O/stills/${s%%:*}.png"
 done
 ```
@@ -344,6 +347,16 @@ build's renders).
   (MD5 `3298670b…`); English 13,782,043 bytes (13m 17s, sha256
   `9876ff17…13b9fdd4`), Spanish 14,271,190 bytes (9m 53s); each rendered once,
   so their byte identity was not checked again.
+
+- Two proofs added (T191, L1584, L1586): the dashboard's audit after the
+  terminal audit, and the Prism review card before the bench, each with the
+  owner's line (two new narration lines; the other 31 reused from the cache).
+  34 shots, 6,572 frames, 219.07 s (12.36 s longer); the same decoded audio
+  in both (MD5 `fb00a06d…`). English 14,945,232 bytes (12m 9s, sha256
+  `79bc0003…fdd61321`), Spanish 15,441,129 bytes (13m 39s, sha256
+  `38447e6d…ff4f8678`); each rendered once. The stills were not
+  extracted again (the six shots they show are unchanged; the close's time
+  above is the new one).
 
 - The marks' timing follows each phrase's share of its line's characters,
   not measured word times; a mark can land a few tenths of a second before
