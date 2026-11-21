@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -38,7 +39,7 @@ func TestRunsOutsideOnlyANetworkLineOfTrustedPrograms(t *testing.T) {
 		{"no -c", []string{"/usr/bin"}, []string{"/usr/bin/bash", "git fetch"}, false},
 		{"no shell", []string{"/usr/bin"}, []string{"/usr/bin/git", "fetch"}, false},
 	} {
-		in := sample(Work, d)
+		in := sample(d)
 		in.Path = slices.Clone(c.path)
 		if got := RunsOutside(h, in, c.argv); got != c.want {
 			t.Errorf("%s: RunsOutside(%q) = %v, want %v", c.name, c.argv, got, c.want)
@@ -554,7 +555,7 @@ func TestRunsOutsideRefusesAPlantedDocker(t *testing.T) {
 		{"a planted docker sends git fetch to work", []string{"/home/u/project/bin", "/usr/bin"}, "git fetch", false},
 		{"a planted docker sends gh pr list to work", []string{"/home/u/project/bin", "/usr/bin"}, "gh pr list", false},
 	} {
-		in := sample(Work, d)
+		in := sample(d)
 		in.Path = slices.Clone(c.path)
 		if got := RunsOutside(h, in, []string{"/usr/bin/bash", "-c", c.line}); got != c.want {
 			t.Errorf("%s: RunsOutside(%q) = %v, want %v", c.name, c.line, got, c.want)
@@ -658,5 +659,122 @@ func TestATildeWordGivesWork(t *testing.T) {
 		if got := ProfileAt(line, "/home/u/project", []string{"/home/u/project"}, machine.stat); got != want {
 			t.Errorf("ProfileAt(%q) = %q, want %q", line, got, want)
 		}
+	}
+}
+
+// T181 (L1502, L1503): a leading `cd <folder> &&` is taken as git's -C: the
+// line stays unsandboxed when the folder is inside the project's roots, and
+// gives work anywhere else; a lone unquoted {word} (gh's {owner} and {repo})
+// is literal, a brace bash would expand is not; anything else on the line
+// still gives work.
+func TestProfileAtTakesALeadingCdIntoTheRootsAndALoneBraceWord(t *testing.T) {
+	d := with(machine, disk{"/home/u/project/sub": "dir", "/home/u/project/link": "-> /home/u", "/home/u/other": "dir"})
+	roots := []string{"/home/u/project", "/home/u/project-worktrees"}
+	for _, c := range []struct{ cwd, line, want string }{
+		{"/home/u/project", "cd /home/u/project && git fetch origin main", Unsandboxed},
+		{"/home/u/project", "cd /home/u/project/sub && git push -u origin x", Unsandboxed},
+		{"/home/u/project", "cd sub && git fetch", Unsandboxed},
+		{"/home/u", "cd project && git fetch -q origin main", Unsandboxed},
+		{"/home/u/other", "cd /home/u/project && git fetch", Unsandboxed},
+		{"/home/u/other", "cd '/home/u/project' && gh pr list", Unsandboxed},
+		{"/home/u/project", "cd /home/u/project && git -C sub fetch", Unsandboxed},
+		{"/home/u/project", "cd /home/u/project && git fetch && git push", Unsandboxed},
+		{"/home/u/project", "gh api repos/{owner}/{repo}/commits/main --jq .sha", Unsandboxed},
+		{"/home/u/project", "cd /home/u/project && gh api repos/{owner}/{repo}/commits/main --jq .sha 2>&1", Unsandboxed},
+		{"/home/u/project", "cd /tmp && git fetch", Work},
+		{"/home/u/project", "cd ~ && git fetch", Work},
+		{"/home/u/project", "cd ../other && git fetch", Work},
+		{"/home/u/project", "cd /home/u/other && gh pr list", Work},
+		{"/home/u/project", "cd link && git fetch", Work},
+		{"/home/u/project", "cd sub/.. && git fetch", Work},
+		{"/home/u/project", "cd /home/u/project && git -C /home/u/other fetch", Work},
+		{"/home/u/project", "cd /home/u/project && git fetch && rm -rf x", Work},
+		{"/home/u/project", "cd /home/u/project && git fetch -q origin main && echo behind", Work},
+		{"/home/u/project", "cd /home/u/project && gh api x 2>&1 | head -3", Work},
+		{"/home/u/project", "cd /home/u/project; git fetch", Work},
+		{"/home/u/project", "cd /home/u/project || git fetch", Work},
+		{"/home/u/project", "cd /home/u/project && git fetch || git push", Work},
+		{"/home/u/project", "git fetch && cd /home/u/project && git push", Work},
+		{"/home/u/project", "(cd /home/u/project) && git fetch", Work},
+		{"/home/u/project", "cd -P /home/u/project && git fetch", Work},
+		{"/home/u/project", "cd - && git fetch", Work},
+		{"/home/u/project", "cd && git fetch", Work},
+		{"/home/u/project", "cd $HOME && git fetch", Work},
+		{"/home/u/project", "cd /home/u/project > x && git fetch", Work},
+		{"/home/u/project", "cd /home/u/project && git fetch &", Work},
+		{"/home/u/project", "cd /home/u/project", Work},
+		{"/home/u/project", "gh api {a,b}", Work},
+		{"/home/u/project", "gh api {a..b}", Work},
+		{"/home/u/project", "gh api x{a,}", Work},
+		{"/home/u/project", "gh api {}", Work},
+		{"/home/u/project", "gh api {{owner}}", Work},
+		{"/home/u/project", "gh api {owner", Work},
+		{"/home/u/project", "gh api owner}", Work},
+		{"/home/u/project", "gh api {own'er,x}", Work},
+		{"/home/u/project", `gh api {a\,b}`, Work},
+	} {
+		if got := ProfileAt(c.line, c.cwd, roots, d.stat); got != c.want {
+			t.Errorf("ProfileAt(%q in %s) = %q, want %q", c.line, c.cwd, got, c.want)
+		}
+	}
+}
+
+// T181 (L1503): a work line that holds git with a network subcommand or gh
+// gets the note, whether the program is the line, the line of `<shell> -c`,
+// or the command the Claude Code wrap passes after $0; any other gets none.
+func TestDeliveryNoteNamesALineWithGitOverSSHOrGh(t *testing.T) {
+	for _, c := range []struct {
+		argv []string
+		want bool
+	}{
+		{[]string{"/usr/bin/bash", "-c", "git fetch origin | cat"}, true},
+		{[]string{"/usr/bin/bash", "-c", `cd /p && git fetch -q origin main && echo "behind=$(git rev-list --count HEAD..origin/main)"`}, true},
+		{[]string{"/usr/bin/bash", "-c", "cd /p && gh api repos/{owner}/{repo}/commits/main --jq .sha 2>&1 | head -3"}, true},
+		{[]string{"/usr/bin/bash", "-c", "git -C /p push -u origin x; echo done"}, true},
+		{[]string{"/usr/bin/bash", "-c", `trap "..." EXIT; eval " $1"`, "/usr/bin/bash", "timeout 30 git pull | cat"}, true},
+		{[]string{"git", "fetch"}, true},
+		{[]string{"/usr/bin/bash", "-c", "false"}, false},
+		{[]string{"/usr/bin/bash", "-c", "git status && git log | head"}, false},
+		{[]string{"/usr/bin/bash", "-c", "make test", "sh", "git fetch"}, true},
+		{[]string{"git", "commit", "-m", "fetch"}, false},
+		{nil, false},
+	} {
+		if got := DeliveryNote(c.argv); (got != "") != c.want || got != "" && got != "git over SSH and gh run outside the sandbox only on a line of their own, with no pipes, $(…) or other commands: run it alone, as in git -C <dir> fetch origin main" {
+			t.Errorf("DeliveryNote(%q) = %q, want a note %v", c.argv, got, c.want)
+		}
+	}
+}
+
+// T181 (L1503): zsh expands a lone {word} under BRACE_CCL and finds a
+// relative cd folder through its cdpath, both of which ~/.zshenv may set
+// for zsh -c: under zsh such a line runs in the work profile; bash and sh
+// read neither (CDPATH is dropped from an unsandboxed line's environment).
+func TestRunsOutsideTakesABraceWordAndARelativeCdOnlyOutsideZsh(t *testing.T) {
+	d := with(machine, disk{"/usr/bin": "dir", "/usr/bin/bash": "file", "/usr/bin/zsh": "file", "/usr/bin/git": "file", "/usr/bin/gh": "file", "/home/u/project/sub": "dir"})
+	h := host("linux", d, nil)
+	for _, c := range []struct {
+		shell, line string
+		want        bool
+	}{
+		{"/usr/bin/bash", "gh api repos/{owner}/{repo}/pulls", true},
+		{"/usr/bin/zsh", "gh api repos/{owner}/{repo}/pulls", false},
+		{"/usr/bin/zsh", "gh api 'repos/{owner}/{repo}/pulls'", true},
+		{"/usr/bin/bash", "cd sub && git fetch", true},
+		{"/usr/bin/zsh", "cd sub && git fetch", false},
+		{"/usr/bin/zsh", "cd /home/u/project/sub && git fetch", true},
+		{"/usr/bin/bash", "cd /tmp && git fetch", false},
+	} {
+		in := sample(d)
+		in.Path = []string{"/usr/bin"}
+		if got := RunsOutside(h, in, []string{c.shell, "-c", c.line}); got != c.want {
+			t.Errorf("RunsOutside(%s -c %q) = %v, want %v", c.shell, c.line, got, c.want)
+		}
+	}
+	env := UnsandboxedEnv([]string{"CDPATH=/home/u", "PATH=/usr/bin"}, nil)
+	if !slices.Contains(env, "PATH=/usr/bin") {
+		t.Errorf("an unsandboxed line loses PATH: %q", env)
+	}
+	if slices.ContainsFunc(env, func(kv string) bool { return strings.HasPrefix(kv, "CDPATH=") }) {
+		t.Errorf("an unsandboxed line keeps CDPATH: %q", env)
 	}
 }

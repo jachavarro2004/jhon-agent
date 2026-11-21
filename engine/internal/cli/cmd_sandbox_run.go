@@ -20,12 +20,13 @@ import (
 // sandboxProgram runs a program `jhon sandbox run` starts, bubblewrap or,
 // for --profile unsandboxed, the shell itself: path is its file and argv its
 // words, argv[0] first, with env. On a terminal it replaces this process,
-// as run always did; otherwise it supervises it (sandboxSupervised).
-func sandboxProgram(path string, argv, env []string, profile string) (int, error) {
+// as run always did; otherwise it supervises it (sandboxSupervised), and
+// a failure ends with failNote when it is not "".
+func sandboxProgram(path string, argv, env []string, profile, failNote string) (int, error) {
 	if isTerminal(os.Stdout) || isTerminal(os.Stderr) {
 		return execProgram(path, argv[1:], env)
 	}
-	return sandboxSupervised(path, argv, env, profile)
+	return sandboxSupervised(path, argv, env, profile, failNote)
 }
 
 // ownerCredentialHelpers are the owner's credential helpers, the system's
@@ -73,11 +74,14 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 //   - a failure whose output (stdout or stderr) said a path is read-only
 //     ends with one note on stderr, sandbox.RefusalNote, on a line of its
 //     own (G3);
+//   - a failure, not a signal's, ends with failNote on a line of its own
+//     when it is not "": sandbox.DeliveryNote for a work line that holds
+//     git over SSH or gh (T181, L1503);
 //   - a jhon.sandbox event records the profile, the exit code and the
 //     refused path, through telemetry when it is on (G4);
 //   - its exit code is the program's, and a program killed by a signal
 //     kills this process with the same signal.
-func sandboxSupervised(path string, argv, env []string, profile string) (int, error) {
+func sandboxSupervised(path string, argv, env []string, profile, failNote string) (int, error) {
 	watch := &sandbox.Watch{}
 	errOut := &lastByte{w: os.Stderr}
 	cmd := &exec.Cmd{Path: path, Args: argv, Env: env, Stdin: os.Stdin,
@@ -124,11 +128,18 @@ func sandboxSupervised(path string, argv, env []string, profile string) (int, er
 		}
 	}
 	refused, said := watch.Refused()
+	var notes []string
 	if said && code != 0 {
+		notes = append(notes, sandbox.RefusalNote(refused))
+	}
+	if failNote != "" && code != 0 && killedBy == 0 {
+		notes = append(notes, failNote)
+	}
+	if len(notes) > 0 {
 		if b := errOut.last(); b != 0 && b != '\n' {
 			fmt.Fprintln(os.Stderr)
 		}
-		fmt.Fprintln(os.Stderr, sandbox.RefusalNote(refused))
+		fmt.Fprintln(os.Stderr, strings.Join(notes, "\n"))
 	}
 	if telemetryOn() {
 		attrs := map[string]any{"jhon.sandbox.profile": profile, "process.exit.code": code, "jhon.duration_ms": time.Since(start).Milliseconds()}

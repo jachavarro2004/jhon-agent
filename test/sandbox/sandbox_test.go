@@ -274,26 +274,16 @@ func TestTheWorkProfileHidesEveryCredentialPath(t *testing.T) {
 	}
 }
 
-func TestTheDeliveryProfileShowsTheDeliveryCredentialsReadOnly(t *testing.T) {
+// The delivery profile is gone (T181, L1503): asking for it is a usage
+// error, and no credential is read.
+func TestTheDeliveryProfileIsGone(t *testing.T) {
 	b := newBox(t)
 	_, agent := withCredentials(t, &b)
 	for _, p := range []string{filepath.Join(b.home, ".ssh", "id_fake"), filepath.Join(b.home, ".config", "gh", "hosts.yml"), agent} {
 		r := support.Jhon(t, b.proj, b.env, "sandbox", "run", "--profile", "delivery", "--", "cat", p)
-		if r.Code != 0 || r.Stdout != secret+"\n" {
-			t.Errorf("delivery reads %s: exit %d, stdout %q, stderr %q; want its content", p, r.Code, r.Stdout, r.Stderr)
+		if r.Code != 2 || r.Stdout != "" || !strings.HasPrefix(r.Stderr, "jhon sandbox: unknown profile: delivery (accepted: work)\n") {
+			t.Errorf("delivery reads %s: exit %d, stdout %q, stderr %q; want the usage error and nothing read", p, r.Code, r.Stdout, r.Stderr)
 		}
-	}
-	for _, dir := range []string{".ssh", ".config/gh"} {
-		file := filepath.Join(b.home, dir, "new")
-		r := support.Jhon(t, b.proj, b.env, "sandbox", "run", "--profile", "delivery", "--", "sh", "-c", `echo x > "$1"`, "sh", file)
-		if r.Code == 0 || !strings.Contains(r.Stderr, "Read-only file system") || exists(file) {
-			t.Errorf("delivery writes %s: exit %d, stderr %q; want a read-only refusal and no file", file, r.Code, r.Stderr)
-		}
-	}
-	// The rest stays hidden.
-	r := support.Jhon(t, b.proj, b.env, "sandbox", "run", "--profile", "delivery", "--", "sh", "-c", `cat "$HOME/.aws/credentials" "$HOME/.netrc" "$XDG_RUNTIME_DIR/bus"; true`)
-	if strings.Contains(r.Out(), secret) {
-		t.Errorf("delivery shows more than the delivery credentials:\n%s", r.Out())
 	}
 }
 
@@ -340,7 +330,7 @@ func TestRunRefusesWhatItCannotRead(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"an unknown profile", []string{"run", "--profile", "root", "--", "touch", marker}, "jhon sandbox: unknown profile: root (accepted: work, delivery)\n"},
+		{"an unknown profile", []string{"run", "--profile", "root", "--", "touch", marker}, "jhon sandbox: unknown profile: root (accepted: work)\n"},
 		{"no program", []string{"run", "--"}, "jhon sandbox: run takes a program after --\n"},
 		{"no --", []string{"run", "touch", marker}, "jhon sandbox: run takes a program after --\n"},
 		{"an unknown subcommand", []string{"wrap"}, "jhon sandbox: unknown subcommand: wrap\n"},

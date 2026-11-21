@@ -436,7 +436,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            pointer. A sibling is a member only while the
                            primary lists it; jhon status reports the workspace.
                            Joining and leaving are yours alone, as a mode is
-  jhon sandbox run [--profile work|delivery] [--project <folder>] -- <program> [args...]
+  jhon sandbox run [--profile work] [--project <folder>] -- <program> [args...]
                            run the program under bubblewrap (Linux), in its
                            place: stdin, stdout, stderr, the exit code and
                            signals are the program's. It may write the
@@ -493,10 +493,8 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            ICE's socket folders under /tmp. GH_TOKEN,
                            GITHUB_TOKEN, GH_ENTERPRISE_TOKEN,
                            GITHUB_ENTERPRISE_TOKEN, SSH_AUTH_SOCK,
-                           GIT_ASKPASS and SSH_ASKPASS are unset.
-                           --profile delivery shows ~/.ssh, ~/.config/gh
-                           and the agent socket, read-only, and keeps those
-                           variables. No network or process isolation:
+                           GIT_ASKPASS and SSH_ASKPASS are unset. No
+                           network or process isolation:
                            abstract unix sockets stay reachable (closing
                            them takes a network namespace), and with no PID
                            namespace a child the program detaches (setsid,
@@ -510,7 +508,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            stderr, the sandbox refused a write to <path>;
                            that is a stop: tell the owner the path (jhon
                            settings sandbox.allow_write), never write it
-                           elsewhere; and with telemetry on each run
+                           elsewhere; a failure of a line that holds git
+                           with a network subcommand or gh ends with one
+                           line, git over SSH and gh run outside the
+                           sandbox only on a line of their own, with no
+                           pipes, $(…) or other commands: run it alone, as
+                           in git -C <dir> fetch origin main; and with
+                           telemetry on each run
                            records a jhon.sandbox event (its profile, work
                            or unsandboxed, and the exit code). The
                            runtimes' --profile unsandboxed runs <shell> -c
@@ -554,8 +558,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            on it is git with a network subcommand (fetch,
                            pull, push, ls-remote, clone, remote update) and
                            only listed options, working inside the project
-                           (the working directory, its -C folders and a
-                           clone's new folder), or gh with a listed
+                           (the working directory, a leading cd <folder> &&
+                           whose folder has no .. part, its -C folders and
+                           a clone's new folder), or gh with a listed
                            subcommand (not auth, extension, alias, config
                            or a name gh does not know) that runs no git,
                            reads no local file and downloads nothing, or
@@ -566,8 +571,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            redirects to no file; work for any other line,
                            and for one it cannot read or whose words the
                            shell would still rewrite (a $, a backtick, an
-                           unquoted glob or brace, an unquoted ~ that names
-                           a home folder; a single-quoted word,
+                           unquoted glob or brace but a lone {word} such as
+                           gh's {owner} outside zsh, an unquoted ~ that
+                           names a home folder; a single-quoted word,
                            or a double-quoted one with no $ or backtick, is
                            literal: --format '{{.Names}}'). git over SSH,
                            gh and the owner's docker cannot run inside the

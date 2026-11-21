@@ -44,7 +44,8 @@ var hookEvents = []string{
 }
 
 // UnsandboxedEnv is env (KEY=VALUE) for an unsandboxed line: without
-// GIT_CONFIG_PARAMETERS, and with gitOverrides as GIT_CONFIG_KEY_<n> and
+// GIT_CONFIG_PARAMETERS and CDPATH (a leading `cd <folder>` goes where
+// ProfileAt judged it, T181), and with gitOverrides as GIT_CONFIG_KEY_<n> and
 // GIT_CONFIG_VALUE_<n> after the owner's own GIT_CONFIG_COUNT entries (none
 // when the count is not a number), the owner's credential helpers (each a
 // key and a value, as `git config --get-regexp` lists the global and system
@@ -61,7 +62,7 @@ func UnsandboxedEnv(env []string, helpers [][2]string) []string {
 	var out []string
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
-		if k == "GIT_CONFIG_PARAMETERS" || k == "GIT_CONFIG_COUNT" {
+		if k == "GIT_CONFIG_PARAMETERS" || k == "GIT_CONFIG_COUNT" || k == "CDPATH" {
 			continue
 		}
 		if i, ok := configIndex(k); ok && i >= n {

@@ -59,7 +59,7 @@ func TestHelpersAreTheCredentialHelpersGitLists(t *testing.T) {
 
 // L1305: uv's tool folders move under the cache, unless the owner set them.
 func TestUVToolEnvMovesUvsToolFoldersUnderTheCache(t *testing.T) {
-	in := sample(Work, machine)
+	in := sample(machine)
 	if got := strings.Join(UVToolEnv(in), " "); got != "UV_TOOL_DIR=/home/u/.cache/jhon/sandbox/uv-tools UV_TOOL_BIN_DIR=/home/u/.cache/jhon/sandbox/uv-tools/bin" {
 		t.Errorf("UVToolEnv = %s", got)
 	}

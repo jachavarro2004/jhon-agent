@@ -22,7 +22,7 @@ func TestModeIsOnByDefaultWhereTheSandboxCanRun(t *testing.T) {
 	installed := with(machine, disk{"/usr/bin": "dir", "/usr/bin/bwrap": "file"})
 	userns := map[string]string{"/proc/sys/user/max_user_namespaces": "0\n"}
 	input := func(d disk) Input {
-		in := sample(Work, d)
+		in := sample(d)
 		in.Path = []string{"/usr/bin"}
 		return in
 	}
