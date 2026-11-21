@@ -1,6 +1,11 @@
 package audit
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 // A runtime's automatic notices are not the owner's messages (L48): a
 // compaction summary, a background job or sub-agent that ended, a
@@ -16,6 +21,11 @@ func TestAutomaticNoticesAreNotOwnerMessages(t *testing.T) {
 		{"The conversation history before this point was compacted into the following summary:\n<summary>", false},
 		{"Subagent gentle-ai-verify (task x, \"verify\") finished.\n\nverdict: pass", false},
 		{"Background job \"t\" exited.\n[System-generated Gentle Agents notification, not written by the user]", false},
+		// T194 (L1608): pi records the shell's send-back and stall continue as user messages, marked.
+		{ShellMark + " Jhon: your turn ended with an empty reply. Continue the work, or say in one line why you stopped.", false},
+		{ShellMark + " The Claude API sent no answer for 75s; the turn was restarted. Continue where you stopped.", false},
+		{ShellMark + " Background job job-1 (\"build\") exited with code 0 after 4s.", false},
+		{"Revisa esto: " + ShellMark, true},
 	} {
 		text := c.text
 		e := &Entry{Role: "user", Prompt: &text}
@@ -38,5 +48,16 @@ func TestUnverifiedVersionsOneNote(t *testing.T) {
 	}
 	if none := unverifiedNote([]string{SupportedVersions[0]}); none != "" {
 		t.Errorf("no note when every version is verified: %q", none)
+	}
+}
+
+// T194: the audit's mark is the shell's, shell/lib/from-the-shell.ts NOT_THE_OWNER.
+func TestShellMarkIsTheShells(t *testing.T) {
+	ts, err := os.ReadFile(filepath.Join("..", "..", "..", "shell", "lib", "from-the-shell.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `export const NOT_THE_OWNER = "` + ShellMark + `";`; !strings.Contains(string(ts), want) {
+		t.Errorf("from-the-shell.ts does not hold %s", want)
 	}
 }

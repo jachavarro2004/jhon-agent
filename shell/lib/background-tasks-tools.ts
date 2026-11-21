@@ -33,6 +33,7 @@ import { CARD_TONE, renderCard, type CardTheme } from "./ui/primitives/index.ts"
 import { TasksView } from "./ui/tasks-view.ts";
 import { createMonitorController, MONITOR_BATCH_MS, MONITOR_FLOOD_LINES, MONITOR_FLOOD_WINDOW_MS, MONITOR_LINES_PER_NOTICE, MONITOR_MAX_TIMEOUT_SECONDS, type MonitorBatch, type MonitorNotice, type MonitorStopReason } from "./ui/task-monitor.ts";
 import { sanitizeTerminalText } from "./ui/terminal-theme.ts";
+import { fromTheShell, withoutTheMark } from "./from-the-shell.ts";
 
 /** The custom message type of every task notice. */
 export const TASK_NOTICE_TYPE = "jhon-tasks.notice";
@@ -335,7 +336,8 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 			return;
 		}
 		const event = notice.kind === "end" ? undefined : notice.kind === "events" ? "events" : notice.reason;
-		const content = notice.kind === "end" ? taskNoticeText(task, now(), notice.stoppedBy) : monitorNoticeText(notice);
+		// pi hands the notice to the model as user text: it says it is not the owner (T194).
+		const content = fromTheShell(notice.kind === "end" ? taskNoticeText(task, now(), notice.stoppedBy) : monitorNoticeText(notice));
 		const message = { customType: TASK_NOTICE_TYPE, content, display: true, details: taskDetails(task, event) };
 		// pi queues a follow-up sent during a turn, and the owner's Esc clears
 		// that queue: agent-2's notice was lost so (T47, L164). Held here, it
@@ -504,7 +506,8 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 	pi.registerMessageRenderer?.(TASK_NOTICE_TYPE, (message: any, options: any, theme: unknown) => {
 		const info = (message.details as { jhonTasks?: { label?: string; kind?: string; event?: string; succeeded?: boolean } } | undefined)?.jhonTasks;
 		const content: string = typeof message.content === "string" ? message.content : message.content.map((part: any) => (part.type === "text" ? part.text : "")).join("\n");
-		const body = sanitizeTerminalText(content).split("\n");
+		// The owner's card shows the notice without the shell's mark.
+		const body = sanitizeTerminalText(withoutTheMark(content)).split("\n");
 		const tone = info?.event === "events" ? CARD_TONE.INFO : info?.succeeded ? CARD_TONE.SUCCESS : CARD_TONE.ERROR;
 		const title = info?.kind === "monitor" ? "Monitor" : info?.kind === "agent" ? "Sub-agent" : "Background job";
 		const action = options.expanded ? "collapse" : "expand";
@@ -655,7 +658,7 @@ export function registerBackgroundTasks(pi: any, deps: BackgroundTasksDeps = {})
 			const left = awaited();
 			const notice = `Headless session: stopped waiting after ${formatTaskDuration(headlessWaitMs)} for ${count(left.length, "background task")} (${left.map((task) => task.label).join(", ")}); ${left.length === 1 ? "its result is" : "their results are"} lost.`;
 			warn(notice);
-			pi.sendMessage({ customType: TASK_NOTICE_TYPE, content: notice, display: true }, { triggerTurn: false });
+			pi.sendMessage({ customType: TASK_NOTICE_TYPE, content: fromTheShell(notice), display: true }, { triggerTurn: false });
 			return undefined;
 		}
 		const out = held;

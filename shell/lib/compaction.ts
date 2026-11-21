@@ -27,6 +27,7 @@
  * (getContextUsage, agent-session.js:3607-3634), so nothing recompacts on the
  * stale usage. A child never compacts here (lib/child-budget.ts).
  */
+import { fromTheShell } from "./from-the-shell.ts";
 
 /** The custom message that continues a run its compaction interrupted. */
 export const COMPACTION_CONTINUE_ENTRY = "jhon-compaction-continue";
@@ -61,8 +62,9 @@ export function compactionDue(usage: ContextUsage, at: number | undefined, budge
 	return { byShare, notice, attributes };
 }
 
+/** The message that continues a run a compaction stopped; it says it is not the owner (T194). */
 export function continueNotice(): string {
-	return "[Harness note from the Jhon shell, not a message from the owner] The context was compacted between the turns of your run, which stopped it. Continue the interrupted work from where the summary leaves it; do not repeat finished steps or ask the owner again.";
+	return fromTheShell("The context was compacted between the turns of your run, which stopped it. Continue the interrupted work from where the summary leaves it; do not repeat finished steps or ask the owner again.");
 }
 
 const headless = (ctx: any) => { try { return ctx?.mode === "print" || ctx?.mode === "json"; } catch { return false; } };

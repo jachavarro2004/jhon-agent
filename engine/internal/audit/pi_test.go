@@ -820,6 +820,27 @@ func TestPiVerifyVerdictFromABackgroundNotice(t *testing.T) {
 	eq(t, "another task's notice: verdicts", other.Verdicts, [3]int{0, 0, 1})
 }
 
+// T194 (L1608): the shell marks every task notice; a marked sub-agent
+// notice still delivers its launch's answer, and is no owner message.
+func TestPiVerifyVerdictFromAMarkedBackgroundNotice(t *testing.T) {
+	task := "Verify openspec/changes/" + chg + "/ against its specs"
+	started := "Started background sub-agent agent-1 (jhon-checker). Its answer arrives as a message when it finishes; task_result reads it, task_stop cancels it."
+	for _, c := range []struct {
+		answer string
+		want   [3]int
+	}{
+		{"verdict: pass\n\nEvery scenario holds.", [3]int{1, 0, 0}},
+		{"verdict: fail\n\nS2 does not hold.", [3]int{0, 1, 0}},
+	} {
+		marked := pagentNotice("agent-1", "jhon-checker", c.answer)
+		marked.text = ShellMark + " " + marked.text
+		notice := outcomeOf(piAudit(t, pstart("tui"), puser("verify it"), psub("jhon-checker", task, started),
+			preply("The checker runs in the background."), marked), chg)
+		eq(t, "marked notice verdicts", notice.Verdicts, c.want)
+		eq(t, "marked notice unfinished", notice.Unfinished, 0)
+	}
+}
+
 // T192 S8: a background answer read with task_result after its notice was lost is no unfinished agent.
 func TestPiBackgroundAnswerReadThroughTaskResult(t *testing.T) {
 	task := "Verify openspec/changes/" + chg + "/ against its specs"

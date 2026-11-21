@@ -22,6 +22,7 @@ import {
 } from "../lib/todo.ts";
 import { counted } from "../lib/ui-use.ts";
 import { shellSettings } from "../lib/settings.ts";
+import { NOT_THE_OWNER, fromTheShell, withoutTheMark } from "../lib/from-the-shell.ts";
 
 /*
  * The agent's todo list: the `todo` tool and where the list shows.
@@ -61,8 +62,8 @@ const REMINDER_AFTER = 4;
 const START_NUDGE_AFTER = 3;
 
 // pi hands a custom message to the model as user text, so every nudge says
-// who speaks first (T42d).
-const FROM_THE_HARNESS = "[Harness reminder from the Jhon shell, not a message from the owner] ";
+// who speaks first (T42d), and that it does not set the reply language (T194).
+const FROM_THE_HARNESS = `${NOT_THE_OWNER} `;
 const REMINDER_TEXT = `${FROM_THE_HARNESS}Several tool-use turns went by without a look at the todo list. Compare it with the work done so far and update any task that no longer matches. Mark nothing done until it is verified.`;
 const START_TEXT = `${FROM_THE_HARNESS}This work has several steps and no todo list. Write your own next steps for this request with todo write and keep them current; the change's tasks stay in \`jhon status\`.`;
 
@@ -170,12 +171,12 @@ function newSession(id: string): ListSession {
 	return { id, state: emptyTodo(), turn: 0, turnsWithoutUpdate: 0, reminded: false, updatedThisTurn: false, ownerTurns: 0, ownerChanged: false, startSent: false, emptiedThisMessage: false, clearAtNextRun: false, folded: false, top: 0, ui: undefined, tui: undefined };
 }
 
-/** The last list block a branch carries already. */
+/** The last list block a branch carries already, without the shell's mark (a branch from before T194 has none). */
 function lastBlockOn(branch: readonly unknown[]): string | undefined {
 	let last: string | undefined;
 	for (const item of branch) {
 		const entry = item as { type?: string; customType?: string; content?: unknown };
-		if (entry?.type === "custom_message" && entry.customType === TODO_LIST_MESSAGE && typeof entry.content === "string") last = entry.content;
+		if (entry?.type === "custom_message" && entry.customType === TODO_LIST_MESSAGE && typeof entry.content === "string") last = withoutTheMark(entry.content);
 	}
 	return last;
 }
@@ -384,7 +385,8 @@ export default function jhonTodo(pi: ExtensionAPI, env: NodeJS.ProcessEnv = proc
 		// T115d: sent as a persisted message when it changed; never in the system prompt.
 		if (!block || block === list.lastBlock) return undefined;
 		list.lastBlock = block;
-		return { message: { customType: TODO_LIST_MESSAGE, content: block, display: false } };
+		// pi hands it to the model as user text: it says it is not the owner (T194).
+		return { message: { customType: TODO_LIST_MESSAGE, content: fromTheShell(block), display: false } };
 	});
 
 	pi.on("turn_end", (event, ctx) => {

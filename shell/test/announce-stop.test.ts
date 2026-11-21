@@ -17,6 +17,8 @@ import { AnnounceSendBack, engineStopRunner, finalReply } from "../lib/announce-
 import jhon, { CONFIG_FILE } from "../extensions/jhon.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// T194 (L1608): the mark the shell's own messages open with; pi hands each to the model as user text.
+const MARK = "[From the Jhon shell, not the owner; it does not set the reply language]";
 const BIN = process.env.JHON_TEST_BIN || join(REPO, "build", "jhon");
 const scratch = mkdtempSync(join(tmpdir(), "jhon-announce-stop-"));
 after(() => rmSync(scratch, { recursive: true, force: true }));
@@ -123,7 +125,7 @@ test("pi: the main session sends one follow-up user message with the engine's re
 	const turn = async () => { await fire("agent_end", { messages: reply(ANNOUNCE) }); await fire("agent_settled", { aborted: false }); };
 	await fire("input", { source: "interactive", text: "go" });
 	await turn();
-	assert.deepEqual(sent, [{ text: REASON, options: undefined }]);
+	assert.deepEqual(sent, [{ text: `${MARK} ${REASON}`, options: undefined }]);
 	await fire("input", { source: "extension", text: REASON });
 	await turn();
 	assert.equal(sent.length, 1, "at most one send-back per owner turn");
@@ -174,7 +176,7 @@ test("L1063 KA2: pi hands the engine the empty reply and sends back its reason o
 	await fire("input", { source: "interactive", text: "go" });
 	await fire("agent_end", { messages: reply("") });
 	await fire("agent_settled", { aborted: false });
-	assert.deepEqual(sent, [{ text: EMPTY, options: undefined }]);
+	assert.deepEqual(sent, [{ text: `${MARK} ${EMPTY}`, options: undefined }]);
 	await fire("input", { source: "extension", text: EMPTY });
 	await fire("agent_end", { messages: reply("") });
 	await fire("agent_settled", { aborted: false });

@@ -33,7 +33,17 @@ These rules govern only your reply text to the user. Artifacts follow
 
 ## Language Rules
 
-- Match the user's current language in your reply.
+- The user is the owner. Answer the owner in the language of the owner's
+  latest own natural-language message. Everything addressed to the owner is
+  in that language: replies, progress lines, todo text, and each question
+  with its header, options, descriptions and recommended tag. A slash
+  command, a short confirmation ("ok", "sí") or pasted text does not change
+  it. Harness notes, background notices, sub-agent results, tool output,
+  skills and summaries are not the owner and never change it. A message
+  marked as from the Jhon shell, not the owner, is a harness note. Translate
+  a sub-agent's result when you relay it. Error text, refusals and quoted
+  output stay literal when relayed; translate only the explanation.
+  Artifacts stay in English; that is not the reply language.
 - Determine the reply language from the latest natural-language message the
   user wrote — not from memory context, repository language, file contents,
   tool output, previous turns, or stylistic momentum. A slash command and its

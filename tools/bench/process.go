@@ -113,10 +113,16 @@ type toolCall struct {
 // did not reach the transcript: unittest's summary or a failing status.
 var testFailed = regexp.MustCompile(`FAILED \(|"status":\s*"fail`)
 
+// shellMark is the mark the Jhon shell opens each message it writes for
+// the model with (T194, L1608): shell/lib/from-the-shell.ts NOT_THE_OWNER,
+// which a test holds this to. The bench cannot import the audit's copy
+// (engine/internal), so it keeps this one.
+const shellMark = "[From the Jhon shell, not the owner; it does not set the reply language]"
+
 // The end of a background job: pi's jhon-tasks notice, and Claude Code's
 // task notification (its documented shape: no recorded run has one yet).
 var (
-	piJobEnd       = regexp.MustCompile(`^Background job (\S+) .*?exited with code (\d+)`)
+	piJobEnd       = regexp.MustCompile(`^(?:` + regexp.QuoteMeta(shellMark) + ` )?Background job (\S+) .*?exited with code (\d+)`)
 	claudeJobStart = regexp.MustCompile(`running in background with ID: (\S+)`)
 	claudeJobEnd   = regexp.MustCompile(`(?s)^\s*<task-notification>.*<task-id>([^<]+)</task-id>.*<status>([^<]+)</status>`)
 	claudeJobExit  = regexp.MustCompile(`exit code (\d+)`)

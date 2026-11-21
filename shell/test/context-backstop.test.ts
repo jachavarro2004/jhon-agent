@@ -24,6 +24,8 @@ import { installShellSettings, SETTINGS_DEFAULTS, shellSettings } from "../lib/s
 import { memorySettings } from "./fake-jhon-settings.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// T194 (L1608): the mark the shell's own messages open with; pi hands each to the model as user text.
+const MARK = "[From the Jhon shell, not the owner; it does not set the reply language]";
 const temps: string[] = [];
 after(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
 function tempDir(prefix: string): string {
@@ -202,9 +204,9 @@ test("the ladder: after a reply past both the backstop and the fresh-session bud
   assert.equal(sent[0].customType, FRESH_SESSION_ENTRY);
   assert.equal(sent[0].display, false);
   assert.deepEqual(sent[0].options, { deliverAs: "nextTurn" });
-  assert.ok(sent[0].content.startsWith(notice(160, 100)), sent[0].content);
+  assert.ok(sent[0].content.startsWith(`${MARK} ${notice(160, 100)}`), sent[0].content);
   assert.match(sent[0].content, /One session per change: the context is at 160K tokens, past its 150K-token budget/);
-  assert.deepEqual(state.notes, [sent[0].content], "one notice for the owner");
+  assert.deepEqual(state.notes, [sent[0].content.slice(MARK.length + 1)], "one notice for the owner, unmarked");
 });
 
 test("after a reply past the backstop alone, a persisted backstop message", async (t) => {
@@ -213,7 +215,7 @@ test("after a reply past the backstop alone, a persisted backstop message", asyn
   const { ctx, state } = usage(1_000_000);
   state.tokens = 110_000;
   await fire("agent_settled", {}, ctx);
-  assert.deepEqual(sent.map((m) => [m.customType, m.content]), [[BACKSTOP_ENTRY, notice(110, 100)]]);
+  assert.deepEqual(sent.map((m) => [m.customType, m.content]), [[BACKSTOP_ENTRY, `${MARK} ${notice(110, 100)}`]]);
   await fire("agent_settled", {}, ctx);
   assert.equal(sent.length, 1, "once per crossing");
 });

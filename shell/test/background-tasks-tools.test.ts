@@ -22,6 +22,9 @@ import { envOverrides, memorySettings } from "./fake-jhon-settings.ts";
 // The settings `jhon settings` would give the shell under an environment (S38).
 const envSettings = (env: NodeJS.ProcessEnv) => memorySettings({}, undefined, envOverrides(env));
 
+// T194 (L1608): what every notice the model reads opens with; pi hands a notice to the model as user text.
+const MARK = "[From the Jhon shell, not the owner; it does not set the reply language]";
+
 const dirs: string[] = [];
 after(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
 
@@ -46,11 +49,12 @@ function harness(env: NodeJS.ProcessEnv = {}, extra: Partial<BackgroundTasksDeps
 	const emitted: Array<{ name: string; value: any }> = [];
 	const listeners = new Map<string, (value: any) => void>();
 	const entries: Array<[string, unknown]> = [];
+	const renderers = new Map<string, any>();
 	const pi = {
 		appendEntry: (type: string, data: unknown) => { entries.push([type, data]); },
 		registerTool: (tool: any) => tools.set(tool.name, tool),
 		registerCommand: (name: string, command: any) => commands.set(name, command),
-		registerMessageRenderer: () => {},
+		registerMessageRenderer: (type: string, render: any) => { renderers.set(type, render); },
 		on: (name: string, handler: Handler) => handlers.set(name, [...(handlers.get(name) ?? []), handler]),
 		sendMessage: (message: any, options: any) => { sent.push({ message, options }); },
 		events: { emit: (name: string, value: any) => emitted.push({ name, value }), on: (name: string, fn: (v: any) => void) => { listeners.set(name, fn); return () => listeners.delete(name); } },
@@ -71,7 +75,7 @@ function harness(env: NodeJS.ProcessEnv = {}, extra: Partial<BackgroundTasksDeps
 		return result;
 	};
 	const run = (name: string, params: any) => tools.get(name).execute("call-1", params, undefined, undefined, ctx);
-	return { tools, commands, sent, emitted, listeners, entries, shell, answers, background, ctx, fire, run };
+	return { tools, commands, sent, emitted, listeners, entries, renderers, shell, answers, background, ctx, fire, run };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
@@ -403,7 +407,7 @@ test("a long sub-agent result arrives bounded at a line, with how much was left 
 	const result = Array.from({ length: 200 }, (_, i) => `line ${i} ${"x".repeat(40)}`).join("\n");
 	const { h, agent, content, details } = await agentNotice(result);
 	assert.ok(content.length < 2_000, `notice is ${content.length} chars`);
-	assert.ok(content.startsWith("Background sub-agent agent-1 (worker) completed after 0s.\n\nline 0 "));
+	assert.ok(content.startsWith(`${MARK} Background sub-agent agent-1 (worker) completed after 0s.\n\nline 0 `));
 	const shown = content.split("\n\n").slice(1).join("\n\n").split("\n").slice(0, -1);
 	for (const line of shown) assert.match(line, /^line \d+ x{40}$/, "cut at a line boundary");
 	const left = result.length - shown.join("\n").length;
@@ -428,9 +432,33 @@ test("a long JSON result (a review facet's report) is summarized by its key fiel
 	assert.ok((await h.run("task_result", { id: agent.id })).content[0].text.endsWith(`\n\n${report}`));
 });
 
-test("a short result's notice is unchanged", async () => {
+test("a short result's notice carries the result whole, after the shell's mark", async () => {
 	const { content } = await agentNotice('{"findings":[],"evidence":["read a.ts"]}');
-	assert.equal(content, 'Background sub-agent agent-1 (worker) completed after 0s.\n\n{"findings":[],"evidence":["read a.ts"]}');
+	assert.equal(content, `${MARK} Background sub-agent agent-1 (worker) completed after 0s.\n\n{"findings":[],"evidence":["read a.ts"]}`);
+});
+
+// T194 (L1608): an English notice arrives as user text; its mark says it is not the owner and sets no reply language.
+test("every notice the model reads opens with the shell's mark; the owner's card and task_result's answer do not show it", async () => {
+	const h = harness();
+	await h.fire("session_start");
+	const agent = h.background!.startAgent(worker, "review", h.ctx.cwd, "main");
+	h.answers[0]!({ ok: true, text: "found 3 callers" });
+	await until(() => h.sent.length > 0);
+	await h.tools.get("bash_background").execute("call-1", { command: "make build", label: "build" }, undefined, undefined, h.ctx);
+	h.shell.runs[0]!.finish(0);
+	await until(() => h.sent.length > 1);
+	await h.tools.get("monitor").execute("call-2", { command: "tail -f x", timeout_seconds: 60, label: "watch" }, undefined, undefined, h.ctx);
+	h.shell.runs[1]!.output("ready\n");
+	await until(() => h.sent.length > 2);
+	for (const { message } of h.sent) assert.ok(message.content.startsWith(`${MARK} `), message.content);
+	assert.equal(h.sent[0]!.message.content, `${MARK} Background sub-agent agent-1 (worker) completed after 0s.\n\nfound 3 callers`);
+	const plain = { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text };
+	for (const { message } of h.sent) {
+		const card = h.renderers.get(TASK_NOTICE_TYPE)(message, { expanded: true }, plain).render(80).join("\n");
+		assert.doesNotMatch(card, /From the Jhon shell/, card);
+		assert.ok(card.includes(message.content.slice(MARK.length + 1).split(" ").slice(0, 2).join(" ")), card);
+	}
+	assert.equal((await h.run("task_result", { id: agent.id })).content[0].text, "Background sub-agent agent-1 (worker) completed after 0s.\n\nfound 3 callers");
 });
 
 test("a JSON summary lists the most severe findings first and counts the unlisted ones by severity", async () => {
@@ -517,8 +545,8 @@ test("a headless run stops waiting at the cap, with a notice, and the run ends",
 	assert.equal(h.sent.length, 1);
 	assert.deepEqual(h.sent[0]!.options, { triggerTurn: false });
 	const notice = "Headless session: stopped waiting after 0s for 1 background task (worker: review); its result is lost.";
-	assert.equal(h.sent[0]!.message.content, notice);
-	assert.deepEqual(h.warned, [notice]);
+	assert.equal(h.sent[0]!.message.content, `${MARK} ${notice}`);
+	assert.deepEqual(h.warned, [notice], "the line on stderr is the owner's, unmarked");
 });
 
 test("an interactive or RPC session never waits at agent_before_settle: completions wake the next turn", async () => {

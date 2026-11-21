@@ -3,7 +3,7 @@
 		"main": {
 			"name": "ask_user",
 			"label": "Ask the owner",
-			"description": "Ask the owner 1 to 4 questions and wait. Each takes 2 to 4 options (label, meaning) or none for a free answer; a typed answer is always offered, so never add one. multiSelect allows several picks. Put a recommended option first, its label ending in \"(Recommended)\". Only the interactive main session can ask.",
+			"description": "Ask the owner 1 to 4 questions and wait, questions and options in the owner's reply language. Each takes 2 to 4 options or none for a free answer; a typed answer is offered; never add one. multiSelect allows several picks. Recommended option first, label ending \"(Recommended)\" translated. Only the interactive main session asks.",
 			"parameters": {
 				"type": "object",
 				"additionalProperties": false,
@@ -35,7 +35,7 @@
 									"type": "array",
 									"minItems": 2,
 									"maxItems": 4,
-									"description": "The choices; omit them for a free answer.",
+									"description": "The choices.",
 									"items": {
 										"type": "object",
 										"additionalProperties": false,
@@ -67,7 +67,7 @@
 		"child": {
 			"name": "ask_user",
 			"label": "Ask the owner",
-			"description": "Ask the owner 1 to 4 questions and wait. Each takes 2 to 4 options (label, meaning) or none for a free answer; a typed answer is always offered, so never add one. multiSelect allows several picks. Put a recommended option first, its label ending in \"(Recommended)\". Only the interactive main session can ask.",
+			"description": "Ask the owner 1 to 4 questions and wait, questions and options in the owner's reply language. Each takes 2 to 4 options or none for a free answer; a typed answer is offered; never add one. multiSelect allows several picks. Recommended option first, label ending \"(Recommended)\" translated. Only the interactive main session asks.",
 			"parameters": {
 				"type": "object",
 				"additionalProperties": false,
@@ -99,7 +99,7 @@
 									"type": "array",
 									"minItems": 2,
 									"maxItems": 4,
-									"description": "The choices; omit them for a free answer.",
+									"description": "The choices.",
 									"items": {
 										"type": "object",
 										"additionalProperties": false,

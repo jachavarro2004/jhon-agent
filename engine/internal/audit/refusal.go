@@ -3,6 +3,7 @@ package audit
 import (
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -100,13 +101,24 @@ var injected = lazyre.New(`^` + space + `*<(task-notification|system-reminder|lo
 // system-generated wake (L48).
 var notice = lazyre.New(`(?s)^` + space + `*(The conversation history before this point was compacted|Background (job|sub-agent) .*\b(exited|completed|failed|finished)\b|Subagent \S+ (\(task [^)]*\) )?(finished|asks|failed)|.*\[System-generated [^\]]*notification, not written by the user\])`)
 
+// ShellMark is the mark the Jhon shell opens each message it writes for the
+// model with (T194, L1608): shell/lib/from-the-shell.ts NOT_THE_OWNER, which
+// a test holds this to. pi records the shell's announce-stop send-back and
+// stall continue as user messages; the mark tells them from the owner's.
+const ShellMark = "[From the Jhon shell, not the owner; it does not set the reply language]"
+
+// shellMarked is a message that opens with ShellMark.
+var shellMarked = lazyre.New(`^` + space + `*` + regexp.QuoteMeta(ShellMark))
+
 // IsGenuineUserMessage is whether an entry is a message the user wrote: a
 // user entry that is neither a tool result nor a message the runtime
 // injects. The runtime marks a typed prompt `origin.kind: human`, including
 // one delivered mid-turn as a `queued_command`, and a task notification
-// `origin.kind: task-notification`.
+// `origin.kind: task-notification`. A message that opens with the Jhon
+// shell's mark is the shell's, whatever its origin: pi records its
+// send-back and stall continue as typed user messages.
 func IsGenuineUserMessage(e *Entry) bool {
-	if e.Role != "user" || e.IsMeta || len(e.ToolResults) > 0 {
+	if e.Role != "user" || e.IsMeta || len(e.ToolResults) > 0 || shellMarked.MatchString(e.note()) {
 		return false
 	}
 	if e.Origin != nil {

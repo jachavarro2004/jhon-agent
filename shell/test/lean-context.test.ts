@@ -18,6 +18,9 @@ import { LDD_REMINDER } from "../lib/ldd-reminder.ts";
 // On a lean session Jhon's own tools wait behind tools_more (L3), except the
 // delegation tools, offered from the first request (T192 S3).
 
+// T194 (L1608): the mark the shell's own messages open with; pi hands each to the model as user text.
+const MARK = "[From the Jhon shell, not the owner; it does not set the reply language]";
+
 /** T192 S3: the delegation tools every main session is offered from its first request, lean or full. */
 const DELEGATION = ["subagent", "subagent_continue", "task_list", "task_result", "task_stop", "bash_background", "monitor"];
 
@@ -241,6 +244,7 @@ test("a not-small status, or a sub-agent launch, loads the full context once, as
 		const full = s.sent.filter((m) => m.message.customType === FULL_MESSAGE);
 		assert.equal(full.length, 1, trigger.toolName);
 		assert.match(full[0].message.content, /FULL PROMPT/);
+		assert.ok(full[0].message.content.startsWith(`${MARK} Jhon: this work needs the full context; it binds from now on.\n\n`), full[0].message.content);
 		assert.equal(full[0].message.display, false);
 		assert.equal(options.appendSystemPrompt, prompt, "the system prompt never changes");
 		assert.ok(s.active().includes("subagent") && s.active().includes("jhon_review"), "Jhon's tools are back");

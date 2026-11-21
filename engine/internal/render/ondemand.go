@@ -135,12 +135,6 @@ var onDemandContracts = []onDemandContract{
 // matches across line breaks.
 func flattened(s string) string { return strings.Join(strings.Fields(s), " ") }
 
-// fixedText is the orchestrator's fixed context as runtime renders it: its
-// body, then the always-on layer it carries.
-func (e *engine) fixedText(runtime string) string {
-	return e.bodyFor(runtime, e.mainAgent(piMain)) + "\n\n" + e.alwaysOnSection(runtime, true)
-}
-
 // fixedParts are the prose files the fixed context of runtime is made of,
 // relative to prose/, each as runtime renders it, flattened: the
 // orchestrator's body, then each always-on file.

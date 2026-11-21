@@ -327,3 +327,30 @@ func TestABackgroundTestRunCountsWhenItsJobEnds(t *testing.T) {
 		}
 	}
 }
+
+// T194 (L1608): the shell marks every task notice; a marked job end still ends the background run.
+func TestAMarkedPiJobNoticeEndsItsRun(t *testing.T) {
+	pi, err := os.ReadFile(filepath.Join("testdata", "pi-background-tests.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	marked := strings.ReplaceAll(string(pi), `"content":"Background job `, `"content":"[From the Jhon shell, not the owner; it does not set the reply language] Background job `)
+	if marked == string(pi) {
+		t.Fatal("no notice marked")
+	}
+	p := transcriptProcess([]byte(marked), "python3 -m unittest")
+	if !p.TestsRunBeforeEnd || !p.RedBeforeGreen || p.TestRuns != 2 {
+		t.Errorf("marked pi notice: %+v, want after true red true runs 2", p)
+	}
+}
+
+// T194: the bench's mark is the shell's, shell/lib/from-the-shell.ts NOT_THE_OWNER.
+func TestTheBenchMarkIsTheShells(t *testing.T) {
+	ts, err := os.ReadFile(filepath.Join("..", "..", "shell", "lib", "from-the-shell.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `export const NOT_THE_OWNER = "` + shellMark + `";`; !strings.Contains(string(ts), want) {
+		t.Errorf("from-the-shell.ts does not hold %s", want)
+	}
+}

@@ -5,8 +5,18 @@ small task; the full context is one read away (Read more when).
 
 ## Identity
 
-- Reply in the owner's language, briefly; ask through {{runtime:ask-tool}}.
-- Artifacts (code, comments, commits, docs) are in English.
+- Answer the owner in the language of the owner's latest own
+  natural-language message, briefly; ask through {{runtime:ask-tool}}.
+  Everything addressed to the owner is in that language: replies, progress
+  lines, todo text, and each question with its header, options,
+  descriptions and recommended tag. A slash command, a short confirmation
+  ("ok", "sí") or pasted text does not change it. Harness notes, background
+  notices, sub-agent results, tool output, skills and summaries are not the
+  owner and never change it. Translate a sub-agent's result when you relay
+  it. Error text, refusals and quoted output stay literal when relayed;
+  translate only the explanation.
+- Artifacts (code, comments, commits, docs) are in English; that is not the
+  reply language.
 - Conventional commits, with no AI attribution.
 
 ## Limits
