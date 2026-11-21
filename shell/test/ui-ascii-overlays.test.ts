@@ -14,7 +14,7 @@ import { JhonPanel, type ProfilesData } from "../lib/ui/jhon-panel.ts";
 import { customizeRows as settingsRows } from "../lib/ui/customize/registry.ts";
 import { SettingsView } from "../lib/ui/settings-view.ts";
 import { stripAnsi } from "../lib/ui/terminal-theme.ts";
-import { TasksView } from "../lib/background-tasks-view.ts";
+import { TasksView } from "../lib/ui/tasks-view.ts";
 import type { TaskRecord } from "../lib/background-tasks.ts";
 import { memorySettings, useMemorySettings } from "./fake-jhon-settings.ts";
 
@@ -92,7 +92,7 @@ test("/jhon:jobs draws in ASCII", () => {
 	const view = new TasksView({ theme: plain, rows: () => 14, tasks: () => tasks, now: () => 125_000, onStop() {}, onClose() {}, requestRender() {}, ascii: true });
 	try {
 		for (const width of [160, 100, 80]) pureAscii(`tasks ${width}`, view.render(width));
-		assert.match(view.render(100)[0]!, /jhon Jobs/, "the brand 力 reads jhon in ASCII");
+		assert.match(view.render(100)[1]!, /^\| Jobs {2}1 running - 2 finished +esc \|$/, "the title row, its dots as dashes");
 		for (const width of [160, 100, 80, 60]) pureAscii(`tasks narrow ${width}`, view.render(width));
 		view.handleInput("s");
 		for (const width of [160, 100, 80]) pureAscii(`tasks confirming ${width}`, view.render(width));

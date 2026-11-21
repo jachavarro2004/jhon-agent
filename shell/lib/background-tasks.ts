@@ -117,7 +117,7 @@ export interface AgentRun extends TaskBase {
 /** One item of a sub-agent's thread. */
 export type ThreadItem =
 	| { kind: "thinking" | "text"; text: string }
-	| { kind: "tool"; callId: string; name: string; output: string; running: boolean; isError: boolean };
+	| { kind: "tool"; callId: string; name: string; /** What it works on (activityLine's pick), when its args name it. */ subject?: string; output: string; running: boolean; isError: boolean };
 
 export type TaskRecord = JobRecord | AgentRun;
 
@@ -149,11 +149,14 @@ function resultText(result: unknown): string {
 export function applyThreadEvent(thread: ThreadItem[], event: ChildEvent): void {
 	const callId = typeof event.toolCallId === "string" ? event.toolCallId : "";
 	const name = typeof event.toolName === "string" ? event.toolName : "tool";
-	if (event.type === "tool_execution_start") thread.push({ kind: "tool", callId, name, output: "", running: true, isError: false });
-	else if (event.type === "tool_execution_end") {
+	if (event.type === "tool_execution_start") {
+		const subject = toolSubject(event);
+		thread.push({ kind: "tool", callId, name, ...(subject ? { subject } : {}), output: "", running: true, isError: false });
+	} else if (event.type === "tool_execution_end") {
 		const item = thread.findLast((i) => i.kind === "tool" && i.callId === callId && i.running);
 		const output = resultText(event.result).trim();
-		const done = { kind: "tool" as const, callId, name, output: output.length > TOOL_OUTPUT_CHARS ? `…${output.slice(-TOOL_OUTPUT_CHARS)}` : output, running: false, isError: event.isError === true };
+		const subject = item?.kind === "tool" ? item.subject : undefined;
+		const done = { kind: "tool" as const, callId, name, ...(subject ? { subject } : {}), output: output.length > TOOL_OUTPUT_CHARS ? `…${output.slice(-TOOL_OUTPUT_CHARS)}` : output, running: false, isError: event.isError === true };
 		if (item) Object.assign(item, done);
 		else thread.push(done);
 	} else if (event.type === "message_end") {
@@ -177,12 +180,17 @@ export function messageCost(event: ChildEvent): number {
 const one = (text: string, width = 100) => { const line = text.replace(/\s+/g, " ").trim(); return line.length > width ? `${line.slice(0, width - 1)}…` : line; };
 const firstLine = (text: string) => one(text.trim().split("\n")[0] ?? "", 60);
 
+/** What a tool's start works on: its command, path, pattern or agent, the first its args name. */
+function toolSubject(event: ChildEvent): string | undefined {
+	const args = (event.args ?? {}) as Record<string, unknown>;
+	return [args.command, args.path, args.pattern, args.agent].find((v) => typeof v === "string") as string | undefined;
+}
+
 /** The activity line one child event adds, or undefined for events that add none. */
 export function activityLine(event: ChildEvent): string | undefined {
 	const tool = typeof event.toolName === "string" ? event.toolName : "tool";
 	if (event.type === "tool_execution_start") {
-		const args = (event.args ?? {}) as Record<string, unknown>;
-		const subject = [args.command, args.path, args.pattern, args.agent].find((v) => typeof v === "string") as string | undefined;
+		const subject = toolSubject(event);
 		return one(subject ? `${tool} ${subject}` : tool);
 	}
 	if (event.type === "tool_execution_end" && event.isError === true) return `✗ ${tool} failed`;
