@@ -317,3 +317,32 @@ test("the registry completer sums its completions' usage, and the outcome carrie
 	assert.equal(r.details.status, "recorded");
 	assert.deepEqual(r.details.reviewers, { calls: 2, input: 200, output: 40, cacheRead: 10, cacheWrite: 14, cost: 0.5 });
 });
+
+// T174-S7: the review card (lib/ui/review-card.ts) reads what the review found from the result's details.
+test("the details carry what the card draws: the change, each facet's state, every finding and its set, the challenger and the arbiter", async () => {
+	const { bin, dir } = fakeJhon({ start: { out: START }, refute: { out: REFUTE }, validate: { out: VALIDATE }, record: { out: RECORD } });
+	const r = await runReview({ base: "main", change: "c" }, { bin, cwd: dir, completer: fakeCompleter(happyAnswers()) });
+	assert.deepEqual(r.details, {
+		status: "recorded", record: "odd/changes/c/review-prism.md", verdict: "fail", change: "c",
+		facets: [{ facet: "safety", status: "completed" }, { facet: "clarity", status: "completed" }],
+		findings: [
+			{ id: "safety-1", facet: "safety", severity: "CRITICAL", location: "a.ts:3", claim: "the guard never runs", set: "correction_set" },
+			{ id: "safety-2", facet: "safety", severity: "CRITICAL", location: "b.ts:9", claim: "a false alarm", set: "refuted" },
+			{ id: "clarity-1", facet: "clarity", severity: "SUGGESTION", location: "a.ts:3", claim: "rename x", set: "information" },
+		],
+		challenger: { findings: 3, refuted: 1 },
+		arbiter: { asked: 2, confirmed: 1 },
+	});
+	// No change named: the change is the record's folder; no finding: neither role ran; an unavailable facet keeps its reason.
+	const quiet = fakeJhon({ start: { out: START }, record: { out: { ...RECORD, verdict: "fail", correction_set: [], information: [], refuted: [], unavailable: ["clarity: the completion failed"] } } });
+	const r2 = await runReview({}, { bin: quiet.bin, cwd: quiet.dir, completer: fakeCompleter((q) => {
+		if (q.routingKey === "prism-clarity") throw new Error("provider 503");
+		return facetAnswer("safety");
+	}) });
+	assert.equal(r2.details.change, "c");
+	assert.deepEqual(r2.details.findings, []);
+	assert.equal(r2.details.challenger, undefined);
+	assert.equal(r2.details.arbiter, undefined);
+	assert.deepEqual(r2.details.facets, [{ facet: "safety", status: "completed" }, { facet: "clarity", status: "unavailable", reason: "the completion failed: provider 503" }]);
+	assert.doesNotMatch(JSON.stringify(r.details), /PROMPT/, "never the prompts");
+});

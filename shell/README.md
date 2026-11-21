@@ -69,7 +69,7 @@ Not covered: an extension that calls a model itself through pi's registry.
 | `lib/background-tasks.ts` | The main session's background work in one registry: commands and monitors (`bash_background`, `monitor`) and sub-agents (every main-session `subagent` call). Each task has an id, belongs to its session, and settles once when it ends on its own; a stop settles nothing. At most 25 run at once. |
 | `lib/background-tasks-tools.ts` | The model's side of it: `bash_background`, `monitor`, and `task_list`, `task_result`, and `task_stop`, which take any task by id, plus `/jhon:agents` and `/jhon:jobs`. A task's end reaches the agent as a follow-up message that starts a turn when it is idle; one that lands while a turn runs waits in the shell and goes out once when the turn settles (with the next message after an abort), since Esc clears pi's own queue; a task the agent stopped sends nothing, one the owner stopped is reported. A headless run (`pi -p`, `--mode json`), which pi ends at its settle and never wakes again, waits at `agent_before_settle` while its session's background sub-agents, commands or monitors run (never the owner's commands), sends each notice as a follow-up that pi runs as a new turn before settling, and repeats until nothing is pending; one wait is capped at `JHON_HEADLESS_WAIT_SECONDS` (an hour by default), past which a notice names the tasks whose results are lost (on stderr too) and the run ends. Background stays the rule there too (L741). The bar counts the running tasks. A foreground bash that only waits (a sleep over 5 s, `gh run watch`, `wait`, `tail -f`, `timeout` over 60 s, or a standalone sleep while a task runs) runs, and its result carries one note pointing to bash_background or monitor (T155; refused before). Jhon's guards judge their commands as bash; a sub-agent gets none of it, and cannot start a background sub-agent. extensions/jhon.ts registers it. |
 | `lib/background-tasks-view.ts` | `/jhon:agents` and `/jhon:jobs`: the sub-agents, or the commands and monitors, running first, beside the selected one's thread: a command's line, output file and output tail; a sub-agent's task, its thread (thinking, text, each tool with its status and output, from the child's JSON events), and answer. `s` stops the selected one. |
-| `lib/review-tool.ts` | T118c: the `jhon_review` tool, the main session's only: the native Prism review in one call. `jhon review start` freezes once; each facet prompt runs as one tool-less completion through pi's model registry (`find`, then `streamSimple`: one user message, no tools, a fresh session id, the effort as reasoning, a time bound that grows with the prompt, at most one retry), all facets at once; then `refute` → the challenger, `validate` → the arbiter (skipped when nothing is left to judge), `record` writes review-prism.md. Every completion runs on exactly the model and effort the engine names for its routing key; a role with none, or one pi cannot resolve, falls back: the tool says which review agents to launch. A facet that fails twice or answers malformed is `unavailable` in the record. The model gets the verdict, the counts and the correction set (at most 2,000 characters), never the prompts. |
+| `lib/review-tool.ts` | T118c: the `jhon_review` tool, the main session's only: the native Prism review in one call. `jhon review start` freezes once; each facet prompt runs as one tool-less completion through pi's model registry (`find`, then `streamSimple`: one user message, no tools, a fresh session id, the effort as reasoning, a time bound that grows with the prompt, at most one retry), all facets at once; then `refute` → the challenger, `validate` → the arbiter (skipped when nothing is left to judge), `record` writes review-prism.md. Every completion runs on exactly the model and effort the engine names for its routing key; a role with none, or one pi cannot resolve, falls back: the tool says which review agents to launch. A facet that fails twice or answers malformed is `unavailable` in the record. The model gets the verdict, the counts and the correction set (at most 2,000 characters), never the prompts; the result's details (never sent to the model) carry what the review card draws: the change, each facet's state, every finding with its set, the challenger's and the arbiter's counts. |
 | `lib/events.ts` | The pi.events channel the background tasks share with the UI: the running tasks. |
 | `lib/ui-use.ts` | Counts the shell's own UI use: every command and shortcut an extension registers through `counted(pi)` appends a `jhon-ui-use` session entry naming it (`/jhon:agents`, `key alt+s`), and so does a click the shell handles that opens a view (`click agents`, `click jobs`), outside the model's context; `jhon audit --all` counts them (`ui_use`). shell/CONTRACT.md, "What the shell records of its own use". |
 | `lib/ask.ts` | The `ask_user` tool, Jhon's AskUserQuestion: 1 to 4 questions, each with 2 to 4 described options (or none for a free answer), multiple choice, and a "Write my own answer." row for a typed one, asked one after another in the question view `lib/ui/ask-view.ts` (pi's select dialog where the UI has no `ui.custom`). The view sits in the dock between two accent rules, never an overlay; keys and clicks reach it. |
@@ -178,6 +178,24 @@ the card) shows all of it, rows wrapped instead of cut; its hint rides the
 header's right while it would change something. `shell.appearance.ascii`
 draws every glyph of the chrome in ASCII (`力` reads `jhon`).
 
+The agent cards (T174-S7, design 01) are the same blocks. `jhon_review` is
+the Prism review card (`lib/ui/review-card.ts`): `◇ Prism review  <change>`
+with the verdict at the right (`✗ changes requested` or `✓ approved`), then
+`facets` (each facet `✓`, or `✗` with its kept findings or `unavailable`),
+`challenger  kept N of M findings · arbiter agreed` (or how many the arbiter
+confirmed), one row per finding that blocks (`✗ critical  path:line  claim`)
+or waits for verify (`◐`), and `record  <path>`; ctrl+o shows every finding
+whole, the refuted ones and an unavailable facet's reason too. A review that
+fell back to its agents, or that the engine refused, shows the tool's words.
+`subagent` and `subagent_continue` are the delegation card
+(`lib/ui/delegation-card.ts`): `→ Delegating · <agent> · <model> · <effort>`
+(`Continuing agent · <id>`) with its agent's state at the right, `◐ running`
+while a background agent runs, then `✓ done`, `✗ failed` or `✗ stopped`,
+and the tool's first line under it, every word kept; ctrl+o shows the rest
+of a foreground answer. A hidden thinking block reads `▸ Thinking…`
+(`lib/ui/thinking-label.ts`): pi draws that row, italic in the theme's
+thinking colour, and lets the shell set only its label, one for every row.
+
 The surface, `shell.appearance.surface`: `transparent` (the default) leaves
 the right pane's sections on the terminal's background; `tinted` paints them
 on one panel, and paints the top row, the strip and the status bar on it too.
@@ -187,7 +205,8 @@ The density, `shell.appearance.density`, picks one of the pane's two forms
 TODOS, Agents, Jobs) in its own rounded box, in rose ink's border role, in
 the same pane; `compact` (the default, L1498) draws them flat with one blank
 row between them (design 01); `minimal` stacks them with none and keeps bash tool cards quiet (`↳ N lines` and a short
-preview, no output tail or duration, and an edit's diff to three rows); tool calls are otherwise full cards (a
+preview, no output tail or duration, and an edit's diff to three rows), the review card to its facets and blocking
+findings and the delegation card's line to one row; tool calls are otherwise full cards (a
 bash card shows its whole command, the last five output lines with the
 ctrl+o hint, and its duration, `✓ 2.3s`) (T91, L656).
 

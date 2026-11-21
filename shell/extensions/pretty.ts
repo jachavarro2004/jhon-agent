@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { shellEnabled } from "../lib/ui/panel.ts";
+import { installThinkingLabel } from "../lib/ui/thinking-label.ts";
 
 type PiPrettyExtension = (pi: unknown, deps?: unknown) => unknown;
 
@@ -76,6 +77,8 @@ export default async function jhonPretty(
 ): Promise<unknown> {
 	// A sub-agent has no transcript to prettify, and pi-pretty would index files in every child.
 	if (env.JHON_PI_CHILD === "1") return undefined;
+	// The thinking row's label is the shell's, with or without pi-pretty (lib/ui/thinking-label.ts).
+	installThinkingLabel(pi as ExtensionAPI, env);
 	const extension = upstream ?? (env.PI_CODING_AGENT_DIR ? await loadPiPretty(env.PI_CODING_AGENT_DIR) : undefined);
 	if (!extension) return undefined;
 	// The shell always draws these tools (L76): pi-pretty never registers its own.
@@ -99,7 +102,8 @@ export default async function jhonPretty(
 		},
 	});
 	// pi-pretty's hidden-thinking animation is global and can animate every
-	// historical Thinking row; the shell keeps collapsed labels static.
+	// historical Thinking row; the shell keeps collapsed labels static, its own
+	// `▸ Thinking…` (lib/ui/thinking-label.ts).
 	const previousThinkingIndicator = process.env.PRETTY_THINKING_INDICATOR;
 	process.env.PRETTY_THINKING_INDICATOR = "off";
 	let result: unknown;
