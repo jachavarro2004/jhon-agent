@@ -30,6 +30,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/BurntSushi/toml"
 
@@ -56,7 +57,7 @@ type Value struct {
 	Env    string `json:"env,omitempty"` // the variable, when Source is env
 	// The schema's description of the key (T15.15, L179): the engine is the
 	// one source of each key's kind, accepted values and default.
-	Kind    string   `json:"kind,omitempty"`   // bool, int, enum, name, key, path, paths
+	Kind    string   `json:"kind,omitempty"`   // bool, int, enum, name, key, path, paths, names
 	Values  []string `json:"values,omitempty"` // an enum's values, in order
 	Default any      `json:"default,omitempty"`
 	Min     *int     `json:"min,omitempty"` // an int's bounds; no max is unbounded
@@ -93,10 +94,11 @@ const (
 	kKey   // a key binding, or off
 	kPath  // an absolute path, or one under ~/
 	kPaths // a list of folders, each absolute or under ~/
+	kNames // a list of program names, each bare: no slash, no whitespace
 )
 
 // kindNames are the kinds as `settings list --json` names them.
-var kindNames = map[kind]string{kBool: "bool", kInt: "int", kEnum: "enum", kName: "name", kKey: "key", kPath: "path", kPaths: "paths"}
+var kindNames = map[kind]string{kBool: "bool", kInt: "int", kEnum: "enum", kName: "name", kKey: "key", kPath: "path", kPaths: "paths", kNames: "names"}
 
 // spec is one key of the schema.
 type spec struct {
@@ -186,6 +188,10 @@ func schema() []spec {
 		// folders a sandboxed command may write besides the project's.
 		{key: "sandbox.mode", kind: kEnum, def: "on", enum: []string{"on", "off"}},
 		{key: "sandbox.allow_write", kind: kPaths, def: []string{}},
+		// odd/tasks/sandbox-deploy-tools.md S2: the owner's deploy tools (aws,
+		// cdk, sam, terraform), which a line runs outside the sandbox as it
+		// runs docker (sandbox.ProfileAt); empty by default.
+		{key: "sandbox.deploy_tools", kind: kNames, def: []string{}},
 		{key: "pi.profile", kind: kName, def: "default"},
 		{key: "shell.appearance.animations", kind: kEnum, def: "full", enum: []string{"full", "off"}},
 		{key: "shell.appearance.ascii", kind: kBool, def: false, env: "JHON_SHELL_ASCII", fromEnv: envBoolIs1},
@@ -314,13 +320,16 @@ func (s spec) accepted() string {
 		return "an absolute path, or one under ~/"
 	case kPaths:
 		return "a list of folders, each an absolute path or one under ~/, never /, the home folder or one above it; jhon settings set takes them separated by commas"
+	case kNames:
+		return `a list of program names, each a bare name with no / and no whitespace, such as aws,cdk,sam, and none of the shells, wrappers, terminals, editors, interpreters, remote shells or script runners Jhon knows (bash, env, sudo, xargs, python, node, ssh, make, npx and the like, in any case and with any version suffix); jhon settings set takes them separated by commas, and "" for none`
 	}
 	return ""
 }
 
-// paths is v as a kPaths key holds it: every entry as written, each one a
-// folder the key accepts. v is a TOML array, or the list a command line gave.
-func (s spec) paths(v any) (any, error) {
+// list is v as a kPaths or kNames key holds it: every entry as written,
+// each one the key accepts (openable, deployTool). v is a TOML array, or the
+// list a command line gave.
+func (s spec) list(v any, accepts func(string) bool) (any, error) {
 	var items []any
 	switch x := v.(type) {
 	case []any:
@@ -335,12 +344,69 @@ func (s spec) paths(v any) (any, error) {
 	out := []string{}
 	for _, item := range items {
 		p, ok := item.(string)
-		if !ok || !openable(p) {
+		if !ok || !accepts(p) {
 			return nil, &InvalidError{s.key, fmt.Sprintf("%s is not accepted (accepted: %s)", show(item), s.accepted())}
 		}
 		out = append(out, p)
 	}
 	return out, nil
+}
+
+// bareName is whether n names a program as a line runs it by its bare
+// name: not empty, no slash, no whitespace.
+func bareName(n string) bool {
+	return n != "" && !strings.ContainsFunc(n, func(r rune) bool { return r == '/' || unicode.IsSpace(r) })
+}
+
+// deployTool is whether n may be a deploy tool (odd/tasks/sandbox-deploy-tools.md
+// S8): a bare name that is not one of runsAnything, with one of them any
+// line would run outside the sandbox.
+func deployTool(n string) bool {
+	if !bareName(n) {
+		return false
+	}
+	lower := strings.ToLower(n)
+	return !runsAnything[lower] && !runsAnything[versionSuffix.ReplaceAllString(lower, "")]
+}
+
+// versionSuffix is a trailing version on a program's name (python3.14,
+// node22, luajit-2.1, php83, python3.14t): the same program as its bare
+// name.
+var versionSuffix = regexp.MustCompile(`[-.]?[0-9][0-9.]*[a-z]?$`)
+
+// runsAnything are the programs, in lower case, that run whatever their
+// arguments name: the shells and their code-running builtins, the wrappers
+// that start another program, the terminals and editors that open a shell,
+// the interpreters and REPLs, the remote shells and the script and project
+// runners. A name not here is taken: the list is the owner's.
+var runsAnything = map[string]bool{}
+
+func init() {
+	for _, n := range strings.Fields(`
+		sh bash zsh fish dash ksh mksh csh tcsh ash yash elvish nu xonsh busybox toybox
+		env sudo doas su pkexec runuser setsid nohup nice ionice timeout time stdbuf chroot unshare nsenter
+		flock watch script expect xargs parallel exec eval command builtin source strace ltrace gdb
+		python python2 python3 pypy pypy3 node nodejs deno bun perl ruby php lua luajit tclsh wish
+		Rscript julia osascript pwsh powershell awk gawk mawk nawk sed
+		ssh scp sftp rsh telnet mosh autossh sshpass ssh-agent pdsh rsync
+		make gmake just task npm npx pnpm pnpx yarn corepack uv uvx pipx bunx
+		. trap fc enable sched zmodload
+		rbash oksh loksh pdksh posh rc es osh ysh oil
+		sg newgrp run0 sudo-rs please systemd-run machinectl systemd-nspawn lxc-attach flatpak-spawn
+		distrobox distrobox-enter toolbox toolbx firejail bwrap dbus-launch dbus-run-session at batch crontab
+		find fd entr watchexec nodemon ansible ansible-playbook
+		tmux screen byobu zellij kitty wezterm alacritty foot xterm konsole gnome-terminal
+		vi vim nvim ex ed emacs nano
+		ipython bpython irb pry jshell jrunscript java r guile racket sbcl clisp ghci runghc scala groovy
+		kotlin dotnet mono swift tcc ts-node tsx
+		cargo go gradle mvn rake bundle poetry hatch tox nox pdm rye pixi conda mamba micromamba
+		nix nix-shell guix brew pip cmake ninja meson scons bazel
+		yarnpkg jupyter zx mise asdf pyenv rbenv nodenv volta fnm direnv
+		taskset chrt prlimit setpriv numactl setarch faketime proxychains torsocks
+		unbuffer rlwrap valgrind perf hyperfine systemd-inhibit
+	`) {
+		runsAnything[strings.ToLower(n)] = true
+	}
 }
 
 // openable is whether p names a folder a kPaths key may hold: absolute or
@@ -376,6 +442,18 @@ func Paths(key string) []string {
 		out = append(out, Expand(p))
 	}
 	return out
+}
+
+// Names is the kNames key's names now, as written; none when the settings
+// cannot be read.
+func Names(key string) []string {
+	vals, err := Load(Path(), os.LookupEnv)
+	if err != nil {
+		return nil
+	}
+	v, _ := Find(vals, key)
+	list, _ := v.Value.([]string)
+	return list
 }
 
 // same is whether two values of one key are equal; a list is compared entry
@@ -414,7 +492,9 @@ func (s spec) check(v any) (any, error) {
 		}
 		return int(n), nil
 	case kPaths:
-		return s.paths(v)
+		return s.list(v, openable)
+	case kNames:
+		return s.list(v, deployTool)
 	}
 	str, ok := v.(string)
 	if !ok {
