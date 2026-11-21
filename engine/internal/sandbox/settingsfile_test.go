@@ -85,3 +85,52 @@ func TestSettingsFileStopsAPathThatDependsOnTheProcess(t *testing.T) {
 		t.Errorf("an absolute file in a read-only folder: %v, want none", p)
 	}
 }
+
+// Jhon's settings file and state folder under the XDG folders, or their
+// defaults (S10): a folder the sandbox binds read-only is a mount point no
+// command can rename, replace or remove (EBUSY), so a settings folder bound
+// directly in a writable folder keeps its file; its plain parent there, or
+// a missing folder, does not. A file bound read-only is not taken as kept:
+// JHON_SETTINGS in a writable folder stops the run as before (S9).
+func TestJhonsFilesStopTheRunWhereACommandCouldMoveThem(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, open := filepath.Join(base, "home"), filepath.Join(base, "open")
+	for _, d := range []string{filepath.Join(home, ".config", "jhon"), filepath.Join(open, "jhon"), filepath.Join(open, "sub", "jhon"), filepath.Join(open, "state", "jhon")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{filepath.Join(open, "settings.toml"), filepath.Join(open, "jhon", "settings.toml")} {
+		if err := os.WriteFile(f, []byte("schema = 1\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	in := func(protected ...string) Input {
+		return Input{Home: home, AllowWrite: []string{open}, Env: map[string]string{}, Stat: Disk, Protected: protected}
+	}
+	for _, c := range []struct {
+		name  string
+		p     *Problem
+		stops bool
+	}{
+		{"the default settings, outside", ConfigSettings(in(filepath.Join(home, ".config", "jhon")), filepath.Join(home, ".config", "jhon", "settings.toml"), ""), false},
+		{"a settings folder bound directly in a writable folder", ConfigSettings(in(filepath.Join(open, "jhon")), filepath.Join(open, "jhon", "settings.toml"), "XDG_CONFIG_HOME"), false},
+		{"a settings folder bound in a plain folder of a writable one", ConfigSettings(in(filepath.Join(open, "sub", "jhon")), filepath.Join(open, "sub", "jhon", "settings.toml"), "XDG_CONFIG_HOME"), true},
+		{"a settings folder not bound in a writable folder", ConfigSettings(in(), filepath.Join(open, "jhon", "settings.toml"), "XDG_CONFIG_HOME"), true},
+		{"a missing settings folder in a writable folder", ConfigSettings(in(), filepath.Join(open, "none", "jhon", "settings.toml"), ""), true},
+		{"a settings folder under /proc", ConfigSettings(in(), "/proc/self/cwd/jhon/settings.toml", "XDG_CONFIG_HOME"), true},
+		{"the default state, outside", StateFolder(in(), filepath.Join(home, ".local", "state", "jhon"), ""), false},
+		{"a state folder bound directly in a writable folder", StateFolder(in(filepath.Join(open, "jhon")), filepath.Join(open, "jhon"), "XDG_STATE_HOME"), false},
+		{"a state folder bound in a plain folder of a writable one", StateFolder(in(filepath.Join(open, "state", "jhon")), filepath.Join(open, "state", "jhon"), "XDG_STATE_HOME"), true},
+		{"a missing state folder in a writable folder", StateFolder(in(), filepath.Join(open, "none", "jhon"), "XDG_STATE_HOME"), true},
+		{"a JHON_SETTINGS file bound directly in a writable folder", SettingsFile(in(filepath.Join(open, "settings.toml")), filepath.Join(open, "settings.toml")), true},
+		{"a JHON_SETTINGS file in a settings folder bound directly in a writable folder", SettingsFile(in(filepath.Join(open, "jhon")), filepath.Join(open, "jhon", "settings.toml")), false},
+	} {
+		if (c.p != nil) != c.stops {
+			t.Errorf("%s: problem %v, want one: %v", c.name, c.p, c.stops)
+		}
+	}
+}

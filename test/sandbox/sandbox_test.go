@@ -187,34 +187,36 @@ func TestAWriteOutsideTheWorkAreaFailsAndLeavesNoFile(t *testing.T) {
 }
 
 // Jhon's own files stay read-only where a writable area holds them: the
-// state under a moved XDG_STATE_HOME inside the scratch root, and the
-// settings under a sandbox.allow_write folder.
+// settings folder directly under a sandbox.allow_write folder. The read-only
+// bind is a mount point, which the kernel refuses to rename, replace or
+// remove from inside the sandbox (EBUSY), and the allowed folder around it
+// lies in the read-only home: no command can move either aside and write
+// new settings, so the sandbox runs (S10). A state folder under XDG_STATE_HOME in the scratch
+// root has a plain parent a command can rename: that stops the run
+// (xdg_path_test.go).
 func TestJhonsFilesStayReadOnlyInsideAWritableArea(t *testing.T) {
 	b := newBox(t)
-	state := filepath.Join(b.tmp, "state")
-	b.env = append(b.env, "XDG_STATE_HOME="+state)
-	if err := os.MkdirAll(filepath.Join(state, "jhon", "grants"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	settings := b.settings(t, "schema = 1\n\n[sandbox]\nallow_write = [\"~/.config\"]\n")
 	before := support.Read(t, settings)
-	for _, c := range []struct{ name, script, file string }{
-		{"the grants under the scratch root", `echo x > "$XDG_STATE_HOME/jhon/grants/push.json"`, filepath.Join(state, "jhon", "grants", "push.json")},
-		{"the settings under an allowed folder", `echo x > "$HOME/.config/jhon/new.toml"`, filepath.Join(b.home, ".config", "jhon", "new.toml")},
+	for _, c := range []struct{ name, script, file, want string }{
+		{"the settings under an allowed folder", `echo x > "$HOME/.config/jhon/new.toml"`, filepath.Join(b.home, ".config", "jhon", "new.toml"), "Read-only file system"},
+		{"the settings folder renamed", `mv "$HOME/.config/jhon" "$HOME/.config/jhon.old"`, filepath.Join(b.home, ".config", "jhon.old"), "Device or resource busy"},
+		{"another folder renamed over the settings folder", `mkdir "$HOME/.config/new" && mv -T "$HOME/.config/new" "$HOME/.config/jhon"`, "", "Device or resource busy"},
+		{"the allowed folder renamed", `mv "$HOME/.config" "$HOME/.config.old" && mkdir -p "$HOME/.config/jhon" && echo x > "$HOME/.config/jhon/settings.toml"`, filepath.Join(b.home, ".config.old"), "Read-only file system"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			r := b.sh(t, b.proj, "", c.script)
-			if r.Code == 0 || !strings.Contains(r.Stderr, "Read-only file system") {
-				t.Fatalf("exit %d, stderr %q; want a failure on a read-only file system", r.Code, r.Stderr)
+			if r.Code == 0 || r.Code == 126 || !strings.Contains(r.Stderr, c.want) {
+				t.Fatalf("exit %d, stderr %q; want a failure: %s", r.Code, r.Stderr, c.want)
 			}
-			if exists(c.file) {
+			if c.file != "" && exists(c.file) {
 				t.Errorf("%s was written", c.file)
 			}
 		})
 	}
-	// The areas around them are writable.
-	r := b.sh(t, b.proj, "", `echo x > "$XDG_STATE_HOME/other.txt" && echo x > "$HOME/.config/other.txt"`)
-	if r.Code != 0 || !exists(filepath.Join(state, "other.txt")) || !exists(filepath.Join(b.home, ".config", "other.txt")) {
+	// The area around them is writable.
+	r := b.sh(t, b.proj, "", `echo x > "$HOME/.config/other.txt"`)
+	if r.Code != 0 || !exists(filepath.Join(b.home, ".config", "other.txt")) {
 		t.Errorf("a write beside them: exit %d, stderr %q", r.Code, r.Stderr)
 	}
 	if got := support.Read(t, settings); got != before {

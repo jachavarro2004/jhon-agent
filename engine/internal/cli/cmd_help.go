@@ -225,11 +225,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            date (0.0.0-dev when unstamped); also jhon --version
   jhon settings [list] [--json]
                            the owner's settings (~/.config/jhon/settings.toml,
-                           schema 1; JHON_SETTINGS names another file, an
-                           absolute path outside /proc: while that file lies
-                           in a folder a sandboxed command may write, or the
-                           path is relative or under /proc, jhon sandbox run
-                           runs nothing): every
+                           or $XDG_CONFIG_HOME/jhon/settings.toml, schema 1;
+                           JHON_SETTINGS names another file, an absolute path
+                           outside /proc: while the file lies in a folder a
+                           sandboxed command may write, or the path is
+                           relative or under /proc, jhon sandbox run runs
+                           nothing): every
                            key with its value and source (default, file, env;
                            --json adds its kind, accepted values and default),
                            then the project's openspec/config.yaml rules
@@ -479,12 +480,21 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            rustup, mise's installs and shims) and mise's
                            state, with the configs it trusts, are the
                            owner's to open with sandbox.allow_write. While
-                           the file JHON_SETTINGS names lies in a writable
-                           folder, or is reached through one, a command could
-                           rewrite it and turn the sandbox off: run runs
-                           nothing and exits 126 with the fix; the same
-                           while JHON_SETTINGS is not an absolute path
-                           outside /proc. $TMPDIR
+                           the settings file (JHON_SETTINGS, else
+                           $XDG_CONFIG_HOME/jhon/settings.toml or
+                           ~/.config/jhon/settings.toml) or the state folder
+                           with the grants and the modes ($XDG_STATE_HOME/jhon
+                           or ~/.local/state/jhon) lies in a writable folder,
+                           or is reached through one, a command could
+                           replace it and turn the sandbox off or grant
+                           itself: run runs nothing and exits 126 with the
+                           fix. Jhon's folder (not a link) bound read-only
+                           directly inside a writable folder (the project,
+                           $TMPDIR, a cache or a sandbox.allow_write folder)
+                           is kept, a JHON_SETTINGS file in it too: the
+                           kernel refuses to move a mount point. The same while
+                           JHON_SETTINGS is not an absolute path outside
+                           /proc. $TMPDIR
                            is bound only under /tmp, /var/tmp, the home or a
                            sandbox.allow_write folder, and not inside a
                            hidden folder or one of Jhon's; any other value

@@ -165,9 +165,8 @@ func sandboxRun(argv []string) (int, error) {
 	}
 	in := sandboxInput(pinned)
 	bwrap, p := sandbox.Check(sandbox.ThisHost(), in)
-	if p == nil && os.Getenv("JHON_SETTINGS") != "" {
-		// A settings file the sandbox could write runs nothing (S9).
-		p = sandbox.SettingsFile(in, settings.Path())
+	if p == nil {
+		p = ownFilesProblem(in)
 	}
 	if p != nil {
 		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
@@ -175,6 +174,33 @@ func sandboxRun(argv []string) (int, error) {
 	}
 	env := append(os.Environ(), sandbox.UVToolEnv(in)...)
 	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program))
+}
+
+// ownFilesProblem is why the sandbox of in runs nothing while a sandboxed
+// command could change Jhon's settings file or the state folder with the
+// grants and the modes, wherever they are (sandbox-deploy-tools S9, S10):
+// it could turn the sandbox off or grant itself what the guards ask for.
+// nil when it could change neither.
+func ownFilesProblem(in sandbox.Input) *sandbox.Problem {
+	var p *sandbox.Problem
+	if os.Getenv("JHON_SETTINGS") != "" {
+		p = sandbox.SettingsFile(in, settings.Path())
+	} else {
+		p = sandbox.ConfigSettings(in, settings.Path(), xdgVariable("XDG_CONFIG_HOME"))
+	}
+	if p == nil {
+		p = sandbox.StateFolder(in, filepath.Dir(grant.Dir()), xdgVariable("XDG_STATE_HOME"))
+	}
+	return p
+}
+
+// xdgVariable is name when the XDG variable moves Jhon's folder (an
+// absolute path, as settings.Path and grant.Dir take it), else "".
+func xdgVariable(name string) string {
+	if filepath.IsAbs(os.Getenv(name)) {
+		return name
+	}
+	return ""
 }
 
 // sandboxInput is the sandbox of a program started here, in the pinned
