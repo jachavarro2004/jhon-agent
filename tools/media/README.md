@@ -39,7 +39,7 @@ the one the HyperFrames CLI keeps in `~/.cache/hyperframes/chrome`
 
 | asset | what |
 | --- | --- |
-| `video/jhon-explainer.mp4` | the presentation: about 3.4 minutes, 1920×1080, 30 fps, narrated in English (AAC) |
+| `video/jhon-explainer.mp4` | the presentation: about 3.7 minutes, 1920×1080, 30 fps, narrated in English (AAC) |
 | `video/jhon-explainer.es.mp4` | the same video and narration, with Spanish subtitles |
 
 The films are rendered into `docs/assets/video/` but not kept in git (`.gitignore`);
@@ -90,7 +90,7 @@ curl -LO $R/kokoro-v1.0.onnx    # 325,532,387 bytes (the int8 one is 92,361,271)
 curl -LO $R/voices-v1.0.bin     # 28,214,398 bytes
 ```
 
-Speaking all 31 lines takes about a minute of CPU.
+Speaking all 33 lines takes about a minute of CPU.
 
 ## Identity
 

@@ -170,6 +170,20 @@ export const SHOTS = [
     marks: [{ at: 0, r: cells(2, 3, 41) }, { at: "a push to main", r: cells(13, 7, 36) }, { at: "no test run", r: cells(0, 5, 112, 2) }],
     en: "Here, a push to main with no test run on record.",
     es: "Aquí, un push a main sin ninguna ejecución de tests registrada." },
+  // The dashboard's audit of a session (tools/media/dashboard.ts, 3200x1520; the teaser's `audit` screen):
+  // the session's verdict and summary, the session it is, then "What to look at" and its first item.
+  { id: "dashboard", kind: "proof", src: F("dashboard-audit"), crop: [0, 0, 3200, 1520],
+    marks: [{ at: "the same audit", r: [62, 146, 1560, 200] }, { at: "every session", r: [56, 22, 330, 60] },
+      { at: "what to look at", r: [62, 830, 1750, 610] }, { at: "first", r: [92, 950, 1680, 152] }],
+    en: "The dashboard shows the same audit for every session, with what to look at first.",
+    es: "El dashboard muestra la misma auditoría para cada sesión, con lo que hay que revisar primero." },
+  // The shell's Prism review card (the teaser's `prism` screen): its verdict, its record, the finding kept and
+  // its place (file:line).
+  { id: "prism", kind: "proof", src: F("prism-review"), crop: panel(96, 5),
+    marks: [{ at: "a verdict", r: cells(75, 0, 19) }, { at: "on record", r: cells(4, 4, 63) },
+      { at: "each finding", r: cells(4, 3, 89) }, { at: "where it is", r: cells(16, 3, 19) }],
+    en: "Every Prism review ends in a verdict on record, with each finding and where it is.",
+    es: "Cada revisión Prism termina en un veredicto registrado, con cada hallazgo y dónde está." },
   { id: "bench", kind: "numbers", kicker: "The bench · native Prism review",
     figures: [["9 of 9", "seeded defects found, the same as the facet agents", "9 of 9"], ["3.4×", "fewer weighted tokens", "3.4 times"]],
     en: "On seeded defects, the native Prism review found the same 9 of 9 as the facet agents, for about 3.4 times fewer weighted tokens.",
