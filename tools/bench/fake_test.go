@@ -18,6 +18,10 @@ import (
 // $FAKE_DIR/utils holds the seven_day utilization the n-th claude run reports.
 // With $FAKE_HOLD (seconds) each claude run holds that long and counts the
 // claude runs alive at once, the most in $FAKE_DIR/max (--parallel, T83).
+// In RPC mode, $FAKE_PI_STAY (seconds) keeps pi running that long after its
+// stdin closed, and $FAKE_PI_ORPHAN (seconds) makes pi never settle its first
+// message and start a process in a session of its own that holds pi's stdout
+// that long, its pid in $FAKE_DIR/orphan.pid (T201).
 
 const fakeClaude = `#!/bin/sh
 echo "claude $* |HOME=$HOME|XDG_CACHE_HOME=$XDG_CACHE_HOME|PWD=$(pwd -P)|JHON_ROOT=$JHON_ROOT|ENGRAM_DATA_DIR=$ENGRAM_DATA_DIR|ENGRAM_URL=$ENGRAM_URL|ENGRAM_PORT=$ENGRAM_PORT" >> "$FAKE_DIR/calls.log"
@@ -80,6 +84,10 @@ case " $* " in *" --mode rpc "*)
     fi
     [ -n "$FAKE_SOLUTIONS" ] && [ -d "$FAKE_SOLUTIONS/$n" ] && cp -r "$FAKE_SOLUTIONS/$n"/. .
     printf '{"id":"bench-%s","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}\n' "$n"
+    if [ $n = 1 ] && [ -n "$FAKE_PI_ORPHAN" ]; then
+      setsid sh -c 'echo $$ > "$FAKE_DIR/orphan.pid"; exec sleep '"$FAKE_PI_ORPHAN" &
+      sleep "$FAKE_PI_ORPHAN"
+    fi
     if [ $n = 1 ] && [ -n "$FAKE_PI_UI" ]; then
       echo '{"type":"extension_ui_request","id":"ui-1","method":"setStatus","statusKey":"fff"}'
       echo '{"type":"extension_ui_request","id":"ui-2","method":"select","title":"Jhon safety guard","options":["Yes","No"]}'
@@ -99,6 +107,7 @@ case " $* " in *" --mode rpc "*)
     done
     echo '{"type":"agent_settled","aborted":false}'
   done
+  [ -n "$FAKE_PI_STAY" ] && sleep "$FAKE_PI_STAY"
   exit 0;;
 esac
 while [ $i -lt $turns ]; do
@@ -177,6 +186,8 @@ func newFake(t *testing.T, utils ...string) fake {
 	t.Setenv("FAKE_PI_UI", "")
 	t.Setenv("FAKE_PI_BG", "")
 	t.Setenv("FAKE_PI_BUSY", "")
+	t.Setenv("FAKE_PI_STAY", "")
+	t.Setenv("FAKE_PI_ORPHAN", "")
 	t.Setenv("FAKE_PROFILE_EXIT", "")
 	t.Setenv("FAKE_HOLD", "")
 	t.Setenv("FAKE_STREAM", "")

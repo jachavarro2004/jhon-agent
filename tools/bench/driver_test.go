@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -274,5 +275,70 @@ func TestABusyPromptIsSentAgainAfterTheTurnSettles(t *testing.T) {
 	}
 	if m := metricsOf(t, o, name); m.TimedOut {
 		t.Errorf("%+v", m)
+	}
+}
+
+// withExitGrace sets exitGrace to d for the test.
+func withExitGrace(t *testing.T, d time.Duration) {
+	t.Helper()
+	old := exitGrace
+	exitGrace = d
+	t.Cleanup(func() { exitGrace = old })
+}
+
+// A pi still running a grace period after the bench closed its stdin, every
+// message settled, is killed with its process group: the run ends then, not
+// at its timeout, and is no timeout (T201, L1630).
+func TestAPiThatOutlivesItsLastMessageIsEndedAfterTheGrace(t *testing.T) {
+	f := newFake(t)
+	t.Setenv("FAKE_PI_STAY", "60")
+	withExitGrace(t, time.Second)
+	o := multiOptions(t, f, "", "pi-jhon")
+	o.Tasks[0].Timeout = 20 * time.Second
+	start := time.Now()
+	if err := Execute(o); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took > 10*time.Second {
+		t.Errorf("the run took %s after its last message settled", took)
+	}
+	name := "pagination-bug-plain-pi-jhon-1"
+	if got := boundaries(readStream(t, o, name)); !slices.Equal(got, []string{"1 start", "1 end settled", "2 start", "2 end settled"}) {
+		t.Errorf("boundaries %q", got)
+	}
+	if m := metricsOf(t, o, name); m.TimedOut || m.Exit != -1 {
+		t.Errorf("timed_out %t exit %d, want false -1", m.TimedOut, m.Exit)
+	}
+}
+
+// The run's deadline ends it even when a process outside pi's process group
+// holds pi's stdout: the group is killed at the deadline and the output cut
+// a grace period later, and the run is recorded as a timeout (T201, L1630).
+func TestTheTimeoutEndsARunWhoseOutputAnotherProcessHolds(t *testing.T) {
+	f := newFake(t)
+	t.Setenv("FAKE_PI_ORPHAN", "45")
+	t.Cleanup(func() {
+		if b, err := os.ReadFile(filepath.Join(f.dir, "orphan.pid")); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+	withExitGrace(t, time.Second)
+	o := multiOptions(t, f, "", "pi-jhon")
+	o.Tasks[0].Timeout = 3 * time.Second
+	start := time.Now()
+	if err := Execute(o); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took > 15*time.Second {
+		t.Errorf("a 3s run took %s", took)
+	}
+	name := "pagination-bug-plain-pi-jhon-1"
+	if got := boundaries(readStream(t, o, name)); !slices.Equal(got, []string{"1 start", "1 end timeout"}) {
+		t.Errorf("boundaries %q", got)
+	}
+	if m := metricsOf(t, o, name); !m.TimedOut {
+		t.Errorf("timed_out %t, want true", m.TimedOut)
 	}
 }
