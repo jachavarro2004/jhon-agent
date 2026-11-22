@@ -160,7 +160,7 @@ func RequiredReviews(config string) []Required {
 // a list (at any consistent indentation, column 0 too) of mappings, block
 // or flow (`{change: c1, review: 4r}`), each naming a `change` or an `area`
 // and its `review`: checker or prism in any case (4r and verify, their
-// names before T177, read as them with a warning until v0.4), as a scalar,
+// names before T177, read as them with a warning until v0.5), as a scalar,
 // a flow list (`[checker, prism]`) or a block list. Values may be quoted and lines carry
 // `# comments`. A line it cannot read, an entry naming neither a change nor
 // an area, or no review or another one, is unreadable: it fails closed.
