@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -108,21 +109,42 @@ func (s *session) stopReason(exit int) string {
 	return "exit " + strconv.Itoa(exit)
 }
 
+// exitGrace bounds how long the bench waits for an agent it is done with
+// (T201): an agent still running this long after the bench closed its stdin
+// is killed with its process group, and its stdout is cut this long after the
+// group was killed when a process outside the group still holds it.
+var exitGrace = 10 * time.Second
+
+// stdin is an agent's stdin whose closed channel closes with it.
+type stdin struct {
+	io.WriteCloser
+	once   sync.Once
+	closed chan struct{}
+}
+
+func (w *stdin) Close() error {
+	w.once.Do(func() { close(w.closed) })
+	return w.WriteCloser.Close()
+}
+
 // run starts argv in the run's repo, calls begin with its stdin when begin
 // is not nil, and line with each stdout line once it is in the stream. The
-// process group is killed when the run's context ends.
+// process group is killed when the run's context ends, or exitGrace after
+// the bench closed its stdin; see reap.
 func (s *session) run(argv []string, begin func(io.WriteCloser), line func([]byte, io.WriteCloser)) (int, error) {
 	c := exec.CommandContext(s.ctx, argv[0], argv[1:]...)
 	c.Dir, c.Env, c.Stderr = s.r.Repo, s.env, s.stderr
 	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	c.Cancel = func() error { return syscall.Kill(-c.Process.Pid, syscall.SIGKILL) }
-	c.WaitDelay = 10 * time.Second
+	c.WaitDelay = exitGrace
 	var in io.WriteCloser
-	var err error
+	closed := make(chan struct{})
 	if begin != nil {
-		if in, err = c.StdinPipe(); err != nil {
+		p, err := c.StdinPipe()
+		if err != nil {
 			return 0, err
 		}
+		in = &stdin{WriteCloser: p, closed: closed}
 	}
 	out, err := c.StdoutPipe()
 	if err != nil {
@@ -131,6 +153,8 @@ func (s *session) run(argv []string, begin func(io.WriteCloser), line func([]byt
 	if err := c.Start(); err != nil {
 		return 0, err
 	}
+	done := make(chan struct{})
+	reaped := s.reap(c.Process.Pid, closed, out, done)
 	if begin != nil {
 		begin(in)
 	}
@@ -141,6 +165,10 @@ func (s *session) run(argv []string, begin func(io.WriteCloser), line func([]byt
 		s.write(l)
 		line(l, in)
 	}
+	// The process is not reaped before reap returns, so its pid still names
+	// its group when reap kills it.
+	close(done)
+	<-reaped
 	err = c.Wait()
 	var exit *exec.ExitError
 	switch {
@@ -152,6 +180,44 @@ func (s *session) run(argv []string, begin func(io.WriteCloser), line func([]byt
 		return -1, nil
 	}
 	return 0, err
+}
+
+// reap ends the agent in process group pgid once the bench is done with it,
+// until done closes (its stdout ended), and returns a channel closed when it
+// stops. When the run's context ends, exec's Cancel kills the group; when
+// closed closes (the bench closed its stdin: every message settled, or the
+// run stopped) and the agent's stdout is still open exitGrace later, reap
+// kills the group. Either way, if a process outside the group still holds the
+// stdout exitGrace after that, reap closes out, so the scan ends and the run
+// never holds its slot past its deadline (T201, L1630).
+func (s *session) reap(pgid int, closed <-chan struct{}, out io.Closer, done <-chan struct{}) <-chan struct{} {
+	reaped := make(chan struct{})
+	go func() {
+		defer close(reaped)
+		select {
+		case <-done:
+			return
+		case <-s.ctx.Done():
+		case <-closed:
+			grace := time.NewTimer(exitGrace)
+			defer grace.Stop()
+			select {
+			case <-done:
+				return
+			case <-s.ctx.Done():
+			case <-grace.C:
+				_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			}
+		}
+		cut := time.NewTimer(exitGrace)
+		defer cut.Stop()
+		select {
+		case <-done:
+		case <-cut.C:
+			_ = out.Close()
+		}
+	}()
+	return reaped
 }
 
 // startAgent runs r's agent in its repo with env, copying stdout to
@@ -231,7 +297,8 @@ func withMaxTurns(argv []string, n int) []string {
 const busyRetries = 3
 
 // rpc runs r.Argv once and writes the task's messages to its stdin, each
-// after the one before settled; stdin closes after the last, which ends pi.
+// after the one before settled; stdin closes after the last, which ends pi
+// (or, exitGrace later, reap).
 func (s *session) rpc() error {
 	prompts, n, open := s.r.Task.Prompts, 0, false
 	// busy counts the times pi refused the open message because a turn of
