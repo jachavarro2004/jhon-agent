@@ -62,7 +62,7 @@ func wantOut(t *testing.T, r support.Result, code int, patterns ...string) {
 
 // warning is the one-line alias warning for old read as now.
 func warning(what, old, now string) string {
-	return regexp.QuoteMeta(what + ` "` + old + `" is now "` + now + `"; the old name is read until v0.4 (jhon settings migrate rewrites it)`)
+	return regexp.QuoteMeta(what + ` "` + old + `" is now "` + now + `"; the old name is read until v0.5 (jhon settings migrate rewrites it)`)
 }
 
 var newAgents = []string{"jhon-scout", "jhon-builder", "jhon-checker", "prism-safety", "prism-failure", "prism-clarity", "prism-behavior", "prism-challenger", "prism-arbiter", "jhon-orchestrator"}
@@ -200,7 +200,7 @@ func lddProject(t *testing.T, s scratch, config string, files map[string]string)
 func TestReviewRequiredNewAndOldValues(t *testing.T) {
 	s := newScratch(t, "")
 	proj := lddProject(t, s, "schema: spec-driven\nreview_required:\n  - change: c1\n    review: [prism, checker]\n", nil)
-	st, r := statusOf(t, s, proj)
+	_, r := statusOf(t, s, proj)
 	if !strings.Contains(r.Stdout, `"review":"prism"`) && !strings.Contains(r.Stdout, `"review": "prism"`) {
 		t.Fatalf("status names no prism review:\n%s", r.Stdout)
 	}
@@ -209,7 +209,7 @@ func TestReviewRequiredNewAndOldValues(t *testing.T) {
 	}
 	s2 := newScratch(t, "")
 	proj2 := lddProject(t, s2, "schema: spec-driven\nreview_required:\n  - change: c1\n    review: [verify, 4r]\n", nil)
-	st, r = statusOf(t, s2, proj2)
+	st, r := statusOf(t, s2, proj2)
 	notes, _ := json.Marshal(st["notes"])
 	var list []string
 	_ = json.Unmarshal(notes, &list)

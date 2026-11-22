@@ -304,7 +304,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            backup to settings-backup-<UTC>/settings.toml; rewrites the old agent names in
                            profiles.json (explore, worker, verify, review-*)
                            and the project's review_required values (4r,
-                           verify) to their new names, read until v0.4
+                           verify) to their new names, read until v0.5
   jhon profile [list] | show [<name>] | use <name>
                            the owner's model profiles (~/.config/jhon/profiles.json):
                            list them with the provider pi runs on, show each

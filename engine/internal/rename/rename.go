@@ -11,7 +11,7 @@ package rename
 import "fmt"
 
 // RemovedIn is the release that stops reading the old names.
-const RemovedIn = "v0.4"
+const RemovedIn = "v0.5"
 
 // agents are the retired agent names and the name each one is now.
 var agents = map[string]string{
