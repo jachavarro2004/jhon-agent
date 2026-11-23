@@ -18,7 +18,7 @@ action is `continue` and every word is the change.
 | `status` | Run `jhon status <change>` from the project root and present its result; the suggested next step is a suggestion. Read-only. |
 | `explore` | Explore it (inline within one bounded read batch, else in the `jhon-scout` agent), following `~/.local/share/jhon/current/prose/skills/ldd/references/explore.md`. Without a named change, write nothing. |
 | `research` | Collect source-backed evidence with the `jhon-scout` agent, following `~/.local/share/jhon/current/prose/skills/ldd/references/research.md`, then write its envelope to the change's `research.md` (`## Sources`, `## Claims`). |
-| `apply` | Run the apply phase (inline only for a small change; otherwise in the `jhon-builder` agent, a slice each, slices that share files one at a time), following `~/.local/share/jhon/current/prose/skills/ldd/references/apply.md`. |
+| `apply` | Run the apply phase (in the `jhon-builder` agent, a slice each, slices that share files one at a time, or inline only for a small change), following `~/.local/share/jhon/current/prose/skills/ldd/references/apply.md`. |
 | `verify` | Run the verify phase in the `jhon-checker` agent, independent of the writer, following `~/.local/share/jhon/current/prose/skills/ldd/references/verify.md`. |
 | `archive` | Run the archive phase inline, following `~/.local/share/jhon/current/prose/skills/ldd/references/archive.md`. |
 | `init` | Run the init phase in this project inline, following `~/.local/share/jhon/current/prose/skills/ldd/references/init.md`. |
