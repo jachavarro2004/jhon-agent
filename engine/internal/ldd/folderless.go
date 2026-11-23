@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/execution"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
@@ -92,7 +93,7 @@ func (g gitReads) candidate(root string) (name, branch string) {
 	if branch = js.Trim(out); branch == "" || slices.Contains(g.defaultBranches(root), branch) {
 		return "", ""
 	}
-	name = strings.ReplaceAll(branch, "/", "-")
+	name = execution.ChangeOfBranch(branch)
 	if name == "archive" || strings.HasPrefix(name, ".") || strings.Contains(name, `\`) {
 		return "", ""
 	}
