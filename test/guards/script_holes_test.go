@@ -1,6 +1,7 @@
 package guards
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/jachavarro2004/jhon-agent/test/support"
@@ -59,6 +60,63 @@ func TestNodeOptionValueIsNotTheScript(t *testing.T) {
 		r := s.bash(t, c, top())
 		code(t, r, 0, c)
 		noDecision(t, r.Stdout, c)
+	}
+}
+
+// A module a script imports is not a file it deletes: a test that imports
+// ../src/main.ts and removes only its mkdtemp dir runs (T210, L1652); a
+// delete of a ../ path, literal or built by string, is still refused, as is
+// one a comment, a string or a look-alike call makes read like an import.
+func TestCodeImportIsNotADeleteTarget(t *testing.T) {
+	t.Parallel()
+	s := credTree(t)
+	// The project's parent is outside the scratch roots, as a real checkout's is.
+	p := filepath.Join(varTemp(t, "jhon-t210-"), "proj")
+	mkdir(t, p)
+	support.GitInit(t, p)
+	o := sgOpts{top: true, cwd: p}
+	scratch := "import { mkdtempSync, rmSync } from \"node:fs\";\nimport { tmpdir } from \"node:os\";\nimport { join } from \"node:path\";\n" +
+		"const dir = mkdtempSync(join(tmpdir(), \"t-\"));\nrmSync(dir, { recursive: true, force: true });\n"
+	support.Write(t, p, map[string]string{
+		"apps/cli/src/main.ts":    "export const main = () => 0;\n",
+		"apps/cli/test/t.test.ts": scratch + "import { main } from \"../src/main.ts\";\nmain();\n",
+		"apps/cli/test/side.test.ts": "import '../src/main.ts';\nconst m = await import('../src/main.ts');\n" +
+			"const r = require(\"../src/main.ts\");\nexport { x } from '../src/main.ts';\n" + scratch,
+		"tools/pkg/t.py":              "import os, tempfile\nfrom . import helper\nfrom .. import shared\nfd, f = tempfile.mkstemp()\nos.remove(f)\n",
+		"apps/cli/test/far.test.ts":   "import { rmSync } from \"node:fs\";\nimport { main } from \"../src/main.ts\";\nrmSync(\"../outside\", { recursive: true });\n",
+		"apps/cli/test/built.test.ts": "import { unlinkSync } from \"node:fs\";\nconst name = \"outside\";\nunlinkSync(\"../\" + name);\n",
+		"apps/cli/test/multi.test.ts": "import {\n  main,\n} from '../src/main.ts';\n" + scratch,
+		// A specifier is one statement on one line: a comment ending in
+		// "from" or "import", a quote inside a string, or a require the code
+		// defines itself hides no target (L1657).
+		"apps/cli/test/list.py":   "import shutil\nSKIP = [  # dirs we never import\n    \"../outside\",\n]\nfor d in SKIP: shutil.rmtree(d)\n",
+		"apps/cli/test/root.py":   "import shutil\nfor d in [  # copied from\n    \".\",\n]: shutil.rmtree(d)\n",
+		"apps/cli/test/abs.py":    "import shutil\nfor d in [  # copied from\n    \"/opt/outside\",\n]: shutil.rmtree(d)\n",
+		"apps/cli/test/arg.py":    "import shutil\nshutil.rmtree(  # the dir we restore from\n    \"../outside\")\n",
+		"apps/cli/test/quote.js":  "const fs = require(\"fs\");\nconsole.log(\"copy from '\"); fs.rmSync(\"../outside\", { recursive: true }); console.log(\"' done\");\n",
+		"apps/cli/test/quote.py":  "import shutil\nprint(\"copy from '\"); shutil.rmtree(\"../outside\"); print(\"' done\")\n",
+		"apps/cli/test/shadow.py": "import shutil\ndef require(p): return p\nshutil.rmtree(require(\"../outside\"))\n",
+		"apps/cli/test/shadow.js": "const fs = require(\"fs\");\nfunction require(p) { return p; }\nfs.rmSync(require(\"../outside\"), { recursive: true });\n",
+	})
+	for _, c := range []string{"node --test apps/cli/test/t.test.ts", "node --test apps/cli/test/side.test.ts", "python3 tools/pkg/t.py",
+		"node --test apps/cli/test/multi.test.ts"} {
+		r := s.bash(t, c, o)
+		code(t, r, 0, c)
+		noDecision(t, r.Stdout, c)
+	}
+	for c, why := range map[string]string{"node --test apps/cli/test/far.test.ts": `code deleting \.\./outside: it is outside the project`,
+		"node --test apps/cli/test/built.test.ts": `code deleting \.\./: it reaches the project root`,
+		"python3 apps/cli/test/list.py":           `code deleting \.\./outside: it is outside the project`,
+		"python3 apps/cli/test/root.py":           `code deleting \.: it reaches the project root`,
+		"python3 apps/cli/test/abs.py":            `code deleting /opt/outside: it is outside the project`,
+		"python3 apps/cli/test/arg.py":            `code deleting \.\./outside: it is outside the project`,
+		"node apps/cli/test/quote.js":             `code deleting \.\./outside: it is outside the project`,
+		"python3 apps/cli/test/quote.py":          `code deleting \.\./outside: it is outside the project`,
+		"python3 apps/cli/test/shadow.py":         `code deleting \.\./outside: it is outside the project`,
+		"node apps/cli/test/shadow.js":            `code deleting \.\./outside: it is outside the project`} {
+		r := s.bash(t, c, o)
+		code(t, r, 2, c)
+		matches(t, r.Stderr, why, c)
 	}
 }
 

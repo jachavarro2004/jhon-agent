@@ -1495,3 +1495,12 @@ verifiers.tsv:139	safety-guard	ask	allow	deliberate-construction T152 (L1311): a
 verifiers.tsv:141	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 verifiers.tsv:142	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
 verifiers.tsv:143	safety-guard	ask	allow	deliberate-construction T152 (L1311): a program the guard cannot see (unreadable, unknown git, a script it cannot read, a preload, xargs on unseen input) is judged by the visible words
+rows.tsv:42@repo/top-default	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
+rows.tsv:42@repo/top-bypass	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
+rows.tsv:42@repo/subagent	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
+rows.tsv:43@repo/top-default	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
+rows.tsv:43@repo/top-bypass	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
+rows.tsv:43@repo/subagent	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
+rows.tsv:44@repo/top-default	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
+rows.tsv:44@repo/top-bypass	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
+rows.tsv:44@repo/subagent	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes

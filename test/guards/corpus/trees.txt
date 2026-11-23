@@ -138,3 +138,35 @@ k
 {}
 -- cred-far id_rsa --
 k
+-- t210 proj/apps/cli/src/main.ts --
+export const main = () => 0;
+-- t210 proj/apps/cli/test/t.test.ts --
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { main } from "../src/main.ts";
+const dir = mkdtempSync(join(tmpdir(), "t-"));
+rmSync(dir, { recursive: true, force: true });
+main();
+-- t210 proj/apps/cli/test/side.test.ts --
+import '../src/main.ts';
+const m = await import('../src/main.ts');
+const r = require("../src/main.ts");
+export { x } from '../src/main.ts';
+import { mkdtempSync, rmSync } from "node:fs";
+const dir = mkdtempSync("t-");
+rmSync(dir, { recursive: true, force: true });
+-- t210 proj/tools/pkg/t.py --
+import os, tempfile
+from . import helper
+from .. import shared
+fd, f = tempfile.mkstemp()
+os.remove(f)
+-- t210 proj/apps/cli/test/far.test.ts --
+import { rmSync } from "node:fs";
+import { main } from "../src/main.ts";
+rmSync("../outside", { recursive: true });
+-- t210 proj/apps/cli/test/built.test.ts --
+import { unlinkSync } from "node:fs";
+const name = "outside";
+unlinkSync("../" + name);
