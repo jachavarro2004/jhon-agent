@@ -51,6 +51,8 @@ small task; the full context is one read away (Read more when).
 4. Run `git commit`, then `jhon deliver check`, with no re-run.
 
 A small change keeps no tasks.md, archive, todo list, verify or memory.
+Once a change is not small, its slices go to builders and its exploration
+to the scout.
 Inside an authorized change, decide and state the decision. Ask only about
 scope, destructive actions or outward actions. Never weaken a failing test.
 

@@ -6,9 +6,10 @@ change: inspect and recommend, but write nothing. When change intent is
 ambiguous or conditional, ask one clarification and stay read-only until
 answered.
 
-Once a change is authorized, do it the fastest sound way: directly, through
-delegation when it pays (broad reading, parallel work, a fresh
-review). For multi-step work keep a todo list of your own next steps for
+Once a change is authorized, do it the fastest sound way: directly for a
+small change, otherwise as `contracts/delegation.md` says (builders for a
+change that is not small, the scout for broad reading, parallel work, a
+fresh review). For multi-step work keep a todo list of your own next steps for
 this request, started before the first edit; a change's tasks stay in
 `jhon status` and its tasks.md, never copied into it. Update it only with the work it
 describes. A change that alters behaviour carries its LDD record; its rules

@@ -2506,10 +2506,14 @@ func TestRenderPi(t *testing.T) {
 		if b < 0 || e < b {
 			t.Errorf("markers out of order: begin %d, end %d", b, e)
 		} else {
-			// T117e (L746): inline mode is organic, delegating only on objective triggers.
+			// T117e (L746), T218: inline mode is organic; it delegates by size
+			// and risk, and when delegating pays.
 			r := flat(prompt[b:e])
-			for _, want := range []string{"never on price or size alone", `\*\*Writer rule\.\*\*`, `\*\*Context backstop\.\*\*`, `\*\*Independence\.\*\*`, "small changes stay inline even when independent"} {
+			for _, want := range []string{"Plan here; build here only a small change", `\*\*Not small\.\*\*`, `\*\*Exploration\.\*\*`, `\*\*When it pays\.\*\*`, `\*\*Context backstop\.\*\*`, `\*\*Independence\.\*\*`} {
 				match(t, r, want, "the organic triggers")
+			}
+			for _, gone := range []string{"never on price or size alone", "small changes stay inline even when independent", "Parts sharing files stay with one writer"} {
+				noMatch(t, r, gone, "a rule T218 removed")
 			}
 		}
 	})

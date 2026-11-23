@@ -233,8 +233,10 @@ would-be violation until real fixtures back it.
 The orchestrator keeps the conversation and the plan. Propose, spec,
 design, tasks, init and archive run inline in it; three executors carry
 every LDD step that leaves its thread. Its delegation mode is the
-profile's: `inline` (the default: understood work stays with it, and it
-delegates on objective triggers) or `writer` (builders write; it edits at
+profile's: `inline` (the default: it builds only a small change itself; a change
+`jhon status` calls not small goes to builders, a slice each, exploration
+past one read batch to the scout, and it also delegates when that is cheaper
+or runs in parallel) or `writer` (builders write; it edits at
 most about 20 lines per request).
 
 | Agent | Does | Writes |
