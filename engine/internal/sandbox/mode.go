@@ -42,11 +42,8 @@ type Effective struct {
 // or off Linux nothing is built, read or started. The Claude Code wrap and
 // `jhon sandbox status`, which pi asks, read this one.
 func Mode(h Host, in func() Input) Effective {
-	vals, err := settings.Load(settings.Path(), os.LookupEnv)
-	if v, ok := settings.Find(vals, "sandbox.mode"); err == nil && ok && v.Source != settings.SourceDefault {
-		if mode, ok := v.Value.(string); ok {
-			return Effective{Mode: mode, Source: ModeSettings}
-		}
+	if mode, ok := OwnerMode(); ok {
+		return Effective{Mode: mode, Source: ModeSettings}
 	}
 	if h.OS != "linux" {
 		return Effective{Mode: "off", Source: ModeDefault}
@@ -56,4 +53,16 @@ func Mode(h Host, in func() Input) Effective {
 		return Effective{Mode: "off", Source: ModeDefault, Probed: true, Problem: p}
 	}
 	return Effective{Mode: "on", Source: ModeDefault, Probed: true, Problem: p}
+}
+
+// OwnerMode is the owner's sandbox.mode in the settings file, and whether
+// the file sets one: what Mode takes before any default.
+func OwnerMode() (string, bool) {
+	vals, err := settings.Load(settings.Path(), os.LookupEnv)
+	if v, ok := settings.Find(vals, "sandbox.mode"); err == nil && ok && v.Source != settings.SourceDefault {
+		if mode, ok := v.Value.(string); ok {
+			return mode, true
+		}
+	}
+	return "", false
 }

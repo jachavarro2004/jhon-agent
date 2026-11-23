@@ -40,7 +40,9 @@ import (
 // trusted programs (sandbox.RunsOutside), and anything else with the work
 // profile; a work run that fails and holds git over SSH or gh ends with a
 // note that they run outside the sandbox only on a line of their own
-// (sandbox.DeliveryNote, T181). The delivery profile is gone (L1503). sandbox.mode in the settings is for the callers (the shell, the
+// (sandbox.DeliveryNote, T181), and a work run that holds one of
+// sandbox.deploy_tools, failed or not, with the same note for those tools
+// (sandbox.DeployNote, T217). The delivery profile is gone (L1503). sandbox.mode in the settings is for the callers (the shell, the
 // hook), which read it through status: the setting, whether the sandbox
 // can run here, and why not. profile prints how a command line runs
 // (sandbox.ProfileFor, T128g): `unsandboxed` or `work`; the pi shell asks
@@ -159,7 +161,7 @@ func sandboxRun(argv []string) (int, error) {
 		// git runs with the repository's hooks, ssh command, helpers and
 		// transports overridden (sandbox.UnsandboxedEnv, L1306).
 		if sandbox.RunsOutside(sandbox.ThisHost(), sandboxInput(pinned), program) {
-			return sandboxProgram(program[0], program, sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers()), sandbox.Unsandboxed, "")
+			return sandboxProgram(program[0], program, sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers()), sandbox.Unsandboxed, "", "")
 		}
 		profile = sandbox.Work
 	}
@@ -173,7 +175,7 @@ func sandboxRun(argv []string) (int, error) {
 		return sandboxRefused, nil
 	}
 	env := append(os.Environ(), sandbox.UVToolEnv(in)...)
-	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program))
+	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools))
 }
 
 // ownFilesProblem is why the sandbox of in runs nothing while a sandboxed
@@ -271,9 +273,13 @@ type sandboxState struct {
 	// and fix, on one line (T128f slice 8 L1375, 8b L1379); "" otherwise.
 	ModeReason string `json:"mode_reason"`
 	CanRun     bool   `json:"can_run"`
-	Reason     string `json:"reason"`
-	Fix        string `json:"fix"`
-	Project    string `json:"project"`
+	// Inside is a status run inside Jhon's sandbox (sandbox.Inside, T217
+	// S4), where no other sandbox can start: nothing is probed, CanRun is
+	// true, and a default mode reads as on, as the probe outside found it.
+	Inside  bool   `json:"inside"`
+	Reason  string `json:"reason"`
+	Fix     string `json:"fix"`
+	Project string `json:"project"`
 	// TimedOut is a probe that did not end in time: no verdict (L1382).
 	// CanRun stays false, truthfully, and pi wraps the command as usual,
 	// as the Claude Code wrap does (L1383).
@@ -367,6 +373,9 @@ func (r *claudeBashRules) warning() string {
 // line is the state on one line, as status and doctor print it.
 // The default's off on Linux says so, and that the fix turns the sandbox on.
 func (s sandboxState) line() string {
+	if s.Inside {
+		return "sandbox " + s.Mode + "; this command runs inside Jhon's sandbox, where another cannot start, so nothing was probed; jhon sandbox status run outside it (the owner's terminal) gives the real state"
+	}
 	if s.CanRun {
 		return "sandbox " + s.Mode + "; it can run here"
 	}
@@ -390,24 +399,34 @@ var sandboxHost = sandbox.ThisHost
 // would get. The mode is sandbox.Mode's, with its source and, for the
 // default's off on Linux, the probe's reason and fix; the mode and the
 // probe read the same sandbox, built once, and bubblewrap starts once.
+// Inside Jhon's sandbox (sandbox.Inside), where bubblewrap cannot start
+// another, nothing is probed: the sandbox runs, and the mode is the
+// owner's or, by default, on (T217 S4).
 func sandboxNow(pinned string) sandboxState {
 	s := sandboxState{CanRun: true, Project: pinned}
-	in := sandboxInput(pinned)
-	e := sandbox.Mode(sandboxHost(), func() sandbox.Input { return in })
-	s.Mode, s.ModeSource = e.Mode, e.Source
-	if e.Mode == "off" && e.Problem != nil {
-		s.ModeReason = e.Problem.Line()
-	}
 	if pinned == "" {
 		s.Project = sandboxProject()
 	}
-	// One empty sandbox started: the mode's probe when it probed.
-	p := e.Problem
-	if !e.Probed {
-		p = sandbox.Probe(sandboxHost(), in)
-	}
-	if p != nil {
-		s.CanRun, s.Reason, s.Fix, s.TimedOut = false, p.Reason, p.Fix, p.TimedOut
+	if sandbox.Inside() {
+		s.Inside, s.Mode, s.ModeSource = true, "on", sandbox.ModeDefault
+		if mode, ok := sandbox.OwnerMode(); ok {
+			s.Mode, s.ModeSource = mode, sandbox.ModeSettings
+		}
+	} else {
+		in := sandboxInput(pinned)
+		e := sandbox.Mode(sandboxHost(), func() sandbox.Input { return in })
+		s.Mode, s.ModeSource = e.Mode, e.Source
+		if e.Mode == "off" && e.Problem != nil {
+			s.ModeReason = e.Problem.Line()
+		}
+		// One empty sandbox started: the mode's probe when it probed.
+		p := e.Problem
+		if !e.Probed {
+			p = sandbox.Probe(sandboxHost(), in)
+		}
+		if p != nil {
+			s.CanRun, s.Reason, s.Fix, s.TimedOut = false, p.Reason, p.Fix, p.TimedOut
+		}
 	}
 	if s.Mode == "on" {
 		top := s.Project

@@ -98,10 +98,16 @@ func removedOutsideRemoved(section string) []string {
 	return bad
 }
 
+// A newest section with no ### Removed block (an [Unreleased] that only
+// fixes, T217) names nothing there; TestNewestSectionSlicing pins the
+// slicing itself.
 func TestUnreleasedRemovedNamesNothingThatCameBack(t *testing.T) {
-	_, removed := unreleased(t)
-	if removed == "" {
-		t.Fatal("the newest section has no ### Removed block; the slicing is wrong")
+	section, removed := unreleased(t)
+	if !strings.Contains(section+removed, "\n### ") {
+		t.Fatal("the newest section has no ### block; the slicing is wrong")
+	}
+	if strings.Contains(section, "### Removed") && strings.TrimSpace(removed) == "" {
+		t.Fatal("the newest section has a ### Removed heading but its block was not sliced")
 	}
 	for _, bad := range restoredUnderRemoved(removed) {
 		t.Errorf("the newest section's ### Removed names a feature that is back: %.160s", bad)
@@ -110,8 +116,8 @@ func TestUnreleasedRemovedNamesNothingThatCameBack(t *testing.T) {
 
 func TestUnreleasedNamesRemovedFeaturesOnlyUnderRemoved(t *testing.T) {
 	section, _ := unreleased(t)
-	if !strings.Contains(section, "### Added") {
-		t.Fatal("the newest section lost its ### Added block; the slicing is wrong")
+	if !strings.Contains(section, "\n### ") {
+		t.Fatal("the newest section has no ### block outside ### Removed; the slicing is wrong")
 	}
 	for _, bad := range removedOutsideRemoved(section) {
 		t.Errorf("the newest section names a removed feature outside ### Removed: %.160s", bad)
