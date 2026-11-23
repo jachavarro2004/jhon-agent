@@ -368,7 +368,8 @@ func writable(in Input) []string {
 // the git folder inside the project) takes no mount.
 //
 // Then the environment: the credential variables that are set are unset
-// (F4), and a $TMPDIR that is not bound becomes /tmp (F7).
+// (F4), a $TMPDIR that is not bound becomes /tmp (F7), and InsideVariable
+// marks what runs inside (T217).
 func Args(in Input) []string {
 	mounts, tmpdir := layout(in, true)
 	args := []string{"--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev"}
@@ -415,12 +416,23 @@ func Args(in Input) []string {
 	if in.Env["TMPDIR"] != "" && !tmpdir {
 		args = append(args, "--setenv", "TMPDIR", "/tmp")
 	}
-	args = append(args, "--die-with-parent")
+	args = append(args, "--setenv", InsideVariable, "1", "--die-with-parent")
 	if in.Cwd != "" {
 		args = append(args, "--chdir", in.Cwd)
 	}
 	return args
 }
+
+// InsideVariable is the variable every sandbox sets to 1 for what runs in
+// it (T217 S4): `jhon sandbox status` run inside, where no other sandbox can
+// start, reads it to say so instead of probing. It changes only what status
+// reports: `jhon sandbox run` still checks and starts bubblewrap, and fails
+// closed where it cannot.
+const InsideVariable = "JHON_IN_SANDBOX"
+
+// Inside is whether this process runs inside Jhon's sandbox, as
+// InsideVariable says.
+func Inside() bool { return os.Getenv(InsideVariable) == "1" }
 
 // probeArgs are the arguments of the empty sandbox Probe starts: one of
 // every option Args may give bubblewrap, on paths every Linux has, so a

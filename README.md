@@ -180,7 +180,12 @@ taken, so list only deploy tools) run outside the sandbox the same way, so a dep
 your cloud credentials (the AWS ones) and the rest of your environment: on a line of their own, or with
 other programs that run outside, with no pipe to another program, redirect to a file, `$` or
 backtick, and taken from a PATH folder a sandboxed command cannot write;
-anything else on the line keeps it in the sandbox. That git
+anything else on the line keeps it in the sandbox, and such a line ends, failed
+or not, with a note that the tool runs outside the sandbox only on a line of
+its own (`aws sts get-caller-identity --region us-east-1`, not `export
+AWS_REGION=…; aws … | tail -1`). The agent's always-on text says the same
+before it runs anything: a failure inside the sandbox is fixed by running the
+program alone, not by turning the sandbox off. That git
 runs with the repository's hooks (configured hooks included), ssh command,
 fsmonitor and credential helpers overridden; `url.*.insteadOf` and `include.*` in the repository's
 configuration are not, an accepted residual risk. uv's tools go to a
@@ -188,7 +193,11 @@ sandbox-only folder under the cache, and uv's own tool folder in the home stays
 read-only. A command that fails on a read-only
 path ends with a note telling the agent to stop and name the path
 (the `sandbox.allow_write` setting), and each run records a `jhon.sandbox`
-telemetry event. There is no PID namespace: a child a command detaches
+telemetry event. Everything inside the sandbox sees `JHON_IN_SANDBOX=1`:
+`jhon sandbox status` run there, where no other sandbox can start, says it
+runs inside and that the status outside it gives the real state (`inside` and
+`can_run` true in `--json`), instead of reporting bubblewrap's failure. There
+is no PID namespace: a child a command detaches
 (`setsid`, `nohup`) outlives the sandbox's bubblewrap. With
 `sandbox.mode = "on"` set and a sandbox that cannot run (no bubblewrap,
 user namespaces off) every command is refused with the fix and `jhon

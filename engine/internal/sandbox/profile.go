@@ -709,8 +709,46 @@ func loneBraces(s string) bool {
 // the line of `<shell> -c <line>` and the words after its $0 (the Claude
 // Code wrap passes the command there). "" when it holds none.
 func DeliveryNote(argv []string) string {
-	if len(argv) == 0 {
+	if slices.ContainsFunc(linePrograms(argv), delivers) {
+		return deliveryNote
+	}
+	return ""
+}
+
+// DeployNote is the note a work run of argv ends with, whatever its exit
+// but a signal's, when its line holds a program tools (sandbox.deploy_tools)
+// lists (T217): argv read as DeliveryNote reads it, each program matched by
+// its base name. It names the listed programs found, in the order of tools,
+// and gives the first as the example of a line of its own. "" when it holds
+// none, or tools is empty.
+func DeployNote(argv, tools []string) string {
+	var found []string
+	programs := linePrograms(argv)
+	for _, tool := range tools {
+		if slices.ContainsFunc(programs, func(p sh.Program) bool { return len(p.Argv) > 0 && filepath.Base(p.Argv[0]) == tool }) {
+			found = append(found, tool)
+		}
+	}
+	const rule = " outside the sandbox (sandbox.deploy_tools) only on a line of "
+	const rest = ", with no pipes, ;, $(…), ~, $VAR or VAR=value in front, or other commands: "
+	const options = " <arguments>, and pass settings as options (--region, --profile), not variables"
+	switch len(found) {
+	case 0:
 		return ""
+	case 1:
+		return found[0] + " runs" + rule + "its own, called by its name" + rest + "run it alone, as in " + found[0] + options
+	}
+	names := strings.Join(found[:len(found)-1], ", ") + " and " + found[len(found)-1]
+	return names + " run" + rule + "their own, called by their names" + rest + "run each alone, as in " + found[0] + options
+}
+
+// linePrograms are the programs of argv, as the notes read it: argv itself,
+// and for `<shell> -c <line>` the programs of the line and of the words
+// after its $0 (the Claude Code wrap passes the command there), each by
+// the reader or, where it cannot judge a line, by its commands' words.
+func linePrograms(argv []string) []sh.Program {
+	if len(argv) == 0 {
+		return nil
 	}
 	programs := []sh.Program{{Argv: argv}}
 	if len(argv) >= 3 && argv[1] == "-c" && slices.Contains(shells, filepath.Base(argv[0])) {
@@ -728,10 +766,7 @@ func DeliveryNote(argv []string) string {
 			}
 		}
 	}
-	if slices.ContainsFunc(programs, delivers) {
-		return deliveryNote
-	}
-	return ""
+	return programs
 }
 
 // deliveryNote is DeliveryNote's text.

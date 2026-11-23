@@ -745,6 +745,45 @@ func TestDeliveryNoteNamesALineWithGitOverSSHOrGh(t *testing.T) {
 	}
 }
 
+// T217 S1, S2: a work line that holds a program sandbox.deploy_tools lists,
+// by its base name, gets the note naming the listed tools it holds, in the
+// setting's order, with the first as the example; a line with none of
+// them, or with no tool listed, gets none. git and gh keep DeliveryNote.
+func TestDeployNoteNamesTheListedToolsOnTheLine(t *testing.T) {
+	const rule = " outside the sandbox (sandbox.deploy_tools) only on a line of "
+	one := func(tool string) string {
+		return tool + " runs" + rule + "its own, called by its name, with no pipes, ;, $(…), ~, $VAR or VAR=value in front, or other commands: run it alone, as in " + tool + " <arguments>, and pass settings as options (--region, --profile), not variables"
+	}
+	many := func(tools, first string) string {
+		return tools + " run" + rule + "their own, called by their names, with no pipes, ;, $(…), ~, $VAR or VAR=value in front, or other commands: run each alone, as in " + first + " <arguments>, and pass settings as options (--region, --profile), not variables"
+	}
+	owner := "export AWS_REGION=us-east-1; aws sts get-caller-identity --query Account --output text 2>&1 | tail -1"
+	listed := []string{"aws", "cdk", "sam"}
+	for _, c := range []struct {
+		argv  []string
+		tools []string
+		want  string
+	}{
+		{[]string{"/usr/bin/bash", "-c", owner}, listed, one("aws")},
+		{[]string{"/usr/bin/bash", "-c", owner}, nil, ""},
+		{[]string{"/usr/bin/bash", "-c", "aws s3 ls; true"}, nil, ""},
+		{[]string{"/usr/bin/bash", "-c", "cdk synth | cat; aws s3 ls"}, listed, many("aws and cdk", "aws")},
+		{[]string{"/usr/bin/bash", "-c", "cdk synth | cat; aws s3 ls"}, []string{"cdk", "aws"}, many("cdk and aws", "cdk")},
+		{[]string{"/usr/bin/bash", "-c", "sam build && cdk synth && aws s3 ls | cat"}, listed, many("aws, cdk and sam", "aws")},
+		{[]string{"/usr/bin/bash", "-c", "/usr/local/bin/aws s3 ls | cat"}, listed, one("aws")},
+		{[]string{"/usr/bin/bash", "-c", `trap "..." EXIT; eval " $1"`, "/usr/bin/bash", "timeout 30 aws s3 ls | cat"}, listed, one("aws")},
+		{[]string{"aws", "s3", "ls"}, listed, one("aws")},
+		{[]string{"/usr/bin/bash", "-c", "terraform apply | cat"}, listed, ""},
+		{[]string{"/usr/bin/bash", "-c", "set -o pipefail; git fetch origin | cat"}, listed, ""},
+		{[]string{"/usr/bin/bash", "-c", "echo aws | cat"}, listed, ""},
+		{nil, listed, ""},
+	} {
+		if got := DeployNote(c.argv, c.tools); got != c.want {
+			t.Errorf("DeployNote(%q, %q) = %q, want %q", c.argv, c.tools, got, c.want)
+		}
+	}
+}
+
 // T181 (L1503): zsh expands a lone {word} under BRACE_CCL and finds a
 // relative cd folder through its cdpath, both of which ~/.zshenv may set
 // for zsh -c: under zsh such a line runs in the work profile; bash and sh

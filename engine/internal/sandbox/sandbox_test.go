@@ -74,6 +74,7 @@ func TestArgsOfTheWorkProfile(t *testing.T) {
 		" --bind /home/u/.local/share/jhon/telemetry /home/u/.local/share/jhon/telemetry" +
 		" --remount-ro /home/u/.ssh --remount-ro /home/u/.config/gh" +
 		" --unsetenv SSH_AUTH_SOCK" +
+		" --setenv JHON_IN_SANDBOX 1" +
 		" --die-with-parent --chdir /home/u/project"
 	if got != want {
 		t.Errorf("Args(work) =\n%s\nwant\n%s", got, want)
@@ -156,6 +157,7 @@ func TestAMissingPathTakesNoMountAndALinkIsBoundWhereItLeads(t *testing.T) {
 		" --dev-bind /dev/null /home/u/project/dotfiles/npmrc" +
 		" --remount-ro /mnt/vault/aws" +
 		" --unsetenv SSH_AUTH_SOCK" +
+		" --setenv JHON_IN_SANDBOX 1" +
 		" --die-with-parent --chdir /home/u/project"
 	if got != want {
 		t.Errorf("Args =\n%s\nwant\n%s", got, want)
@@ -240,7 +242,7 @@ func TestTheSandboxUnsetsTheCredentialVariables(t *testing.T) {
 	in := sample(machine)
 	in.Env = map[string]string{"GH_TOKEN": "x", "GITHUB_TOKEN": "", "GIT_ASKPASS": "/usr/bin/ask", "HOME": "/home/u", "ANTHROPIC_API_KEY": "x"}
 	got := strings.Join(Args(in), " ")
-	if !strings.Contains(got, " --unsetenv GH_TOKEN --unsetenv GITHUB_TOKEN --unsetenv GIT_ASKPASS --die-with-parent") || strings.Count(got, "--unsetenv") != 3 {
+	if !strings.Contains(got, " --unsetenv GH_TOKEN --unsetenv GITHUB_TOKEN --unsetenv GIT_ASKPASS --setenv JHON_IN_SANDBOX 1 --die-with-parent") || strings.Count(got, "--unsetenv") != 3 {
 		t.Errorf("work unsets the credential variables that are set, and only them:\n%s", got)
 	}
 	if want := []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "SSH_AUTH_SOCK", "GIT_ASKPASS", "SSH_ASKPASS"}; !slices.Equal(CredentialVariables, want) {
@@ -337,8 +339,20 @@ func TestTMPDIRIsBoundOnlyWhereAScratchRootMayBe(t *testing.T) {
 		}
 	}
 	// No TMPDIR: nothing to set.
-	if got := strings.Join(Args(sample(d)), " "); strings.Contains(got, "--setenv") {
+	if got := strings.Join(Args(sample(d)), " "); strings.Contains(got, "--setenv TMPDIR") {
 		t.Errorf("with no TMPDIR, Args sets one:\n%s", got)
+	}
+}
+
+// T217 S4: every sandbox marks what runs in it with JHON_IN_SANDBOX=1, once,
+// so `jhon sandbox status` run inside knows it is inside; the marker is the
+// only variable Args sets besides a TMPDIR that is not bound.
+func TestArgsMarkWhatRunsInsideTheSandbox(t *testing.T) {
+	for _, in := range []Input{sample(machine), func() Input { i := sample(machine); i.Env["TMPDIR"] = "/proc/sys"; return i }()} {
+		got := strings.Join(Args(in), " ")
+		if strings.Count(got, " --setenv JHON_IN_SANDBOX 1 ") != 1 || strings.Count(got, "--setenv")-strings.Count(got, "--setenv TMPDIR") != 1 {
+			t.Errorf("Args sets JHON_IN_SANDBOX=1 once, and nothing else but TMPDIR:\n%s", got)
+		}
 	}
 }
 

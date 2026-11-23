@@ -93,6 +93,26 @@ func TestLeanTextKeepsItsCore(t *testing.T) {
 	}
 }
 
+// T217 S3: before it runs anything, the agent of either runtime reads that
+// git over SSH, gh and the owner's deploy tools run outside the sandbox only
+// alone on their line, and that a failure inside is fixed by running the
+// program alone, not by turning the sandbox off.
+func TestLeanTextSaysWhatRunsOutsideTheSandbox(t *testing.T) {
+	e := engineAt(t, repo, "--validate")
+	for _, rt := range []string{"claude-code", "pi"} {
+		lean := flatText(e.leanText(rt))
+		for _, w := range []string{
+			"With Jhon's sandbox on, git over SSH, `gh` and the owner's `sandbox.deploy_tools` (such as `aws`) run outside it, with the owner's credentials, only alone on their line, called by name:",
+			"no pipes, `;`, `&&` (but a leading `cd <absolute project dir> &&`), `$(…)`, `$VAR`, `~` or `VAR=value` in front.",
+			"One that fails inside the sandbox (no credentials, a read-only folder) is fixed by running it alone, not by turning the sandbox off.",
+		} {
+			if !strings.Contains(lean, w) {
+				t.Errorf("%s's lean text lacks %q", rt, w)
+			}
+		}
+	}
+}
+
 // T146h L2, the large path: the full context of each runtime is today's
 // fixed context whole, the orchestrator's body and the always-on layer with
 // the runtime's guarantees (pi's with its edits, as jhon-orchestrator.md

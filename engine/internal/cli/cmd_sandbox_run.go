@@ -21,12 +21,13 @@ import (
 // for --profile unsandboxed, the shell itself: path is its file and argv its
 // words, argv[0] first, with env. On a terminal it replaces this process,
 // as run always did; otherwise it supervises it (sandboxSupervised), and
-// a failure ends with failNote when it is not "".
-func sandboxProgram(path string, argv, env []string, profile, failNote string) (int, error) {
+// a failure ends with failNote when it is not "", any exit but a signal's
+// with runNote.
+func sandboxProgram(path string, argv, env []string, profile, failNote, runNote string) (int, error) {
 	if isTerminal(os.Stdout) || isTerminal(os.Stderr) {
 		return execProgram(path, argv[1:], env)
 	}
-	return sandboxSupervised(path, argv, env, profile, failNote)
+	return sandboxSupervised(path, argv, env, profile, failNote, runNote)
 }
 
 // ownerCredentialHelpers are the owner's credential helpers, the system's
@@ -80,11 +81,14 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 //     signal killed as an exit above 128 (143 for SIGTERM), so such an
 //     exit gets no note either; git's own fatal errors exit 128 and keep
 //     it;
+//   - any exit, a success too, not a signal's, ends with runNote after
+//     those, on a line of its own, when it is not "": sandbox.DeployNote
+//     for a work line that holds one of sandbox.deploy_tools (T217);
 //   - a jhon.sandbox event records the profile, the exit code and the
 //     refused path, through telemetry when it is on (G4);
 //   - its exit code is the program's, and a program killed by a signal
 //     kills this process with the same signal.
-func sandboxSupervised(path string, argv, env []string, profile, failNote string) (int, error) {
+func sandboxSupervised(path string, argv, env []string, profile, failNote, runNote string) (int, error) {
 	watch := &sandbox.Watch{}
 	errOut := &lastByte{w: os.Stderr}
 	cmd := &exec.Cmd{Path: path, Args: argv, Env: env, Stdin: os.Stdin,
@@ -137,6 +141,9 @@ func sandboxSupervised(path string, argv, env []string, profile, failNote string
 	}
 	if failNote != "" && code != 0 && code <= 128 && killedBy == 0 {
 		notes = append(notes, failNote)
+	}
+	if runNote != "" && code <= 128 && killedBy == 0 {
+		notes = append(notes, runNote)
 	}
 	if len(notes) > 0 {
 		if b := errOut.last(); b != 0 && b != '\n' {

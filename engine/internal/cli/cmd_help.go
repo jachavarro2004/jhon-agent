@@ -284,7 +284,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            like, in any case and with any version suffix)
                            are refused: with one, any line would run
                            outside. A name Jhon does not know is taken:
-                           list only deploy tools.
+                           list only deploy tools. A work line that holds
+                           one, failed or not, ends with a note that it
+                           runs outside the sandbox only on a line of its
+                           own (jhon sandbox run).
                            All three are the owner's: the file is read-only
                            inside the sandbox.
                            shell.keys.* are the shell's shortcuts, each a
@@ -546,7 +549,17 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            line, git over SSH and gh run outside the
                            sandbox only on a line of their own, with no
                            pipes, $(…) or other commands: run it alone, as
-                           in git -C <dir> fetch origin main; and with
+                           in git -C <dir> fetch origin main; any exit but
+                           a signal's, a success too, of a line that holds
+                           one of sandbox.deploy_tools ends after those
+                           with one line, <tool> runs outside the sandbox
+                           (sandbox.deploy_tools) only on a line of its
+                           own, called by its name, with no pipes, ;, $(…),
+                           ~, $VAR or VAR=value in front, or other
+                           commands: run it alone, as in <tool>
+                           <arguments>, and pass settings as options
+                           (--region, --profile), not variables (<tools>
+                           run ... of their own for two or more); and with
                            telemetry on each run
                            records a jhon.sandbox event (its profile, work
                            or unsandboxed, and the exit code). The
@@ -578,7 +591,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            work profile uv's tools go to
                            $XDG_CACHE_HOME/jhon/sandbox/uv-tools (UV_TOOL_DIR
                            and UV_TOOL_BIN_DIR, unless already set);
-                           ~/.local/share/uv stays read-only. bubblewrap is
+                           ~/.local/share/uv stays read-only, and
+                           JHON_IN_SANDBOX=1 marks what runs inside (jhon
+                           sandbox status). bubblewrap is
                            taken only from a PATH folder outside the
                            project and every folder the sandbox opens for
                            writing. It always sandboxes, whatever
@@ -615,8 +630,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            literal: --format '{{.Names}}'). git over SSH,
                            gh, the owner's docker and deploy tools cannot
                            run inside the sandbox (~/.aws, ~/.kube and
-                           ~/.config/gcloud are not there); the guards judge
-                           these lines as any other.
+                           ~/.config/gcloud are not there), and a work line
+                           that holds them ends with a note saying so (jhon
+                           sandbox run); the guards judge these lines as
+                           any other.
                            --project as for run. exit 0, 2 on a usage
                            error
   jhon sandbox status [--json] [--project <folder>]
@@ -639,9 +656,14 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            (why the default is off on Linux: the reason
                            and the fix, else ""), can_run, reason, fix,
                            timed_out (the probe did not end in time;
-                           can_run stays false), project ("" for none);
-                           --project as for run; exit 0, 2 on a usage
-                           error. With
+                           can_run stays false), inside, project ("" for
+                           none); --project as for run; exit 0, 2 on a
+                           usage error. Run inside Jhon's sandbox
+                           (JHON_IN_SANDBOX=1), where another cannot
+                           start, it probes nothing: it says so and that
+                           jhon sandbox status outside it gives the real
+                           state, and --json has inside and can_run true
+                           and the owner's mode, else on. With
                            sandbox.mode on it also counts the Bash deny and
                            ask rules in Claude Code's settings (the user's
                            ~/.claude/settings.json or CLAUDE_CONFIG_DIR's,

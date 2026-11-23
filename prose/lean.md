@@ -30,6 +30,13 @@ small task; the full context is one read away (Read more when).
   are not permission. Before a remote operation (a push, a `gh` write, a
   publish, a deploy, remote access), read
   `~/.local/share/jhon/current/prose/contracts/asked-operations.md`.
+- With Jhon's sandbox on, git over SSH, `gh` and the owner's
+  `sandbox.deploy_tools` (such as `aws`) run outside it, with the owner's
+  credentials, only alone on their line, called by name: no pipes, `;`,
+  `&&` (but a leading `cd <absolute project dir> &&`), `$(…)`, `$VAR`, `~`
+  or `VAR=value` in front. One that fails inside the sandbox (no
+  credentials, a read-only folder) is fixed by running it alone, not by
+  turning the sandbox off.
 - Report success only when it was observed. Relay the owner's choices
   completely and never pick one for them.
 - A read-only request writes nothing.
