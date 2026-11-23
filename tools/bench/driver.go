@@ -305,7 +305,7 @@ func (s *session) rpc() error {
 	// its own (a background notice) was running: the message goes again
 	// once that turn settles, at most busyRetries times (L444).
 	busy, resent := 0, true
-	jobs := backgroundJobs{running: map[string]bool{}, waited: map[string]bool{}}
+	jobs := backgroundJobs{running: map[string]bool{}, waited: map[string]bool{}, agents: map[string]bool{}}
 	write := func(in io.WriteCloser) {
 		b, _ := json.Marshal(map[string]string{"id": fmt.Sprintf("bench-%d", n), "type": "prompt", "message": prompts[n-1]})
 		_, _ = in.Write(append(b, '\n'))
@@ -380,40 +380,61 @@ func (s *session) rpc() error {
 }
 
 // backgroundJobs are the agent's background jobs (bash_background, monitor)
-// as the stream shows them (T47): a job is running from a record whose
-// details.jhonTasks.status is running (the tool's result, task_result) until
-// one shows another status (the shell's jhon-tasks.notice message, task_stop).
-// waited are the jobs a message already stayed open for once.
+// and background sub-agents as the stream shows them (T47, T209): a job is
+// running from a record whose details.jhonTasks.status is running (the tool's
+// result, task_result) until one shows another status (the shell's
+// jhon-tasks.notice message, task_result, task_stop). A sub-agent is running
+// from its launch, the subagent or subagent_continue result whose
+// details.task names it (agent-N; its result has no jhonTasks), until a
+// record's jhonTasks with its id shows another status. waited are the jobs a
+// message already stayed open for once; agents are the sub-agents' ids.
 type backgroundJobs struct {
-	running, waited map[string]bool
+	running, waited, agents map[string]bool
 }
 
+// subagentTools are the tools whose result names a background sub-agent it
+// launched in details.task.
+var subagentTools = []string{"subagent", "subagent_continue"}
+
 func (j backgroundJobs) see(l []byte) {
-	if !bytes.Contains(l, []byte(`"jhonTasks"`)) {
+	if !bytes.Contains(l, []byte(`"jhonTasks"`)) && !bytes.Contains(l, []byte(`"toolName":"subagent`)) {
 		return
 	}
 	var r map[string]any
 	if json.Unmarshal(l, &r) != nil {
 		return
 	}
+	if str(r["type"]) == "tool_execution_end" && slices.Contains(subagentTools, str(r["toolName"])) && r["isError"] != true {
+		// A foreground sub-agent's result has no task; a launch never
+		// overrides an end the stream already showed.
+		if id := str(at(r, "result", "details", "task")); id != "" && !j.agents[id] {
+			j.agents[id], j.running[id] = true, true
+		}
+	}
 	for _, t := range []any{at(r, "result", "details", "jhonTasks"), at(r, "message", "details", "jhonTasks")} {
 		// A monitor watches until it is stopped and may never end: only a
-		// command job holds a message open (L444).
+		// command job or a sub-agent holds a message open (L444).
 		if id := str(at(t, "id")); id != "" && str(at(t, "kind")) != "monitor" {
 			j.running[id] = str(at(t, "status")) == "running"
+			if str(at(t, "kind")) == "agent" {
+				j.agents[id] = true
+			}
 		}
 	}
 }
 
-// unwaited are the running jobs no agent_settled has waited for yet, sorted,
-// now marked waited; nil when none. A message whose agent settled with a job
-// still running stays open until the next agent_settled (the job's notice
-// turn), once per job: a job whose end the stream never shows keeps it open
-// no longer, and the run's timeout bounds the wait.
+// unwaited are the running jobs a message waits for at an agent_settled,
+// sorted, now marked waited; nil when none. A message whose agent settled
+// with a job still running stays open until the next agent_settled (the
+// job's notice turn), once per command job: one whose end the stream never
+// shows keeps it open no longer. A sub-agent keeps it open at every
+// agent_settled until the stream shows its end, as the shell's notice always
+// does (T209): another job's notice turn does not close it. The run's
+// timeout bounds the wait.
 func (j backgroundJobs) unwaited() []string {
 	var out []string
 	for id, running := range j.running {
-		if running && !j.waited[id] {
+		if running && (!j.waited[id] || j.agents[id]) {
 			j.waited[id] = true
 			out = append(out, id)
 		}
