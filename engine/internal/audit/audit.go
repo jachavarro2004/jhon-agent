@@ -24,6 +24,9 @@
 //	                    change's exploration.md or research.md;
 //	archive-without-red `jhon archive <change>` with no RED then GREEN of
 //	                    the change in the session.
+//	inline-not-small    the main thread's own edit of a change's code after
+//	                    `jhon status` called the change not small (inline.go;
+//	                    heuristic, a suspect at most).
 //
 // isolation-bypass also reads pi, which has no runtime isolation: a pi
 // worker or verify child's write outside its own cwd.
@@ -214,6 +217,7 @@ func runChecks(s *Session, ev evidence) ([]Finding, []string) {
 	checkVerifyWrote(s, emit)
 	checkExploreWrote(s, emit)
 	checkArchiveWithoutRed(s, emit)
+	checkInlineNotSmall(s, emit)
 	slices.SortStableFunc(findings, func(a, b Finding) int {
 		if c := js.LocaleCompare(a.Transcript, b.Transcript); c != 0 {
 			return c

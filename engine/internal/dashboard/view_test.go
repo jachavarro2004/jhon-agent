@@ -180,3 +180,23 @@ func TestSummaryCountsTheAuditErrors(t *testing.T) {
 		t.Errorf("errors = %v, want 2", got)
 	}
 }
+
+// T220 S4: the page explains inline-not-small as it explains every check.
+func TestViewExplainsInlineNotSmall(t *testing.T) {
+	c, ok := checkOf("inline-not-small")
+	if !ok || c.Title != "Not-small change built inline" || !strings.Contains(c.Explain, "jhon status called the change not small") {
+		t.Errorf("inline-not-small: %+v %v", c, ok)
+	}
+}
+
+// T220 L6: the page renders an explanation as plain text; no markdown backticks.
+func TestViewExplanationsArePlainText(t *testing.T) {
+	for _, c := range Checks {
+		if strings.Contains(c.Title+c.Explain, "`") {
+			t.Errorf("%s: %q", c.Name, c.Explain)
+		}
+	}
+	if c, _ := checkOf("inline-not-small"); !strings.Contains(c.Explain, "writer mode") {
+		t.Errorf("inline-not-small says it cannot tell writer mode apart: %q", c.Explain)
+	}
+}

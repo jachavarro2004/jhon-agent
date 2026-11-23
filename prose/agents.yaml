@@ -161,6 +161,10 @@ guarantees:
   # vcs-guard notes any other Edit/Write of its (Claude Code by `--agent`, pi
   # by JHON_PI_AGENT); it holds no Bash. audit's scout-wrote reads it (T123).
   ldd/scout-scope: { claude-code: behavioural, pi: behavioural }
+  # A change that is not small is applied by the jhon-builder agent, not
+  # inline (contracts/ldd.md, the apply row); jhon audit's inline-not-small
+  # reads the main thread's own edit of its code after jhon status said so (T220).
+  delegation/not-small-inline: { claude-code: behavioural, pi: behavioural }
   # A failing test is made to pass by the code, never skipped or removed;
   # jhon audit's test-weakened reads the edit between a RED and its pass (T56).
   tdd/no-weaken: { claude-code: behavioural, pi: behavioural }

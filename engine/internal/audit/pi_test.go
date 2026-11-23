@@ -59,7 +59,7 @@ func psafety(what string) string {
 // pstep is one step of a pi main session: a user message, a call, a final
 // reply, or a subagent call with its child's calls.
 type pstep struct {
-	kind         string // user, call, reply, subagent, start, auth, compaction, notice, wait
+	kind         string // user, call, reply, subagent, start, auth, compaction, notice, wait, full
 	text         string
 	n            int
 	call         pcall
@@ -190,6 +190,9 @@ func piSessionWith(t *testing.T, steps ...pstep) string {
 		case "notice":
 			w.entry("custom_message", "customType", "jhon-tasks.notice", "content", s.text, "display", true,
 				"details", js.Obj("jhonTasks", js.Obj("id", "job-3", "kind", "command", "status", "exited", "succeeded", s.n == 0, "exitCode", float64(s.n))))
+		case "full":
+			// The shell's message that the full context now binds (shell/lib/lean-context.ts FULL_MESSAGE).
+			w.entry("custom_message", "customType", "jhon-full", "content", "Jhon: this work needs the full context; it binds from now on.\n\n# Orchestrator", "display", false)
 		case "subagentResult":
 			w.entry("custom_message", "customType", "jhon-subagent.result", "content", s.text, "display", true,
 				"details", js.Obj("id", s.task, "agent", s.agent, "status", "completed"))

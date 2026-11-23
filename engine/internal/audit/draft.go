@@ -97,6 +97,11 @@ func Cause(check, message string) string {
 		return "no-red-in-session"
 	case "checker-wrote", "scout-wrote":
 		return check
+	case "inline-not-small":
+		if strings.Contains(m, "after the shell loaded the full context") {
+			return "after-full-context"
+		}
+		return "after-status"
 	}
 	return normalCause(m)
 }

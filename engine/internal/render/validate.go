@@ -75,6 +75,7 @@ var behaviouralAnchors = []string{
 	"safety/destructive-deny", "safety/outward-ask",
 	"efficiency/writer-scope",
 	"ldd/slices", "ldd/red-first", "ldd/independent-verify", "ldd/scout-scope",
+	"delegation/not-small-inline",
 	"tdd/no-weaken",
 }
 

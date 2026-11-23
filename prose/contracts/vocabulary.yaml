@@ -142,6 +142,15 @@ audit_rules:
     evidence_class: deterministic
     validation_status: pending-real-fixture
     real_violation: [explore-wrote-real]
+  - anchor: delegation/not-small-inline
+    # contracts/ldd.md's apply row: the `jhon-builder` agent applies a
+    # change, inline only a small one. jhon audit's inline-not-small reads
+    # the main thread's own edit of a change's code after `jhon status` (or
+    # the shell's full context) called it not small (T220 S2). The transcript
+    # does not record the delegation mode, so it is a heuristic, never a
+    # violation.
+    check: inline-not-small
+    evidence_class: heuristic
   - anchor: tdd/no-weaken
     check: test-weakened
     evidence_class: deterministic
