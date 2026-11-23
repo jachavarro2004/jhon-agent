@@ -9,12 +9,16 @@ that can harm a project or the owner, and audits afterwards with
 trigger applies.
 
 <!-- delegation:begin -->
-Work directly: do understood work here. Delegate only on an objective
-trigger, never on price or size alone:
-- **Writer rule.** 2+ independent units, each heavier than a sub-agent start
-  (several files or ~100+ lines), launch together in one message; small
-  changes stay inline even when independent. One behavior's code, tests and
-  docs are one unit.
+Plan here; build here only a small change (`jhon status` says so). Delegate:
+- **Not small.** When `jhon status` or the change's route calls a change
+  not small, builders apply it, a slice each; only a small change stays
+  here. Slices that share files go to one builder at a time, in order;
+  shared files are no reason to build here.
+- **Exploration.** Reading past one bounded read batch goes to the scout.
+- **When it pays.** Delegate also when it is cheaper, more efficient, or
+  lets work run in parallel: 2+ independent units, each heavier than a
+  sub-agent start (several files or ~100+ lines), launch together in one
+  message. One behavior's code, tests and docs are one unit.
 - **Context backstop.** On the shell's notice, delegate the next multi-step
   unit.
 - **Independence.** Verify by the risk tier (`contracts/delivery.md`).
@@ -23,7 +27,7 @@ A delegation prompt states what the executor cannot see: the task, its
 scope, the project root, and the decisions and authorizations that bind it.
 **Parallel work.** Readers share the tree; a writer beside another
 {{runtime:own-worktree}}. On return, read `contracts/delegation.md`
-before merging. Parts sharing files stay with one writer.
+before merging.
 When an executor stops short (a refusal the owner then resolves, a question
 answered), {{runtime:continue-agent}}: it keeps what it
 already read and did. Each slice gets a fresh executor.

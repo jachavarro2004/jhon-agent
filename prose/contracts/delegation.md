@@ -1,5 +1,12 @@
 # Delegation
 
+- **When to delegate.** A change `jhon status` (or its route) calls not
+  small is applied by builders, a slice each; only a small change stays
+  with the orchestrator. Slices that share files go to one builder at a
+  time, in order; shared files are no reason to work inline. Exploration
+  past one bounded read batch goes to the scout. Delegate also when it is
+  cheaper, more efficient, or lets work run in parallel. In writer mode,
+  its own rules bind instead.
 - A count or a price ratio never sizes a task; the counts below are notes.
 - From the main checkout, pass the change's worktree to sub-agents and
   inspect (their `cwd` where the tool takes one, else its absolute path in the

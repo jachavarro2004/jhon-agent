@@ -18,7 +18,7 @@ func TestWriterModeRulesReplaceAMarkedRegion(t *testing.T) {
 	}
 	begin, end := strings.Index(prompt, delegationBegin), strings.Index(prompt, delegationEnd)
 	organic := prompt[begin : end+len(delegationEnd)]
-	for _, w := range []string{"Work directly:", "**Parallel work.**", "A fix needed after a builder returns goes to a builder"} {
+	for _, w := range []string{"Plan here; build here only a small change", "**Parallel work.**", "A fix needed after a builder returns goes to a builder"} {
 		if !strings.Contains(organic, w) {
 			t.Errorf("the organic region lacks %q", w)
 		}

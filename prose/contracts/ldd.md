@@ -148,9 +148,9 @@ agent may run on any change.
 
 | Step | Runs in |
 |---|---|
-| explore, research | the `jhon-scout` agent, or inline |
+| explore, research | the `jhon-scout` agent, or inline within one bounded read batch |
 | init, propose, spec, design, tasks, archive | the orchestrator, inline, with the step's reference in `skills/ldd/references/` |
-| apply | the `jhon-builder` agent, or inline for a small task |
+| apply | the `jhon-builder` agent, a slice each (slices that share files one at a time, in order); inline only for a small change (in writer mode, its own rules bind) |
 | verify | the `jhon-checker` agent: independent, never the writer |
 
 A delegated step carries the output of `jhon context <change> --phase
