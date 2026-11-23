@@ -942,6 +942,46 @@ func TestRouteGuardPRNeedsRedBeforeGreen(t *testing.T) {
 	}
 }
 
+// T208 (L1643, L1649): a change whose RED was recorded before it had a
+// folder, under the git common dir, and whose GREEN is in its folder's
+// record, has its RED before GREEN on record when the checked-out branch
+// names it: the PR opens. Passes alone are no RED, and neither is a RED of
+// its name on a branch that does not name it, or on a detached HEAD.
+func TestRouteGuardPRReadsRedFromBeforeTheFolder(t *testing.T) {
+	t.Parallel()
+	pr := cmd("gh pr create --title x --body y")
+	green := `{"timestamp":"2026-01-01T00:03:00.000Z","complete":true,"scope":"full","candidate_tree":"t1","executions":[{"project":".","command":"true","status":"pass","exit_code":0}]}` + "\n"
+	passes := `{"timestamp":"2026-01-01T00:01:00.000Z","complete":true,"scope":"full","executions":[{"project":".","command":"true","status":"pass","exit_code":0}],"history":[{"timestamp":"2026-01-01T00:00:00.000Z","passed":true}]}` + "\n"
+	for _, c := range []struct {
+		name, before, branch string
+		want                 int
+	}{
+		{"a RED before the folder", redGreenUnverified(""), "c1", 0},
+		{"passes alone before the folder", passes, "c1", 2},
+		// The git common dir is every branch's: a RED its name recorded on
+		// another branch is not this branch's change's.
+		{"a RED of its name on another branch", redGreenUnverified(""), "feat/other", 2},
+		{"a RED before the folder, detached", redGreenUnverified(""), "", 2},
+	} {
+		r := newRG(t, "")
+		if c.branch != "" {
+			support.Git(t, r.p, "checkout", "-q", "-b", c.branch)
+		} else {
+			support.Git(t, r.p, "checkout", "-q", "--detach")
+		}
+		// A migration is high risk: the verified route, its record in a folder.
+		support.Write(t, r.p, map[string]string{"src/app.py": "X = 2\n", "src/migrations/0001_add.sql": "alter table a drop column b;\n", "tests/test_app.py": "def test_a(): pass\n",
+			"openspec/changes/c1/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n", "openspec/changes/c1/specs/a/spec.md": "# a\n",
+			"openspec/changes/c1/verify-report.md": "verdict: pass\n", "openspec/changes/c1/review-prism.md": "facets: safety\nverdict: pass\n",
+			"openspec/changes/c1/execution-record.json": green, ".git/jhon/changes/c1/execution-record.json": c.before})
+		res := r.call(t, "Bash", pr, true)
+		code(t, res, c.want, c.name)
+		if refused := strings.Contains(res.Stderr, "its RED before GREEN is not on record"); refused != (c.want != 0) {
+			t.Errorf("%s: refused for its RED %v: %q", c.name, refused, res.Stderr)
+		}
+	}
+}
+
 // lightVerifyNote is route-guard's advisory on a standard-route PR of change
 // with no passing light verify of the tree its last run tested (T154).
 func lightVerifyNote(change string) string {

@@ -245,11 +245,33 @@ func RecordPath(root, change string) string {
 func ChangeFile(root, change, file string) string {
 	dir := filepath.Join(root, ChangesOf(root), change)
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-		if common := gitCommonDir(root); common != "" {
-			return filepath.Join(common, "jhon", "changes", change, file)
+		if common := commonChangeFile(root, change, file); common != "" {
+			return common
 		}
 	}
 	return filepath.Join(dir, file)
+}
+
+// ChangeOfBranch is the change branch names (T31, L254): its name, a slash
+// naming a dash (feat/small-fix names feat-small-fix).
+func ChangeOfBranch(branch string) string { return strings.ReplaceAll(branch, "/", "-") }
+
+// branchNames is whether the branch checked out in the repository holding
+// root names change (ChangeOfBranch): false on a detached HEAD or outside git.
+func branchNames(root, change string) bool {
+	out, err := project.ReadGitCmd(root, "branch", "--show-current").Output()
+	branch := strings.TrimSpace(string(out))
+	return err == nil && branch != "" && ChangeOfBranch(branch) == change
+}
+
+// commonChangeFile is where file, one of change's record files, is kept
+// while change has no folder: under the git common dir, jhon/changes/<change>/;
+// "" outside git.
+func commonChangeFile(root, change, file string) string {
+	if common := gitCommonDir(root); common != "" {
+		return filepath.Join(common, "jhon", "changes", change, file)
+	}
+	return ""
 }
 
 // RecordFile is the absolute path of change's execution record (ChangeFile).
@@ -391,7 +413,18 @@ func (r *LastRun) Empty() bool { return r.Complete && !r.Passed && len(r.Failed)
 // is a record that exists and cannot be read, or one that is JSON null:
 // neither is a run to read.
 func ReadLastRun(root, change string) (*LastRun, error) {
-	abs := RecordFile(root, change)
+	run, err := readRunAt(RecordFile(root, change))
+	if err != nil || run == nil {
+		return run, err
+	}
+	run.RedBeforeGreen = redBeforeGreen(run.Passed, pastRuns(root, change))
+	run.LightVerify = lastLightVerify(root, change)
+	return run, nil
+}
+
+// readRunAt is the record at abs read as a last run, as ReadLastRun reads
+// it, with no RED before GREEN and no light verify read.
+func readRunAt(abs string) (*LastRun, error) {
 	if _, err := os.Stat(abs); err != nil {
 		return nil, nil
 	}
@@ -459,10 +492,8 @@ func ReadLastRun(root, change string) (*LastRun, error) {
 		Tree:      str("candidate_tree"),
 		Clean:     obj["working_tree_clean"] == true,
 
-		RedBeforeGreen: redBeforeGreen(passedAll, pastRuns(root, change)),
-		LightVerify:    lastLightVerify(root, change),
-		Unit:           obj["unit"] == true,
-		WorkingTree:    str("working_tree"),
+		Unit:        obj["unit"] == true,
+		WorkingTree: str("working_tree"),
 
 		AfterWorkingTree: str("after_working_tree"),
 	}, nil
