@@ -215,8 +215,8 @@ rule and runtime, how it holds, and `jhon doctor --runtime <name>` prints it:
 
 | Runtime | Enforced (a hook refuses) | Behavioural (`jhon audit` checks after) | Instruction only |
 |---|---|---|---|
-| Claude Code | 5 | 12 | 4 |
-| pi | 5 | 12 | 4 |
+| Claude Code | 5 | 13 | 4 |
+| pi | 5 | 13 | 4 |
 
 The enforced rules are the safety guard's destructive and outward-facing
 rules, the framework boundary, a writer's scope, and the tool list a
@@ -273,7 +273,9 @@ Every rule is a hypothesis with its evidence, and the evidence is measured.
 
 - **`jhon audit`** reads a Claude Code or pi session afterwards for
   safety and delivery outcomes: `refusal-bypass`, `isolation-bypass`,
-  `delivered-untested`, `edit-before-red`. It also measures context use,
+  `delivered-untested`, `edit-before-red`, and `inline-not-small` (the
+  main agent writing a change itself after `jhon status` called it not
+  small). It also measures context use,
   each change's slices and time, each writer's efficiency, how each agent
   used memory and CodeGraph, and your dialogue with the main thread, as
   statistics. `--all` sums every recent session; `--html` gives one page.

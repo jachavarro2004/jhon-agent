@@ -33,7 +33,7 @@ func TestSessionBuilderYieldsAReadableSession(t *testing.T) {
 
 func TestOnlyVerifiedVersionsAreSupported(t *testing.T) {
 	eq(t, "SupportedVersions", SupportedVersions, []string{"2.1.278", "2.1.280", "2.1.289", "2.1.292", "2.1.293", "2.1.296", "2.1.299", "2.1.304"})
-	eq(t, "Checks", Checks, []string{"refusal-bypass", "isolation-bypass", "delivered-untested", "edit-before-red", "test-weakened", "checker-wrote", "scout-wrote", "archive-without-red"})
+	eq(t, "Checks", Checks, []string{"refusal-bypass", "isolation-bypass", "delivered-untested", "edit-before-red", "test-weakened", "checker-wrote", "scout-wrote", "inline-not-small", "archive-without-red"})
 }
 
 func TestFixtures(t *testing.T) {

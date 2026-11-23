@@ -155,6 +155,11 @@ func TestNewestSectionSlicing(t *testing.T) {
 			outside: true, added: true,
 		},
 		{
+			name:    "unreleased with only ### Fixed is read, not the release below",
+			text:    head + "## [Unreleased]\n\n### Fixed\n\n- `/jhon:panel` fixed.\n\n## [0.4.0] - 2026-11-23\n\n### Added\n\n- New.\n\n### Removed\n\n- `alt+u` is gone.\n",
+			outside: true,
+		},
+		{
 			name: "only an empty unreleased",
 			text: head + "## [Unreleased]\n",
 		},

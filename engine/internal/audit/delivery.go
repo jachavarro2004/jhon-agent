@@ -29,10 +29,12 @@ var defaultBranches = []string{"main", "master"}
 var remotePrefix = lazyre.New(`^(?:origin|upstream)/`)
 
 // MergesToDefault is whether a command line merges into the default branch:
-// `gh pr merge`, or a `git merge` of another branch after `git checkout` or
-// `git switch` to `main` or `master` earlier in the same line. A merge of
-// the default branch into the current one syncs a branch; `git merge-base`
-// merges nothing.
+// `gh pr merge`, a `git merge` of another branch after `git checkout` or
+// `git switch` to `main` or `master` earlier in the same line, or a `git
+// fetch` whose refspec moves the default branch to another one (`git fetch
+// . fix/x:main`, a fast-forward, T220 S3). A merge of the default branch
+// into the current one, or a fetch of it into itself (`git fetch origin
+// main:main`), syncs a branch; `git merge-base` merges nothing.
 func MergesToDefault(command string) bool {
 	onDefault := false
 	for _, x := range codeless(plain(command)) {
@@ -55,9 +57,21 @@ func MergesToDefault(command string) bool {
 			return !slices.Contains(defaultBranches, remotePrefix.ReplaceAllString(a, ""))
 		}):
 			return true
+		case x.Sub == "fetch" && len(operands) > 1 && !slices.Contains(x.Args, "--dry-run") && slices.ContainsFunc(operands[1:], fetchesIntoDefault):
+			return true
 		}
 	}
 	return false
+}
+
+// fetchesIntoDefault is whether a fetch refspec moves the default branch to
+// another branch: its destination is `main` or `master`, its source is not.
+func fetchesIntoDefault(spec string) bool {
+	src, dest, ok := strings.Cut(strings.TrimPrefix(spec, "+"), ":")
+	branch := func(ref string) string {
+		return remotePrefix.ReplaceAllString(strings.TrimPrefix(ref, "refs/heads/"), "")
+	}
+	return ok && src != "" && slices.Contains(defaultBranches, branch(dest)) && !slices.Contains(defaultBranches, branch(src))
 }
 
 // pushesDefault is whether a git push updates the default branch: a refspec
@@ -578,10 +592,17 @@ type evidence struct {
 	pushedTo []pushOfChange
 	// refs is the session's PR references (readPRRefs).
 	refs prRefs
+	// moves is every successful move of the default branch a change's
+	// command made: a merge into it (MergesToDefault) or a push to it, `jhon
+	// publish` aside (T220 S3).
+	moves []moveOfChange
 }
 
 // pushOfChange is a git push of change, at at, of commit sha.
 type pushOfChange struct{ change, at, sha string }
+
+// moveOfChange is a move of the default branch by change's command, at at.
+type moveOfChange struct{ change, at string }
 
 // A finished is how a background command ended, from the runtime's task
 // notification: its exit code (nil when the summary gives none), its output
@@ -712,6 +733,9 @@ func transcriptEvidence(s *Session) evidence {
 					if sha := pushedCommit(text); sha != "" && u.change != "" {
 						ev.pushedTo = append(ev.pushedTo, pushOfChange{u.change, at, sha})
 					}
+				}
+				if !r.IsError && u.change != "" && (MergesToDefault(command) || DeliveryCommand(command) == "push" && !Publishes(command)) {
+					ev.moves = append(ev.moves, moveOfChange{u.change, e.Timestamp})
 				}
 				if ran == "" && u.change != "" && DirectTest(command) && (!background || ended && end.exit != nil) {
 					passed := !failed
@@ -1279,6 +1303,14 @@ func checkDeliveredUntested(s *Session, seen evidence, emit emitFunc, notes *[]s
 				}
 				if why == nil {
 					continue
+				}
+				// A ready check made after the delivery is no evidence for it (T220 S3): say so where one exists.
+				if i := slices.IndexFunc(checks, func(c readyCheck) bool { return c.action == action && dateParse(c.at) > deliveredAt }); i >= 0 {
+					moved := "the move"
+					if action != "merge" {
+						moved = "the " + kind
+					}
+					why.message += fmt.Sprintf("; the ready check at %s came after %s: a check made after it is no evidence for it", checks[i].at, moved)
 				}
 				reportedKey[key] = true
 				f := base

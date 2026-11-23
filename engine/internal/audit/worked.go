@@ -59,8 +59,7 @@ func whatWorked(ev evidence, o *Outcomes, ldd []ChangeLDD, guards []GuardRefusal
 func changeWorked(ev evidence, c *ChangeOutcome, ldd []ChangeLDD) []Worked {
 	var out []Worked
 	add := func(kind, what, evidence string) { out = append(out, Worked{kind, c.Change, what, evidence}) }
-	if i := lastIndex(ev.checks, func(k readyCheck) bool { return k.change == c.Change }); i >= 0 {
-		k := ev.checks[i]
+	if k, ok := deliveryEvidence(ev, c.Change); ok {
 		evidence := "jhon deliver check at " + k.at
 		if k.commit != "" {
 			evidence += " on " + k.commit[:min(8, len(k.commit))]
@@ -98,6 +97,39 @@ func changeWorked(ev evidence, c *ChangeOutcome, ldd []ChangeLDD) []Worked {
 		}
 	}
 	return out
+}
+
+// deliveryEvidence is the ready check that shows change's delivery worked:
+// its last ready check; but when its command moved the default branch, a
+// ready merge check is evidence only for a move it came before (T220 S3):
+// the last one before the last move, and none when any move had none before
+// it. ok is false when no check shows it.
+func deliveryEvidence(ev evidence, change string) (readyCheck, bool) {
+	i := lastIndex(ev.checks, func(k readyCheck) bool { return k.change == change })
+	if i < 0 {
+		return readyCheck{}, false
+	}
+	if ev.checks[i].action != "merge" {
+		return ev.checks[i], true
+	}
+	cited, last := -1, math.Inf(-1)
+	for _, m := range ev.moves {
+		if m.change != change {
+			continue
+		}
+		at := dateParse(m.at)
+		j := lastIndex(ev.checks, func(k readyCheck) bool { return k.change == change && k.action == "merge" && dateParse(k.at) <= at })
+		if j < 0 {
+			return readyCheck{}, false
+		}
+		if at >= last {
+			cited, last = j, at
+		}
+	}
+	if cited >= 0 {
+		return ev.checks[cited], true
+	}
+	return ev.checks[i], true
 }
 
 // lastIndex is the index of the last x in xs that f holds for, or -1.

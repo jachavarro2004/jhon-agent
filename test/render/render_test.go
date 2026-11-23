@@ -2477,7 +2477,7 @@ func TestRenderPi(t *testing.T) {
 		match(t, prompt, `(?m)^# Orchestrator$`)
 		match(t, prompt, `## Response Length Contract`, "the persona")
 		match(t, prompt, `\*\*A safety refusal is a stop\.\*\*`, "the contracts")
-		match(t, prompt, "Runtime guarantees in pi \\(agents\\.yaml `guarantees`\\): 5 enforced, 12 behavioural")
+		match(t, prompt, "Runtime guarantees in pi \\(agents\\.yaml `guarantees`\\): 5 enforced, 13 behavioural")
 	})
 
 	// T117b (L720): the writer-mode rules sit beside the prompt, protected,

@@ -40,6 +40,8 @@ func TestRuntimeDoctor(t *testing.T) {
 		match(t, out, `(?m)^  unsupported +runtime-boundaries/stop$`)
 		match(t, out, `(?m)^  behavioural +isolation/no-other-tree +jhon audit \(isolation-bypass, verified\)$`)
 		match(t, out, `(?m)^  behavioural +ldd/red-first +jhon audit \(edit-before-red, archive-without-red, pending-real-fixture\)$`)
+		// T220 S2: the main agent building a not-small change itself is a heuristic check, never a violation.
+		match(t, out, `(?m)^  behavioural +delegation/not-small-inline +jhon audit \(inline-not-small\)$`)
 		match(t, out, `(?m)^  verified +named-subagents +yes +2\.1\.280 +test/testdata/audit/apply-tdd-evidence`)
 		match(t, out, `(?m)^  ok +imports: the runtime takes imports, so no instruction budget binds the always-on bundle$`)
 	})
@@ -49,6 +51,7 @@ func TestRuntimeDoctor(t *testing.T) {
 		r := doctor(t, "pi")
 		wantCode(t, r, 0)
 		match(t, r.Out(), `(?m)^  behavioural +isolation/no-other-tree +jhon audit \(isolation-bypass, pending-real-fixture\)$`)
+		match(t, r.Out(), `(?m)^  behavioural +delegation/not-small-inline +jhon audit \(inline-not-small\)$`)
 	})
 
 	t.Run("jhon doctor --runtime with an unknown or missing name is a usage error", func(t *testing.T) {
