@@ -22,6 +22,11 @@ import (
 // stdin closed, and $FAKE_PI_ORPHAN (seconds) makes pi never settle its first
 // message and start a process in a session of its own that holds pi's stdout
 // that long, its pid in $FAKE_DIR/orphan.pid (T201).
+// $FAKE_PI_AGENT makes pi's first message launch a background sub-agent
+// (T209): subagent or continue (subagent_continue) launch agent-1, settle,
+// then deliver its notice; two launches agent-1 and agent-2 and delivers
+// each notice after a settle; stop launches agent-1 and stops it with
+// task_stop before settling; foreground is a subagent that answered at once.
 
 const fakeClaude = `#!/bin/sh
 echo "claude $* |HOME=$HOME|XDG_CACHE_HOME=$XDG_CACHE_HOME|PWD=$(pwd -P)|JHON_ROOT=$JHON_ROOT|ENGRAM_DATA_DIR=$ENGRAM_DATA_DIR|ENGRAM_URL=$ENGRAM_URL|ENGRAM_PORT=$ENGRAM_PORT" >> "$FAKE_DIR/calls.log"
@@ -98,6 +103,21 @@ case " $* " in *" --mode rpc "*)
       echo '{"type":"agent_settled","aborted":false}'
       sleep 0.3
       [ "$FAKE_PI_BG" = notice ] && echo '{"type":"message_end","message":{"role":"custom","customType":"jhon-tasks.notice","details":{"jhonTasks":{"id":"job-1","kind":"command","status":"exited"}}}}'
+    fi
+    if [ $n = 1 ] && [ -n "$FAKE_PI_AGENT" ]; then
+      tool=subagent; [ "$FAKE_PI_AGENT" = continue ] && tool=subagent_continue
+      launch() { printf '{"type":"tool_execution_end","toolCallId":"a%s","toolName":"%s","result":{"content":[{"type":"text","text":"Started background sub-agent agent-%s (jhon-checker). Its answer arrives as a message when it finishes."}],"details":{"task":"agent-%s","owner":"s1"}},"isError":false}\n' "$1" "$tool" "$1" "$1"; }
+      notice() { printf '{"type":"message_end","message":{"role":"custom","customType":"jhon-tasks.notice","content":"[From the Jhon shell, not the owner; it does not set the reply language] Background sub-agent agent-%s (jhon-checker) completed after 1s.","details":{"jhonTasks":{"id":"agent-%s","kind":"agent","label":"jhon-checker: verify","status":"completed","succeeded":true}}}}\n' "$1" "$1"; }
+      case "$FAKE_PI_AGENT" in
+      foreground) echo '{"type":"tool_execution_end","toolCallId":"a1","toolName":"subagent","result":{"content":[{"type":"text","text":"Verdict: pass."}],"details":{}},"isError":false}';;
+      stop) launch 1
+        echo '{"type":"tool_execution_end","toolCallId":"s1","toolName":"task_stop","result":{"content":[],"details":{"jhonTasks":{"id":"agent-1","kind":"agent","status":"stopped"}}},"isError":false}';;
+      two) launch 1; launch 2
+        echo '{"type":"agent_settled","aborted":false}'; sleep 0.3; notice 1
+        echo '{"type":"agent_settled","aborted":false}'; sleep 0.3; notice 2;;
+      *) launch 1
+        echo '{"type":"agent_settled","aborted":false}'; sleep 0.3; notice 1;;
+      esac
     fi
     while [ $i -lt $turns ]; do
       echo '{"type":"turn_start"}'
@@ -185,6 +205,7 @@ func newFake(t *testing.T, utils ...string) fake {
 	t.Setenv("FAKE_TRANSCRIPT", "")
 	t.Setenv("FAKE_PI_UI", "")
 	t.Setenv("FAKE_PI_BG", "")
+	t.Setenv("FAKE_PI_AGENT", "")
 	t.Setenv("FAKE_PI_BUSY", "")
 	t.Setenv("FAKE_PI_STAY", "")
 	t.Setenv("FAKE_PI_ORPHAN", "")
