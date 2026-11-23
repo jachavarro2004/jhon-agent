@@ -39,3 +39,8 @@ ldd,repo	none	subagent	Bash	"tee svc/src/x.py < /dev/null"	scope: tee into the g
 ldd,repo	none	subagent	Bash	"rm src/util/old.ts"	scope: an unlisted file deleted
 ldd,repo	none	subagent	Bash	"d=$(mktemp -d) && echo x > \"$d/out\""	scope: mktemp scratch
 ldd,repo	none	subagent	Bash	"echo x > /tmp/scope-out"	scope: /tmp scratch
+repo	t210	*	Bash	"node --test apps/cli/test/t.test.ts"	T210: a test that imports ../src/main.ts and deletes only its mkdtemp dir
+repo	t210	*	Bash	"node --test apps/cli/test/side.test.ts"	T210: a bare, dynamic, require and export-from module specifier
+repo	t210	*	Bash	"python3 tools/pkg/t.py"	T210: a Python relative import
+repo	t210	*	Bash	"node --test apps/cli/test/far.test.ts"	T210: rmSync of ../outside stays refused
+repo	t210	*	Bash	"node --test apps/cli/test/built.test.ts"	T210: an unlink of a ../ path built by string stays refused

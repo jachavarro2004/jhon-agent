@@ -476,7 +476,7 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 		out = append(out, judgeScriptFile(name, argv, ctx, vars, st, depth, p)...)
 	}
 	if p.Code != nil {
-		out = append(out, judgeCode(p, ctx, vars, dir, st.Lost, depth)...)
+		out = append(out, judgeCode(p, name, ctx, vars, dir, st.Lost, depth)...)
 		if (name == "perl" || name == "ruby") && hasInPlace(args) {
 			pieces := strings.Split(*p.Code, "\n")
 			for _, f := range operands(args, nil, "eEIMm") {
@@ -1002,6 +1002,17 @@ var (
 	multilineString = lazyre.New("'''[\\s\\S]*?'''|\"\"\"[\\s\\S]*?\"\"\"|`(?:[^`\\\\]|\\\\.)*`")
 	codePathLike    = lazyre.New(`[^\s'"` + "`" + `(),;=<>{}[\]]+`)
 	pathLead        = lazyre.New(`^(?:/|~|\.\.?(?:/|$))`)
+	// jsModuleSpec and pyModuleSpec are modules the code imports, not files
+	// it deletes (T210, L1657). Each is one statement on one line, its
+	// specifier one quoted string: an `import … from` or `export … from` (or
+	// the `} from` closing a multi-line one), a bare `import '…'`, and an
+	// `import('…')` or `require('…')` that opens a statement or is assigned
+	// or awaited, never a call's argument; in Python, the module of a
+	// `from … import`.
+	jsModuleSpec = lazyre.New(`(?m:^[ \t]*(?:(?:import|export)\b[^'"\n;]*?|\}[ \t]*)\bfrom[ \t]*(?:'[^'"\n]*'|"[^'"\n]*"))|` +
+		`(?m:^[ \t]*import[ \t]*(?:'[^'"\n]*'|"[^'"\n]*"))|` +
+		`(?m:(?:^|[=:]|\bawait)[ \t]*(?:import|require)\([ \t]*(?:'[^'"\n]*'|"[^'"\n]*")[ \t]*\))`)
+	pyModuleSpec = lazyre.New(`(?m:^[ \t]*from[ \t]+[\w.]+[ \t]+import\b)`)
 	// codeGlob is code that expands a pattern into file names: only there is
 	// a `.*` a path that can name `.git`.
 	codeGlob = lazyre.New(`\b(?:i?glob|rglob|fnmatch|globSync|fast-glob|wildcard)\b|\bglob\(`)
@@ -1016,7 +1027,20 @@ func withoutTextBlocks(code string) string {
 	})
 }
 
-func judgeCode(p sh.Program, ctx *Ctx, vars map[string]string, dir string, lost bool, depth int) []Finding {
+// withoutModules is code without the modules it imports, read in the
+// language of interp, the program that runs it: a JS runtime's or Python's.
+func withoutModules(code, interp string) string {
+	switch {
+	case tsRunners[interp]:
+		return jsModuleSpec.ReplaceAllString(code, " ")
+	case pythonName.MatchString(interp):
+		return pyModuleSpec.ReplaceAllString(code, " ")
+	}
+	return code
+}
+
+// judgeCode is the findings of code that interp, the program, runs.
+func judgeCode(p sh.Program, interp string, ctx *Ctx, vars map[string]string, dir string, lost bool, depth int) []Finding {
 	var out []Finding
 	code := ""
 	if p.Code != nil {
@@ -1032,7 +1056,7 @@ func judgeCode(p sh.Program, ctx *Ctx, vars map[string]string, dir string, lost 
 		out = append(out, deny(p.Name+" code", "it writes or deletes a VCS directory, the grants directory, or a Claude Code settings file"))
 	}
 	if codeDelete.MatchString(targets) {
-		for _, t := range codePathLike.FindAllString(targets, -1) {
+		for _, t := range codePathLike.FindAllString(withoutModules(targets, interp), -1) {
 			if !pathLead.MatchString(t) {
 				continue
 			}
@@ -1123,7 +1147,7 @@ func judgeScriptFile(name string, argv []string, ctx *Ctx, vars map[string]strin
 	// A script the guard cannot read (one the line writes first, a
 	// substitution, a descriptor, a parameter it cannot resolve, one sourced
 	// past the bound) is judged by the line's visible words alone (L1311).
-	kind, word, text, path, ok := "", "", "", "", false
+	kind, word, text, path, ok, interp := "", "", "", "", false, name
 	if sourced {
 		// A sourced script runs in the shell itself, as `bash <script>` would
 		// run it; the scripts it sources are judged in turn, up to a bound.
@@ -1153,7 +1177,7 @@ func judgeScriptFile(name string, argv []string, ctx *Ctx, vars map[string]strin
 			if sh.Shells[prog] {
 				kind = "shell"
 			} else if sh.CodeInterpreter.MatchString(prog) || tsRunners[prog] {
-				kind = "code"
+				kind, interp = "code", prog
 			}
 		}
 	}
@@ -1175,7 +1199,7 @@ func judgeScriptFile(name string, argv []string, ctx *Ctx, vars map[string]strin
 	} else {
 		q := p
 		q.Name, q.Code = label, &body
-		found = judgeCode(q, ctx, vars, st.Dir, st.Lost, depth+1)
+		found = judgeCode(q, interp, ctx, vars, st.Dir, st.Lost, depth+1)
 	}
 	// A question the script asks where it was started is its own
 	// repository's when it lives in another one: a session lends another
