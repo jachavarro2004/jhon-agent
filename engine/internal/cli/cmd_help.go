@@ -197,6 +197,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            rendered agents or the main agent's definition
                            is missing from ~/.claude/agents, or the
                            definition cannot be read or is empty; warns of
+                           the state records that wait in the Engram queue,
+                           why Engram did not take them, the entries it
+                           refused, and a queue it cannot read; warns of
                            each live orchestrator session that started
                            before the last install (resume it with
                            jhon start --resume <id>); warns when the
@@ -356,7 +359,20 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            tests turned green by editing only their test, which
                            verify and the Prism facets judge; --save-state
                            --after <commit> (started by route-guard) writes the
-                           change's state record to Engram once HEAD moves
+                           change's state record to Engram once HEAD moves.
+                           Inside Jhon's sandbox, where Engram's folder stays
+                           read-only, a state record is queued in <git common
+                           dir>/jhon/engram-queue/ instead, and every jhon
+                           command run outside it, the hooks included (the
+                           payload's cwd), first saves each well-formed queued
+                           record (ldd state: <change>, topic
+                           ldd-state/<change>) to Engram from the main
+                           worktree and moves any other entry to
+                           engram-queue/refused/ (the newest 100 kept), never
+                           saved, its name quoted on stderr; no link on the
+                           way is followed (the common dir is opened with
+                           openat2 RESOLVE_NO_SYMLINKS; without it, before
+                           Linux 5.6, the queue is not read)
   jhon executions run [<change>] [--affected [<base-ref>]] [--timeout <minutes>] [--jobs <n>] [--force] [--dry-run] [--json]
                            with no change named, the one jhon status selects
                            on the branch (its first line says which); run each

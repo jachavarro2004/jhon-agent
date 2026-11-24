@@ -73,6 +73,7 @@ func runDoctor(argv []string) (int, error) {
 	}
 	d.sessions()
 	d.sandbox()
+	d.engramQueue()
 	d.versions()
 	d.remoteProbed(remote)
 	fmt.Fprint(o.W, "\n")

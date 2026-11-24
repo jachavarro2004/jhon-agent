@@ -48,6 +48,28 @@ type Payload map[string]any
 
 // read reads the payload; ok is false when stdin is not JSON. A JSON value
 // that is not an object reads as an empty payload, as `payload?.x` does.
+// PayloadHooks are the hooks that read a JSON payload with the call's cwd
+// and call PayloadRead with it once they have; PayloadRead, when set, is
+// what the caller does with that cwd ("" when the payload names none):
+// the cli flushes that folder's Engram queue (T222 S1b), as pi runs its
+// guards from anywhere.
+var (
+	PayloadHooks = []string{"pre-tool", "agent-hooks"}
+	PayloadRead  func(cwd string)
+)
+
+// payloadRead calls PayloadRead, when set, with payload's cwd.
+func payloadRead(payload []byte) {
+	if PayloadRead == nil {
+		return
+	}
+	cwd := ""
+	if p, ok := read(bytes.NewReader(payload)); ok {
+		cwd = p.Str("cwd")
+	}
+	PayloadRead(cwd)
+}
+
 func read(r io.Reader) (Payload, bool) {
 	data, err := io.ReadAll(r)
 	if err != nil {

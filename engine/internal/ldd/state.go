@@ -1,7 +1,6 @@
 package ldd
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,6 +16,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/execution"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/sandbox"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 )
 
@@ -32,7 +32,9 @@ import (
 //
 // The write never fails or slows the transition: one deadline (StateDeadline)
 // bounds the searches, CodeGraph, and the save; Engram not resolvable is no
-// write and no note; any failure is one note line.
+// write and no note; any failure is one note line. Inside Jhon's sandbox,
+// whose Engram folder stays read-only, the record is queued instead and
+// saved by Jhon outside the sandbox (engramqueue.go).
 
 // StateDeadline bounds a state write: decisions, refs, and the save.
 const StateDeadline = 3 * time.Second
@@ -315,12 +317,19 @@ func (s ChangeState) Content() string {
 // SaveState writes s to Engram as change's one state record, from top (so
 // Engram resolves the project as the agents' saves do), within
 // StateDeadline. It returns "" when written or when Engram does not resolve,
-// and otherwise the one note line that says the state was not saved.
+// and otherwise the one note line that says what became of the state.
+//
+// Inside Jhon's sandbox, where Engram's folder stays read-only, and where
+// Engram fails on a read-only file system, the record is queued for Jhon to
+// save outside the sandbox (engramqueue.go, T222 S1b), and the note says so;
+// inside, Engram is not asked for the decisions either: it could not open
+// its folder.
 func SaveState(top string, s ChangeState) string {
 	bin := EngramBin()
 	if bin == "" {
 		return ""
 	}
+	inside := sandbox.Inside()
 	ctx, cancel := context.WithTimeout(context.Background(), StateDeadline)
 	defer cancel()
 	var files []string
@@ -328,40 +337,51 @@ func SaveState(top string, s ChangeState) string {
 		files = append(files, t.File)
 	}
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		if d, ok := decisionsFor(ctx, bin, top, handoffQuery(s.Change, files, codeNames(s.touched))); ok {
-			s.Decisions = d
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		s.Refs = refsOf(ctx, top, s.touched)
-	}()
+	if !inside {
+		wg.Go(func() {
+			if d, ok := decisionsFor(ctx, bin, top, handoffQuery(s.Change, files, codeNames(s.touched))); ok {
+				s.Decisions = d
+			}
+		})
+	}
+	wg.Go(func() { s.Refs = refsOf(ctx, top, s.touched) })
 	wg.Wait()
 	note := func(why string) string {
 		return "jhon: the state of " + s.Change + " was not saved to Engram (" + why + "); the " + s.Phase + " stands"
 	}
+	if inside {
+		return queueNote(top, s, note, "")
+	}
 	if ctx.Err() != nil {
 		return note("no answer within " + StateDeadline.String())
 	}
-	cmd := exec.CommandContext(ctx, bin, "save", StateTitle(s.Change), s.Content(), "--type", StateType, "--topic", StateTopic(s.Change))
-	cmd.Dir = top
-	cmd.WaitDelay = 100 * time.Millisecond
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return note("no answer within " + StateDeadline.String())
-		}
-		why := strings.TrimSpace(strings.SplitN(stderr.String(), "\n", 2)[0])
-		if why == "" {
-			why = err.Error()
+	stderr, err := engramSave(ctx, bin, top, StateTitle(s.Change), s.Content(), StateTopic(s.Change))
+	if err != nil {
+		why := saveFailure(ctx, err, stderr, StateDeadline)
+		if ctx.Err() == nil && readOnlyFailure(stderr) {
+			return queueNote(top, s, note, why)
 		}
 		return note(why)
 	}
 	return ""
+}
+
+// queueNote queues s in top's queue and says so; where the queue cannot be
+// written, the note says why the state was not saved: why Engram failed,
+// or inside the sandbox that it keeps Engram's folder read-only.
+func queueNote(top string, s ChangeState, note func(string) string, why string) string {
+	queue, err := queueState(top, s)
+	if err == nil {
+		return "jhon: the state of " + s.Change + " was queued for Engram; Jhon saves it outside the sandbox"
+	}
+	where := "the queue " + queue
+	if queue == "" {
+		where = "no queue"
+	}
+	if why == "" {
+		return note("Jhon's sandbox keeps Engram's folder " + engramFolder() + " read-only, and " + where + " could not be written: " + err.Error() + "; fix: run jhon doctor")
+	}
+	return note(why + "; " + where + " could not be written: " + err.Error() + "; fix: run jhon doctor")
 }
 
 // ClosingChanges are the active changes of top's branch a commit there

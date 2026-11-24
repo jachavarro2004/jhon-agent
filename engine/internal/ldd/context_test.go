@@ -192,7 +192,7 @@ func TestHandoffDecisionsNote(t *testing.T) {
 	jhonRoot(t)
 	root := gitRepoT(t)
 	write(t, filepath.Join(root, "services/notifications/mailer.ts"), "export const send = () => 1;\n")
-	const tail = "): search Engram for the change's decisions before handing off"
+	const tail = "): search Engram with the MCP memory tool (mem_search) for the change's decisions before handing off"
 	for _, tc := range []struct {
 		name, engram, note string
 	}{

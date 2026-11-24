@@ -46,7 +46,10 @@ import (
 // decisions and architecture Engram holds for the change and the areas its
 // diff touches (`engram search`, or JHON_ENGRAM). Engram unavailable leaves
 // `decisions` null with a `decisions_note` that names why (T163): not found,
-// its exit code and first stderr line, a timeout, or too much output; the
+// its exit code and first stderr line, a timeout, or too much output, and
+// inside Jhon's sandbox that it keeps Engram's folder read-only (T222,
+// sandboxedFolder); the note says to search with the MCP memory tool
+// (mem_search) instead. The
 // packet still prints. An Engram that finds nothing is no failure.
 //
 // `change` is the name given, or nil; it is never selected on the context's
@@ -290,7 +293,7 @@ func decisionsWhy(ctx context.Context, bin, root, query string) (decisions []Dec
 		stderr := &capped{n: engramStderrMax}
 		cmd.Stdout, cmd.Stderr = &stdout, stderr
 		if err := cmd.Run(); err != nil {
-			return nil, engramFailure(ctx, err, stderr.String())
+			return nil, sandboxedFolder(engramFailure(ctx, err, stderr.String()), stderr.String())
 		}
 		if stdout.Len() > engramMaxBuffer {
 			return nil, "engram output over 1 MiB"
@@ -372,7 +375,7 @@ func handoffContext(ctx context.Context, c Context) (Context, error) {
 		decisions, why = decisionsWithin(ctx, c.ProjectRoot, query)
 	}
 	if why != "" {
-		return out.with(Field{"decisions", nil}, Field{"decisions_note", "engram unavailable (" + why + "): search Engram for the change's decisions before handing off"}), nil
+		return out.with(Field{"decisions", nil}, Field{"decisions_note", "engram unavailable (" + why + "): search Engram with the MCP memory tool (mem_search) for the change's decisions before handing off"}), nil
 	}
 	return out.with(Field{"decisions", decisions}), nil
 }

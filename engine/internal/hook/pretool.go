@@ -87,6 +87,7 @@ func PreTool(args []string, io IO) int {
 	if err != nil {
 		return refuse("stdin could not be read")
 	}
+	payloadRead(payload)
 	tool, plan := "", false
 	if p, ok := read(bytes.NewReader(payload)); ok {
 		tool, plan = p.Str("tool_name"), p.Str("permission_mode") == "plan"
