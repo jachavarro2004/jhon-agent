@@ -479,7 +479,7 @@ func TestSetupNotesAToolThatNeedsANewerJhon(t *testing.T) {
 		return Check{}
 	}
 	path := filepath.Join(s.Home, "bin", "jhon-studio")
-	want := Check{Name: "jhon-studio", OK: true, Detail: "~/bin/jhon-studio",
+	want := Check{Name: "jhon-studio", OK: true, Detail: "~" + string(filepath.Separator) + filepath.Join("bin", "jhon-studio"),
 		Note: "jhon-studio 0.2.0 requires jhon >=0.6.0, and this is jhon 0.5.0-rc.1: jhon-studio is off for this run; update jhon (jhon update), or install a jhon-studio version that supports jhon 0.5.0-rc.1"}
 	if got := studio(manifests.Answer{Version: "0.2.0", PluginDir: path, RequiresJhon: ">=0.6.0"}, nil); got != want {
 		t.Errorf("a newer minimum: %+v", got)
