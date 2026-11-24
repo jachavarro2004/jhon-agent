@@ -80,34 +80,19 @@ jhon-agent's `validate.yml`. Replace `<repo>` and `<workflow>`:
 </p>
 ```
 
-## Family
-
-The section `## The Jhon family`, the same list in every README and on the
-landing, with the current repo's line ending in "(you are here)" (and its
-own name not linked):
-
-```markdown
-## The Jhon family
-
-- **[jhon-agent](https://github.com/jachavarro2004/jhon-agent)**: the framework.
-- **[jhon-studio](https://github.com/jachavarro2004/jhon-studio)**: presentation videos for any project.
-- **[The landing](https://jachavarro2004.github.io/jhon-site/)**: Jhon's site, jachavarro2004.github.io/jhon-site.
-- **[The profile](https://github.com/jachavarro2004)**: the author's GitHub profile, github.com/jachavarro2004.
-- **[YouTube](https://www.youtube.com/channel/UCprv0NKifqqMb-zzrBdXb9g)**: Jhon's films, a video for every release.
-```
-
-In jhon-agent, for example, the first line reads
-`- **jhon-agent**: the framework (you are here).`
-
 ## Support block
 
-Approved as is: verbatim in every README (before `## License`), in every
-SUPPORT.md, and in the landing's sponsor section:
+Verbatim in every README (before `## License`), in every SUPPORT.md, and in
+the landing's sponsor section, with `<name>` the repo's own jhon-* name
+(jhon-agent, jhon-studio, jhon-site), never bare "Jhon". The profile repo,
+which has no jhon-* name, and the landing page's sponsor section, whose star
+link goes to jhon-agent, use jhon-agent. There is no family section in any
+repo. In jhon-agent the block reads:
 
 ```markdown
-## Support Jhon
+## Support jhon-agent
 
-Jhon is free and open source.
+jhon-agent is free and open source.
 If it helps you, donate any amount you choose,
 once or monthly, on GitHub Sponsors.
 If you can't donate, a ⭐ on the repo helps
@@ -141,8 +126,9 @@ jhon-agent's. The README's footer heading is `## License` everywhere (never
 
 - The banner is the 61818-byte GIF and opens the README; the tagline block
   and the badge row follow it.
-- `## The Jhon family` lists all five, the current repo marked once.
-- `## Support Jhon` is verbatim and sits right before `## License`.
+- No `## The Jhon family` section.
+- `## Support <name>` (the repo's jhon-* name) is verbatim and sits right
+  before `## License`.
 - No `$` amount or tier appears in any README, SUPPORT.md or sponsor text.
 - Every relative link and image points to a file that exists.
 

@@ -1,6 +1,6 @@
 // Jhon's one identity (odd/tasks/presentation-identity.md S4-S11): the README
-// opens with the banner, the tagline and the badge row, names the Jhon family
-// with this repo marked, carries the support block verbatim before
+// opens with the banner, the tagline and the badge row, has no family section
+// (L6), carries the support block, with this repo's jhon-* name, verbatim before
 // `## License`; SUPPORT.md and docs/identity.md exist and hold the block; and
 // every relative link or image in those files names a file that exists. The
 // files are read from the repository root.
@@ -15,9 +15,9 @@ import (
 	"testing"
 )
 
-// supportBlock is S9's block, verbatim.
-const supportBlock = "## Support Jhon\n\n" +
-	"Jhon is free and open source.\n" +
+// supportBlock is S9's block, verbatim, with this repo's jhon-* name (L6).
+const supportBlock = "## Support jhon-agent\n\n" +
+	"jhon-agent is free and open source.\n" +
 	"If it helps you, donate any amount you choose,\n" +
 	"once or monthly, on GitHub Sponsors.\n" +
 	"If you can't donate, a ⭐ on the repo helps\n" +
@@ -86,26 +86,17 @@ func TestReadmeCarriesTheIdentityKit(t *testing.T) {
 		t.Errorf("the badge row is not under the tagline, before the first section")
 	}
 
-	// S8: the family, this repo marked; S9: the block before ## License.
-	family := strings.Index(readme, "\n## The Jhon family\n")
+	// S8: no family section (L6); S9: the block, then ## License.
+	if strings.Contains(readme, "## The Jhon family") {
+		t.Errorf("README.md has a family section; L6 drops it")
+	}
+	if strings.Contains(readme, "## Support Jhon\n") {
+		t.Errorf("README.md says \"Support Jhon\"; the block names jhon-agent (L6)")
+	}
 	support := strings.Index(readme, "\n"+supportBlock)
 	license := strings.Index(readme, "\n## License\n")
-	if family < 0 || support < 0 || license < 0 || !(family < support && support < license) {
-		t.Fatalf("README.md wants ## The Jhon family, then the support block verbatim, then ## License: %d %d %d", family, support, license)
-	}
-	section := readme[family:support]
-	for _, want := range []string{"jhon-agent", "jhon-studio", "https://jachavarro2004.github.io/jhon-site/", "github.com/jachavarro2004", "YouTube"} {
-		if !strings.Contains(section, want) {
-			t.Errorf("## The Jhon family does not name %s", want)
-		}
-	}
-	if n := strings.Count(section, "(you are here)"); n != 1 {
-		t.Errorf("## The Jhon family marks %d repos \"(you are here)\", want 1", n)
-	}
-	for _, line := range strings.Split(section, "\n") {
-		if strings.Contains(line, "(you are here)") && !strings.Contains(line, "**jhon-agent**") {
-			t.Errorf("\"(you are here)\" is not on jhon-agent's line: %q", line)
-		}
+	if support < 0 || license < 0 || support > license {
+		t.Fatalf("README.md wants the support block verbatim, then ## License: %d %d", support, license)
 	}
 	if strings.Contains(readme, "Licences") {
 		t.Errorf("README.md says \"Licences\"; the footer is ## License")
@@ -120,7 +111,7 @@ func TestSupportAndIdentityDocsHoldTheSupportBlock(t *testing.T) {
 		}
 	}
 	identity := readRoot(t, root, "docs/identity.md")
-	for _, want := range []string{"#e7bbc8", "#53343f", "#e9e0e1", "#1f1f28", "#161618", "Fraunces", "Space Grotesk", "FiraCode Nerd", "(you are here)", badgeStyle, "FUNDING.yml"} {
+	for _, want := range []string{"#e7bbc8", "#53343f", "#e9e0e1", "#1f1f28", "#161618", "Fraunces", "Space Grotesk", "FiraCode Nerd", "jhon-*", badgeStyle, "FUNDING.yml"} {
 		if !strings.Contains(identity, want) {
 			t.Errorf("docs/identity.md does not state %s", want)
 		}

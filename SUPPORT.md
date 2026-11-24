@@ -15,9 +15,9 @@ Jhon is maintained by one person. Pick the place that fits what you have:
 Before you ask, `jhon doctor` runs every health check and says how to fix
 what fails, and `jhon help` lists every command.
 
-## Support Jhon
+## Support jhon-agent
 
-Jhon is free and open source.
+jhon-agent is free and open source.
 If it helps you, donate any amount you choose,
 once or monthly, on GitHub Sponsors.
 If you can't donate, a ⭐ on the repo helps
