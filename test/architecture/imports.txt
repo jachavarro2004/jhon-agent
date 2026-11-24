@@ -115,6 +115,7 @@ internal/ldd -> internal/ldd/layout
 internal/ldd -> internal/project
 internal/ldd -> internal/rename
 internal/ldd -> internal/requirements
+internal/ldd -> internal/sandbox
 internal/ldd -> internal/vcs
 internal/ldd -> internal/workspace
 internal/ldd/layout -> internal/lazyre
