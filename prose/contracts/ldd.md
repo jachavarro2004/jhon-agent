@@ -140,7 +140,12 @@ A change's record holds only what it needs:
 - **No folder** for a change that needs none of these: see above.
 
 Archive only a change with a folder and its RED before GREEN on record;
-`jhon status` never suggests archive without them.
+a workspace member's counts. A change that alters no behaviour records no
+tests by design: it archives without one while a file outside the
+layout's folder differs from the default branch, never once that diff is
+empty (after its merge). `jhon archive` refuses any other change without
+its RED before GREEN, and `jhon status` suggests archive only where
+`jhon archive` takes the change.
 
 `explore → research → propose → spec → design → tasks → apply → verify → archive`
 
@@ -181,8 +186,8 @@ refusal.
 Status suggests one of `propose`, `spec`, `design`, `tasks`, `apply`,
 `verify`, `archive`, `select-change`, or `start-change`: the next step the
 change needs after the furthest output that exists. It never suggests an
-artifact the change does not need, nor `archive` without RED before GREEN
-or without a folder. It suggests `verify` only when it is due: on the verified route, or when
+artifact the change does not need, nor `archive` where `jhon archive`
+refuses it (see above) or without a folder. It suggests `verify` only when it is due: on the verified route, or when
 `review_required` names it. Its notes (a VCS state below ready, an edit
 target outside the repository, legacy configuration) inform; none stops
 anything.

@@ -12,11 +12,19 @@ import (
 // archive that moved nothing says nothing of it.
 func TestArchiveSuggestsAFreshSessionOnce(t *testing.T) {
 	t.Setenv("JHON_TELEMETRY", "off")
+	// The RED before GREEN check reads the layout's vocabulary (T223).
+	t.Setenv("JHON_ROOT", repoRoot(t))
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "openspec", "changes", "c1"), 0o777); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "openspec", "changes", "c1", "tasks.md"), []byte("- [x] 1.1 done\n"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	// Its RED before GREEN is on record: `jhon archive` refuses a change without it (T223).
+	record := `{"timestamp":"2026-11-05T10:01:00.000Z","complete":true,"scope":"full","executions":[{"project":".","command":"true","status":"pass","exit_code":0}],` +
+		`"history":[{"timestamp":"2026-11-05T10:00:00.000Z","passed":false}]}` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "openspec", "changes", "c1", "execution-record.json"), []byte(record), 0o666); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)

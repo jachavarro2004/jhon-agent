@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/execution"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 	"io"
 	"io/fs"
 	"os"
@@ -28,6 +30,14 @@ import (
 // falls back. An existing destination is refused before any move. The
 // source is snapshotted first, must be gone after the move, and the
 // destination must equal the snapshot (the readback).
+//
+// A change with no RED before GREEN on record is refused before anything
+// moves (T223): the fact `jhon status --json` reports as
+// tests.red_before_green (execution.RedBeforeGreenOnRecord, a workspace
+// member's included). Only a change that alters no behaviour is archived
+// without it, while its diff against the default branch is not empty
+// (noBehaviourApplied, as status reads it): its route records no tests by
+// design; an empty diff, after its merge, earns no exemption.
 //
 // Exit status: 0 moved and verified; 1 refused or readback failed; 2 usage;
 // otherwise the status of the failed git command.
@@ -51,6 +61,19 @@ func Archive(args []string, stdout, stderr io.Writer) int {
 	if _, err := os.Lstat(destination); err == nil {
 		fmt.Fprintf(stderr, "archive destination collision: source %s and destination %s remain unchanged. Resolve the destination collision, then rerun this archive step.\n", source, destination)
 		return 1
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if !execution.RedBeforeGreenOnRecord(root, change) {
+		g := gitReads{}
+		if !g.noBehaviourApplied(root, g.routeAt(root)) {
+			fmt.Fprintln(stderr, NoRedGreenRefusal(root, change))
+			return 1
+		}
+		fmt.Fprintf(stdout, "no RED before GREEN needed: %s alters no behaviour (every file outside %s/ that differs from the default branch is a test or a document)\n", change, layout.For(root).Dir())
 	}
 
 	// Outside a work tree nothing can be tracked. Inside one, a failing
@@ -117,6 +140,54 @@ func Archive(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stdout, "readback: empty")
 	return 0
+}
+
+// NoRedGreenRefusal is why `jhon archive` refuses change in root: no RED
+// before GREEN on record, how to record it, and which change archives
+// without it.
+func NoRedGreenRefusal(root, change string) string {
+	return "archive refused: " + change + " has no RED before GREEN on record (`tests.red_before_green` in `jhon status " + change + " --json` is not true); nothing was moved. " +
+		"Record it: " + RedGreenHint(change) + "; then archive again. " +
+		"Only a change that alters no behaviour archives without it, while a file outside " + layout.For(root).Dir() + "/ differs from the default branch (before its merge): " +
+		"the standard and the verified route both keep the RED and GREEN runs of a change that alters behaviour (contracts/ldd.md, \"The record\")."
+}
+
+// routeAt is the route of the change at root, as status reads it: only a
+// project that is its repository's top level has a route of its own (one
+// nested in another repository would read that one's diff); nil otherwise
+// or when it cannot be read.
+func (g gitReads) routeAt(root string) *Route {
+	top := vcs.GitTopLevel(root)
+	if top == "" || project.Realish(top) != project.Realish(root) {
+		return nil
+	}
+	rt, err := g.routeOf(root)
+	if err != nil {
+		return nil
+	}
+	return &rt
+}
+
+// noBehaviourApplied is whether the change at root, on route, alters no
+// behaviour and has applied it: every file that differs from the default
+// branch outside the layout is one `jhon risk` reads as passive (a test or
+// a document), and at least one does (T223). Its route records no tests by
+// design, so it is archived without a RED before GREEN. An unknown route
+// or base, or an empty diff (after its merge, or nothing applied), is not.
+func (g gitReads) noBehaviourApplied(root string, route *Route) bool {
+	if route == nil || route.Behaviour {
+		return false
+	}
+	top := vcs.GitTopLevel(root)
+	if top == "" {
+		return false
+	}
+	base, _, ok := g.baseOf(top, nil)
+	if !ok {
+		return false
+	}
+	files, _ := g.addedOutsideRecord(top, base)
+	return len(files) > 0
 }
 
 var (

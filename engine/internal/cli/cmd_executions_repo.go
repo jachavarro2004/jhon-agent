@@ -100,7 +100,8 @@ func runRepoExecutions(root, change, name string, minutes float64, json bool) (i
 		shown = execution.RecordFile(primary, change)
 	}
 	exempt := execution.ChangeRecordPaths(lib, change)
-	run := execution.RepoRun{WorkingTree: vcs.WorkingTree(lib, exempt), Executions: []execution.Execution{}}
+	run := execution.RepoRun{WorkingTree: vcs.WorkingTree(lib, exempt), Executions: []execution.Execution{},
+		History: execution.RepoHistoryOf(primary, change, name)}
 	write := func() error { return execution.WriteRepoRun(primary, change, name, run) }
 	if err := write(); err != nil {
 		return 1, err
@@ -147,6 +148,7 @@ func runRepoExecutions(root, change, name string, minutes float64, json bool) (i
 	}
 	run.AfterWorkingTree = vcs.WorkingTree(lib, exempt)
 	run.Complete = true
+	run.Timestamp = now()
 	passed := 0
 	for _, e := range run.Executions {
 		if e.Status == execution.Pass {

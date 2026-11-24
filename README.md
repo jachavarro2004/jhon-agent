@@ -433,7 +433,7 @@ own help.
 | `jhon review start` | the native Prism review (`freeze`, `refute`, `validate`, `record`; `run` is all of it through `claude -p`, for Claude Code) |
 | `jhon context` | one delegation's launch context as JSON |
 | `jhon compose` | apply a delta spec to a main spec, atomically |
-| `jhon archive` | move a change into the archive and verify it |
+| `jhon archive` | move a change into the archive and verify it, once its RED before GREEN is on record (or the change alters no behaviour) |
 | `jhon audit` | audit one session, or every recent one with `--all` |
 | `jhon dashboard` | the read-only dashboard |
 | `jhon mode`, `jhon grant` | your permission mode and timed grants |
