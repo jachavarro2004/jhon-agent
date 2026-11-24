@@ -469,7 +469,7 @@ own help.
 | [docs/jhon-studio.md](docs/jhon-studio.md) | jhon-studio, the opt-in video integration: `/jhon-studio:video` in Claude Code, `/jhon:video` in pi |
 | [docs/status-json.md](docs/status-json.md) | the shape of `jhon status --json` |
 | [docs/identity.md](docs/identity.md) | Jhon's one identity across its repos: the mark, the words, the look, the badges, the family, the support block, the community files |
-| [SUPPORT.md](SUPPORT.md) | where to ask, and how to support Jhon |
+| [SUPPORT.md](SUPPORT.md) | where to ask, and how to support jhon-agent |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, release by release |
 | `prose/contracts/ldd.md` | the method itself |
 
@@ -525,17 +525,9 @@ nothing is recorded.
   already passed on this machine is skipped. Install both with
   `git config core.hooksPath tools/git-hooks`.
 
-## The Jhon family
+## Support jhon-agent
 
-- **jhon-agent**: the framework (you are here).
-- **[jhon-studio](https://github.com/jachavarro2004/jhon-studio)**: presentation videos for any project.
-- **[The landing](https://jachavarro2004.github.io/jhon-site/)**: Jhon's site, jachavarro2004.github.io/jhon-site.
-- **[The profile](https://github.com/jachavarro2004)**: the author's GitHub profile, github.com/jachavarro2004.
-- **[YouTube](https://www.youtube.com/channel/UCprv0NKifqqMb-zzrBdXb9g)**: Jhon's films, a video for every release.
-
-## Support Jhon
-
-Jhon is free and open source.
+jhon-agent is free and open source.
 If it helps you, donate any amount you choose,
 once or monthly, on GitHub Sponsors.
 If you can't donate, a ⭐ on the repo helps
