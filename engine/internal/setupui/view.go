@@ -426,10 +426,15 @@ var stateWidth = func() int {
 }()
 
 func (m Model) integrations() []line {
-	on := [rowCount]bool{true, true, m.c.Telemetry, m.c.Palette == "desktop"}
+	// Jhon's own rows, then each offered optional integration's (offered).
+	rows, on := integrations[:], []bool{true, true, m.c.Telemetry, m.c.Palette == "desktop"}
+	for _, o := range offered() {
+		rows = append(rows, integration{o.Display, o.Display, o.Setup.Summary, o.Setup.SummaryNarrow, o.Setup.Detail})
+		on = append(on, m.c.Optional.On(o.Setting))
+	}
 	narrow := m.narrow()
 	row := func(i int) line {
-		it := integrations[i]
+		it := rows[i]
 		name, desc, nw, dw := it.name, it.desc, 24, 38
 		if narrow {
 			name, desc, nw, dw = it.short, it.narrowDesc, 12, 26
@@ -463,7 +468,7 @@ func (m Model) integrations() []line {
 		}
 		return line{focus: m.cursor == i, segs: []seg{m.box(on[i]), {s: pad(name, nw), fg: m.st.ink}, m.text(pad(desc, dw)), state}}
 	}
-	long := func(i int) line { return l(m.dim("    " + integrations[i].long)) }
+	long := func(i int) line { return l(m.dim("    " + rows[i].long)) }
 	ls := []line{m.heading("Integrations"), l(m.head("Required for now"))}
 	if narrow {
 		ls = append(ls, row(rowEngram), row(rowCodeGraph), l(m.dim("    coupled to the core for now")))
@@ -471,7 +476,7 @@ func (m Model) integrations() []line {
 		ls = append(ls, row(rowEngram), long(rowEngram), row(rowCodeGraph), long(rowCodeGraph))
 	}
 	ls = append(ls, line{}, l(m.head("Optional, off by default")))
-	for i := rowTelemetry; i < rowCount; i++ {
+	for i := rowTelemetry; i < len(rows); i++ {
 		ls = append(ls, row(i))
 		if !narrow && m.cursor == i {
 			ls = append(ls, long(i))
@@ -501,12 +506,17 @@ func (m Model) checkLines(cw int) []line {
 		count = seg{s: fmt.Sprintf("   %d missing", missing), fg: m.st.warn}
 	}
 	ls := []line{m.heading("Dependencies", count), {}}
+	// The name column fits the longest name with two cells after it, 11 at least.
+	nw := 11
+	for _, c := range m.checks {
+		nw = max(nw, ansi.StringWidth(c.Name)+2)
+	}
 	for i, c := range m.checks {
 		mark := seg{s: "✓", fg: m.st.ok}
 		if !c.OK {
 			mark = m.bad("✗")
 		}
-		ls = append(ls, line{focus: m.cursor == i, segs: []seg{mark, {s: " " + pad(c.Name, 11), fg: m.st.ink}, m.text(c.Detail)}})
+		ls = append(ls, line{focus: m.cursor == i, segs: []seg{mark, {s: " " + pad(c.Name, nw), fg: m.st.ink}, m.text(c.Detail)}})
 		if !c.OK && c.Fix != "" {
 			// The row keeps the rule's right margin: lead, "  $ ", text, 2 cells.
 			for j, part := range wrapFix(c.Fix, cw-8, cw-6) {
@@ -518,7 +528,10 @@ func (m Model) checkLines(cw int) []line {
 			}
 		}
 		if !c.OK && c.Advice != "" {
-			ls = append(ls, l(m.dim("  "), m.text(c.Advice)))
+			// Advice too long for the row wraps as a fix does, never cut.
+			for _, part := range wrapFix(c.Advice, cw-6, cw-6) {
+				ls = append(ls, l(m.dim("  "), m.text(strings.TrimRight(part, " "))))
+			}
 		}
 	}
 	ls = append(ls, line{}, l(seg{s: strings.Repeat("─", max(cw-4, 0)), fg: m.st.line}))

@@ -19,7 +19,7 @@ __pycache__/
 .atl/
 .codegraph/
 
-# The films are rendered here (tools/media) but kept out of git: each render
+# Jhon's films (made with jhon-studio) are kept out of git: each render
 # would add ~28 MB to every clone. They are published on the landing page
 # (github.com/jachavarro2004/jhon-site) and in the README's players.
 /docs/assets/video/*.mp4

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os/exec"
 	"slices"
 	"strings"
 
@@ -34,6 +35,51 @@ func (d doctor) remoteProbed(remote bool) {
 			o.OK(m.Name + " answers at " + url)
 		}
 	}
+}
+
+// cliIntegrations is a section for each optional cli integration that is on
+// (jhon-studio, odd/tasks/jhon-studio.md S3), after the versions, headed by
+// its display name: its program's own checks, `<doctor.binary> doctor
+// --json` (integrations.AskDoctor), each that passes ok and each that fails
+// a warning with its fix; its program not on PATH, a warning with how to
+// install it. Nothing of it fails Jhon's doctor: it is the owner's opt-in,
+// and Jhon runs without it. One that is off shows nothing.
+func (d doctor) cliIntegrations() {
+	o := d.o
+	for _, m := range integrations.Optional() {
+		if m.Kind != "cli" || m.Doctor.Binary == "" || !settings.On(m.Setting) {
+			continue
+		}
+		o.Head(m.Display)
+		if _, err := exec.LookPath(m.Doctor.Binary); err != nil {
+			o.Warn(fmt.Sprintf("%s is not on PATH (%s is on) — %s", m.Doctor.Binary, m.Setting, installAdvice(m)))
+			continue
+		}
+		checks, err := integrations.AskDoctor(m)
+		if err != nil {
+			o.Warn(err.Error())
+			continue
+		}
+		for _, c := range checks {
+			if c.OK {
+				o.OK(c.ID + ": " + c.Detail)
+			} else {
+				o.Warn(c.ID + ": " + c.Detail + " — fix: " + c.Fix)
+			}
+		}
+	}
+}
+
+// installAdvice is how m's manifest says to install its binary: its manual
+// way, else the first it lists.
+func installAdvice(m integrations.Manifest) string {
+	if s := m.InstallCommand("manual", m.Doctor.Version); s != "" {
+		return s
+	}
+	if vias := m.InstallVias(); len(vias) > 0 {
+		return m.InstallCommand(vias[0], m.Doctor.Version)
+	}
+	return "install " + m.Doctor.Binary
 }
 
 // shippedHolders are, by capability, the agents of the shipped

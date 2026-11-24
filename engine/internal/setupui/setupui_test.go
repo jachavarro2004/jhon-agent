@@ -613,7 +613,8 @@ func TestSpaceOnEngramLeavesItOnWithANote(t *testing.T) {
 func TestPaletteIsOneRowInSetup(t *testing.T) {
 	f := newFake()
 	f.checks = artboardChecks(false)
-	m := press(setup(t, f, 100), "enter", "enter", "down", "down", "down")
+	// From Telemetry, one row down; the offered integrations' rows follow it.
+	m := press(setup(t, f, 100), "enter", "enter", "down")
 	s := screen(m)
 	contains(t, s, "Palette", "● Rose Ink  ○ Desktop")
 	if strings.Contains(s, "] Palette") {
@@ -633,7 +634,7 @@ func TestPaletteIsOneRowInSetup(t *testing.T) {
 		g.saved.Palette = &saved
 		m := press(setup(t, g, 100), "enter", "enter")
 		contains(t, screen(m), "○ Rose Ink  ● Desktop")
-		contains(t, screen(press(m, "down", "down", "down", "space")), "● Rose Ink  ○ Desktop")
+		contains(t, screen(press(m, "down", "space")), "● Rose Ink  ○ Desktop")
 	}
 }
 
@@ -678,4 +679,50 @@ func TestAFixWithAdviceShowsBoth(t *testing.T) {
 	f.checks[3] = Check{Name: "engram", Detail: "not on PATH", Fix: "go install example.com/engram@v1", Advice: "if that fails, download engram v1"}
 	s := screen(press(setup(t, f, 100), "enter", "enter", "enter"))
 	contains(t, s, "  $ go install example.com/engram@v1", "    if that fails, download engram v1")
+}
+
+// odd/tasks/jhon-studio.md S3: the Integrations step offers jhon-studio
+// under the optional ones, off by default; space turns it on and the
+// install gets it chosen; a saved one starts on.
+func TestStudioIsAnOptionalRowOffByDefault(t *testing.T) {
+	f := newFake()
+	f.checks = artboardChecks(false)
+	m := press(setup(t, f, 100), "enter", "enter")
+	s := screen(m)
+	contains(t, s, "[ ] jhon-studio", "presentation videos for any project")
+	m = press(m, "down", "down", "space")
+	contains(t, screen(m), "▎ [●] jhon-studio", "/jhon-studio:video in Claude Code, /jhon:video in pi")
+	press(m, "enter", "enter", "enter")
+	if !f.choices.Optional.On("integrations.studio") {
+		t.Errorf("choices = %+v, want studio on", f.choices)
+	}
+	contains(t, frame(t, press(setup(t, newFake(), 80), "enter", "enter"), 80, 24), "[ ] jhon-studio", "project videos")
+	g := newFake()
+	g.saved.Optional = Toggles("integrations.studio\n")
+	contains(t, screen(press(setup(t, g, 100), "enter", "enter")), "[●] jhon-studio")
+}
+
+// A check's advice too long for its row wraps, never cut, and a name longer
+// than the column keeps two cells before its detail (jhon-studio's manual
+// install, odd/tasks/jhon-studio.md S3).
+func TestALongAdviceWrapsAndALongNameKeepsItsGap(t *testing.T) {
+	const manual = "git clone https://github.com/jachavarro2004/jhon-studio ~/.local/share/jhon-studio && ln -s ~/.local/share/jhon-studio/bin/jhon-studio ~/.local/bin/jhon-studio"
+	for _, w := range []int{100, 80} {
+		f := newFake()
+		f.checks = append(artboardChecks(false), Check{Name: "jhon-studio", Detail: "not on PATH", Advice: manual})
+		s := frame(t, press(setup(t, f, w), "enter", "enter", "enter"), w, 24)
+		if strings.Contains(s, "…") {
+			t.Errorf("%d columns: the advice is cut:\n%s", w, s)
+		}
+		contains(t, s, "✗ jhon-studio  not on PATH", "    git clone https://github.com/jachavarro2004/jhon-studio")
+		var joined string
+		for _, ln := range strings.Split(s, "\n") {
+			if _, content, ok := strings.Cut(ln, "│"); ok && strings.HasPrefix(content, "    ") {
+				joined += strings.TrimSpace(content) + " "
+			}
+		}
+		if !strings.Contains(joined, manual) {
+			t.Errorf("%d columns: the advice's lines %q lack %q", w, joined, manual)
+		}
+	}
 }

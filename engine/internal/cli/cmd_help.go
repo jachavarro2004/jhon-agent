@@ -115,8 +115,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            after any command runs nothing (after jhon sandbox
                            run --, it is the program's)
   jhon setup               the setup wizard, on a terminal: pick the runtimes and
-                           the opt-in integrations, check git, claude, node,
-                           engram and codegraph with the fix for each, then
+                           the opt-in integrations (jhon-studio among them,
+                           off by default), check git, claude, node,
+                           engram and codegraph (and jhon-studio when it is
+                           chosen) with the fix for each, then
                            write the settings and install the runtimes from the
                            active release; exit 2 without a terminal
   jhon start [<claude args>]
@@ -127,7 +129,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            (ENABLE_CLAUDEAI_MCP_SERVERS=false) unless
                            claude_code.connectors is on or the variable is
                            set; Jhon's MCP servers (jhon, engram, codegraph)
-                           stay
+                           stay; with integrations.studio on, a second
+                           --plugin-dir loads the plugin jhon-studio
+                           integration --json names (its
+                           /jhon-studio:video), and
+                           when it does not answer the session starts
+                           without it, with one note
                            with -p/--print, where --agent already makes the
                            orchestrator the system prompt, it sets
                            JHON_AGENT_LOADED=jhon-orchestrator and the
@@ -204,7 +211,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            before the last install (resume it with
                            jhon start --resume <id>); warns when the
                            repository under LDD it runs in has no merge
-                           gate in git (jhon hook merge-gate --install)
+                           gate in git (jhon hook merge-gate --install);
+                           with integrations.studio on, a jhon-studio
+                           section: jhon-studio doctor --json's checks,
+                           each failing one a warning with its fix
   jhon hook merge-gate --install
                            write the merge gate into the local git
                            configuration of the repository under LDD it
@@ -274,6 +284,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            next sync applies it);
                            claude_code.connectors (off by default) lets
                            jhon start load the claude.ai connectors;
+                           integrations.studio (off by default) turns on
+                           jhon-studio, presentation videos for any
+                           project: /jhon-studio:video in Claude Code,
+                           /jhon:video in pi, and
+                           jhon doctor's jhon-studio section;
                            agents.act_on_announce (on by default) sends
                            a main session's turn back once when its
                            reply announces an action it did not take

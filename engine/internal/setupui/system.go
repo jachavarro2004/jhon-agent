@@ -49,11 +49,26 @@ func (p Pins) of(m manifests.Manifest) string {
 	return m.Doctor.Version
 }
 
-// binaries are the integrations setup checks for, by their binary's name.
-func binaries() []manifests.Manifest {
+// binaries are the integrations setup checks for, by their binary's name:
+// each required one's, and an optional one's only when c chooses it on.
+func binaries(c Choices) []manifests.Manifest {
 	var out []manifests.Manifest
 	for _, m := range manifests.All() {
-		if m.Doctor.Binary != "" {
+		if m.Doctor.Binary != "" && (m.Required || c.Optional.On(m.Setting)) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// offered are the optional integrations setup shows a row for, by Order:
+// each with setup text in its manifest (setup.summary; jhon-studio,
+// odd/tasks/jhon-studio.md S3). Every other optional one is set elsewhere
+// (Elsewhere).
+func offered() []manifests.Manifest {
+	var out []manifests.Manifest
+	for _, m := range manifests.Optional() {
+		if m.Setup.Summary != "" {
 			out = append(out, m)
 		}
 	}
@@ -72,7 +87,7 @@ func (s *System) fix(name string) (cmd, adv string) {
 	if name == "claude" {
 		return "npm install -g @anthropic-ai/claude-code@" + s.Pins.ClaudeCode, ""
 	}
-	for _, m := range binaries() {
+	for _, m := range manifests.All() {
 		if m.Doctor.Binary == name {
 			return s.install(m)
 		}
@@ -168,16 +183,25 @@ func (s *System) Saved() Saved {
 			palette = &p
 		}
 	}
+	var optional Toggles
+	for _, m := range offered() {
+		on := m.Default
+		if v := file[m.Setting]; v != nil {
+			on = *v
+		}
+		optional = optional.with(m.Setting, on)
+	}
 	return Saved{
 		Palette:    palette,
 		ClaudeCode: file["runtimes.claude_code"], Pi: file["runtimes.pi"],
 		Telemetry: file["integrations.telemetry"],
+		Optional:  optional,
 	}
 }
 
 // Checks are git, claude when Claude Code is chosen, node when pi is (setup
 // installs pi itself with npm), and each integration's binary (Engram,
-// CodeGraph).
+// CodeGraph; an optional one's only when chosen on).
 func (s *System) Checks(c Choices) []Check {
 	names := []string{"git"}
 	if c.ClaudeCode {
@@ -186,7 +210,7 @@ func (s *System) Checks(c Choices) []Check {
 	if c.Pi {
 		names = append(names, "node")
 	}
-	for _, m := range binaries() {
+	for _, m := range binaries(c) {
 		names = append(names, m.Doctor.Binary)
 	}
 	out := make([]Check, 0, len(names))
@@ -235,19 +259,23 @@ func (s *System) RunStep(c Choices, i int) error {
 }
 
 // SetupKeys are the settings `jhon setup` shows and writes (T15.7, L96): the
-// runtimes and the integrations. The shell's own, shell.*, are its Settings
+// runtimes and the integrations, the offered optional ones among them. The shell's own, shell.*, are its Settings
 // overlay's (/jhon:customize); Elsewhere names where each remaining one is set.
 var SetupKeys = func() []string {
 	keys := []string{"runtimes.claude_code", "runtimes.pi"}
 	for _, m := range manifests.Required() {
 		keys = append(keys, m.Setting)
 	}
-	return append(keys, "integrations.telemetry", "integrations.theme.palette")
+	keys = append(keys, "integrations.telemetry", "integrations.theme.palette")
+	for _, m := range offered() {
+		keys = append(keys, m.Setting)
+	}
+	return keys
 }()
 
 // Elsewhere are the settings neither setup nor the shell shows, and where
-// each is set; every optional integration's setting among them, whatever
-// its when_off (its manifest's, T58b).
+// each is set; every optional integration's setting setup does not offer
+// among them, whatever its when_off (its manifest's, T58b).
 var Elsewhere = func() map[string]string {
 	e := map[string]string{
 		"pi.profile":             "jhon profile use, or /jhon:profile in the shell",
@@ -257,7 +285,9 @@ var Elsewhere = func() map[string]string {
 		"sandbox.deploy_tools":   "jhon settings set sandbox.deploy_tools <program>,<program>",
 	}
 	for _, m := range manifests.Optional() {
-		e[m.Setting] = "jhon settings set " + m.Setting + " true|false"
+		if m.Setup.Summary == "" {
+			e[m.Setting] = "jhon settings set " + m.Setting + " true|false"
+		}
 	}
 	return e
 }()
@@ -274,6 +304,9 @@ func (s *System) writeSettings(c Choices) error {
 		vals = append(vals, kv{m.Setting, true})
 	}
 	vals = append(vals, kv{"integrations.telemetry", c.Telemetry})
+	for _, m := range offered() {
+		vals = append(vals, kv{m.Setting, c.Optional.On(m.Setting)})
+	}
 	if !c.ClaudeCode {
 		vals[0], vals[1] = vals[1], vals[0]
 	}

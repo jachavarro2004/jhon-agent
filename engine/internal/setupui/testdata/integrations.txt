@@ -11,9 +11,9 @@
                       │▎ [●] Telemetry               record usage events on this machine   on       
                       │      one JSON line per event under ~/.local/share/jhon/telemetry            
                       │      Palette                 ● Rose Ink  ○ Desktop                          
+                      │  [ ] jhon-studio             presentation videos for any project   off      
                       │                                                                             
                       │  Each one toggles later in jhon settings                                    
-                      │                                                                             
                       │                                                                             
                       │                                                                             
                       │                                                                             

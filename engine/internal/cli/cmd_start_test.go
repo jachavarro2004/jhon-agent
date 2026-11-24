@@ -70,3 +70,70 @@ func TestConnectorsStayOutWithNoLaunchOffManifest(t *testing.T) {
 		t.Errorf("connectors on: %q", got)
 	}
 }
+
+// studioAt sets the settings to text and puts a fake jhon-studio on PATH
+// (with /usr/bin and /bin) whose `integration --json` prints answer, or
+// none at all when answer is ""; it logs each call to the returned file.
+func studioAt(t *testing.T, text, answer string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.toml")
+	must(t, os.WriteFile(path, []byte(text), 0o600))
+	t.Setenv("JHON_SETTINGS", path)
+	bin := filepath.Join(dir, "bin")
+	must(t, os.MkdirAll(bin, 0o755))
+	log := filepath.Join(dir, "calls")
+	if answer != "" {
+		must(t, os.WriteFile(filepath.Join(bin, "jhon-studio"), []byte("#!/bin/sh\necho \"$*\" >> '"+log+"'\ncat <<'EOF'\n"+answer+"\nEOF\n"), 0o755))
+	}
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	return log
+}
+
+// odd/tasks/jhon-studio.md S3: with integrations.studio on and jhon-studio
+// answering, jhon start loads its plugin as a second --plugin-dir; off,
+// jhon-studio is never asked and nothing is added.
+func TestStartLoadsAnOnCLIIntegrationsPlugin(t *testing.T) {
+	plugin := t.TempDir()
+	answer := `{"version":"0.1.0","plugin_dir":"` + plugin + `","skill":"` + plugin + `/skills/video/SKILL.md"}`
+	log := studioAt(t, "schema = 1\n\n[integrations]\nstudio = true\n", answer)
+	args, notes := launchPlugins()
+	if !slices.Equal(args, []string{"--plugin-dir", plugin}) || len(notes) != 0 {
+		t.Errorf("on: args %q, notes %q", args, notes)
+	}
+	if b, _ := os.ReadFile(log); string(b) != "integration --json\n" {
+		t.Errorf("on: calls %q", b)
+	}
+	log = studioAt(t, "schema = 1\n", answer)
+	if args, notes := launchPlugins(); len(args) != 0 || len(notes) != 0 {
+		t.Errorf("off: args %q, notes %q", args, notes)
+	}
+	if _, err := os.Stat(log); err == nil {
+		t.Error("off: jhon-studio was asked")
+	}
+}
+
+// On but not answering, start still starts, with one note saying why.
+func TestStartWithAnOnCLIIntegrationThatDoesNotAnswerNotesItOnce(t *testing.T) {
+	const on = "schema = 1\n\n[integrations]\nstudio = true\n"
+	const tail = "; this session starts without its plugin"
+	for _, c := range []struct{ what, answer, want string }{
+		{"not on PATH", "", "jhon: integrations.studio is on, but jhon-studio is not on PATH" + tail},
+		{"not its JSON", "nope", "jhon: integrations.studio is on, but jhon-studio integration --json: not the JSON {version, plugin_dir, skill}" + tail},
+		{"no plugin folder", `{"plugin_dir":"/nonexistent/jhon-studio-plugin"}`, "jhon: integrations.studio is on, but its plugin_dir, /nonexistent/jhon-studio-plugin, is not a folder" + tail},
+	} {
+		studioAt(t, on, c.answer)
+		args, notes := launchPlugins()
+		if len(args) != 0 || !slices.Equal(notes, []string{c.want}) {
+			t.Errorf("%s: args %q, notes %q", c.what, args, notes)
+		}
+	}
+}
+
+// A cli integration off at launch is no connector: it never keeps the
+// claude.ai connectors out (PRESERVE, T42a).
+func TestAnOffCLIIntegrationLeavesTheConnectorsAlone(t *testing.T) {
+	if got := connectorsSwitch(t, "schema = 1\n\n[claude_code]\nconnectors = true\n\n[integrations]\nstudio = false\n"); got != "" {
+		t.Errorf("studio off, connectors on: %q", got)
+	}
+}

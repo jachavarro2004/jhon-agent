@@ -55,7 +55,8 @@ func TestIntegrationsOffShowsItsReasonAndNoNumbers(t *testing.T) {
 	want := `[{"name":"engram","display":"Engram","required":true,"state":"on","reason":"","numbers":{"observations":12}},` +
 		`{"name":"codegraph","display":"CodeGraph","required":true,"state":"unavailable","reason":"codegraph is not on PATH","numbers":null},` +
 		`{"name":"context7","display":"Context7","required":false,"state":"off","reason":"integrations.context7 = false","numbers":null},` +
-		`{"name":"m365","display":"Microsoft 365","required":false,"state":"off","reason":"claude_code.connectors = false","numbers":null}]`
+		`{"name":"m365","display":"Microsoft 365","required":false,"state":"off","reason":"claude_code.connectors = false","numbers":null},` +
+		`{"name":"studio","display":"jhon-studio","required":false,"state":"off","reason":"integrations.studio = false","numbers":null}]`
 	if r.status != 200 || r.typ != "application/json; charset=utf-8" || r.body != want || asked != 0 {
 		t.Errorf("asked %d, %d %s\n got %s\nwant %s", asked, r.status, r.typ, r.body, want)
 	}
@@ -69,7 +70,8 @@ func TestIntegrationsUnreachableShowsItsReasonAndNoNumbers(t *testing.T) {
 	want := `[{"name":"engram","display":"Engram","required":true,"state":"unavailable","reason":"Engram does not answer: /stats answered 500","numbers":null},` +
 		`{"name":"codegraph","display":"CodeGraph","required":true,"state":"on","reason":"","numbers":null},` +
 		`{"name":"context7","display":"Context7","required":false,"state":"unavailable","reason":"https://mcp.context7.com/mcp: HTTP 503","numbers":null},` +
-		`{"name":"m365","display":"Microsoft 365","required":false,"state":"on","reason":"","numbers":null}]`
+		`{"name":"m365","display":"Microsoft 365","required":false,"state":"on","reason":"","numbers":null},` +
+		`{"name":"studio","display":"jhon-studio","required":false,"state":"off","reason":"integrations.studio = false","numbers":null}]`
 	if r.status != 200 || r.body != want || asked != 1 {
 		t.Errorf("asked %d, %d\n got %s\nwant %s", asked, r.status, r.body, want)
 	}
@@ -87,8 +89,25 @@ func TestIntegrationsRowsFollowTheManifests(t *testing.T) {
 		Default: true, WhenOff: "render", Capabilities: []string{"docsfixture"}}
 	t.Cleanup(integrations.Use(append(integrations.All(), extra)))
 	r, _ := integrationsAt(t, "schema = 1\n\n[integrations]\ndocsfixture = false\n", map[string]bool{"engram": true, "codegraph": true}, nil, "/api/integrations")
-	if want := `{"name":"docsfixture","display":"Docs Fixture","required":false,"state":"off","reason":"integrations.docsfixture = false","numbers":null}]`; r.status != 200 || !contains(r.body, want) {
+	if want := `{"name":"docsfixture","display":"Docs Fixture","required":false,"state":"off","reason":"integrations.docsfixture = false","numbers":null},`; r.status != 200 || !contains(r.body, want) {
 		t.Errorf("%d %s", r.status, r.body)
+	}
+}
+
+// odd/tasks/jhon-studio.md S3: jhon-studio's row is off by default (above);
+// on, it is unavailable while its program is not on PATH, and on once it is.
+func TestIntegrationsStudioRowFollowsItsSettingAndProgram(t *testing.T) {
+	engramStats(t, 200)
+	on := "schema = 1\n\n[integrations]\nstudio = true\n"
+	paths := map[string]bool{"engram": true, "codegraph": true}
+	r, _ := integrationsAt(t, on, paths, nil, "/api/integrations")
+	if want := `{"name":"studio","display":"jhon-studio","required":false,"state":"unavailable","reason":"jhon-studio is not on PATH","numbers":null}]`; r.status != 200 || !contains(r.body, want) {
+		t.Errorf("on, not on PATH: %d %s", r.status, r.body)
+	}
+	paths["jhon-studio"] = true
+	r, _ = integrationsAt(t, on, paths, nil, "/api/integrations")
+	if want := `{"name":"studio","display":"jhon-studio","required":false,"state":"on","reason":"","numbers":null}]`; r.status != 200 || !contains(r.body, want) {
+		t.Errorf("on: %d %s", r.status, r.body)
 	}
 }
 
@@ -126,7 +145,8 @@ func TestIntegrationsUnreadableSettingsTurnTheOptionalOnesOff(t *testing.T) {
 	want := `[{"name":"engram","display":"Engram","required":true,"state":"on","reason":"","numbers":{"observations":12}},` +
 		`{"name":"codegraph","display":"CodeGraph","required":true,"state":"on","reason":"","numbers":null},` +
 		`{"name":"context7","display":"Context7","required":false,"state":"off","reason":"the settings cannot be read, so it is off","numbers":null},` +
-		`{"name":"m365","display":"Microsoft 365","required":false,"state":"off","reason":"the settings cannot be read, so it is off","numbers":null}]`
+		`{"name":"m365","display":"Microsoft 365","required":false,"state":"off","reason":"the settings cannot be read, so it is off","numbers":null},` +
+		`{"name":"studio","display":"jhon-studio","required":false,"state":"off","reason":"the settings cannot be read, so it is off","numbers":null}]`
 	if r.status != 200 || r.body != want || asked != 0 {
 		t.Errorf("asked %d, %d\n got %s\nwant %s", asked, r.status, r.body, want)
 	}

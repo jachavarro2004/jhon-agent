@@ -43,7 +43,8 @@ const (
 
 // The integration rows: the required integrations' first, locked on
 // (Engram and CodeGraph, manifests.Core, read by name; view.go's integrations
-// holds one row for each), then Jhon's own.
+// holds one row for each), then Jhon's own, then one for each offered
+// optional integration (offered), from rowCount on.
 const (
 	rowEngram = iota
 	rowCodeGraph
@@ -130,6 +131,7 @@ func NewSetup(b Backend, c Colors) Model {
 			}
 		}
 	}
+	m.c.Optional = saved.Optional
 	if saved.Palette != nil {
 		m.c.Palette = *saved.Palette
 		if m.c.Palette == "ryoku" { // the desktop palette's older name (T50f)
@@ -287,7 +289,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case sIntegrations:
 		switch k {
 		case "up", "down":
-			m.cursor = move(m.cursor, k, rowCount)
+			m.cursor = move(m.cursor, k, rowCount+len(offered()))
 		case " ":
 			m.toggleIntegration()
 		case "enter":
@@ -355,6 +357,11 @@ func (m *Model) toggleIntegration() {
 			m.c.Palette = "rose-ink"
 		} else {
 			m.c.Palette = "desktop"
+		}
+	default:
+		if o := offered(); m.cursor >= rowCount && m.cursor < rowCount+len(o) {
+			setting := o[m.cursor-rowCount].Setting
+			m.c.set(setting, !m.c.Optional.On(setting))
 		}
 	}
 }

@@ -96,6 +96,7 @@ import { reviewRenderers } from "../lib/ui/review-card.ts";
 import { createWorktree, sameRepoWorktree, worktreeNote } from "../lib/worktree.ts";
 import { completeWord, lddChanges, PROFILE_ACTIONS } from "../lib/ui/jhon-commands.ts";
 import { LDD_SKILL, lddCompletions, lddPrompt } from "../lib/ldd-command.ts";
+import { STUDIO_SETTING, VIDEO_DESCRIPTION, studioSkill, videoPrompt } from "../lib/studio-command.ts";
 import { ModelChoice, settingsDefaults, UNCHOSEN_ENDED, UNCHOSEN_HINT, UNCHOSEN_NO, UNCHOSEN_YES, unchosenQuestion } from "../lib/model-choice.ts";
 import { JhonPanel, jhonPanelKey, modelsOffered, registryModels, type ProfilesData, type View } from "../lib/ui/jhon-panel.ts";
 import { compactAt } from "../lib/ui/bars.ts";
@@ -759,6 +760,17 @@ export default function jhon(pi: any): void {
         // on the old template did; a prompt pi refuses (a compaction running) is said once.
         try { pi.sendUserMessage(lddPrompt(skill, String(args ?? "")), ctx?.isIdle?.() === false ? { deliverAs: "steer" } : undefined); }
         catch (error) { ctx?.ui?.notify?.(`jhon-ldd: ${(error as Error).message}; run it again when pi is ready`, "warning"); }
+      },
+    });
+    // odd/tasks/jhon-studio.md S3: jhon-studio's video skill, only while integrations.studio is on
+    // (off, nothing about video is registered); its skill is read where jhon-studio says, at each use.
+    if (shellSettings().bool(STUDIO_SETTING)) pi.registerCommand("jhon:video", {
+      description: VIDEO_DESCRIPTION,
+      handler: async (args: string, ctx: any) => {
+        const skill = await studioSkill();
+        if ("error" in skill) return void ctx?.ui?.notify?.(`jhon:video: ${skill.error}; run \`jhon doctor\`, or turn it off with \`jhon settings set ${STUDIO_SETTING} false\``, "error");
+        try { pi.sendUserMessage(videoPrompt(skill.text, String(args ?? "")), ctx?.isIdle?.() === false ? { deliverAs: "steer" } : undefined); }
+        catch (error) { ctx?.ui?.notify?.(`jhon:video: ${(error as Error).message}; run it again when pi is ready`, "warning"); }
       },
     });
     pi.registerCommand("jhon:grants", {
