@@ -46,7 +46,7 @@ func TestLineFactsPoisoned(t *testing.T) {
 // assignable on a proven line, as a statement, a prefix, a for variable or
 // the tracked mktemp one.
 func TestLineFactsZshSpecialNames(t *testing.T) {
-	for _, n := range []string{"path", "cdpath", "fpath", "manpath", "module_path", "mailpath", "psvar"} {
+	for _, n := range []string{"path", "cdpath", "fpath", "manpath", "module_path", "mailpath", "psvar", "pipestatus", "histchars"} {
 		for _, c := range []string{
 			n + "=/x; L=$(mktemp)", n + "=/x true; L=$(mktemp)", "L=$(mktemp); " + n + "=$L/e",
 			"for " + n + " in /x; do :; done; L=$(mktemp)", n + "=$(mktemp -d)", n + "=; L=$(mktemp)",
