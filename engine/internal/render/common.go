@@ -182,6 +182,12 @@ var runtimePlaceholder = lazyre.New(`\{\{runtime:([\w-]+)\}\}`)
 // runtimeTerms are, per term, what each runtime's render writes for it.
 // Validation refuses a body term missing here or missing a runtime.
 var runtimeTerms = map[string]map[string]string{
+	// T226: where Jhon runs, as its identity says it; pi's text names no
+	// other runtime (L264).
+	"jhon-runtimes": {
+		"claude-code": "Claude Code or pi",
+		"pi":          "pi or another agent runtime",
+	},
 	"continue-agent": {
 		"claude-code": "continue it with `SendMessage` to its agent id",
 		"pi":          "continue it with `subagent_continue` and the id `subagent` returned",
