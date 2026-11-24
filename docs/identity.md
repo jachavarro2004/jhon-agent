@@ -86,8 +86,10 @@ Verbatim in every README (before `## License`), in every SUPPORT.md, and in
 the landing's sponsor section. In a product repo, `<name>` is its own
 jhon-* name (jhon-agent, jhon-studio), never bare "Jhon". The social repos,
 jhon-site (README, SUPPORT.md and the page's sponsor section) and the profile
-jachavarro2004, are not products and say exactly "Support Jhon" and "Jhon is
-free and open source.". There is no family section in any repo. In
+jachavarro2004, are not products and lead straight to jhon-agent: they say
+"Support jhon-agent", with "repo" in the star line linked to
+https://github.com/jachavarro2004/jhon-agent. There is no family section in
+any repo. In
 jhon-agent the block reads:
 
 ```markdown
@@ -128,8 +130,8 @@ jhon-agent's. The README's footer heading is `## License` everywhere (never
 - The banner is the 61818-byte GIF and opens the README; the tagline block
   and the badge row follow it.
 - No `## The Jhon family` section.
-- `## Support <name>` (a product's jhon-* name; "Jhon" in jhon-site and the
-  profile) is verbatim and sits right before `## License`.
+- `## Support <name>` (the product's jhon-* name; jhon-agent in jhon-site and
+  the profile) is verbatim and sits right before `## License`.
 - No `$` amount or tier appears in any README, SUPPORT.md or sponsor text.
 - Every relative link and image points to a file that exists.
 
