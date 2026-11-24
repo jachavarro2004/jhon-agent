@@ -146,8 +146,9 @@ func TestTheGuardsDecisionGoesWithTheWrappedCommand(t *testing.T) {
 	off := modeOff(t, b, env)
 
 	was, asked := preTool(t, b, off, bashGuards, "Bash", `{"command":"git push origin main && echo pushed","timeout":5}`, true)
-	if was.Code != 0 || asked.Out.Decision != "ask" || asked.Out.Updated != nil {
-		t.Fatalf("with the mode off: exit %d, %q; want the guard's ask alone", was.Code, was.Stdout)
+	// With the mode off the ask carries the command with the agent's marker (T219 S9).
+	if was.Code != 0 || asked.Out.Decision != "ask" || string(asked.Out.Updated["command"]) != `"export JHON_AGENT=1\ngit push origin main \u0026\u0026 echo pushed"` && string(asked.Out.Updated["command"]) != `"export JHON_AGENT=1\ngit push origin main && echo pushed"` {
+		t.Fatalf("with the mode off: exit %d, %q; want the guard's ask with the marked command", was.Code, was.Stdout)
 	}
 	r, a := preTool(t, b, env, bashGuards, "Bash", `{"command":"git push origin main && echo pushed","timeout":5}`, true)
 	if r.Code != 0 || r.Stderr != "" || a.Out.Decision != "ask" || a.Out.Reason != asked.Out.Reason {
@@ -308,10 +309,10 @@ func TestAMonitorCallReachesTheAgentsBashHooks(t *testing.T) {
 			t.Errorf("%s: exit %d, stderr %q, stdout %q; want the wrapped command %s", tool, r.Code, r.Stderr, r.Stdout, want)
 		}
 	}
-	// With the mode off a Monitor call prints nothing, as before.
+	// With the mode off a Monitor call runs as it came but for the agent's marker (T219 S9).
 	off := modeOff(t, b, env)
-	if r, _ := run(off, payload("PreToolUse", "Monitor", `{"command":"tail -f build.log"}`)); r.Code != 0 || r.Stdout != "" || r.Stderr != "" {
-		t.Errorf("Monitor with the mode off: %+v; want nothing printed", r)
+	if r, _ := run(off, payload("PreToolUse", "Monitor", `{"command":"tail -f build.log"}`)); r.Code != 0 || r.Stdout != `{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"export JHON_AGENT=1\ntail -f build.log"}}}`+"\n" && r.Stdout != `{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"export JHON_AGENT=1\ntail -f build.log"}}}` || r.Stderr != "" {
+		t.Errorf("Monitor with the mode off: %+v; want only the marker", r)
 	}
 	// A PostToolUse hook with a Bash matcher does not run for Monitor.
 	if r, _ := run(env, payload("PostToolUse", "Monitor", `{"command":"tail -f build.log"}`)); r.Code != 0 || r.Stdout != "" || r.Stderr != "" {

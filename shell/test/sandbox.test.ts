@@ -222,7 +222,7 @@ function suite(): void {
 		assert.equal(fake.runs().length, 2);
 	});
 
-	test("rule 3: the re-registered bash is pi's built-in tool for the model and the chat; with the mode off no bash is registered", async (t) => {
+	test("rule 3: the re-registered bash is pi's built-in tool for the model and the chat, with the mode on and off", async (t) => {
 		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);
 		const d = project(t);
 		const on = fakePi();
@@ -237,14 +237,34 @@ function suite(): void {
 		assert.ok(builtIn.promptSnippet && builtIn.promptGuidelines?.length, "the built-in carries the prompt lines an override must repeat");
 		// The chat: pi's own renderers, which extensions/quiet.ts wraps by the tool's name.
 		for (const key of Object.keys(builtIn).filter((k) => k.startsWith("render"))) assert.equal(String(ours[key]), String(builtIn[key]), key);
-		// Off: nothing is registered, so `bash` is pi's built-in tool, untouched.
+		// Off (T219 S9): bash is registered too, pi's built-in definition, so the agent's command carries its marker.
 		fake.set(OFF);
 		const off = fakePi();
 		const sandbox = wireSandbox(off.pi, { jhon: fake.bin });
 		await off.fire("session_start", {}, ctxAt(d));
-		assert.deepEqual([...off.tools.keys()], []);
+		assert.deepEqual([...off.tools.keys()], ["bash"]);
+		const offBash = off.tools.get("bash") as Record<string, any>;
+		for (const key of ["name", "label", "description", "promptSnippet"]) assert.equal(offBash[key], builtIn[key], key);
 		for (const tool of ["bash", "bash_background", "monitor"]) assert.equal(await sandbox.gate(tool, d), undefined);
-		assert.equal(sandbox.jobOperations(undefined), undefined);
+		assert.ok(sandbox.jobOperations(undefined), "the agent's jobs run through pi's local operations with the marker");
+	});
+
+	test("T219 S9: with the mode off the agent's bash and jobs carry JHON_AGENT=1 and nothing else changes; the owner's `!` (this process's environment) carries none", { skip: !bash && "needs /bin/bash" }, async (t) => {
+		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), OFF);
+		const d = project(t);
+		const { pi, tools, fire } = fakePi();
+		const env: NodeJS.ProcessEnv = { ...process.env };
+		const sandbox = wireSandbox(pi, { jhon: fake.bin, env });
+		await fire("session_start", {}, ctxAt(d));
+		const result = await tools.get("bash").execute("c1", { command: `printf '%s|%s' "$JHON_AGENT" "$PWD"` }, undefined, undefined, ctxAt(d));
+		assert.equal(textOf(result).trim(), `1|${d}`, "the marker, in the same folder");
+		assert.equal(textOf(await tools.get("bash").execute("c2", { command: "echo no; exit 3" }, undefined, undefined, ctxAt(d))), "no\n\n\nCommand exited with code 3", "the same output and exit");
+		const ran: string[] = [];
+		await sandbox.jobOperations(undefined)!.exec(`printf %s "$JHON_AGENT"`, d, { onData: (b: Buffer) => ran.push(b.toString()) });
+		assert.equal(ran.join(""), "1", "an agent's job carries the marker");
+		assert.equal(env.JHON_AGENT, undefined, "the session's environment, which the owner's `!` commands inherit, carries no marker");
+		assert.equal(process.env.JHON_AGENT, undefined);
+		assert.deepEqual(fake.runs(), [], "no sandbox runs");
 	});
 
 	test("rule 3: in a real pi session the system prompt and the tool list are the same bytes with the sandbox on, and bash runs through it", { skip: !bash && "needs /bin/bash" }, (t) => {
@@ -462,7 +482,7 @@ function suite(): void {
 		], "each child asked once: in its own folder, and for its parent's project where it inherits one");
 	});
 
-	test("the mode off changes nothing: background jobs and monitors start and stop as before, and no sandbox runs", { skip: !bash && "needs /bin/bash" }, async (t) => {
+	test("the mode off changes nothing but the agent's marker: background jobs and monitors start and stop as before, and no sandbox runs", { skip: !bash && "needs /bin/bash" }, async (t) => {
 		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), OFF);
 		const d = project(t);
 		const { pi, tools, fire } = fakePi();
@@ -470,7 +490,7 @@ function suite(): void {
 		const out = scratch(t, "jhon-sbx-jobs-");
 		registerBackgroundTasks(pi as any, { env: {}, outputDir: () => out, sandbox: sandbox.jobOperations });
 		await fire("session_start", {}, ctxAt(d));
-		assert.equal(tools.has("bash"), false);
+		assert.equal(tools.has("bash"), true, "bash carries the agent's marker (T219 S9)");
 		await tools.get("bash_background").execute("c1", { command: "echo started; sleep 30" }, undefined, undefined, ctxAt(d));
 		await tools.get("monitor").execute("c2", { command: "echo watched; sleep 30", timeout_seconds: 60 }, undefined, undefined, ctxAt(d));
 		await waitFor(() => existsSync(join(out, "job-2.log")) && readFileSync(join(out, "job-1.log"), "utf8") === "started\n" && readFileSync(join(out, "job-2.log"), "utf8") === "watched\n", "both ran");

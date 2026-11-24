@@ -161,7 +161,7 @@ func sandboxRun(argv []string) (int, error) {
 		// git runs with the repository's hooks, ssh command, helpers and
 		// transports overridden (sandbox.UnsandboxedEnv, L1306).
 		if sandbox.RunsOutside(sandbox.ThisHost(), sandboxInput(pinned), program) {
-			return sandboxProgram(program[0], program, sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers()), sandbox.Unsandboxed, "", "")
+			return sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), mergeGateEntries(pinned)...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "")
 		}
 		profile = sandbox.Work
 	}
@@ -174,7 +174,8 @@ func sandboxRun(argv []string) (int, error) {
 		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
 		return sandboxRefused, nil
 	}
-	env := append(os.Environ(), sandbox.UVToolEnv(in)...)
+	// What runs here runs for an agent (T219 S9): git's merge gate judges it.
+	env := append(append(os.Environ(), sandbox.UVToolEnv(in)...), hook.AgentVariable+"=1")
 	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools))
 }
 
@@ -482,4 +483,16 @@ func (d doctor) sandbox() {
 	if w := s.BashRules.warning(); w != "" {
 		d.o.Warn(w)
 	}
+}
+
+// mergeGateEntries are the merge gate's entries for an unsandboxed git line
+// (hook.MergeGateUnsandboxed, T219 S5) in the repository of the pinned
+// project, else of the working directory: none outside a repository under
+// LDD.
+func mergeGateEntries(pinned string) [][2]string {
+	dir := pinned
+	if dir == "" {
+		dir = cwd()
+	}
+	return hook.MergeGateUnsandboxed(project.Root(dir))
 }

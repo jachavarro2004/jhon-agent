@@ -66,6 +66,9 @@ import (
 //     tree the change's last test run tested (ldd.SliceCommitRefusal); a PR
 //     opens once the branch's change has every slice done (ldd.SlicesLeft,
 //     deliver check's words), and merges with --rebase.
+//   - A command that moves the default branch to another commit is a merge,
+//     and runs only after a ready `jhon deliver check <change> --action
+//     merge` of that commit, on its own line before it (mergeGate, T219).
 //   - A commit or a PR is judged at the repository it runs in: a cd, a
 //     pushd, env -C or git -C to another worktree moves it there from the
 //     session's root (deliveryRoots, T140); one the guard cannot place is
@@ -109,6 +112,21 @@ func RouteGuard(args []string, io IO) int {
 	}
 	cwd := p.Cwd()
 	top := project.Root(cwd)
+	// A command that moves the default branch is a merge: it runs after a
+	// ready merge check of that commit, on its own line (T219).
+	if command, _ := p.Obj("tool_input")["command"].(string); p.Str("tool_name") == "Bash" {
+		// Git itself refuses what a line cannot show (S5): the merge gate is
+		// installed on the first guarded command, and nothing turns it off.
+		if top != "" && gatedRoot(top) {
+			InstallMergeGate(top)
+		}
+		if why := gateBypass(command, cwd, top); why != "" {
+			return block(why)
+		}
+		if why := mergeGate(command, cwd, top); why != "" {
+			return block(why)
+		}
+	}
 	if !project.UsesLdd(top) && memberPrimary(top) == "" {
 		// Jhon always works under LDD (T72, L557): in a repository with no
 		// layout nothing is refused but delivery, a commit or a PR, until LDD

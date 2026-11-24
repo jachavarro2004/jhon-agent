@@ -3,11 +3,12 @@ package guards
 // With sandbox.mode on, `jhon hook pre-tool` hands Claude Code the wrapped
 // command of a Bash or Monitor call (T128c, L894; the wrap itself is proven
 // under a real bubblewrap in test/sandbox). These are the cases that need no
-// sandbox: with the mode off the output is what it was, pi's calls (`--agent
-// *`) get nothing new whatever the mode, and with the mode on a call that
+// sandbox: with the mode off the output is what it was but for the agent's
+// marker (T219 S9), pi's calls (`--agent *`) get nothing new whatever the mode, and with the mode on a call that
 // cannot be pinned or sandboxed is refused, never run as it came.
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -51,30 +52,55 @@ func claudePayload(s sgEnv, tool string, input map[string]any) map[string]any {
 	return map[string]any{"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": input, "cwd": s.p, "session_id": "s", "permission_mode": "default"}
 }
 
-func TestSandboxModeOffLeavesThePreToolOutputAsItWas(t *testing.T) {
+// T219 S9: with the mode off, Claude Code runs the agent's command as it
+// came but for the agent's marker (JHON_AGENT=1, which git's merge gate
+// reads): pre-tool hands it back as updatedInput with no decision of its
+// own, so Claude Code's permissions decide as before; a guard's ask and
+// refusal stand as they were, and a call that starts no command, or pi's,
+// gets nothing.
+func TestSandboxModeOffMarksTheAgentsCommandOnly(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
 	off := sandboxEnv(t, s, "off", "JHON_SANDBOX_PROJECT="+s.p)
 	for _, c := range wrapCalls {
 		r := hook(t, off, "pre-tool", claudeGuards, claudePayload(s, c.tool, c.input))
 		code(t, r, c.code, c.name)
-		if strings.Contains(r.Stdout, "updatedInput") || strings.Contains(r.Stdout, `"allow"`) {
-			t.Errorf("%s: with the mode off the output carries the sandbox's: %q", c.name, r.Stdout)
+		if strings.Contains(r.Stdout, `"allow"`) {
+			t.Errorf("%s: with the mode off pre-tool decides an allow: %q", c.name, r.Stdout)
 		}
+		command, isCommand := c.input["command"].(string)
 		switch {
 		case c.code == 2:
 			if r.Stdout != "" || !strings.HasPrefix(r.Stderr, "safety-guard: ") {
 				t.Errorf("%s: stdout %q, stderr %q; want the guard's own refusal and no stdout", c.name, r.Stdout, r.Stderr)
 			}
-		case c.decision == "ask":
-			d, why, _ := decision(t, r.Stdout)
-			if d != "ask" || why == "" || r.Stdout != `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":`+js(t, []string{why})[1:len(js(t, []string{why}))-1]+"}}\n" || r.Stderr != "" {
-				t.Errorf("%s: stdout %q, stderr %q; want the ask as the guard prints it", c.name, r.Stdout, r.Stderr)
-			}
-		default:
+		case !isCommand:
 			if r.Stdout != "" || r.Stderr != "" {
 				t.Errorf("%s: stdout %q, stderr %q; want nothing printed", c.name, r.Stdout, r.Stderr)
 			}
+		default:
+			var j struct {
+				H map[string]any `json:"hookSpecificOutput"`
+			}
+			if err := json.Unmarshal([]byte(r.Stdout), &j); err != nil {
+				t.Fatalf("%s: %q: %v", c.name, r.Stdout, err)
+			}
+			in, _ := j.H["updatedInput"].(map[string]any)
+			if got, _ := in["command"].(string); got != "export JHON_AGENT=1\n"+command {
+				t.Errorf("%s: the command run is %q, want the marker before %q", c.name, got, command)
+			}
+			for k, v := range c.input {
+				if k != "command" && js(t, in[k]) != js(t, v) {
+					t.Errorf("%s: %s changed: %v", c.name, k, in[k])
+				}
+			}
+			if d, _ := j.H["permissionDecision"].(string); d != c.decision {
+				t.Errorf("%s: decision %q, want %q", c.name, d, c.decision)
+			}
+		}
+		pi := hook(t, off, "pre-tool", []string{"--agent", "*", "safety-guard"}, claudePayload(s, "Bash", cmd("ls src")))
+		if strings.Contains(pi.Stdout, "updatedInput") {
+			t.Errorf("pi's call is marked on pi's side, not here: %q", pi.Stdout)
 		}
 	}
 }

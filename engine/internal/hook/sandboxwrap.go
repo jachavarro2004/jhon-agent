@@ -262,3 +262,33 @@ func sandboxedJSON(ask []byte, notes []string, updated map[string]json.RawMessag
 	}
 	return marshal(map[string]any{"hookSpecificOutput": out}), true
 }
+
+// agentMarked is the tool input Claude Code runs for an agent's command
+// call the sandbox does not wrap: the same input with `export JHON_AGENT=1`
+// on a line before the command (AgentVariable, T219 S9). nil for a call
+// that starts no command, and for pi's (`--agent *`), which pi's shell marks.
+// Claude Code applies a PreToolUse updatedInput with no permissionDecision
+// as a rewrite of the input, under its own permission rules.
+func agentMarked(agent string, payload []byte) map[string]json.RawMessage {
+	if agent == "*" {
+		return nil
+	}
+	p, ok := read(bytes.NewReader(payload))
+	if !ok || !slices.Contains(sandboxTools, p.Str("tool_name")) {
+		return nil
+	}
+	var top, input map[string]json.RawMessage
+	if json.Unmarshal(payload, &top) != nil || json.Unmarshal(top["tool_input"], &input) != nil {
+		return nil
+	}
+	var command string
+	if raw, has := input["command"]; !has || json.Unmarshal(raw, &command) != nil || strings.ContainsRune(command, 0) {
+		return nil
+	}
+	updated := map[string]json.RawMessage{}
+	for k, v := range input {
+		updated[k] = v
+	}
+	updated["command"] = json.RawMessage(marshal("export " + AgentVariable + "=1\n" + command))
+	return updated
+}

@@ -33,6 +33,7 @@ var Handlers = map[string]Handler{
 	"format-edit":     FormatEdit,
 	"framework-guard": FrameworkGuard,
 	"inspect-guard":   InspectGuard,
+	"merge-gate":      MergeGate,
 	"pre-tool":        PreTool,
 	"return-shape":    ReturnShape,
 	"route-guard":     RouteGuard,

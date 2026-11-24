@@ -199,7 +199,25 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            definition cannot be read or is empty; warns of
                            each live orchestrator session that started
                            before the last install (resume it with
-                           jhon start --resume <id>)
+                           jhon start --resume <id>); warns when the
+                           repository under LDD it runs in has no merge
+                           gate in git (jhon hook merge-gate --install)
+  jhon hook merge-gate --install
+                           write the merge gate into the local git
+                           configuration of the repository under LDD it
+                           runs in (hook.jhon-merge-gate, a
+                           reference-transaction hook; other hooks and
+                           core.hooksPath untouched): git then refuses to
+                           move the default branch to a commit no ready
+                           jhon deliver check <change> --action merge
+                           covers (a commit it already holds and its own
+                           upstream's tip aside) and prints what to do,
+                           when the agent's git makes the move (JHON_AGENT=1,
+                           which jhon sandbox run, pi's shell and Claude
+                           Code's pre-tool give the agent's commands); the
+                           owner's git is never refused; route-guard writes
+                           it on the first guarded command and refuses a
+                           command that turns it off or drops the marker
   jhon doctor --runtime <name>
                            one runtime's guarantee level per behavioural rule
                            and the verification state of each primitive, with

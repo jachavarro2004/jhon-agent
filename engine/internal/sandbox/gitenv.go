@@ -49,8 +49,12 @@ var hookEvents = []string{
 // GIT_CONFIG_VALUE_<n> after the owner's own GIT_CONFIG_COUNT entries (none
 // when the count is not a number), the owner's credential helpers (each a
 // key and a value, as `git config --get-regexp` lists the global and system
-// ones) right after the reset of the helpers.
-func UnsandboxedEnv(env []string, helpers [][2]string) []string {
+// ones) right after the reset of the helpers. gate, when given, are Jhon's
+// merge gate's entries (T219 S5, hook.MergeGateUnsandboxed: every other
+// hook the repository names for reference-transaction disabled, the gate's
+// own values forced): they replace the switch that turns the event off, so
+// git runs the gate alone for it.
+func UnsandboxedEnv(env []string, helpers [][2]string, gate ...[2]string) []string {
 	n := 0
 	for _, kv := range env {
 		if v, ok := strings.CutPrefix(kv, "GIT_CONFIG_COUNT="); ok {
@@ -78,6 +82,10 @@ func UnsandboxedEnv(env []string, helpers [][2]string) []string {
 		}
 	}
 	for _, event := range hookEvents {
+		if event == "reference-transaction" && len(gate) > 0 {
+			entries = append(entries, gate...)
+			continue
+		}
 		entries = append(entries, [2]string{"hook." + event + ".enabled", "false"})
 	}
 	for i, e := range entries {

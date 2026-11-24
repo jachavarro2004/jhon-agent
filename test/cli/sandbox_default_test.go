@@ -73,8 +73,9 @@ func TestTheDefaultModeIsOffWhereTheSandboxCannotRun(t *testing.T) {
 			t.Errorf("%q: doctor: exit %d, %q; want the row %q and the verdict with the mode off: exit %d, %q\n%s", text, r.Code, last(r.Stdout), row, off.Code, last(off.Stdout), r.Out())
 		}
 		h := support.Hook(t, env, "pre-tool", payload, guards...)
-		if h.Code != 0 || h.Stderr != "" || strings.Contains(h.Stdout, "updatedInput") || strings.Contains(h.Stdout, "sandbox") {
-			t.Errorf("%q: pre-tool Bash: exit %d, stdout %q, stderr %q; want it run as it came, unsandboxed", text, h.Code, h.Stdout, h.Stderr)
+		// Unsandboxed, as it came but for the agent's marker (T219 S9).
+		if h.Code != 0 || h.Stderr != "" || h.Stdout != `{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"export JHON_AGENT=1\nls"}}}` {
+			t.Errorf("%q: pre-tool Bash: exit %d, stdout %q, stderr %q; want it run as it came, unsandboxed, with the agent's marker", text, h.Code, h.Stdout, h.Stderr)
 		}
 	}
 
