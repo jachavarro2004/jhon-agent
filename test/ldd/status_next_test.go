@@ -47,7 +47,8 @@ func TestRecordOnlyChangeIsNotArchived(t *testing.T) {
 	match(t, h.Stdout, `(?m)^  - `+regexp.QuoteMeta(recordOnlyNote)+`$`)
 }
 
-// A docs-only change, applied, needs no tests: archived as before.
+// A docs-only change, applied, needs no tests: archived as before, with no
+// RED before GREEN, while its diff is not empty (T223, L4).
 func TestAppliedDocsOnlyChangeIsArchived(t *testing.T) {
 	t.Parallel()
 	root := recordRepo(t, map[string]string{"docs/guide.md": "# Guide\n\nHow to use it.\n"})

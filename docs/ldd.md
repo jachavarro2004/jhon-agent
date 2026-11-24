@@ -91,6 +91,23 @@ selects on the branch, a change with no folder included, and its first line
 names it; `jhon status` prints the exact next command (`command`), the
 change's name and base filled in.
 
+`jhon archive <change> <date>` moves a change with a folder into the
+archive only once its RED before GREEN is on record, the fact
+`jhon status <change> --json` reports as `tests.red_before_green`, a
+workspace member's (`jhon executions run <change> --repo <name>`, kept under
+`repos.<name>`) included: without it, it moves nothing, exits 1, and says
+how to record it (the failing test run through `jhon executions run`, then
+the passing one). The one exception is a change that alters no behaviour,
+whose route records no tests by design: every file outside the layout's
+folder that differs from the default branch is a test or a document (what
+`jhon risk` reads as passive), and at least one does. It archives with
+`no RED before GREEN needed: <change> alters no behaviour (…)` as its first
+line. An empty diff earns no exemption: after the change is merged, or
+before anything is applied, it needs its RED before GREEN like any other.
+`jhon status` agrees: it suggests `archive` only where `jhon archive` takes
+the change; elsewhere it stays at `apply`, and its note and `command` name
+the runs. `jhon archive --help` prints its own help.
+
 ## A small change
 
 A change with no folder whose record needs no tasks.md (one component,

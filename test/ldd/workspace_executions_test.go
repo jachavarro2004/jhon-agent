@@ -89,7 +89,9 @@ func TestWorkspaceExecutionsRunPerRepo(t *testing.T) {
 	for k := range lib {
 		ks = append(ks, k)
 	}
-	equal(t, len(ks), 5, ks)
+	// T223: the entry says when the run ended; a first run keeps no history.
+	equal(t, len(ks), 6, ks)
+	match(t, lib["timestamp"].(string), `^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$`)
 	equal(t, lib["working_tree"], headTree(t, f.lib))
 	equal(t, lib["after_working_tree"], headTree(t, f.lib))
 	equal(t, lib["passed"], true)
@@ -281,4 +283,50 @@ func TestMemberDeliverRefusesMidRunEditAndVanishedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	notReady("HEAD's tree is not the tested tree")
+}
+
+// T223 L4 (A2): a workspace change's RED before GREEN recorded in a
+// member's entry (repos.<name>, `jhon executions run c --repo lib`) counts
+// as the primary's does: status reports tests.red_before_green and
+// `jhon archive` takes the change; a member's GREEN alone does not.
+func TestArchiveCountsAMembersRedBeforeGreen(t *testing.T) {
+	t.Parallel()
+	redGreen := func(t *testing.T, f wsFixture, runs ...bool) {
+		t.Helper()
+		for _, red := range runs {
+			code, src := 0, "package a // good\n"
+			if red {
+				code, src = 1, "package a // bad\n"
+			}
+			support.Write(t, f.lib, map[string]string{"a/a.go": src})
+			equal(t, f.run(t, f.app, "executions", "run", "c", "--repo", "lib").Code, code, "the member's run")
+		}
+	}
+	tests := func(t *testing.T, f wsFixture) any {
+		t.Helper()
+		s := object(t, f.run(t, f.app, "status", "c", "--json").Stdout)
+		tk, _ := s["tests"].(map[string]any)
+		if tk == nil {
+			return nil
+		}
+		return tk["red_before_green"]
+	}
+
+	f := workspaceFixture(t)
+	r := f.run(t, f.app, "archive", "c", "2026-11-18")
+	equal(t, r.Code, 1, "no run on record", r.Out())
+	equal(t, r.Stderr, refusal("c", "ldd"))
+	redGreen(t, f, true, false)
+	equal(t, tests(t, f), true, "status reports the member's RED before GREEN")
+	r = f.run(t, f.app, "archive", "c", "2026-11-18")
+	equal(t, r.Code, 0, "the member's RED before GREEN", r.Out())
+	equal(t, exists(filepath.Join(f.app, "ldd/changes/archive/2026-11-18-c/tasks.md")), true, "archived")
+
+	// A member's GREEN alone is no RED before GREEN.
+	g := workspaceFixture(t)
+	redGreen(t, g, false)
+	equal(t, tests(t, g) == true, false, "status with a member's GREEN alone")
+	r = g.run(t, g.app, "archive", "c", "2026-11-18")
+	equal(t, r.Code, 1, "a member's GREEN alone", r.Out())
+	equal(t, r.Stderr, refusal("c", "ldd"))
 }

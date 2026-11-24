@@ -1151,14 +1151,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 		notes = append(notes, "verify-report.md does not report a passing verdict (verdict "+verdict+")")
 	}
 
-	// Only a project that is its repository's top level has a route of its
-	// own: one nested in another repository would read that one's diff.
-	var route *Route
-	if top := vcs.GitTopLevel(root); top != "" && project.Realish(top) == project.Realish(root) {
-		if rt, err := g.routeOf(root); err == nil {
-			route = &rt
-		}
-	}
+	route := g.routeAt(root)
 	// The slice in progress over the advisory size is said, never refused.
 	if route != nil {
 		size := g.sliceLines(root, change, *route)
@@ -1203,6 +1196,16 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	tests, err := execution.ReadLastRun(root, change)
 	if err != nil {
 		return Status{}, err
+	}
+	// A workspace member's RED before GREEN (repos.<name>) counts as the
+	// primary's (T223): tests says so, a member's run standing in when the
+	// primary has none of its own.
+	if member, name := execution.MemberRedBeforeGreen(root, change); member != nil {
+		if tests == nil {
+			tests = &execution.LastRun{Timestamp: member.Timestamp, Passed: member.Passed, Complete: member.Complete,
+				Scope: "repos." + name, Tree: member.WorkingTree, Dirty: member.Dirty(), Clean: !member.Dirty()}
+		}
+		tests.RedBeforeGreen = true
 	}
 	redGreen := tests != nil && tests.RedBeforeGreen
 	behaviour := route == nil || route.Behaviour
@@ -1256,15 +1259,22 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 		next = tasksPhase
 		notes = append(notes, *plan+" is next: write its spec delta and tasks, and revise the slices after it")
 	}
-	// Never archive a change that alters behaviour before its RED before
-	// GREEN; a change with no folder has nothing to archive: it is delivered.
-	if next == archive && behaviour && !redGreen {
+	// Never suggest archive where `jhon archive` refuses (T223): before the
+	// change's RED before GREEN, unless it alters no behaviour and its diff
+	// against the default branch is not empty (noBehaviourApplied, the
+	// route that records no tests by design); an empty diff, after its merge
+	// or before anything is applied, earns no exemption. A change with no
+	// folder has nothing to archive: only one that alters behaviour waits.
+	// An umbrella is split, never applied (T37): it owes no RED before GREEN.
+	umbrella := branch == "" && IsUmbrella(root, change)
+	owesRedGreen := !redGreen && !umbrella && (behaviour || branch == "" && !g.noBehaviourApplied(root, route))
+	if next == archive && owesRedGreen {
 		next = apply
 	}
 	// A small change (T146 FA2): no folder, and its record needs no tasks.md
 	// (one component, under the advisory size, not high risk).
 	small := branch != "" && needs != nil && !needs.Tasks
-	if next == apply && behaviour && !redGreen && (tddOnly || st("tasks.md") == v.done && tasks.Finished()) {
+	if next == apply && owesRedGreen && (tddOnly || st("tasks.md") == v.done && tasks.Finished()) {
 		hint := RedGreenHint(change)
 		if small {
 			hint = SmallRedGreen
@@ -1287,7 +1297,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 		next = verify
 	}
 	// An umbrella is split into changes, never archived nor applied (T37).
-	if branch == "" && IsUmbrella(root, change) {
+	if umbrella {
 		next = v.startChange
 		notes = append([]string{change + " is an umbrella (" + v.startChange + "): " + umbrellaHow}, notes...)
 	}
@@ -1309,7 +1319,7 @@ func (g gitReads) derive(root, change, branch string, tdd StrictTdd, resolved di
 	case next == apply && behaviour && !redGreen && small:
 		// T146h L4: the small path's run is the bare one, twice.
 		command = "jhon executions run"
-	case next == apply && behaviour && !redGreen && (tddOnly || st("tasks.md") == v.done && tasks.Finished()):
+	case next == apply && owesRedGreen && (tddOnly || st("tasks.md") == v.done && tasks.Finished()):
 		command = "jhon executions run " + change
 		if base := g.baseName(root); base != "" {
 			command += " --affected " + base
