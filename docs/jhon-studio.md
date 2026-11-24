@@ -57,7 +57,9 @@ jhon-studio says what jhon it runs with in `jhon-studio integration --json`:
 `requires_jhon` (a SemVer range, `">=0.5.0-rc.1"` for v0.1.0) and `contract`
 (`jhon.integration/v1`); `integrations/README.md` ("The jhon a tool needs")
 has the rules. When the running jhon is older than its minimum, or the
-contract is not one jhon speaks, jhon-studio is off for that run with one
+contract is not one jhon speaks, or its range is one jhon cannot read
+(plain `>=`, `>`, `<=`, `<`, `=` on full x.y.z versions, spaces for AND and
+`||` for OR; no `^`, `~` or `x`), jhon-studio is off for that run with one
 note, and Jhon works as it does with it off:
 
 ```text
