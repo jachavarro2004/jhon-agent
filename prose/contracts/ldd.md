@@ -31,7 +31,8 @@ something better.
    is held to principle 3.
 
 State lives in the change directory, or, for a change with no folder, under
-the git directory (`<git common dir>/jhon/changes/<change>/`);
+the git directory (`<git common dir>/jhon/changes/<change>/`), where every
+change's `delivery.json` lives too;
 `jhon status <change> --json` reads it and reports facts, what the change
 needs (`needs`), and one advisory `next`. It keeps no state and never
 blocks a step. LDD works best in a git repository with a commit; below
@@ -79,9 +80,10 @@ openspec/
     │   ├── tasks.md                   tasks, checked off by apply
     │   ├── tdd-evidence.md            optional witness entries
     │   ├── verify-report.md           verify
-    │   ├── execution-record.json      jhon executions run
-    │   └── delivery.json              jhon deliver check
+    │   └── execution-record.json      jhon executions run
     └── archive/<date>-<change>/       archive
+<git common dir>/jhon/changes/<change>/
+    └── delivery.json                  jhon deliver check, outside the tree
 ```
 
 A change is active while `openspec/changes/<change>/` exists outside
@@ -315,7 +317,13 @@ change's delta specs is named by no test, and lists those scenarios (a
 change without delta specs is unaffected). A deploy or a release names its
 artifact immutably: an image or package by its content digest; an
 infrastructure deploy (CDK, Terraform) by the full commit it deploys from,
-which must be the tested HEAD. A ready check writes `delivery.json`. What reaches the
+which must be the tested HEAD. A ready check writes
+`$(git rev-parse --git-common-dir)/jhon/changes/<change>/delivery.json`
+(the change's folder outside git), outside every work tree: the check
+leaves the tree as it found it, so no commit only records it, and the
+merge gate and `jhon audit` read it there from any worktree. A
+`delivery.json` an earlier jhon wrote in the change's folder, tracked or
+not, is left as it is and still read: no migration. What reaches the
 default branch is delivered (a merge into it, or a push to it), and so is a
 deploy or a release; a push of a change branch is review. Any command that
 moves the default branch to another commit is a merge (`git merge`, `pull`,
@@ -363,7 +371,8 @@ A change `jhon risk` reads as `high` is delivered only after an independent
 verification: `verify-report.md` stating `verdict: pass` (the `verify`
 agent). `jhon deliver check` is not ready without one; `jhon audit`
 reports a high-risk delivery made without one. The tier only rises: a ready
-check records it in `delivery.json`, and a later slice whose own diff reads
+check records it in its `delivery.json` (an earlier jhon's in the change's
+folder counts too), and a later slice whose own diff reads
 lower is checked at the highest tier the change delivered.
 
 On a change whose risk reaches the verified tier, Prism review is due too: the route

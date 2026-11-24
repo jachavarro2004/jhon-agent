@@ -169,6 +169,30 @@ func TestMergeHookAllowsAfterAReadyCheck(t *testing.T) {
 	}
 }
 
+// T225 S1: a ready merge check leaves the tree clean, and its record,
+// under the git common dir, still lets the agent's merge of the checked
+// commit through route-guard and git's merge gate, with no commit that
+// only records the check.
+func TestMergeGateReadyCheckLeavesTheTreeClean(t *testing.T) {
+	t.Parallel()
+	m := newMG(t).tested(t)
+	m.gateInstalled(t)
+	status := func() string { return support.Git(t, m.p, "status", "--porcelain", "--untracked-files=all") }
+	equalStr(t, status(), "", "clean before the check")
+	m.check(t, 0)
+	equalStr(t, status(), "", "clean after the check")
+	if _, err := os.Stat(m.record()); err != nil {
+		t.Errorf("the check's record is under the git common dir: %v", err)
+	}
+	tip := m.rev(t, mgBranch)
+	wtm := m.mainWorktree(t)
+	line := "git merge -q --ff-only " + mgBranch
+	code(t, m.bash(t, wtm, line), 0, "route-guard lets the merge run")
+	code(t, m.sh(t, wtm, line), 0, "git's merge gate lets it run")
+	equalStr(t, m.rev(t, "main"), tip, "main is at the checked commit")
+	equalStr(t, status(), "", "still clean after the merge")
+}
+
 // S3: the everyday flow runs as before with the hook installed: commits
 // and merges on a feature branch, fetches, and main updated from its own
 // upstream.

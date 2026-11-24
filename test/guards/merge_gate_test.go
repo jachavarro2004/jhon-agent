@@ -81,6 +81,12 @@ func (m mgEnv) check(t *testing.T, want int) mgEnv {
 	return m
 }
 
+// record is where a ready check of the change records itself: the git
+// common dir's jhon/changes/<change>/delivery.json (T225).
+func (m mgEnv) record() string {
+	return filepath.Join(m.p, ".git", "jhon", "changes", mgChange, "delivery.json")
+}
+
 // ready is a change whose branch tip a ready merge check covers.
 func readyMG(t *testing.T) mgEnv { return newMG(t).tested(t).check(t, 0) }
 
@@ -176,6 +182,8 @@ func TestMergeGateMovesOfTheDefaultBranch(t *testing.T) {
 func TestMergeGateRecordCommittedAfterTheCheck(t *testing.T) {
 	t.Parallel()
 	m := readyMG(t)
+	// The record an earlier jhon wrote in the change's folder, committed (T225 S3).
+	support.Write(t, m.p, map[string]string{"openspec/changes/" + mgChange + "/delivery.json": support.Read(t, m.record())})
 	m.commit(t, "the check's record")
 	code(t, m.bash(t, m.p, "git fetch -q . "+mgBranch+":main"), 0, "the tip differs from the checked commit only in the record")
 	support.Write(t, m.p, map[string]string{"a/a.go": "package a\n\nconst X = 3\n"})
@@ -238,7 +246,7 @@ func TestMergeGateOwnersLine(t *testing.T) {
 func TestMergeGateCheckOnTheSameLine(t *testing.T) {
 	t.Parallel()
 	m := newMG(t).tested(t)
-	record := filepath.Join(m.p, "openspec", "changes", mgChange, "delivery.json")
+	record := m.record()
 	check := "jhon deliver check " + mgChange + " --action merge"
 	for _, c := range []string{
 		check + "; git fetch -q . " + mgBranch + ":main",

@@ -103,7 +103,12 @@ evidence: no re-run on the clean tree. For a change with a folder, the files
 under it (tasks.md, the proposal, the design, the spec deltas) are its
 record, not project input: marking a task after the GREEN run and committing
 it needs no re-run either. An edit anywhere else, another change's folder
-included, does.
+included, does. A ready `jhon deliver check` records itself in
+`$(git rev-parse --git-common-dir)/jhon/changes/<change>/delivery.json`,
+outside the work tree, where the merge gate and `jhon audit` read it: the
+tree stays clean, so a merge needs no commit that only records the check. A
+`delivery.json` an earlier jhon wrote in the change's folder is left as it
+is and still read.
 
 A data migration is high risk, so never small: `jhon risk` reads as
 `migration or schema` a code file whose base name starts with `migrate` or
@@ -221,7 +226,7 @@ commit, it says to commit with no re-run). The member's risk is its own
 diff's; a high one needs the change's independent verification in the
 primary. The scenarios and `delivery: change` stay the primary's check's. A
 ready check writes the member's `delivery.json` under its git common dir
-(`jhon/changes/<change>/`), as a change with no folder keeps its record, so
+(`jhon/changes/<change>/`), as every ready check writes its own, so
 neither tree changes.
 
 A change that spans members delivers one PR per repository, the primary's

@@ -433,7 +433,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            tree is the last passing test run's; deploy and
                            release need an immutable artifact digest (only
                            deploy, for infrastructure, may name the full
-                           HEAD commit), recorded in delivery.json; exit 0 ready,
+                           HEAD commit); a ready check is recorded in
+                           $(git rev-parse --git-common-dir)/jhon/changes/
+                           <change>/delivery.json, outside the work tree, so
+                           it leaves the tree clean; exit 0 ready,
                            1 not, 2 usage; in a workspace member, a change of
                            the primary's is checked against the member's run
                            in the primary's record (repos.<name>); in the

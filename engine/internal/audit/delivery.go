@@ -526,8 +526,11 @@ func readJSON(file string) *js.Object {
 // vocab is contracts/vocabulary.yaml, read once, when a check first needs it.
 var vocab = sync.OnceValue(func() string { return contract.MustContract("vocabulary.yaml") })
 
-// diskEvidence is a change's execution record and delivery.json under each of roots, read from disk.
+// diskEvidence is a change's execution record and delivery.json under each
+// of roots, and the delivery.json under each one's git common dir, read
+// from disk.
 func diskEvidence(change string, roots []string) (runs []testRun, checks []readyCheck) {
+	var commons []string
 	_, m := contract.Map(vocab(), "execution_record")
 	recordFile := m["file"]
 	if recordFile == "" {
@@ -560,18 +563,40 @@ func diskEvidence(change string, roots []string) (runs []testRun, checks []ready
 				}
 				runs = append(runs, run)
 			}
-			d := readJSON(filepath.Join(dir, "delivery.json"))
-			ts, ok1 := strProp(d, "timestamp")
-			action, ok2 := strProp(d, "action")
-			if ok1 && ok2 {
-				str := func(k string) string { s, _ := strProp(d, k); return s }
-				_, risked := prop(d, "risk").(string)
-				checks = append(checks, readyCheck{change: change, at: ts, action: action, artifact: optString(prop(d, "artifact")), source: filepath.Join(dir, "delivery.json"),
-					commit: str("head_commit"), tree: str("tested_tree"), testedTree: str("tested_tree"), risked: risked})
+			// A delivery.json an earlier jhon wrote in the change's folder.
+			if c, ok := diskCheck(change, filepath.Join(dir, ldd.DeliveryFile)); ok {
+				checks = append(checks, c)
+			}
+		}
+		// The one a ready check writes under the git common dir
+		// (ldd.DeliveryRecord, T225), shared by the repository's worktrees.
+		if top := repoOf(filepath.Join(root, "x")); top != "" {
+			if common := commonDir(top); common != "" && !slices.Contains(commons, common) {
+				commons = append(commons, common)
+				dir := filepath.Join(common, "jhon", "changes", change)
+				readTree(dir)
+				if c, ok := diskCheck(change, filepath.Join(dir, ldd.DeliveryFile)); ok {
+					checks = append(checks, c)
+				}
 			}
 		}
 	}
 	return runs, checks
+}
+
+// diskCheck is the ready check a delivery.json at file records; ok is false
+// when it is absent or names no time and action.
+func diskCheck(change, file string) (readyCheck, bool) {
+	d := readJSON(file)
+	ts, ok1 := strProp(d, "timestamp")
+	action, ok2 := strProp(d, "action")
+	if !ok1 || !ok2 {
+		return readyCheck{}, false
+	}
+	str := func(k string) string { s, _ := strProp(d, k); return s }
+	_, risked := prop(d, "risk").(string)
+	return readyCheck{change: change, at: ts, action: action, artifact: optString(prop(d, "artifact")), source: file,
+		commit: str("head_commit"), tree: str("tested_tree"), testedTree: str("tested_tree"), risked: risked}, true
 }
 
 // evidence is every `jhon executions run` and ready `jhon deliver check`

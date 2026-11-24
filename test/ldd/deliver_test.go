@@ -84,6 +84,65 @@ func TestDeliverReady(t *testing.T) {
 	equal(t, r.json["tested_tree"], rec["candidate_tree"])
 }
 
+// gitStatus is `git status --porcelain --untracked-files=all` in root: "" when clean.
+func gitStatus(t *testing.T, root string) string {
+	t.Helper()
+	return support.Git(t, root, "status", "--porcelain", "--untracked-files=all")
+}
+
+// deliveryRecord is where a ready check records itself: the git common
+// dir's jhon/changes/<change>/delivery.json, never the change's folder (T225).
+func deliveryRecord(root string) string {
+	return filepath.Join(root, ".git", "jhon", "changes", deliverChange, "delivery.json")
+}
+
+// T225 S1: a ready merge check on a clean, committed tree leaves it clean:
+// `git status`, and the clean-tree check of the next `jhon deliver check`;
+// the record goes under the git common dir, where the merge gate reads it.
+func TestDeliverReadyCheckLeavesTheTreeClean(t *testing.T) {
+	t.Parallel()
+	root := deliverProject(t, "true")
+	tested(t, root)
+	equal(t, gitStatus(t, root), "", "clean before the check")
+	r := jhonGit(t, root, "deliver", "check", deliverChange, "--action", "merge")
+	equal(t, r.Code, 0, r.Out())
+	match(t, r.Stdout, `(?m)^merge  ready$`)
+	equal(t, r.Stderr, "")
+	equal(t, gitStatus(t, root), "", "clean after the check: no commit only records it")
+	head := strings.TrimSpace(support.Git(t, root, "rev-parse", "HEAD"))
+	rec := object(t, support.Read(t, deliveryRecord(root)))
+	equal(t, rec["action"], "merge")
+	equal(t, rec["head_commit"], head)
+	equal(t, exists(filepath.Join(root, deliverDir, "delivery.json")), false, "nothing in the change's folder")
+	again := check(t, root, "--action", "merge")
+	equal(t, again.Code, 0, again.Out())
+	equal(t, gitStatus(t, root), "", "clean after the next check too")
+}
+
+// T225 S3: a repository whose change folder tracks a delivery.json an
+// earlier jhon wrote keeps working with no migration: the check leaves the
+// tracked file as committed, the tree clean, and still reads the tier the
+// earlier delivery recorded there (the tier only rises).
+func TestDeliverTrackedRecordOfAnEarlierJhon(t *testing.T) {
+	t.Parallel()
+	root := deliverProject(t, "true")
+	legacy := `{"timestamp": "2026-10-25T00:00:00Z", "action": "merge", "head_commit": "` + strings.Repeat("1", 40) + `", "risk": "high"}` + "\n"
+	support.Write(t, root, map[string]string{deliverDir + "/delivery.json": legacy})
+	commit(t, root, "an earlier check's record")
+	tested(t, root)
+	r := check(t, root, "--action", "merge")
+	equal(t, r.Code, 1, r.Out())
+	equal(t, anyMatch(r.json["reasons"], `high risk \(an earlier delivery of this change was high\)`), true, reasons(r))
+	support.Write(t, root, map[string]string{deliverDir + "/verify-report.md": "verdict: pass\n"})
+	commit(t, root, "verify")
+	r = check(t, root, "--action", "merge")
+	equal(t, r.Code, 0, r.Out())
+	equal(t, r.json["risk"].(map[string]any)["tier"], "high", "the earlier delivery's tier")
+	equal(t, gitStatus(t, root), "", "the tracked record is not rewritten")
+	equal(t, support.Read(t, filepath.Join(root, deliverDir, "delivery.json")), legacy)
+	equal(t, object(t, support.Read(t, deliveryRecord(root)))["risk"], "high")
+}
+
 func TestDeliverProductionChangeAfterRun(t *testing.T) {
 	t.Parallel()
 	root := deliverProject(t, "true")
@@ -133,17 +192,17 @@ func TestDeliverArtifactDigest(t *testing.T) {
 		equal(t, check(t, root, "--action", action).Code, 2, action+" without an artifact")
 		equal(t, check(t, root, "--action", action, "--artifact", "registry.example/app:latest").Code, 2, action+" with a mutable tag")
 	}
-	equal(t, exists(filepath.Join(root, deliverDir, "delivery.json")), false, "a refusal writes nothing")
+	equal(t, exists(deliveryRecord(root)), false, "a refusal writes nothing")
 	r := check(t, root, "--action", "deploy", "--artifact", digest)
 	equal(t, r.Code, 0, r.Out())
-	rec := object(t, support.Read(t, filepath.Join(root, deliverDir, "delivery.json")))
+	rec := object(t, support.Read(t, deliveryRecord(root)))
 	equal(t, rec["action"], "deploy")
 	equal(t, rec["artifact"], digest)
 	equal(t, rec["tested_tree"], r.json["tested_tree"])
 	equal(t, check(t, root, "--action", "deploy", "--artifact", digest).Code, 0, "the delivery record never makes the tree unclean")
 	m := check(t, root, "--action", "merge", "--artifact", digest)
 	equal(t, m.Code, 0, "a merge may name a digest, as before: "+m.Out())
-	equal(t, object(t, support.Read(t, filepath.Join(root, deliverDir, "delivery.json")))["artifact"], digest)
+	equal(t, object(t, support.Read(t, deliveryRecord(root)))["artifact"], digest)
 }
 
 func TestDeliverRetiredSubcommands(t *testing.T) {
@@ -230,7 +289,7 @@ func TestDeliverDeployNamesItsCommit(t *testing.T) {
 	first := support.Git(t, root, "rev-parse", "HEAD")
 	tested(t, root)
 	head := strings.TrimSpace(support.Git(t, root, "rev-parse", "HEAD"))
-	record := filepath.Join(root, deliverDir, "delivery.json")
+	record := deliveryRecord(root)
 
 	refused := "jhon deliver: '%s' is not an immutable artifact identifier: give its content digest (<name@>sha256:<hex>), or for an infrastructure deploy the full commit it deploys from; never a tag or a short sha\n"
 	for _, a := range []string{head[:7], "v1.2.3"} {
