@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/version"
 )
 
 // connectorsSwitch is the ENABLE_CLAUDEAI_MCP_SERVERS entry connectorsEnv
@@ -152,6 +153,89 @@ func TestConnectorsFollowM365AloneWhateverStudioIs(t *testing.T) {
 			if got := connectorsSwitch(t, text); got != want {
 				t.Errorf("connectors %v, studio %q: %q, want %q", connectors, studio, got, want)
 			}
+		}
+	}
+}
+
+// jhonIs runs the test as a jhon stamped v (version.Version), as a release
+// is; the tests' own build is 0.0.0-dev.
+func jhonIs(t *testing.T, v string) {
+	t.Helper()
+	saved := version.Version
+	version.Version = v
+	t.Cleanup(func() { version.Version = saved })
+}
+
+// T237 (odd/tasks/studio-integration-v1.md S5): a jhon older than the
+// minimum jhon-studio declares, or a contract jhon does not speak, keeps it
+// off for the session with one note naming its version, its minimum and the
+// fix; Claude Code still starts, as it does with it off.
+func TestStartLeavesOutAToolThatNeedsANewerJhonWithOneNote(t *testing.T) {
+	plugin := t.TempDir()
+	const on = "schema = 1\n\n[integrations]\nstudio = true\n"
+	jhonIs(t, "0.5.0-rc.1")
+	for _, c := range []struct{ what, answer, want string }{
+		{"a newer minimum", `{"version":"0.2.0","plugin_dir":"` + plugin + `","skill":"` + plugin + `/SKILL.md","requires_jhon":">=0.5.0","contract":"jhon.integration/v1"}`,
+			"jhon: jhon-studio 0.2.0 requires jhon >=0.5.0, and this is jhon 0.5.0-rc.1: jhon-studio is off for this run; update jhon (jhon update), or install a jhon-studio version that supports jhon 0.5.0-rc.1"},
+		{"another contract", `{"version":"1.0.0","requires_jhon":">=0.5.0-rc.1","contract":"jhon.integration/v2"}`,
+			"jhon: jhon-studio 1.0.0 speaks jhon.integration/v2 (it requires jhon >=0.5.0-rc.1), and this jhon 0.5.0-rc.1 speaks jhon.integration/v1: jhon-studio is off for this run; update jhon (jhon update), or install a jhon-studio version that speaks jhon.integration/v1"},
+	} {
+		studioAt(t, on, c.answer)
+		args, notes := launchPlugins()
+		if len(args) != 0 || !slices.Equal(notes, []string{c.want}) {
+			t.Errorf("%s: args %q, notes %q", c.what, args, notes)
+		}
+	}
+}
+
+// A minimum it meets, an older tool that declares none, and any minimum on
+// a development build load the plugin with no note (PRESERVE: the plugin
+// argument is what it was).
+func TestStartLoadsAToolThatFitsThisJhon(t *testing.T) {
+	plugin := t.TempDir()
+	const on = "schema = 1\n\n[integrations]\nstudio = true\n"
+	for _, c := range []struct{ jhon, fields string }{
+		{"0.5.0-rc.1", `,"requires_jhon":">=0.5.0-rc.1","contract":"jhon.integration/v1"`},
+		{"0.5.0", `,"requires_jhon":">=0.5.0-rc.1"`},
+		{"0.5.0", ``},
+		{"0.0.0-dev+abc1234", `,"requires_jhon":">=9.0.0","contract":"jhon.integration/v1"`},
+	} {
+		jhonIs(t, c.jhon)
+		studioAt(t, on, `{"version":"0.2.0","plugin_dir":"`+plugin+`","skill":"`+plugin+`/SKILL.md"`+c.fields+`}`)
+		if args, notes := launchPlugins(); !slices.Equal(args, []string{"--plugin-dir", plugin}) || len(notes) != 0 {
+			t.Errorf("jhon %s, %s: args %q, notes %q", c.jhon, c.fields, args, notes)
+		}
+	}
+}
+
+// pi's session: the same note, and JHON_INTEGRATIONS_OFF names the setting
+// of each tool off for the run, so the shell registers nothing of it; a
+// value the caller's environment held is never kept.
+func TestStartPiNamesTheToolsOffForTheRun(t *testing.T) {
+	const on = "schema = 1\n\n[integrations]\nstudio = true\n"
+	jhonIs(t, "0.5.0-rc.1")
+	studioAt(t, on, `{"version":"0.2.0","plugin_dir":"/p","skill":"/p/SKILL.md","requires_jhon":">=0.6.0"}`)
+	env, notes := toolsOffEnv([]string{"A=1", "JHON_INTEGRATIONS_OFF=stale"})
+	if !slices.Equal(env, []string{"A=1", "JHON_INTEGRATIONS_OFF=integrations.studio"}) {
+		t.Errorf("incompatible: env %q", env)
+	}
+	if want := "jhon: jhon-studio 0.2.0 requires jhon >=0.6.0, and this is jhon 0.5.0-rc.1: jhon-studio is off for this run; update jhon (jhon update), or install a jhon-studio version that supports jhon 0.5.0-rc.1"; !slices.Equal(notes, []string{want}) {
+		t.Errorf("incompatible: notes %q", notes)
+	}
+	// Fits, not answering, or off: no variable and no note; /jhon:video says
+	// itself why a jhon-studio that does not answer has no skill.
+	for _, c := range []struct{ what, text, answer string }{
+		{"fits", on, `{"version":"0.2.0","plugin_dir":"/p","skill":"/p/SKILL.md","requires_jhon":">=0.5.0-rc.1"}`},
+		{"not on PATH", on, ""},
+		{"off", "schema = 1\n", `{"version":"0.2.0","requires_jhon":">=0.6.0"}`},
+	} {
+		log := studioAt(t, c.text, c.answer)
+		env, notes := toolsOffEnv([]string{"A=1", "JHON_INTEGRATIONS_OFF=stale"})
+		if !slices.Equal(env, []string{"A=1"}) || len(notes) != 0 {
+			t.Errorf("%s: env %q, notes %q", c.what, env, notes)
+		}
+		if _, err := os.Stat(log); c.what == "off" && err == nil {
+			t.Error("off: jhon-studio was asked")
 		}
 	}
 }

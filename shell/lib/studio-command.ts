@@ -11,6 +11,10 @@
  * (lib/ldd-command.ts): the body after the frontmatter with pi's argument
  * substitution. A skill that names no argument placeholder gets them after
  * it as `ARGUMENTS: <args>`, as Claude Code appends them to a skill's body.
+ *
+ * A jhon-studio that needs a newer jhon, or speaks another contract, is off
+ * for the session (T237): `jhon start pi` says so once and names its setting
+ * in JHON_INTEGRATIONS_OFF, and nothing about video is registered.
  */
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
@@ -23,6 +27,14 @@ export const STUDIO_SETTING = "integrations.studio";
 export const STUDIO_BIN = "jhon-studio";
 /** How long `jhon-studio integration --json` may take, as the engine's bound (engine/internal/integrations/cli.go). */
 export const STUDIO_TIMEOUT_MS = 10_000;
+
+/** The variable `jhon start pi` names the settings of the tools off for the session in (engine/internal/cli/cmd_start.go). */
+export const INTEGRATIONS_OFF_ENV = "JHON_INTEGRATIONS_OFF";
+
+/** Whether `jhon start pi` kept the integration of `setting` off for this session, comma-separated in JHON_INTEGRATIONS_OFF. */
+export function offForSession(setting: string, env: NodeJS.ProcessEnv = process.env): boolean {
+	return (env[INTEGRATIONS_OFF_ENV] ?? "").split(",").map((s) => s.trim()).includes(setting);
+}
 
 /** What /jhon:video says it does in pi's `/` list. */
 export const VIDEO_DESCRIPTION = "Makes a narrated presentation video of this project with jhon-studio";

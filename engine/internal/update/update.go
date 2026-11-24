@@ -88,8 +88,8 @@ func Newer(current, latest string) bool {
 	return semver.Compare("v"+latest, "v"+current) > 0
 }
 
-// IsDev is whether v is a development build's version.
-func IsDev(v string) bool { return semver.Prerelease("v"+v) == "-dev" }
+// IsDev is whether v is a development build's version (version.IsDev).
+func IsDev(v string) bool { return version.IsDev(v) }
 
 // ErrNoRelease is Latest's answer when /releases/latest is 404: GitHub's
 // answer while only pre-releases are published (S11). It is not a failure.

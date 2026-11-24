@@ -16,6 +16,7 @@ import (
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/discover"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/hook"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/release"
@@ -90,7 +91,10 @@ func runDoctor(argv []string) (int, error) {
 // versions compares each installed tool with its pin in render's versions
 // table (T50g): a mismatch is a warning, never a problem; a tool that is
 // not installed, or prints no version, is a note. An optional
-// integration's binary is compared only while it is on.
+// integration's binary is compared only while it is on. A kind cli tool's
+// manifest version is the one Jhon was tested with, never a pin or a
+// requirement (T237): its installed version is ok whatever it is, and what
+// it needs of jhon is its own requires_jhon (cliIntegrations).
 func (d doctor) versions() {
 	o := d.o
 	o.Head("versions")
@@ -100,6 +104,20 @@ func (d doctor) versions() {
 		}
 		out, err := probeVersion(t.Command)
 		got := installedVersion(out)
+		if testedWith(t.Command) {
+			tested := "(tested with " + t.Version + ")"
+			switch {
+			case errors.Is(err, errNotInstalled):
+				o.Note(fmt.Sprintf("%s is not installed %s", t.Command, tested))
+			case err != nil:
+				o.Note(fmt.Sprintf("%v %s", err, tested))
+			case got == "":
+				o.Note(fmt.Sprintf("%s printed no version %s", t.Command, tested))
+			default:
+				o.OK(fmt.Sprintf("%s %s %s", t.Command, got, tested))
+			}
+			continue
+		}
 		switch {
 		case errors.Is(err, errNotInstalled):
 			o.Note(fmt.Sprintf("%s is not installed (Jhon pins %s)", t.Command, t.Version))
@@ -113,6 +131,17 @@ func (d doctor) versions() {
 			o.Warn(fmt.Sprintf("%s %s is installed; Jhon pins %s", t.Command, got, t.Version))
 		}
 	}
+}
+
+// testedWith is whether command is a kind cli integration's binary, whose
+// manifest version is the one Jhon was tested with.
+func testedWith(command string) bool {
+	for _, m := range integrations.All() {
+		if m.Kind == "cli" && m.Doctor.Binary == command {
+			return true
+		}
+	}
+	return false
 }
 
 // errNotInstalled is probeVersion's command not on PATH.

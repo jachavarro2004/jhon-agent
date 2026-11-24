@@ -36,6 +36,45 @@ brief, write the script, show you a preview and wait for your approval before
 the render. `<source>` is optional: `readme` (the default), `ldd:<change>`,
 `release:<tag>` or a file.
 
+You need not name the command: with jhon-studio on, the main session's text
+(lean and full, both runtimes) says that a request for a video, or
+"jhon:video", means this skill, and points to this page, which every install
+carries at `~/.local/share/jhon/current/docs/jhon-studio.md` (the rest of
+`docs/` stays in the repository). In pi the agent follows the skill by
+reading the `skill` file `jhon-studio integration --json` names. The text
+is rendered at `jhon sync` (setup runs it): after `jhon settings set
+integrations.studio true|false`, run `jhon sync` for the sentence to come or
+go.
+
+With Jhon's sandbox on (`sandbox.mode`), the skill's commands run as every
+other command of the agent, inside it: jhon-studio reads its install and
+writes in the project's `.jhon/` and the cache. Chrome inside the sandbox,
+for web screens, is jhon-studio's own work (its T9).
+
+## The jhon it needs
+
+jhon-studio says what jhon it runs with in `jhon-studio integration --json`:
+`requires_jhon` (a SemVer range, `">=0.5.0-rc.1"` for v0.1.0) and `contract`
+(`jhon.integration/v1`); `integrations/README.md` ("The jhon a tool needs")
+has the rules. When the running jhon is older than its minimum, or the
+contract is not one jhon speaks, jhon-studio is off for that run with one
+note, and Jhon works as it does with it off:
+
+```text
+jhon: jhon-studio 0.2.0 requires jhon >=0.6.0, and this is jhon 0.5.0-rc.1: jhon-studio is off for this run; update jhon (jhon update), or install a jhon-studio version that supports jhon 0.5.0-rc.1
+```
+
+`jhon start` loads no plugin, pi has no `/jhon:video`, `jhon setup` shows the
+note under the `jhon-studio` check, and `jhon doctor`'s `jhon-studio` section
+shows it as a warning instead of the checks. With a version that fits, doctor
+says what it requires and the running jhon; an older jhon-studio that declares
+nothing is accepted, and doctor notes that it declares no minimum. A
+development build of jhon (`0.0.0-dev+<commit>`, from `jhon sync`) satisfies
+any minimum, and doctor says it was not checked. The version in
+`integrations/studio/manifest.yaml` is the one Jhon was tested with: doctor
+shows `jhon-studio <installed> (tested with <version>)`, never as a
+requirement.
+
 ## While it is off, or not answering
 
 Off (the default), nothing about video is shown or loaded: `jhon start` adds

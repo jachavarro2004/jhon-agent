@@ -47,7 +47,7 @@ func TestVerify(t *testing.T) {
 	{
 		base := "https://github.com/jachavarro2004/jhon-agent"
 		tag := base + "/.github/workflows/release.yml@refs/tags/"
-		for _, c := range []signerCase{
+		cases = append(cases, []signerCase{
 			{"a release candidate's tag verifies", tag + "v0.2.0-rc.1", Issuer, "the release", ""},
 			{"an rc tag without its dot is refused", tag + "v1.2.3-rc1", Issuer, "the release", notWorkflow},
 			{"a beta tag is refused", tag + "v0.2.0-beta.1", Issuer, "the release", notWorkflow},
@@ -72,9 +72,7 @@ func TestVerify(t *testing.T) {
 			{"a longer workflow name is refused", base + "/.github/workflows/release.ymlX@refs/tags/v0.2.0", Issuer, "the release", notWorkflow},
 			{"a branch is refused", base + "/.github/workflows/release.yml@refs/heads/main", Issuer, "the release", notWorkflow},
 			{"a pull request ref is refused", base + "/.github/workflows/release.yml@refs/pull/1/merge", Issuer, "the release", notWorkflow},
-		} {
-			cases = append(cases, c)
-		}
+		}...)
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

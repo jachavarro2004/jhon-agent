@@ -16,8 +16,10 @@ import (
 // integration"; odd/tasks/jhon-studio.md S3):
 //
 //   - `<binary> integration --json`, what a runtime loads: {version,
-//     plugin_dir, skill}, plugin_dir a Claude Code plugin folder and skill
-//     the SKILL.md pi's shell sends as a command's prompt;
+//     plugin_dir, skill, requires_jhon, contract}, plugin_dir a Claude Code
+//     plugin folder, skill the SKILL.md pi's shell sends as a command's
+//     prompt, and requires_jhon and contract what jhon it needs (Judge,
+//     compat.go), both optional;
 //   - `<binary> doctor --json`, its own checks: {ok, checks: [{id, ok,
 //     detail, fix}]}, exiting 1 when one fails.
 //
@@ -29,6 +31,11 @@ type Answer struct {
 	Version   string `json:"version"`
 	PluginDir string `json:"plugin_dir"`
 	Skill     string `json:"skill"`
+	// RequiresJhon is the SemVer range of jhon versions the tool runs with,
+	// such as ">=0.5.0-rc.1"; "" declares none.
+	RequiresJhon string `json:"requires_jhon"`
+	// Contract is the contract the answer speaks; "" is Contract.
+	Contract string `json:"contract"`
 }
 
 // Check is one of `<binary> doctor --json`'s checks: Fix says how to mend it
@@ -45,7 +52,9 @@ type Check struct {
 var askTimeout = 10 * time.Second
 
 // AskIntegration is m's program's `integration --json`; an error says why
-// there is none (not on PATH, a failure, not the JSON, no plugin_dir).
+// there is none (not on PATH, a failure, not the JSON, no plugin_dir). An
+// answer of another contract need not name a plugin_dir: Judge says why it
+// is off.
 func AskIntegration(m Manifest) (Answer, error) {
 	var a Answer
 	out, err := ask(m.Doctor.Binary, "integration", "--json")
@@ -55,7 +64,7 @@ func AskIntegration(m Manifest) (Answer, error) {
 	if json.Unmarshal(out, &a) != nil {
 		return a, fmt.Errorf("%s integration --json: not the JSON {version, plugin_dir, skill}", m.Doctor.Binary)
 	}
-	if a.PluginDir == "" {
+	if a.PluginDir == "" && a.contract() == Contract {
 		return a, fmt.Errorf("%s integration --json: names no plugin_dir", m.Doctor.Binary)
 	}
 	return a, nil

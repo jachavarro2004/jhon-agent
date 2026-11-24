@@ -250,6 +250,13 @@ var runtimeTerms = map[string]map[string]string{
 		"claude-code": "`AskUserQuestion`",
 		"pi":          "`ask_user`",
 	},
+	// T238: jhon-studio's video skill as each runtime has it: Claude Code's
+	// from the plugin jhon start loads, pi's the shell's command, which the
+	// agent follows by reading the skill jhon-studio names (studio.go).
+	"video-skill": {
+		"claude-code": "the skill `jhon-studio:video`, which the owner runs as `/jhon-studio:video`",
+		"pi":          "`/jhon:video`, which the owner types; to follow it yourself, read the `skill` file that `jhon-studio integration --json` names",
+	},
 	// T146h: the runtime's own name, as its full file is named
 	// (prose/full-<runtime>.md, lean.go).
 	"runtime": {
@@ -284,9 +291,9 @@ func init() {
 // its words, the contracts at the install's path (atInstall). A term with no words for it stays as written, which
 // validation reports. An agent that does not hold an optional integration's
 // capability (context7, or one that is off: context7.go) reads no sentence
-// about it.
+// about it, nor about a cli tool that is off (studio.go).
 func (e *engine) bodyFor(runtime string, a manifest.Agent) string {
-	return e.atInstall(inRuntime(runtime, withoutUnheld(e.bodyOf(a), a.Caps)))
+	return e.atInstall(inRuntime(runtime, withoutOffTools(withoutUnheld(e.bodyOf(a), a.Caps), e.toolsOff)))
 }
 
 // inRuntime is text with each runtime term in runtime's words, so a runtime

@@ -49,8 +49,10 @@ func start(t *testing.T, args ...string) (support.Result, []string) {
 	seen := filepath.Join(dir, "argv")
 	claude := filepath.Join(dir, "claude")
 	recordArgv(t, claude, seen)
+	// The owner's settings never steer it: with integrations.studio on there,
+	// jhon start would ask the owner's jhon-studio and add its plugin (T237).
 	r := support.Run(t, support.Cmd{Args: append([]string{support.Bin(t), "start"}, args...), Dir: dir,
-		Env: support.Env("JHON_CLAUDE="+claude, "JHON_ROOT="+support.Root())})
+		Env: support.Env("JHON_CLAUDE="+claude, "JHON_ROOT="+support.Root(), "JHON_SETTINGS="+filepath.Join(dir, "settings.toml"))})
 	return r, seenArgv(seen)
 }
 

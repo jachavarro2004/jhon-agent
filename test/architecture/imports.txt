@@ -105,6 +105,7 @@ internal/hook -> internal/session
 internal/hook -> internal/settings
 internal/hook -> internal/sh
 internal/hook -> internal/workspace
+internal/integrations -> internal/version
 internal/ldd -> internal/contract
 internal/ldd -> internal/discover
 internal/ldd -> internal/execution

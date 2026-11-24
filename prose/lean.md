@@ -80,3 +80,4 @@ scope, destructive actions or outward actions. Never weaken a failing test.
 - Testing behaviour that already exists:
   `~/.local/share/jhon/current/prose/contracts/witness.md`.
 - A diagram: `~/.local/share/jhon/current/prose/contracts/archify.md`.
+- A request for a video, or "jhon:video", with jhon-studio on: its video skill, {{runtime:video-skill}}; how it works: `~/.local/share/jhon/current/docs/jhon-studio.md`.

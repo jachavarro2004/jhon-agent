@@ -533,6 +533,12 @@ func (m Model) checkLines(cw int) []line {
 				ls = append(ls, l(m.dim("  "), m.text(strings.TrimRight(part, " "))))
 			}
 		}
+		if c.OK && c.Note != "" {
+			// A found tool that is off all the same (T237): its note, wrapped.
+			for _, part := range wrapFix(c.Note, cw-6, cw-6) {
+				ls = append(ls, l(m.dim("  "), seg{s: strings.TrimRight(part, " "), fg: m.st.warn}))
+			}
+		}
 	}
 	ls = append(ls, line{}, l(seg{s: strings.Repeat("─", max(cw-4, 0)), fg: m.st.line}))
 	if missing > 0 {

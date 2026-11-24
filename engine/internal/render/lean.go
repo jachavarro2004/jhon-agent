@@ -22,9 +22,10 @@ import (
 const leanProse = "lean.md"
 
 // leanText is the lean text as runtime renders it: each runtime term in its
-// words, every path at the install's real path.
+// words, every path at the install's real path, and no line about a cli
+// tool that is off (studio.go).
 func (e *engine) leanText(runtime string) string {
-	return e.atInstall(inRuntime(runtime, js.Trim(mustReadText(filepath.Join(e.prose, leanProse)))))
+	return e.atInstall(inRuntime(runtime, withoutOffTools(js.Trim(mustReadText(filepath.Join(e.prose, leanProse))), e.toolsOff)))
 }
 
 // fullText is the full context of runtime: what its main session carried

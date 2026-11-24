@@ -168,6 +168,9 @@ type engine struct {
 	// optionalOn is whether each optional integration's setting is on, by
 	// name (context7.go).
 	optionalOn map[string]bool
+	// toolsOff are the display names of the optional cli integrations whose
+	// setting is off (studio.go).
+	toolsOff []string
 }
 
 // ReadProfiles is the owner's profiles file with its active profile settled
@@ -212,6 +215,7 @@ func newEngine(root string, a args, out, errw io.Writer) (*engine, error) {
 	e.active, e.profile = profiles.Active(e.profiles)
 	e.off, e.absent, e.chosen = map[string]string{}, map[string]bool{}, map[string]bool{}
 	e.m.Agents, e.optionalOn = withoutOff(e.m.Agents, settings.On)
+	e.toolsOff = toolsOff(settings.On)
 	for _, r := range m.Matrix.Runtimes {
 		on, key, source := settings.RuntimeSetting(r)
 		if !on {

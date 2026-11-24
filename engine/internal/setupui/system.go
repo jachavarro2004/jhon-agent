@@ -12,6 +12,7 @@ import (
 
 	manifests "github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/version"
 )
 
 // InstallFunc installs the core and the chosen runtimes; the CLI passes the
@@ -30,6 +31,11 @@ type System struct {
 	Updates  Updater
 	// Pins are the versions setup installs.
 	Pins Pins
+	// Ask is a cli integration's answer, `<binary> integration --json`
+	// (manifests.AskIntegration), and Jhon the running jhon's version: a
+	// chosen tool found on PATH that does not fit it is noted (T237).
+	Ask  func(manifests.Manifest) (manifests.Answer, error)
+	Jhon string
 }
 
 // Pins are the versions setup installs (T50g): the CLI passes render's
@@ -78,7 +84,8 @@ func offered() []manifests.Manifest {
 // NewSystem is a System on PATH and the user's home.
 func NewSystem(settingsPath, binaryPath string, pins Pins, install InstallFunc) *System {
 	home, _ := os.UserHomeDir()
-	return &System{SettingsPath: settingsPath, BinaryPath: binaryPath, Home: home, LookPath: exec.LookPath, Install: install, Pins: pins}
+	return &System{SettingsPath: settingsPath, BinaryPath: binaryPath, Home: home, LookPath: exec.LookPath, Install: install, Pins: pins,
+		Ask: manifests.AskIntegration, Jhon: version.Version}
 }
 
 // fix is how to install name on this machine, at its pin: a command it can
@@ -201,7 +208,9 @@ func (s *System) Saved() Saved {
 
 // Checks are git, claude when Claude Code is chosen, node when pi is (setup
 // installs pi itself with npm), and each integration's binary (Engram,
-// CodeGraph; an optional one's only when chosen on).
+// CodeGraph; an optional one's only when chosen on). A chosen cli tool
+// found on PATH whose answer does not fit this jhon (manifests.Judge) is
+// found with its one note: it is off, the core installs all the same.
 func (s *System) Checks(c Choices) []Check {
 	names := []string{"git"}
 	if c.ClaudeCode {
@@ -210,19 +219,38 @@ func (s *System) Checks(c Choices) []Check {
 	if c.Pi {
 		names = append(names, "node")
 	}
+	tools := map[string]manifests.Manifest{}
 	for _, m := range binaries(c) {
 		names = append(names, m.Doctor.Binary)
+		if m.Kind == "cli" {
+			tools[m.Doctor.Binary] = m
+		}
 	}
 	out := make([]Check, 0, len(names))
 	for _, n := range names {
 		if p := s.find(n); p != "" {
-			out = append(out, Check{Name: n, OK: true, Detail: p})
+			out = append(out, Check{Name: n, OK: true, Detail: p, Note: s.offNote(tools, n)})
 		} else {
 			cmd, adv := s.fix(n)
 			out = append(out, Check{Name: n, Detail: "not on PATH", Fix: cmd, Advice: adv})
 		}
 	}
 	return out
+}
+
+// offNote is the note of the cli tool called name when its answer does not
+// fit this jhon; "" for any other binary, one that fits, or one that gives
+// no answer (jhon doctor says why).
+func (s *System) offNote(tools map[string]manifests.Manifest, name string) string {
+	m, ok := tools[name]
+	if !ok || s.Ask == nil {
+		return ""
+	}
+	a, err := s.Ask(m)
+	if err != nil {
+		return ""
+	}
+	return manifests.Judge(m, a, s.Jhon).Off
 }
 
 func runtimes(c Choices) string {
