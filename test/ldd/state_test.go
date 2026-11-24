@@ -140,6 +140,7 @@ func oneSave(t *testing.T, save []string) string {
 func TestArchiveWritesTheChangeState(t *testing.T) {
 	t.Parallel()
 	f := stateProject(t, "")
+	recordRedGreen(t, filepath.Join(f.root, "openspec/changes/c1"), true)
 	r := f.jhon(t, "archive", "c1", "2026-11-16")
 	equal(t, r.Code, 0, r.Stderr)
 	equal(t, r.Stderr, "", "a written state adds no note")
@@ -149,7 +150,7 @@ func TestArchiveWritesTheChangeState(t *testing.T) {
 		t.FailNow()
 	}
 	content := oneSave(t, saves[0])
-	match(t, content, `(?m)^phase: archive\nslices: 1 of 2 done\nlast test run: none on record\ndelivery: archived to openspec/changes/archive/2026-11-16-c1$`, content)
+	match(t, content, `(?m)^phase: archive\nslices: 1 of 2 done\nlast test run: passed 2026-09-20T10:01:00\.000Z\ndelivery: archived to openspec/changes/archive/2026-11-16-c1$`, content)
 }
 
 func TestVerifyWritesAndUpdatesTheChangeState(t *testing.T) {
@@ -206,6 +207,7 @@ func TestAFailingSlowOrAbsentEngramLeavesTheTransitionAlone(t *testing.T) {
 	t.Parallel()
 	archive := func(mode, engram string) (support.Result, time.Duration) {
 		f := stateProject(t, mode)
+		recordRedGreen(t, filepath.Join(f.root, "openspec/changes/c1"), true)
 		if engram != "" {
 			f.env = append(f.env, "JHON_ENGRAM="+engram)
 		}

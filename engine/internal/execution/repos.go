@@ -23,6 +23,60 @@ type RepoRun struct {
 	Executions       []Execution `json:"executions"`
 	Passed           bool        `json:"passed"`
 	Complete         bool        `json:"complete"`
+	// Timestamp is when the run ended; an entry an earlier binary wrote
+	// has none.
+	Timestamp string `json:"timestamp,omitempty"`
+	// History is the outcome of each earlier complete run of the member
+	// (RepoHistoryOf, T223), the newest HistoryLimit: its RED before GREEN
+	// counts as the primary's does (RedBeforeGreenOnRecord).
+	History []PastRun `json:"history,omitempty"`
+}
+
+// RedBeforeGreen is whether the member's run passed after an earlier run
+// of it failed.
+func (r RepoRun) RedBeforeGreen() bool { return redBeforeGreen(r.Complete && r.Passed, r.History) }
+
+// RepoHistoryOf is the history member name's next run of change keeps: its
+// entry's history and, when that entry's run is complete, its outcome.
+func RepoHistoryOf(root, change, name string) []PastRun {
+	r, ok := RepoRunOf(root, change, name)
+	if !ok {
+		return nil
+	}
+	out := r.History
+	if r.Complete {
+		out = append(out, PastRun{Timestamp: r.Timestamp, Passed: r.Passed, WorkingTree: r.WorkingTree})
+	}
+	return out[max(0, len(out)-HistoryLimit):]
+}
+
+// MemberRedBeforeGreen is the newest member run of change, in root's
+// record, that passed after an earlier failing run of the same member, and
+// the member's name; nil when none did.
+func MemberRedBeforeGreen(root, change string) (*RepoRun, string) {
+	var best *RepoRun
+	name := ""
+	for n, r := range ReposOf(root, change) {
+		if !r.RedBeforeGreen() {
+			continue
+		}
+		if best == nil || r.Timestamp > best.Timestamp || r.Timestamp == best.Timestamp && n < name {
+			r := r
+			best, name = &r, n
+		}
+	}
+	return best, name
+}
+
+// RedBeforeGreenOnRecord is whether change has a RED before GREEN on
+// record: its own (RedBeforeGreen), or a workspace member's in its record
+// (repos.<name>, T223), which counts the same way for archive and status.
+func RedBeforeGreenOnRecord(root, change string) bool {
+	if RedBeforeGreen(root, change) {
+		return true
+	}
+	r, _ := MemberRedBeforeGreen(root, change)
+	return r != nil
 }
 
 // Dirty is whether the tree the run tested changed while it ran.

@@ -68,6 +68,7 @@ var commandPurpose = map[string]string{
 	"profile":    "list, show and choose the owner's model profiles.",
 	"sandbox":    "run a program in the OS sandbox, or say whether the sandbox can run here.",
 	"executions": "record a change's test runs, the evidence its delivery is checked against.",
+	"archive":    "move a change into the archive once its RED before GREEN is on record, or a change that alters no behaviour.",
 }
 
 // commonCase is the two lines a command's own help opens with, before its
@@ -110,8 +111,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
 {B}usage{Z}
   jhon <command> --help    the command's own help for setup, start, update,
                            doctor, status, version, settings, profile,
-                           sandbox and executions (which opens with its
-                           common case), this usage for the others; -h or --help
+                           sandbox, executions (which opens with its
+                           common case) and archive, this usage for the
+                           others; -h or --help
                            after any command runs nothing (after jhon sandbox
                            run --, it is the program's)
   jhon setup               the setup wizard, on a terminal: pick the runtimes and
@@ -462,7 +464,16 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            apply a delta spec to a main spec, atomically
   jhon archive <change-name> <YYYY-MM-DD>
                            move a change into openspec/changes/archive, with
-                           git mv or a rename, and verify it (project root)
+                           git mv or a rename, and verify it (project root);
+                           it refuses a change with no RED before GREEN on
+                           record (tests.red_before_green in jhon status
+                           <change> --json), and moves nothing: run the new
+                           test failing through jhon executions run <change>
+                           (RED), then again once it passes (GREEN); a
+                           workspace member's (--repo <name>) counts too; only
+                           a change that alters no behaviour archives without
+                           it, while a file outside the layout's folder
+                           differs from the default branch (before its merge)
   jhon grant <class>… [--for <n>{s|m|h|d}] [--root <path>]
                            authorize one or more outward-facing classes (push,
                            gh-write, publish, remote, deploy, outside-write),

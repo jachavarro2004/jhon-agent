@@ -7,6 +7,7 @@
 package guards
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -104,6 +105,31 @@ func TestRouteGuardPrimaryPRWaitsForMembersOfAnArchivedChange(t *testing.T) {
 	code(t, call("gh pr create --title c --body 'see https://github.com/acme/lib/pull/7'"), 0, "the archived run is ready and its PR named")
 }
 
+// redGreenOnRecord puts the primary's RED before GREEN in the change's
+// execution record file, keeping what it holds (a member's repos.<name>):
+// `jhon archive` refuses a change without it (T223).
+func redGreenOnRecord(t *testing.T, file string) {
+	t.Helper()
+	record := map[string]any{}
+	if b, err := os.ReadFile(file); err == nil {
+		if err := json.Unmarshal(b, &record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record["timestamp"] = "2026-11-18T10:01:00.000Z"
+	record["complete"] = true
+	record["scope"] = "full"
+	record["executions"] = []any{map[string]any{"project": ".", "command": "true", "status": "pass", "exit_code": 0}}
+	record["history"] = []any{map[string]any{"timestamp": "2026-11-18T10:00:00.000Z", "passed": false}}
+	b, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // The same through `jhon archive` in the ldd layout.
 func TestRouteGuardPrimaryPRWaitsForMembersOfAChangeJhonArchived(t *testing.T) {
 	t.Parallel()
@@ -116,6 +142,7 @@ func TestRouteGuardPrimaryPRWaitsForMembersOfAChangeJhonArchived(t *testing.T) {
 	support.Write(t, w.app, map[string]string{"ldd/changes/c/tasks.md": "## Slice 1: lib side\n\nRepo: lib\n\n- [x] lib task\n"})
 	support.Git(t, w.app, "add", "-A")
 	support.Git(t, w.app, "commit", "-q", "-m", "c")
+	redGreenOnRecord(t, filepath.Join(w.app, "ldd/changes/c/execution-record.json"))
 	r := support.Jhon(t, w.app, w.env, "archive", "c", "2026-11-18")
 	code(t, r, 0, "jhon archive c")
 	support.Git(t, w.app, "add", "-A")
@@ -194,6 +221,7 @@ func TestRouteGuardMemberRunRecordedBeforeJhonArchiveCounts(t *testing.T) {
 	support.Git(t, w.app, "commit", "-q", "-m", "c")
 
 	code(t, support.Jhon(t, w.app, w.env, "executions", "run", "c", "--repo", "lib"), 0, "the member's run while the change is active")
+	redGreenOnRecord(t, filepath.Join(w.app, "ldd/changes/c/execution-record.json"))
 	code(t, support.Jhon(t, w.app, w.env, "archive", "c", "2026-11-18"), 0, "jhon archive c")
 	support.Git(t, w.app, "add", "-A")
 	support.Git(t, w.app, "commit", "-q", "-m", "archive c")

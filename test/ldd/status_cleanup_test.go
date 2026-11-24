@@ -28,6 +28,7 @@ func TestStatusNamesTheArchivedChangesCleanup(t *testing.T) {
 		"openspec/changes/shipping-cost/tasks.md": "## Slice 1: a\n- [x] 1.1 a\n",
 		"src/shipping.py":                         "COST = 1\n",
 	})
+	recordRedGreen(t, filepath.Join(wt, "openspec/changes/shipping-cost"), true)
 	commit(t, wt, "shipping cost")
 	a := jhonGit(t, wt, "archive", "shipping-cost", "2026-11-16")
 	equal(t, a.Code, 0, a.Out())

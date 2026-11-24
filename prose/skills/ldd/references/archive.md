@@ -1,7 +1,9 @@
 ## Archive
 
 Archive only a change with a folder and its RED before GREEN on record
-(`red_before_green` in `jhon status --json`). A change with no folder has
+(`tests.red_before_green` in `jhon status --json`); `jhon archive` refuses
+one without it, except a change that alters no behaviour while its diff
+against the default branch is not empty. A change with no folder has
 nothing to archive: its commit or PR text and its runs are its record.
 
 Close a change: merge its delta specs into the main specs, then move it into
