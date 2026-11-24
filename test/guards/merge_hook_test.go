@@ -308,14 +308,19 @@ func TestMergeHookHoldsWhateverTheLineChanges(t *testing.T) {
 	for _, c := range []struct {
 		line  string
 		extra []string
+		// early: git itself may fail before the transaction (a git whose
+		// helpers GIT_EXEC_PATH hides: "did not send all necessary
+		// objects" on some versions); main must still stay.
+		early bool
 	}{
-		{"mv openspec/config.yaml config.away && git fetch -q . " + b + ":main; mv config.away openspec/config.yaml", nil},
-		{"git fetch -q . " + b + ":main", []string{"HOME=" + m.p}},
-		{git + " fetch -q . " + b + ":main", []string{"PATH=" + fake + ":" + os.Getenv("PATH"), "GIT_EXEC_PATH=" + fake}},
-		{"t=$(git rev-parse " + b + ") && git checkout -q --detach && git branch -" + "D main " + b + " && git branch main $t", nil},
+		{"mv openspec/config.yaml config.away && git fetch -q . " + b + ":main; mv config.away openspec/config.yaml", nil, false},
+		{"git fetch -q . " + b + ":main", []string{"HOME=" + m.p}, false},
+		{git + " fetch -q . " + b + ":main", []string{"PATH=" + fake + ":" + os.Getenv("PATH"), "GIT_EXEC_PATH=" + fake}, true},
+		{"t=$(git rev-parse " + b + ") && git checkout -q --detach && git branch -" + "D main " + b + " && git branch main $t", nil, false},
 	} {
 		r := m.sh(t, m.p, c.line, c.extra...)
-		if got := m.refOr(t, "main"); got != "" && got != before || !strings.Contains(r.Stderr, gateRefusal) {
+		refused := strings.Contains(r.Stderr, gateRefusal) || c.early && r.Code != 0
+		if got := m.refOr(t, "main"); got != "" && got != before || !refused {
 			t.Errorf("%s %v: main %q (was %s), exit %d %q; want git's refusal", c.line, c.extra, got, before, r.Code, r.Stderr)
 		}
 	}
