@@ -338,6 +338,7 @@ func AgentHooks(args []string, io IO) int {
 	if err != nil {
 		return 0
 	}
+	payloadRead(payload)
 	var p Payload
 	if json.Unmarshal(payload, &p) != nil {
 		return 0

@@ -265,7 +265,11 @@ timeout or empty result:
 **Memory.** Engram holds decisions, and the engine keeps one state record
 per change in it (phase, slices, last run, delivery, code refs), written
 after a slice commit, a light verify and an archive, never failing the
-step. Claude Code's project memory is shared by both runtimes.
+step. Inside the sandbox Engram's folder stays read-only, so the record is
+queued in the repository's git common dir and the next jhon command outside
+the sandbox (the agent's next tool call) saves it; only well-formed state
+records of Jhon's own are saved, anything else is refused and reported
+([docs/ldd.md](docs/ldd.md)). Claude Code's project memory is shared by both runtimes.
 
 ## Measured, not assumed
 

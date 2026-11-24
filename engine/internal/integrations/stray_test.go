@@ -23,6 +23,8 @@ var exceptions = []struct{ lit, reason string }{
 	{"internal/ldd/state.go: .codegraph", "outside this slice's surfaces"},
 	{"internal/ldd/state.go: codegraph", "outside this slice's surfaces"},
 	{"internal/ldd/context.go: engram", "outside this slice's surfaces"},
+	{"internal/ldd/engramqueue.go: engram-queue", "the folder in the git common dir where Jhon queues its own state records for Engram (T222 S1b); a Jhon path, not the integration's"},
+	{"internal/ldd/engramqueue.go: .engram", "Engram's default data folder, named in the note when Jhon's sandbox keeps it read-only (T222 S3); v1 has no field for it, and a new field is v2"},
 	{"internal/cli/cmd_doctor_context7.go: context7", "the shipped holders of its capability, doctor's clause when the judged tree's agents.yaml cannot be read (T58c, L1193); v1 has no field for them, and a new field is v2"},
 	{"internal/hook/launchcontext.go: .codegraph", "CodeGraph's own index folder; v1 has no field for it, and a new field is v2 (integrations/README.md)"},
 	{"internal/hook/launchcontext.go: .codegraph-wsl", "CodeGraph's own index folder under WSL; v1 has no field for it, and a new field is v2"},

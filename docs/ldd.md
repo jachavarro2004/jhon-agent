@@ -270,6 +270,53 @@ Engram does not resolve (`JHON_ENGRAM`, else `engram` on PATH) or
 by the change, its areas, and the symbol and file names of its diff, so a
 decision saved with its code's refs is found from that code.
 
+Inside Jhon's sandbox Engram's folder (`ENGRAM_DATA_DIR`, else ~/.engram)
+stays read-only: a writable one would let a sandboxed command steer what
+Engram does outside the sandbox. So a state record written there (a
+`jhon executions verify` or `jhon archive` from sandboxed bash), or one
+Engram refuses on a read-only file system, is queued instead, one file per
+record in `<git common dir>/jhon/engram-queue/`, and the note says `jhon:
+the state of <change> was queued for Engram; Jhon saves it outside the
+sandbox`. The next jhon command run outside the sandbox (the agent's next
+tool call runs a jhon hook, in both runtimes, which flushes the queue of
+its payload's folder) saves each queued record to Engram from the
+repository's main worktree and removes it. The queue is a sandboxed
+command's to write, so only a well-formed state record of Jhon's own is
+saved: a file named `<time>-<change>.json`, at most 64 KiB, holding exactly
+`title` (`ldd state: <change>`), `topic` (`ldd-state/<change>`), `content`
+(the state, opening with the change's name) and `project` (the
+repository's main worktree, whatever worktree queued it; Engram never runs
+in a folder a record names). Anything else (another title, topic or
+project, a link, a folder, a file too large) is moved to
+`engram-queue/refused/`, which keeps the newest 100, reported on stderr
+with its name quoted, and never saved; a write left half-done for a minute
+is removed. No link is followed anywhere on the way: the git common dir
+is opened with `openat2` and `RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS`, so
+the kernel refuses a link in any component of its path (a linked
+worktree's common dir is a path its `.git` file names, which a sandboxed
+command may write, under folders it may swap for a link); `jhon/`, the
+queue and `refused/` are then each opened relative to the one before with
+`O_NOFOLLOW`, and every read, move and removal is relative to those open
+folders, never to a path. Engram is run in the main worktree, opened the
+same way and entered through that open folder. So a sandboxed command that
+swaps any folder on the way for a link reaches nothing outside it. On a
+kernel without `openat2` (before Linux 5.6) the queue fails closed:
+nothing is read, written or saved, the next jhon says so once on stderr,
+and `jhon doctor` warns with the fix, a Linux kernel 5.6 or newer. One
+flush takes at most 5 s, its listing and removals included, and leaves
+what it did not reach for the next one. When Engram does not take a
+record, it waits, and the next jhon says so once on stderr. `jhon doctor`
+says why Engram did not take them, how many records wait, how many entries
+were refused, and a queue it cannot read, with the fix, every path quoted.
+A search inside the sandbox fails the same way: `decisions_note` names the
+folder the sandbox keeps read-only and says to search with the MCP memory
+tool (`mem_search`). Accepted residuals: a sandboxed command can queue a
+well-formed record with false content for any change name, saved under
+`ldd-state/<change>` (never under another topic or title); and the Engram
+project a record lands in is the one Engram derives from the main
+worktree's files (its git remote, `.engram/config.json`), which a sandboxed
+command can write, as it can for the agents' own saves.
+
 A sub-agent's first message carries, after its brief, what its launch
 found: `## Decisions on record`, the decisions of the handoff packet (`jhon
 context [<change>] --phase none --handoff`; id, type and title, at most 12

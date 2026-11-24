@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/hook"
@@ -52,6 +53,16 @@ func register(name string, c Command) {
 
 // Run runs one jhon invocation: `hook <name> [args]` or `<command> [args]`.
 func Run(args []string) (int, error) {
+	// Outside Jhon's sandbox, first the state records queued inside it
+	// (T222 S1b): the hooks' calls too, so the next tool call saves them.
+	// A hook that reads a payload flushes its cwd's queue once it has read
+	// it (hook.PayloadRead): pi runs its guards from anywhere.
+	if len(args) > 1 && args[0] == "hook" && slices.Contains(hook.PayloadHooks, args[1]) {
+		var once sync.Once
+		hook.PayloadRead = func(cwd string) { once.Do(func() { flushEngramQueue(cwd) }) }
+	} else {
+		flushEngramQueue("")
+	}
 	if len(args) > 0 && args[0] == "hook" {
 		if len(args) < 2 {
 			return 2, errors.New("usage: jhon hook <name> [args]")
