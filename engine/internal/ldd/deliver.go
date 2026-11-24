@@ -35,8 +35,10 @@ import (
 //
 // Identity is the tree, never the commit: a squash or a rebase that yields
 // the same tree is the same revision. The change's own record files
-// (verify-report.md, the execution record, delivery.json) are written after
-// the run and never count as a difference, committed or not; nor does any
+// (verify-report.md, the execution record, a delivery.json an earlier jhon
+// wrote there) are written after the run and never count as a difference,
+// committed or not; a ready check writes its delivery.json outside the work
+// tree (DeliveryRecord), so it leaves the tree clean. Nor does any
 // other committed file under the change's own folder (tasks.md, the proposal, the
 // design, the spec deltas): the change's record, never project input, as
 // `--affected` reads it (T150). Another change's folder still counts.
@@ -54,8 +56,21 @@ func Actions() []string { return actions() }
 // Merge is the default action, the one that ships no artifact.
 func Merge() string { return actions()[0] }
 
-// DeliveryFile is the record a ready check writes in the change directory.
+// DeliveryFile is the name of the record a ready check writes (DeliveryRecord).
 const DeliveryFile = "delivery.json"
+
+// DeliveryRecord is where a ready check of change records itself: under
+// the git common dir of the repository holding root,
+// jhon/changes/<change>/delivery.json, outside every work tree, so a check
+// leaves the tree as it found it and no commit only records it (T225); the
+// merge gate reads it there from any worktree (MergeChecked). Outside git,
+// the change's folder (execution.ChangeFile).
+func DeliveryRecord(root, change string) string {
+	if common, ok := gitOK(root, "rev-parse", "--path-format=absolute", "--git-common-dir"); ok && common != "" {
+		return filepath.Join(common, "jhon", "changes", change, DeliveryFile)
+	}
+	return execution.ChangeFile(root, change, DeliveryFile)
+}
 
 // Digest is an immutable artifact reference: an optional name, then a content digest.
 var Digest = lazyre.New(`^(?:[^\s@]+@)?(?:sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})$`)
@@ -362,7 +377,7 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 	}, nil
 }
 
-// Delivery is the record a ready check leaves in the change's delivery.json.
+// Delivery is the record a ready check leaves in delivery.json (DeliveryRecord).
 type Delivery struct {
 	Timestamp    string  `json:"timestamp"`
 	Action       string  `json:"action"`
@@ -379,14 +394,16 @@ func DeliveryOf(c DeliverCheck, timestamp string) Delivery {
 	return Delivery{timestamp, c.Action, c.Artifact, c.HeadCommit, c.TestedTree, c.TestedCommit, c.Risk.Tier, c.VerifiedBy}
 }
 
-// WriteDelivery writes d to the change's delivery.json, replacing the
-// previous one atomically: a reader sees the previous record or this one.
+// WriteDelivery writes d to the change's delivery.json (DeliveryRecord),
+// replacing the previous one atomically: a reader sees the previous record
+// or this one. A delivery.json an earlier jhon wrote in the change's folder,
+// tracked or not, is left as it is.
 func WriteDelivery(root, change string, d Delivery) error {
 	s, err := js.Stringify(d)
 	if err != nil {
 		return err
 	}
-	abs := execution.ChangeFile(root, change, DeliveryFile)
+	abs := DeliveryRecord(root, change)
 	if err := os.MkdirAll(filepath.Dir(abs), 0o777); err != nil {
 		return err
 	}
@@ -412,18 +429,23 @@ func DeliveryUnit(root string) string {
 // rank is a tier's place in Levels, -1 for anything else.
 func rank(l Level) int { return slices.Index(Levels, l) }
 
-// deliveredTier is the tier the change's last ready delivery recorded, ""
-// when it has none: delivery.json keeps the highest tier delivered so far.
+// deliveredTier is the highest tier the change's ready deliveries recorded,
+// "" when it has none: delivery.json keeps the highest tier delivered so
+// far. Its record (DeliveryRecord) is read, and the one an earlier jhon
+// wrote in the change's folder (T225 S3: no migration).
 func deliveredTier(root, change string) Level {
-	b, err := os.ReadFile(execution.ChangeFile(root, change, DeliveryFile))
-	if err != nil {
-		return ""
+	var tier Level
+	for _, f := range []string{DeliveryRecord(root, change), execution.ChangeFile(root, change, DeliveryFile)} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		var d struct {
+			Risk Level `json:"risk"`
+		}
+		if json.Unmarshal(b, &d) == nil && rank(d.Risk) > rank(tier) {
+			tier = d.Risk
+		}
 	}
-	var d struct {
-		Risk Level `json:"risk"`
-	}
-	if json.Unmarshal(b, &d) != nil || rank(d.Risk) < 0 {
-		return ""
-	}
-	return d.Risk
+	return tier
 }

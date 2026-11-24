@@ -394,6 +394,30 @@ func TestDeliveredUntestedDiskRecords(t *testing.T) {
 	eq(t, "a record after the push", len(findingsOf(t, "delivered-untested", user("go"), d)), 1)
 }
 
+// T225: a ready check records itself under the git common dir,
+// jhon/changes/<change>/delivery.json, not in the change's folder: the
+// audit still finds it there, so a delivery after it is tested, and one
+// before it is cited as made before the check.
+func TestDeliveredUntestedCommonDirRecord(t *testing.T) {
+	root := t.TempDir()
+	must(t, os.MkdirAll(filepath.Join(root, "openspec", "changes", chg), 0o755))
+	dir := filepath.Join(root, ".git", "jhon", "changes", chg)
+	must(t, os.MkdirAll(dir, 0o755))
+	record := func(ts string) {
+		must(t, os.WriteFile(filepath.Join(dir, "delivery.json"), []byte(`{"timestamp":"`+ts+`","action":"merge","artifact":null,"head_commit":"`+c1+
+			`","tested_tree":"`+t1+`","tested_commit":"`+c1+`","risk":"medium","verified_by":null}`), 0o644))
+	}
+	d := delegate("d01", "general", chg, push())
+	d.root = root
+	record("2026-09-30T09:00:00.000Z")
+	eq(t, "a ready check before the push", len(findingsOf(t, "delivered-untested", user("go"), d)), 0)
+	record("2026-09-30T11:00:00.000Z")
+	fs := findingsOf(t, "delivered-untested", user("go"), d)
+	if len(fs) != 1 || !strings.Contains(fs[0].Message, "the ready check at 2026-09-30T11:00:00.000Z came after the move") {
+		t.Errorf("a ready check after the push is cited as no evidence for it: %+v", fs)
+	}
+}
+
 func TestDeliveredUntestedGrants(t *testing.T) {
 	grant := fmt.Sprintf("<bash-input>jhon grant push</bash-input><bash-stdout>granted push for %s until 2026-09-30T11:00:00.000Z\n</bash-stdout><bash-stderr></bash-stderr>", testRoot)
 	r := auditOf(t, user("go"), user(grant), delegate("d01", "general", chg, push()))

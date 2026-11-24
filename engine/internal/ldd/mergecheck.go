@@ -23,9 +23,10 @@ func DefaultBranches(root string) []string { return gitReads(nil).defaultBranche
 // merge` on record in the repository holding root covers commit, a full
 // sha: the record names commit, or a commit whose tree differs from it only
 // in that change's record (outsideRecord, deliver check's identity: the
-// tree, never the commit). The records read are each worktree's changes,
-// active and archived, and those under the git common dir (a change with no
-// folder, a workspace member's); never one a commit carries.
+// tree, never the commit). The records read are those under the git common
+// dir, where every ready check writes its own (DeliveryRecord, T225), and
+// each worktree's changes, active and archived, where an earlier jhon wrote
+// them; never one a commit carries.
 func MergeChecked(root, commit string) bool {
 	if !isSha(commit) {
 		return false

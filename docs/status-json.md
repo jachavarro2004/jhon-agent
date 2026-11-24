@@ -63,8 +63,11 @@ when its directory is named for the change and its branch names no change.
 
 `jhon executions run <change>` writes `execution-record.json` in the
 change's folder, or, for a change with no folder, under
-`$(git rev-parse --git-common-dir)/jhon/changes/<change>/`, where its
-`delivery.json` goes too, so the tree is never dirtied. Besides the last
+`$(git rev-parse --git-common-dir)/jhon/changes/<change>/`, so the tree is
+never dirtied. A ready `jhon deliver check` writes every change's
+`delivery.json` there, folder or not, so a check leaves the tree clean and
+no commit only records it; one an earlier jhon wrote in the change's
+folder is left as it is and still read. Besides the last
 run's executions, the record keeps `history`: each earlier complete run as
 `{timestamp, passed}`, the newest 20 (absent in a record written before it
 existed, which reads as no RED known). The `--json` summary of a run ends

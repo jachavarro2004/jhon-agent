@@ -22,12 +22,13 @@ import (
 // `jhon deliver check <change> [--action merge|deploy|release]
 // [--artifact <digest|commit>] [--json] [--root <project>]`: whether
 // HEAD is the change's tested revision (internal/ldd, deliver.go). A ready
-// check records what it saw in the change's delivery.json, replacing the
-// previous one; a check that is not ready writes nothing. In a workspace
-// member, a change of the primary's is checked against the member's run in
-// the primary's record (ldd.CheckMemberDelivery), and a ready check's
-// delivery.json goes under the member's git common dir, as a change with
-// no folder keeps its record, so neither tree changes. In a primary, a
+// check records what it saw in the change's delivery.json under the git
+// common dir, jhon/changes/<change>/ (ldd.DeliveryRecord), replacing the
+// previous one, so the tree stays clean (T225); a check that is not ready
+// writes nothing. In a workspace member, a change of the primary's is
+// checked against the member's run in the primary's record
+// (ldd.CheckMemberDelivery), and a ready check's delivery.json goes under
+// the member's git common dir, so neither tree changes. In a primary, a
 // change whose slices or record name members (ldd.ChangeMembers) lists each
 // member's delivery, judged there, and is not ready while one is not (T57
 // slice 7): one PR per repository, the primary's last. Consent is not this
