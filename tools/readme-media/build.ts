@@ -3,7 +3,7 @@
  *
  *   node --experimental-strip-types tools/readme-media/build.ts [--out <dir>] [--only features,banner,dashboard]
  *
- * Writes docs/assets/features/*.png (the dashboard's audit page among them) and
+ * Writes docs/assets/features/*.png (the captures FEATURE_CAPTIONS names and the dashboard's audit page) and
  * docs/assets/brand/jhon-banner.gif (or the same tree under --out). Jhon's videos are not
  * made here: jhon-studio makes them (github.com/jachavarro2004/jhon-studio). Frames and
  * the engine binary live in a fresh temp
@@ -22,17 +22,9 @@ import { encodeGif, framesToPngs, svgToPng } from "./raster.ts";
 import { BANNER, bannerSvg } from "./banner.ts";
 import { auditPage, screenshot } from "./dashboard.ts";
 
-/** What each feature capture shows, under it. */
+/** The feature captures written as PNGs, each with what it shows, under it. No other capture is written (the banner reads ldd-status's rows). */
 export const FEATURE_CAPTIONS: Record<string, string> = {
-  "shell-bar": "The top row and the status bar: the project and its path; branch, sandbox, model and effort, context, cost.",
-  "ldd-status": "The right pane's LDD section: the change and its route, the next step, the slices with the open one's tasks, the last test run.",
-  "agents-jobs": "Sub-agents and background jobs, live in the right pane while they run: what each does and for how long.",
-  "ldd-question": "A repo with no LDD yet: at the first code change, the session asks once how to deliver and test.",
-  "guard-refusal": "A writer's edit outside its edit surfaces, refused by scope-guard: the shell's tool card, then the engine's whole reason.",
-  "route-refusal": "Under delivery: change, route-guard refuses the pull request while a task is unchecked: the card, then the reason.",
   "prism-review": "The Prism review of a risky change: four facets, a challenger and an arbiter, the verdict and its record.",
-  "executions-red-green": "jhon executions records the run: the test fails first (RED), then passes (GREEN), on record.",
-  "mode-grant": "The mode and the grants are yours: jhon mode reads it, jhon grant widens one class for a time.",
   audit: "jhon audit reads a session afterwards: here, a push to main with no test run on record.",
 };
 
@@ -41,13 +33,13 @@ export const PARTS: readonly Part[] = ["features", "banner", "dashboard"];
 
 export interface Built { files: string[] }
 
-/** The feature PNGs: each capture in its panel, at 2× for sharp text. */
+/** The feature PNGs: each captioned capture in its panel, at 2× for sharp text. */
 export async function buildFeatures(c: Colors, caps: Capture[], out: string): Promise<string[]> {
   mkdirSync(join(out, "features"), { recursive: true });
   const files: string[] = [];
-  for (const cap of caps) {
+  for (const cap of caps.filter((x) => x.name in FEATURE_CAPTIONS)) {
     const png = join(out, "features", `${cap.name}.png`);
-    await svgToPng(featureSvg(c, cap.lines, cap.title, FEATURE_CAPTIONS[cap.name] ?? "", cap.cols), png, 2);
+    await svgToPng(featureSvg(c, cap.lines, cap.title, FEATURE_CAPTIONS[cap.name]!, cap.cols), png, 2);
     rmSync(`${png}.svg`);
     files.push(png);
   }

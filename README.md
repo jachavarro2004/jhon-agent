@@ -347,16 +347,25 @@ own terminal in pi).
 | `publish` | a package publish (`npm publish`, `cargo publish`, …) |
 | `remote` | a session on or a copy to another host (`ssh`, `scp`, `rsync`, …) |
 | `deploy` | a cloud or cluster write (`aws`, `gcloud`, `kubectl`, `terraform apply`, …) |
-| `outside-write` | an Edit or Write outside the project (a shell write there is the sandbox's) |
+| `outside-write` | an Edit or Write outside the project and the scratch roots, asked at the top level and refused to a sub-agent (a shell write there is the sandbox's) |
 | `destroy` | a deletion that loses work (a forced branch delete, `reset --hard`); the rest of the destructive operations are never grantable |
 
 **The hard lines, in every mode.** Refused: credentials (by the file tools; by the shell, a write or delete), the
 never-grantable destructive operations, writes into `.git/`, the grants
 and the modes, Jhon's own files. Asked: a write to Claude Code's settings,
-and a `git config` that changes what git runs. A folder that is not a git
-repository takes no mode and no timed grant; pi can let one session write
-there (`jhon grant outside-write --session <id>`). See
-[docs/modes-and-grants.md](docs/modes-and-grants.md).
+and a `git config` that changes what git runs.
+
+**Where they apply.** A git repository, with or without LDD, is a project:
+it takes a mode and timed grants. A folder that is not a git repository is
+no project: `jhon mode` and a timed `jhon grant` refuse there, as in HOME
+and `/`, and its calls are judged as in normal mode. There, pi's question
+about a write outside the project offers "Yes, and allow writes in this
+folder for this session" (`jhon grant outside-write --session <id>`). That
+grant covers the session's Edit and Write calls inside the folder (not
+through a link out of it, nor into a nested repository), never HOME, `/`, a
+folder above HOME or jhon's state, and nothing but `outside-write`; pi
+revokes it at shutdown, and it ends after 12 h at the latest. In Claude
+Code a yes covers that one call.
 
 **Settings** are one file, `.config/jhon/settings.toml` in the home:
 `jhon settings list` shows every key with its value and source,
@@ -465,10 +474,9 @@ own help.
 | Document | About |
 |---|---|
 | [docs/ldd.md](docs/ldd.md) | LDD in a project: layouts, the set-up at the first change, a worktree per change, the change's state in Engram, the launch context |
-| [docs/modes-and-grants.md](docs/modes-and-grants.md) | where modes and grants apply |
 | [docs/jhon-studio.md](docs/jhon-studio.md) | jhon-studio, the opt-in video integration: `/jhon-studio:video` in Claude Code, `/jhon:video` in pi |
 | [docs/status-json.md](docs/status-json.md) | the shape of `jhon status --json` |
-| [docs/identity.md](docs/identity.md) | Jhon's one identity across its repos: the mark, the words, the look, the badges, the family, the support block, the community files |
+| [docs/identity.md](docs/identity.md) | Jhon's one identity across its repos: the mark, the words, the look, the badges, the support block, the community files |
 | [SUPPORT.md](SUPPORT.md) | where to ask, and how to support jhon-agent |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, release by release |
 | `prose/contracts/ldd.md` | the method itself |

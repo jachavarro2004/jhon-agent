@@ -64,7 +64,7 @@ test("the build is deterministic: the feature captures and the banner rendered t
   await build({ out: a, only: ["features", "banner"] });
   await build({ out: b, only: ["features", "banner"] });
   const features = readdirSync(join(a, "features")).sort();
-  assert.ok(features.length >= 4, `at least four feature captures, got ${features.join(", ")}`);
+  assert.deepEqual(features, ["audit.png", "prism-review.png"], "only the feature captures still kept under docs/assets/features");
   assert.deepEqual(readdirSync(join(b, "features")).sort(), features);
   for (const f of [...features.map((x) => join("features", x)), join("brand", "jhon-banner.gif")]) {
     assert.ok(readFileSync(join(a, f)).equals(readFileSync(join(b, f))), `${f} differs between two builds`);

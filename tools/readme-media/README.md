@@ -21,7 +21,7 @@ rebuilds the images into `docs/assets/`:
 | asset | what |
 | --- | --- |
 | `brand/jhon-banner.gif` | the animated banner: the wordmark, one line saying what Jhon is, the LDD status typing itself |
-| `features/*.png` | the shell's views and the engine's real output: `shell-bar`, `ldd-status`, `agents-jobs`, `ldd-question`, `guard-refusal`, `route-refusal`, `prism-review`, `executions-red-green`, `mode-grant`, `audit` |
+| `features/*.png` | the shell's Prism review card and the engine's real output: `prism-review`, `audit` (the captions in `build.ts` name the captures written; the others are rendered and not written, `ldd-status` feeding the banner) |
 | `features/dashboard-audit.png` | the dashboard's page for one session: the engine's audit of an invented Claude Code session (`dashboard.ts`), drawn by headless Chrome at 1600×760, 2× |
 
 Options: `--out <dir>` writes the same tree elsewhere; `--only features,banner,dashboard`
