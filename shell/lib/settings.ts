@@ -42,6 +42,8 @@ export const SETTINGS_DEFAULTS: Readonly<Record<string, SettingValue>> = Object.
 	"runtimes.pi": true,
 	"integrations.engram": true,
 	"integrations.codegraph": true,
+	// odd/tasks/jhon-studio.md S3: jhon-studio, off by default; on, /jhon:video is registered (lib/studio-command.ts).
+	"integrations.studio": false,
 	"integrations.telemetry": false,
 	"integrations.theme.palette": "rose-ink",
 	"claude_code.connectors": false,

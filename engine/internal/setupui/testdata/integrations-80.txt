@@ -9,7 +9,7 @@
      │  Optional, off by default                                                
      │▎ [●] Telemetry   usage events, local       on                            
      │      Palette     ● Rose Ink  ○ Desktop                                   
-     │                                                                          
+     │  [ ] jhon-studio project videos            off                           
      │                                                                          
      │                                                                          
      │                                                                          

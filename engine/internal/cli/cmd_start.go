@@ -25,8 +25,10 @@ import (
 // then. pi runs on its own agent directory, ~/.pi/jhon, which the pi
 // render writes; the owner's ~/.pi/agent stays theirs. Both get Claude
 // Code's first-byte window (firstByteEnv) and the project its sandboxed
-// commands are pinned to (sandboxProjectEnv). The program replaces this
-// process; JHON_CLAUDE and JHON_PI name another.
+// commands are pinned to (sandboxProjectEnv). A cli integration that is on
+// (jhon-studio, odd/tasks/jhon-studio.md S3) adds its own plugin to the
+// Claude Code launch (launchPlugins). The program replaces this process;
+// JHON_CLAUDE and JHON_PI name another.
 func init() { register("start", runStart) }
 
 func runStart(argv []string) (int, error) {
@@ -42,7 +44,38 @@ func runStart(argv []string) (int, error) {
 		}
 	}
 	plugin := release.Locate().Runtime + "/" + render.PluginDir
-	return execProgram(envOr("JHON_CLAUDE", "claude"), append([]string{"--agent", "jhon-orchestrator", "--plugin-dir", plugin}, argv...), agentLoadedEnv(argv, connectorsEnv(firstByteEnv(sandboxProjectEnv(os.Environ())))))
+	args := []string{"--agent", "jhon-orchestrator", "--plugin-dir", plugin}
+	extra, notes := launchPlugins()
+	for _, n := range notes {
+		fmt.Fprintln(os.Stderr, n)
+	}
+	args = append(append(args, extra...), argv...)
+	return execProgram(envOr("JHON_CLAUDE", "claude"), args, agentLoadedEnv(argv, connectorsEnv(firstByteEnv(sandboxProjectEnv(os.Environ())))))
+}
+
+// launchPlugins are the --plugin-dir arguments of each cli integration the
+// launch keeps out while it is off (when_off: launch) and that is on: the
+// plugin folder its program names, `<doctor.binary> integration --json`
+// (integrations.AskIntegration). Claude Code takes --plugin-dir more than
+// once (2.1.323's --help: "repeatable"). One that is on but gives no
+// plugin folder is a note each, and the session starts without it; one that
+// is off is never asked.
+func launchPlugins() (args, notes []string) {
+	for _, m := range integrations.OffAt("launch") {
+		if m.Kind != "cli" || m.Doctor.Binary == "" || !settings.On(m.Setting) {
+			continue
+		}
+		a, err := integrations.AskIntegration(m)
+		if err == nil && !release.IsDir(a.PluginDir) {
+			err = fmt.Errorf("its plugin_dir, %s, is not a folder", a.PluginDir)
+		}
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("jhon: %s is on, but %v; this session starts without its plugin", m.Setting, err))
+			continue
+		}
+		args = append(args, "--plugin-dir", a.PluginDir)
+	}
+	return args, notes
 }
 
 // sandboxProjectEnv is env with sandbox.ProjectEnv naming the project this
@@ -77,9 +110,11 @@ func agentLoadedEnv(argv, env []string) []string {
 const claudeAIConnectors = "ENABLE_CLAUDEAI_MCP_SERVERS"
 
 // connectorsEnv is env with the claude.ai connectors off unless
-// claude_code.connectors (T42a, L403) and every integration its manifest
-// turns off at launch (when_off: launch; m365's is claude_code.connectors
-// itself, T58b, L1167) are on, or the owner set the variable. It fails
+// claude_code.connectors (T42a, L403) and every connector integration its
+// manifest turns off at launch (kind mcp-connector, when_off: launch;
+// m365's is claude_code.connectors itself, T58b, L1167) are on, or the
+// owner set the variable. A cli one off at launch is no connector
+// (launchPlugins). It fails
 // closed: a set with no launch-off manifest keeps them out too (T58c,
 // L1193). The variable loads or keeps out every connector at once, so one
 // of them off keeps them all out. pi's claude-bridge loads no claude.ai
@@ -88,7 +123,7 @@ func connectorsEnv(env []string) []string {
 	if os.Getenv(claudeAIConnectors) != "" {
 		return env
 	}
-	off := func(m integrations.Manifest) bool { return !settings.On(m.Setting) }
+	off := func(m integrations.Manifest) bool { return m.Kind == "mcp-connector" && !settings.On(m.Setting) }
 	if settings.On(settings.Connectors) && !slices.ContainsFunc(integrations.OffAt("launch"), off) {
 		return env
 	}

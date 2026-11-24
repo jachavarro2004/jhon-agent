@@ -318,6 +318,7 @@ Its commands:
 | `/jhon:profile` | | the model profiles |
 | `/jhon:grants` | | the project's grants |
 | `/jhon:customize` | | the shell's settings, and the permission mode |
+| `/jhon:video [<source>]` | | with `integrations.studio` on only: a presentation video of the project with jhon-studio (`/jhon-studio:video` in Claude Code; [docs/jhon-studio.md](docs/jhon-studio.md)) |
 
 ## You decide
 
@@ -360,10 +361,16 @@ after a backup. The main groups:
 | Group | Holds |
 |---|---|
 | `[runtimes]` | `claude_code`, `pi`: which runtimes are installed (both by default, at least one) |
-| `[integrations]` | `engram` and `codegraph` (always on), `context7` (hosted documentation for `jhon-scout` and `jhon-builder`, on by default), telemetry (opt-in), the palette |
+| `[integrations]` | `engram` and `codegraph` (always on), `context7` (hosted documentation for `jhon-scout` and `jhon-builder`, on by default), `studio` (jhon-studio, opt-in), telemetry (opt-in), the palette |
 | `[sandbox]` | `mode` (`on` or `off`, on by default on Linux where the sandbox can run, off elsewhere), `allow_write` |
 | `[agents]` | `act_on_announce`: a turn that announces an action and takes none is sent back once |
 | `[pi]`, `[shell.*]` | the active profile, and the shell's appearance, behaviour and keys |
+
+**Integrations** beyond the core, each off until you turn it on:
+
+| Integration | What it gives | How |
+|---|---|---|
+| [jhon-studio](https://github.com/jachavarro2004/jhon-studio) | presentation videos for any project: `/jhon-studio:video` in Claude Code, `/jhon:video` in pi | opt-in: `jhon setup`, or `jhon settings set integrations.studio true`; see [docs/jhon-studio.md](docs/jhon-studio.md) |
 
 **Profiles** choose each agent's model per runtime (`jhon profile list`,
 `jhon profile use <name>`); `default` is `prose/agents.yaml`. A pi model is
@@ -452,6 +459,7 @@ own help.
 |---|---|
 | [docs/ldd.md](docs/ldd.md) | LDD in a project: layouts, the set-up at the first change, a worktree per change, the change's state in Engram, the launch context |
 | [docs/modes-and-grants.md](docs/modes-and-grants.md) | where modes and grants apply |
+| [docs/jhon-studio.md](docs/jhon-studio.md) | jhon-studio, the opt-in video integration: `/jhon-studio:video` in Claude Code, `/jhon:video` in pi |
 | [docs/status-json.md](docs/status-json.md) | the shape of `jhon status --json` |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, release by release |
 | `prose/contracts/ldd.md` | the method itself |

@@ -377,3 +377,46 @@ func TestEngramFixWithGoOnlyKeepsTheDownloadAdvice(t *testing.T) {
 		t.Errorf("engram = %+v", c)
 	}
 }
+
+// odd/tasks/jhon-studio.md S3: setup offers jhon-studio, off by default; its
+// program is checked only once it is chosen, with its manual install as
+// advice, and its setting is written either way.
+func TestSetupOffersStudioOffByDefault(t *testing.T) {
+	s, _ := scratch(t, "git", "claude", "engram", "codegraph")
+	on := Choices{ClaudeCode: true}
+	on.set("integrations.studio", true)
+	var names []string
+	var studio Check
+	for _, c := range s.Checks(on) {
+		names = append(names, c.Name)
+		if c.Name == "jhon-studio" {
+			studio = c
+		}
+	}
+	if got := strings.Join(names, " "); got != "git claude engram codegraph jhon-studio" {
+		t.Errorf("checks with studio chosen: %s", got)
+	}
+	const manual = "git clone https://github.com/jachavarro2004/jhon-studio ~/.local/share/jhon-studio && ln -s ~/.local/share/jhon-studio/bin/jhon-studio ~/.local/bin/jhon-studio"
+	if studio.OK || studio.Detail != "not on PATH" || studio.Fix != "" || studio.Advice != manual {
+		t.Errorf("jhon-studio = %+v", studio)
+	}
+	if err := s.RunStep(on, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got := values(t, s.SettingsPath)["integrations.studio"]; got != true {
+		t.Errorf("integrations.studio written %v, want true", got)
+	}
+	if got := s.Saved(); !got.Optional.On("integrations.studio") {
+		t.Errorf("Saved = %+v, want studio on", got)
+	}
+	if err := s.RunStep(Choices{ClaudeCode: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(s.SettingsPath)
+	if got := values(t, s.SettingsPath)["integrations.studio"]; got != false || !strings.Contains(string(b), "studio = false") {
+		t.Errorf("integrations.studio written %v, want false:\n%s", got, b)
+	}
+	if got := s.Saved(); got.Optional.On("integrations.studio") {
+		t.Errorf("Saved = %+v, want studio off", got)
+	}
+}

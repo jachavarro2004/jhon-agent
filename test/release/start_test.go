@@ -210,6 +210,61 @@ func TestStart(t *testing.T) {
 		equal(t, launchClaude(t, "schema = 1\n\n[claude_code]\nconnectors = true\n", ""), []string{connectors + "="})
 	})
 
+	// ── jhon-studio (odd/tasks/jhon-studio.md S3) ───────────────────────────────
+	// integrations.studio on and jhon-studio answering `integration --json`:
+	// its plugin is a second --plugin-dir, after the release's. On but not on
+	// PATH: claude still starts, with one note. Off: nothing is added or said.
+	studio := func(t *testing.T, settingsFile string, onPath bool) (support.Result, []string, string) {
+		t.Helper()
+		base := temp(t)
+		home := filepath.Join(base, "home")
+		support.Write(t, home, map[string]string{".config/jhon/settings.toml": settingsFile})
+		bin, studioPlugin := filepath.Join(base, "bin"), filepath.Join(base, "studio-plugin")
+		if err := os.MkdirAll(studioPlugin, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(bin, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if onPath {
+			answer := `{"version":"0.1.0","plugin_dir":"` + studioPlugin + `","skill":"` + studioPlugin + `/skills/video/SKILL.md"}`
+			if err := os.WriteFile(filepath.Join(bin, "jhon-studio"), []byte("#!/bin/sh\n[ \"$*\" = 'integration --json' ] && echo '"+answer+"'\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		seen := filepath.Join(base, "seen")
+		prog := filepath.Join(base, "claude")
+		recordArgv(t, prog, seen)
+		r := support.Run(t, support.Cmd{Args: []string{support.Bin(t), "start", "-p", "hi"}, Dir: base,
+			Env: support.Env("HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "JHON_SETTINGS=", "PATH="+bin+":/usr/bin:/bin",
+				"JHON_CLAUDE="+prog, "JHON_ROOT="+support.Root())})
+		return r, seenArgv(seen), studioPlugin
+	}
+
+	t.Run("with integrations.studio on, jhon start loads jhon-studio's plugin too", func(t *testing.T) {
+		t.Parallel()
+		r, argv, studioPlugin := studio(t, "schema = 1\n\n[integrations]\nstudio = true\n", true)
+		equal(t, r.Code, 0, r.Stderr)
+		equal(t, r.Stderr, "")
+		equal(t, argv, []string{"--agent", "jhon-orchestrator", "--plugin-dir", plugin, "--plugin-dir", studioPlugin, "-p", "hi"})
+	})
+
+	t.Run("with integrations.studio on and jhon-studio missing, jhon start still starts and says so once", func(t *testing.T) {
+		t.Parallel()
+		r, argv, _ := studio(t, "schema = 1\n\n[integrations]\nstudio = true\n", false)
+		equal(t, r.Code, 0, r.Stderr)
+		equal(t, r.Stderr, "jhon: integrations.studio is on, but jhon-studio is not on PATH; this session starts without its plugin\n")
+		equal(t, argv, []string{"--agent", "jhon-orchestrator", "--plugin-dir", plugin, "-p", "hi"})
+	})
+
+	t.Run("with integrations.studio off, the default, jhon start adds and says nothing", func(t *testing.T) {
+		t.Parallel()
+		r, argv, _ := studio(t, "schema = 1\n", true)
+		equal(t, r.Code, 0, r.Stderr)
+		equal(t, r.Stderr, "")
+		equal(t, argv, []string{"--agent", "jhon-orchestrator", "--plugin-dir", plugin, "-p", "hi"})
+	})
+
 	t.Run("the owner's ENABLE_CLAUDEAI_MCP_SERVERS wins", func(t *testing.T) {
 		t.Parallel()
 		equal(t, launchClaude(t, "", "true"), []string{connectors + "=true"})

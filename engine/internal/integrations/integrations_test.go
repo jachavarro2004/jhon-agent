@@ -50,7 +50,7 @@ func TestEmbeddedManifests(t *testing.T) {
 	for _, m := range all {
 		names = append(names, m.Name)
 	}
-	if want := []string{"engram", "codegraph", "context7", "m365"}; !slices.Equal(names, want) {
+	if want := []string{"engram", "codegraph", "context7", "m365", "studio"}; !slices.Equal(names, want) {
 		t.Fatalf("names %v, want %v (by order)", names, want)
 	}
 	e, ok := Get("engram")
@@ -68,6 +68,40 @@ func TestEmbeddedManifests(t *testing.T) {
 	}
 	if got := Required(); len(got) != 2 || got[0].Name != "engram" || got[1].Name != "codegraph" {
 		t.Fatalf("required: %v", got)
+	}
+}
+
+// odd/tasks/jhon-studio.md S3: jhon-studio is an opt-in cli integration, off
+// by default, which the launch keeps out while it is off; it grants no
+// capability (a cli mounts no tools) and setup offers only its manual install.
+func TestStudioIsAnOptInCLI(t *testing.T) {
+	s, ok := Get("studio")
+	if !ok || s.Kind != "cli" || s.Display != "jhon-studio" || s.Setting != "integrations.studio" || s.Default || s.Required ||
+		s.WhenOff != "launch" || len(s.Capabilities) != 0 || len(s.ClaudeServers) != 0 || s.Pi != nil {
+		t.Fatalf("studio: %+v", s)
+	}
+	if s.Doctor.Binary != "jhon-studio" || s.Doctor.Probe != "--version" || s.Doctor.Version == "" {
+		t.Errorf("studio's doctor: %+v", s.Doctor)
+	}
+	if s.Setup.Summary != "presentation videos for any project" || s.Setup.SummaryNarrow == "" || s.Setup.Detail == "" {
+		t.Errorf("studio's setup text: %+v", s.Setup)
+	}
+	const manual = "git clone https://github.com/jachavarro2004/jhon-studio ~/.local/share/jhon-studio && ln -s ~/.local/share/jhon-studio/bin/jhon-studio ~/.local/bin/jhon-studio"
+	if vias := s.InstallVias(); !slices.Equal(vias, []string{"manual"}) || s.InstallCommand("manual", s.Doctor.Version) != manual {
+		t.Errorf("studio's install: %v %q", vias, s.InstallCommand("manual", s.Doctor.Version))
+	}
+}
+
+// A cli integration may grant no capability; an MCP one still must.
+func TestOnlyACLIMayGrantNoCapability(t *testing.T) {
+	cli := strings.NewReplacer("kind: mcp-stdio", "kind: cli", "capabilities: [alpha]\n", "").Replace(good)
+	cli = cli[:strings.Index(cli, "claude-code:")] + cli[strings.Index(cli, "doctor:"):]
+	if _, probs := Load(fsOf(map[string]string{"alpha/manifest.yaml": cli})); len(probs) != 0 {
+		t.Errorf("a cli with no capabilities: %v", probs)
+	}
+	_, probs := Load(fsOf(map[string]string{"alpha/manifest.yaml": strings.Replace(good, "capabilities: [alpha]\n", "", 1)}))
+	if len(probs) == 0 || probs[0].String() != "integrations/alpha/manifest.yaml: capabilities: missing" {
+		t.Errorf("an mcp-stdio with no capabilities: %v", probs)
 	}
 }
 
@@ -171,9 +205,9 @@ func TestOptionalByTheirManifests(t *testing.T) {
 		got  []Manifest
 		want []string
 	}{
-		{"Optional", Optional(), []string{"context7", "m365"}},
+		{"Optional", Optional(), []string{"context7", "m365", "studio"}},
 		{"OffAt(render)", OffAt("render"), []string{"context7"}},
-		{"OffAt(launch)", OffAt("launch"), []string{"m365"}},
+		{"OffAt(launch)", OffAt("launch"), []string{"m365", "studio"}},
 		{"RemoteProbed", RemoteProbed(), []string{"context7"}},
 	} {
 		if !slices.Equal(names(c.got), c.want) {

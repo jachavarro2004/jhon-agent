@@ -2,7 +2,8 @@
 // (T5, S1, S4, S7): a wizard with a progress rail, drawn from the chosen
 // artboard design/installer-tui/01-wizard-rail.html. Setup walks Welcome,
 // Runtimes (at least one), Integrations (Engram and CodeGraph locked on,
-// the rest off by default), Checks, Install and Done; update walks Check,
+// the rest off by default, each optional integration with setup text a row
+// of its own), Checks, Install and Done; update walks Check,
 // Review, Update and Done, with a roll-back.
 //
 // The model is pure: everything that touches the machine (finding commands,
@@ -19,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -58,6 +60,33 @@ type Choices struct {
 	ClaudeCode, Pi, Telemetry bool
 	// Palette is integrations.theme.palette: "rose-ink" (or "", its default) or "desktop", the desktop palette file (T15.7, L97, T50f).
 	Palette string
+	// Optional are the offered optional integrations chosen on (offered).
+	Optional Toggles
+}
+
+// set turns the offered integration whose setting is setting on or off.
+func (c *Choices) set(setting string, on bool) { c.Optional = c.Optional.with(setting, on) }
+
+// Toggles are the settings of the offered optional integrations that are on
+// (offered: jhon-studio, odd/tasks/jhon-studio.md S3), each followed by a
+// newline, in their manifests' order: a string, so Choices and Saved stay
+// comparable.
+type Toggles string
+
+// On is whether setting is among them.
+func (t Toggles) On(setting string) bool {
+	return setting != "" && strings.Contains("\n"+string(t), "\n"+setting+"\n")
+}
+
+// with is t with setting on or off, in the offered integrations' order.
+func (t Toggles) with(setting string, on bool) Toggles {
+	var out strings.Builder
+	for _, m := range offered() {
+		if m.Setting == setting && on || m.Setting != setting && t.On(m.Setting) {
+			out.WriteString(m.Setting + "\n")
+		}
+	}
+	return Toggles(out.String())
 }
 
 // Paths are where the binary and the settings live, as they should read on screen.
@@ -120,4 +149,7 @@ func Run(in io.Reader, out io.Writer, b Backend, mode Mode, colors Colors) error
 type Saved struct {
 	ClaudeCode, Pi, Telemetry *bool
 	Palette                   *string
+	// Optional are the offered integrations on: as the file sets each, else
+	// its manifest's default.
+	Optional Toggles
 }

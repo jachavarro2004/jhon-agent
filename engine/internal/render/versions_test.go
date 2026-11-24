@@ -3,6 +3,7 @@ package render
 import (
 	"testing"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 )
 
@@ -18,12 +19,18 @@ func TestPiPackagesArePinnedFromTheVersionsTable(t *testing.T) {
 	if got := js.Prop(piPretty(), "source"); got != "npm:@heyhuynhgiabuu/pi-pretty@"+PiPrettyVersion {
 		t.Errorf("pi-pretty source = %v", got)
 	}
-	want := map[string]string{"claude": ClaudeCodeVersion, "engram": EngramVersion, "codegraph": CodeGraphVersion}
+	want := map[string]Tool{"claude": {"claude", ClaudeCodeVersion, ""}, "engram": {"engram", EngramVersion, ""}, "codegraph": {"codegraph", CodeGraphVersion, ""}}
+	// An optional integration's binary is compared only while its setting is on.
+	for _, m := range integrations.Optional() {
+		if m.Doctor.Binary != "" {
+			want[m.Doctor.Binary] = Tool{m.Doctor.Binary, m.Doctor.Version, m.Setting}
+		}
+	}
 	if len(Tools) != len(want) {
 		t.Errorf("tools = %+v", Tools)
 	}
 	for _, tool := range Tools {
-		if want[tool.Command] == "" || tool.Version != want[tool.Command] {
+		if want[tool.Command].Version == "" || tool != want[tool.Command] {
 			t.Errorf("tool %+v is not the table's", tool)
 		}
 	}

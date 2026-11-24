@@ -75,7 +75,8 @@ type Manifest struct {
 	Default  bool
 	Required bool
 	WhenOff  string
-	// Capabilities are the agents.yaml capabilities whose tools are its own.
+	// Capabilities are the agents.yaml capabilities whose tools are its own;
+	// none for a cli, which mounts no tools.
 	Capabilities []string
 	// ClaudeServers are its MCP server ids in Claude Code: a tool is
 	// mcp__<server>__<tool>, or the server name alone for every tool of it.
@@ -585,8 +586,9 @@ func parse(file, dir, text string) (Manifest, []Problem) {
 	if !m.Required && m.WhenOff == "refused" {
 		bad("when_off", "refused is a required integration's")
 	}
-	m.Capabilities = list("capabilities", true)
 	mcp := strings.HasPrefix(m.Kind, "mcp-")
+	// A cli mounts no tools, so it may grant no capability; an MCP one must.
+	m.Capabilities = list("capabilities", m.Kind != "cli")
 	m.ClaudeServers = list("claude-code.servers", mcp)
 
 	if has("pi") {

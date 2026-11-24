@@ -1564,6 +1564,46 @@ test("/jhon-ldd sends the agent the LDD prompt for its arguments, steering while
   assert.deepEqual((await ldd.getArgumentCompletions("ar")).map((item: any) => item.value), ["archive"]);
 });
 
+// odd/tasks/jhon-studio.md S3: /jhon:video exists only while integrations.studio is on.
+test("with integrations.studio off, the default, nothing about video is registered; a child never has it", async (t) => {
+  useMemorySettings(t);
+  const { commands } = loadedWith(agentDir(), { PI_CODING_AGENT_DIR: agentDir() });
+  assert.equal(commands.has("jhon:video"), false);
+  assert.deepEqual([...commands.keys()].filter((name) => /video|studio/.test(name)), []);
+  useMemorySettings(t, { "integrations.studio": true });
+  const kid = agentDir();
+  assert.equal(loadedWith(kid, { PI_CODING_AGENT_DIR: kid, JHON_PI_CHILD: "1" }).commands.has("jhon:video"), false);
+});
+
+test("with integrations.studio on, /jhon:video sends jhon-studio's video skill with the arguments, steering while the agent works; a jhon-studio that does not answer is said once", async (t) => {
+  useMemorySettings(t, { "integrations.studio": true });
+  const dir = agentDir();
+  const sent: Array<{ text: string; options: any }> = [];
+  const { commands } = loadedWith(dir, { PI_CODING_AGENT_DIR: dir }, { sendUserMessage: (text: string, options: any) => sent.push({ text, options }) });
+  const video = commands.get("jhon:video");
+  assert.equal(video.description, "Makes a narrated presentation video of this project with jhon-studio");
+  const studio = tempDir("jhon-pi-studio-");
+  const skill = join(studio, "SKILL.md");
+  writeFileSync(skill, "---\nname: video\ndescription: Make a video.\n---\n\n# Make a video\n");
+  writeFileSync(join(studio, "jhon-studio"), `#!/bin/sh\n[ "$*" = 'integration --json' ] && echo '{"version":"0.1.0","plugin_dir":"${studio}","skill":"${skill}"}'\n`);
+  chmodSync(join(studio, "jhon-studio"), 0o755);
+  const notes: Array<[string, string]> = [];
+  const ui = { notify: (text: string, level: string) => notes.push([text, level]) };
+  const saved = process.env.PATH;
+  process.env.PATH = `${studio}:/usr/bin:/bin`;
+  try {
+    await video.handler("release:v1.2.0", { isIdle: () => true, ui });
+    await video.handler("", { isIdle: () => false, ui });
+    process.env.PATH = "/usr/bin:/bin";
+    await video.handler("readme", { isIdle: () => true, ui });
+  } finally { process.env.PATH = saved; }
+  assert.deepEqual(sent, [
+    { text: "# Make a video\n\nARGUMENTS: release:v1.2.0", options: undefined },
+    { text: "# Make a video", options: { deliverAs: "steer" } },
+  ]);
+  assert.deepEqual(notes, [["jhon:video: jhon-studio is not on PATH; run `jhon doctor`, or turn it off with `jhon settings set integrations.studio false`", "error"]]);
+});
+
 test("/jhon-ldd that pi refuses (a compaction running) says so once and sends nothing", async () => {
   const dir = agentDir();
   const notes: Array<[string, string]> = [];

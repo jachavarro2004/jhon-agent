@@ -76,6 +76,7 @@ func runDoctor(argv []string) (int, error) {
 	d.engramQueue()
 	d.versions()
 	d.remoteProbed(remote)
+	d.cliIntegrations()
 	fmt.Fprint(o.W, "\n")
 	if o.Failed > 0 {
 		fmt.Fprintf(o.W, "%s%d problem(s)%s\n", o.R, o.Failed, o.Z)
@@ -87,11 +88,15 @@ func runDoctor(argv []string) (int, error) {
 
 // versions compares each installed tool with its pin in render's versions
 // table (T50g): a mismatch is a warning, never a problem; a tool that is
-// not installed, or prints no version, is a note.
+// not installed, or prints no version, is a note. An optional
+// integration's binary is compared only while it is on.
 func (d doctor) versions() {
 	o := d.o
 	o.Head("versions")
 	for _, t := range render.Tools {
+		if t.Setting != "" && !settings.On(t.Setting) {
+			continue
+		}
 		out, ok := probeVersion(t.Command)
 		got := installedVersion(out)
 		switch {

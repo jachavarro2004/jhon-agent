@@ -16,17 +16,23 @@ const (
 )
 
 // A Tool is a command on PATH whose version doctor compares with its pin:
-// `<Command> --version` prints it.
-type Tool struct{ Command, Version string }
+// `<Command> --version` prints it. Setting is the setting of an optional
+// integration's binary, which doctor compares only while it is on; "" for
+// one always compared.
+type Tool struct{ Command, Version, Setting string }
 
 // Tools are the installed tools doctor compares: Claude Code, then each
 // integration's binary in its manifests' order; pi's packages are the
 // render's own, written at their pins.
 var Tools = func() []Tool {
-	out := []Tool{{"claude", ClaudeCodeVersion}}
+	out := []Tool{{"claude", ClaudeCodeVersion, ""}}
 	for _, m := range integrations.All() {
 		if m.Doctor.Binary != "" {
-			out = append(out, Tool{m.Doctor.Binary, m.Doctor.Version})
+			setting := m.Setting
+			if m.Required {
+				setting = ""
+			}
+			out = append(out, Tool{m.Doctor.Binary, m.Doctor.Version, setting})
 		}
 	}
 	return out

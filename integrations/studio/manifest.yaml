@@ -1,0 +1,28 @@
+# jhon-studio: presentation videos for any project, a program of its own
+# repository (github.com/jachavarro2004/jhon-studio). A cli: it grants no
+# capability and mounts no MCP server; it answers `jhon-studio integration
+# --json` and `jhon-studio doctor --json` (integrations/README.md).
+# Schema jhon.integration/v1 (integrations/README.md); engine/internal/integrations reads it.
+schema: jhon.integration/v1
+name: studio
+display: jhon-studio
+kind: cli
+order: 10
+# Off by default. On, jhon start loads its Claude Code plugin (its skill is
+# /jhon-studio:video there), pi's shell registers /jhon:video, and jhon
+# doctor checks it; off, nothing about it is shown or loaded.
+setting: integrations.studio
+default: false
+required: false
+when_off: launch
+doctor:
+  binary: jhon-studio
+  version: 0.1.0
+  source: github.com/jachavarro2004/jhon-studio
+  probe: --version
+setup:
+  summary: presentation videos for any project
+  summary_narrow: project videos
+  detail: /jhon-studio:video in Claude Code, /jhon:video in pi
+  install:
+    manual: "git clone https://github.com/jachavarro2004/jhon-studio ~/.local/share/jhon-studio && ln -s ~/.local/share/jhon-studio/bin/jhon-studio ~/.local/bin/jhon-studio"
