@@ -93,7 +93,7 @@ own name not linked):
 - **[jhon-studio](https://github.com/jachavarro2004/jhon-studio)**: presentation videos for any project.
 - **[The landing](https://jachavarro2004.github.io/jhon-site/)**: Jhon's site, jachavarro2004.github.io/jhon-site.
 - **[The profile](https://github.com/jachavarro2004)**: the author's GitHub profile, github.com/jachavarro2004.
-- **YouTube**: Jhon's films, a video for every release.
+- **[YouTube](https://www.youtube.com/channel/UCprv0NKifqqMb-zzrBdXb9g)**: Jhon's films, a video for every release.
 ```
 
 In jhon-agent, for example, the first line reads
