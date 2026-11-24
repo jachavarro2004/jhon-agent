@@ -34,13 +34,17 @@ import (
 //   - the assignment is not run in a pipe, a subshell, a group or the
 //     background, nor after `||`; it runs before every rm or rmdir that
 //     names the variable: unconditionally (first in the line, or after
-//     `;`), or in the same `&&` chain as the rm (T64c, L519);
+//     `;`), or in the same `&&` chain as the rm (T64c, L519); one after
+//     `cd … &&` is not: a cd that fails at run time skips it (T224 L4), and
+//     the refusal names the safe form (scratchHint);
 //   - the line names no IFS; no ln, mv, cp, install, rsync, mount or link
 //     names the variable, and nothing names it after an rm or rmdir of it.
 // The variable then reads as a directory under the template's directory
 // (the temporary root, or -p's) only where an rm or rmdir names it whole,
-// `$d`, `"$d"` or `${d}` (L514): `$d/x`, `$d/`, a glob or a brace stays
-// unresolvable, and so does every other program's use. A whole line `rm [-flags] $(mktemp -d)`
+// `$d`, `"$d"` or `${d}` (L514): `$d/x`, `$d/`, a glob (`"$d"/*` too: a
+// failed mktemp leaves d empty, and it is then /*, T224 L4, L8) or a brace
+// stays unresolvable, and so does
+// every other program's use. A whole line `rm [-flags] $(mktemp -d)`
 // removes the directory it makes.
 
 // scratchSeg is one part of a line at its top level and the operators
@@ -155,10 +159,15 @@ func scratchUse(line, name string, segs []scratchSeg, at int) bool {
 	if len(regexp.MustCompile(`(?:^|[^A-Za-z0-9_])`+q+`\+?=`).FindAllStringIndex(line, -1)) != 1 {
 		return false
 	}
-	if slices.Contains(strings.FieldsFunc(line, func(r rune) bool { return strings.ContainsRune(" \t\n;&|()<>\"'", r) }), name) {
+	a := segs[at]
+	// A word that is the name, an option cluster ending in it or the name
+	// with a subscript may assign it (read d, zsh's `print -vd /`,
+	// `strftime -sd / 0`, `print -v 'd[1]' x`; T224 L6), the assignment's own
+	// `mktemp -d` aside.
+	glued := regexp.MustCompile(`^(?:-[A-Za-z]*)?` + q + `(?:\[.*)?$`)
+	if slices.ContainsFunc(strings.FieldsFunc(strings.Replace(line, a.text, "", 1), func(r rune) bool { return strings.ContainsRune(" \t\n;&|()<>\"'", r) }), glued.MatchString) {
 		return false
 	}
-	a := segs[at]
 	if a.before == "||" || a.before == "|" || a.before == "|&" || a.after == "|" || a.after == "|&" || a.after == "&" {
 		return false
 	}
@@ -200,10 +209,50 @@ func scratchUse(line, name string, segs []scratchSeg, at int) bool {
 	return true
 }
 
+// scratchSafeForm is the safe form scratchHint names.
+const scratchSafeForm = `assign the scratch folder first, on its own: d=$(mktemp -d); cd <dir> && …; rm -rf "$d"`
+
+// scratchHint is the sentence a refused rm of the line's mktemp -d folder
+// ends its reason with when the folder was assigned after `&&` and an rm or
+// rmdir of it runs outside that chain (T224 L5), mktemp -d's folder one
+// mktempDir reads (L6 B5): the assignment may be
+// skipped there, so the folder must be assigned first, on its own; "" for
+// any other line.
+func scratchHint(line string, scratch map[string]string, ctx *Ctx) string {
+	segs, ok := scratchSegments(line)
+	if !ok {
+		return ""
+	}
+	for at, a := range segs {
+		m := scratchAssign.FindStringSubmatch(a.text)
+		if m == nil || a.before != "&&" || scratch[m[1]] != "" {
+			continue
+		}
+		// Only a folder mktemp -d makes where the rule reads it (L6 B5).
+		if _, ok := mktempDir(m[2], ctx); !ok {
+			continue
+		}
+		q := regexp.QuoteMeta(m[1])
+		ref := regexp.MustCompile(`\$(?:` + q + `|\{` + q + `\})(?:[^A-Za-z0-9_]|$)`)
+		chain := true
+		for _, s := range segs[at+1:] {
+			chain = chain && s.before == "&&"
+			first := ""
+			if f := scratchFirst.FindStringSubmatch(s.text); f != nil {
+				first = f[1]
+			}
+			if !chain && (first == "rm" || first == "rmdir") && ref.MatchString(s.text) {
+				return scratchSafeForm
+			}
+		}
+	}
+	return ""
+}
+
 // mktempDir is the path `mktemp <args>` makes, read as a directory under
 // its template's directory; ok is false for anything the rule does not read.
 func mktempDir(argText string, ctx *Ctx) (string, bool) {
-	var dirFlag, tFlag bool
+	var dirFlag, tFlag, tmpdirFlag bool
 	pdir, tmpl := "", ""
 	args := strings.Fields(strings.ReplaceAll(argText, `"`, ""))
 	for k := 0; k < len(args); k++ {
@@ -214,7 +263,10 @@ func mktempDir(argText string, ctx *Ctx) (string, bool) {
 		case a == "-q" || a == "--quiet":
 		case a == "-t":
 			tFlag = true
-		case a == "-p" || a == "--tmpdir":
+		case a == "--tmpdir":
+			// GNU's --tmpdir takes its directory only after `=`: alone, it is the temporary root (T224).
+			tmpdirFlag = true
+		case a == "-p":
 			if k++; k >= len(args) || pdir != "" {
 				return "", false
 			}
@@ -230,7 +282,7 @@ func mktempDir(argText string, ctx *Ctx) (string, bool) {
 			tmpl = a
 		}
 	}
-	if !dirFlag || slices.Contains(strings.Split(pdir+"/"+tmpl, "/"), "..") {
+	if !dirFlag || tmpdirFlag && pdir != "" || slices.Contains(strings.Split(pdir+"/"+tmpl, "/"), "..") {
 		return "", false
 	}
 	tmp := os.Getenv("TMPDIR")
@@ -256,11 +308,11 @@ func mktempDir(argText string, ctx *Ctx) (string, bool) {
 		tmpl = "tmp.XXXXXXXXXX"
 	case strings.Contains(tmpl, "/"):
 		p := filepath.Clean(expand(tmpl))
-		if tFlag || pdir != "" || !(project.Within(p, "/tmp") || project.Within(p, filepath.Clean(tmp))) {
+		if tFlag || tmpdirFlag || pdir != "" || !(project.Within(p, "/tmp") || project.Within(p, filepath.Clean(tmp))) {
 			return "", false
 		}
 		return project.Realish(filepath.Dir(p)) + "/" + filepath.Base(p), true
-	case !tFlag && pdir == "":
+	case !tFlag && !tmpdirFlag && pdir == "":
 		return "", false // a bare template is made in the working directory
 	}
 	if strings.Contains(base, "$") {
@@ -333,7 +385,8 @@ func mktempRm(line string) bool { return mktempRmLine.MatchString(line) }
 func freshVars(line, cwd string) map[string]string {
 	segs, ok := scratchSegments(line)
 	facts := lineFacts(line)
-	if !ok || ifsWord.MatchString(line) || facts == nil {
+	// An uppercase prefix assignment is read by scratchVars' deletions only (T224).
+	if !ok || ifsWord.MatchString(line) || facts == nil || facts.prefixed {
 		return nil
 	}
 	out := map[string]string{}

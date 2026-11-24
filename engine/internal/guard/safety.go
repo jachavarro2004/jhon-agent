@@ -190,6 +190,14 @@ func Classify(command string, ctx *Ctx) []Finding {
 	ctx.scratch, ctx.mktempRm = scratchVars(command, ctx), mktempRm(command)
 	st := &State{Dir: ctx.Cwd, Links: &Links{}}
 	out := classify(command, ctx, 0, st)
+	// An rm of a mktemp -d folder assigned after `&&` names the safe form (scratchHint, T224 L5).
+	if hint := scratchHint(command, ctx.scratch, ctx); hint != "" {
+		for i, f := range out {
+			if f.Level == "deny" && (strings.HasPrefix(f.What, "rm ") || strings.HasPrefix(f.What, "rmdir ")) && strings.Contains(f.What, "$(…)") && f.Why == "its target cannot be resolved" {
+				out[i].Why += "; " + hint
+			}
+		}
+	}
 	ctx.scratch, ctx.mktempRm = nil, false
 	// A file the write reader finds the line writing (curl -o, go build -o) is
 	// refused when it is a credentials file, as judgeWrite's targets are (L1368).

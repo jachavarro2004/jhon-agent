@@ -1504,3 +1504,12 @@ rows.tsv:43@repo/subagent	safety-guard	refuse	allow	false-positive T210 (L1652):
 rows.tsv:44@repo/top-default	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
 rows.tsv:44@repo/top-bypass	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
 rows.tsv:44@repo/subagent	safety-guard	refuse	allow	false-positive T210 (L1652): a module the code imports is not a file it deletes
+verifiers.tsv:153	safety-guard	refuse	allow	false-positive T224 S1 (L1684, L5): the owner's line in the safe form, the mktemp -d folder assigned first and handed to a program by an uppercase prefix assignment
+verifiers.tsv:155	safety-guard	refuse	allow	false-positive T224 S1 (L1684): a bare mktemp --tmpdir is the temporary root
+verifiers.tsv:156	safety-guard	refuse	allow	false-positive T224 S1 (L1684): an uppercase prefix assignment is the program's environment
+verifiers.tsv:167	safety-guard	allow	refuse	hole T224 (found on main): $_ is the last argument of the command before, never the line's mktemp -d folder
+verifiers.tsv:174	safety-guard	allow	refuse	hole T224 L6 B4 (found on main): zsh's print -vd ~ assigns d the home folder, so d is no mktemp -d folder
+verifiers.tsv:176	safety-guard	allow	refuse	hole T224 L8 (found on main): a zsh glob qualifier runs code in the shell, which may assign d
+verifiers.tsv:177	safety-guard	allow	refuse	hole T224 L8 (found on main): zsh's repeat runs a builtin in the shell, which may assign d
+verifiers.tsv:178	safety-guard	allow	refuse	hole T224 L8 (found on main): zsh's - runs a builtin in the shell, which may assign d
+verifiers.tsv:179	safety-guard	allow	refuse	hole T224 L8 (found on main): zsh's private assigns in the shell

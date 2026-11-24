@@ -149,3 +149,31 @@ framework-guard	Bash	"node /tmp/run.js <FW>/shell/lib/agents.ts"	refuse	framewor
 framework-guard	Bash	"python3 <FW>/tools/x.py"	refuse	framework	L1367	-	T81: an interpreter running a script of Jhon's own
 framework-guard	Bash	"cd <FW> && node x.js"	refuse	framework	L1367	-	T81: a script run inside Jhon's source
 framework-guard	Bash	"bash <HOME>/.local/bin/jhon status"	refuse	framework	L1367	-	T81: the installed CLI run as a script by hand
+# T224 S1: a variable the line assigns from $(mktemp -d) names a fresh scratch folder (t224_scratch_test.go).
+safety-guard	Bash	"d=$(mktemp -d); cd <P> && APP_DB=$d/t.db API_KEY= node --import tsx src/main.ts items | head -6; rm -rf \"$d\""	allow	none	T224	-	the owner's line in the safe form its refusal names: the folder assigned first, on its own; an uppercase prefix assignment to a program
+safety-guard	Bash	"d=$(mktemp -d) && rm -rf \"$d\"/*"	refuse	none	T224	-	the folder's entries stay refused (L8): a failed mktemp leaves d empty, and "$d"/* is then /*
+safety-guard	Bash	"d=$(mktemp -d --tmpdir) && rm -rf $d"	allow	none	T224	-	a bare --tmpdir is the temporary root
+safety-guard	Bash	"d=$(mktemp -d) && APP_DB=$d/t.db python3 cli.py && rm -rf $d"	allow	none	T224	-	an uppercase prefix assignment is the program's environment
+safety-guard	Bash	"d=$(mktemp -d); d=/; rm -rf \"$d\"/*"	refuse	none	T224	-	reassigned
+safety-guard	Bash	"rm -rf \"$d\"/*; d=$(mktemp -d)"	refuse	none	T224	-	used before the assignment
+safety-guard	Bash	"d=$(mktemp -d) && rm -rf \"$d\"/*/.."	refuse	none	T224	-	extra path parts that leave it
+safety-guard	Bash	"d=$(mktemp -d) && rm -rf \"${d:-/}\"/*"	refuse	none	T224	-	a default
+safety-guard	Bash	"d=$(mktemp -d) && rm -rf \"$e\"/*"	refuse	none	T224	-	a different variable
+safety-guard	Bash	"d=$(mktemp -d) && rm -rf \"$d\"/* $HOME"	refuse	none	T224	-	another target beside it
+safety-guard	Bash	"python3 cli.py && d=$(mktemp -d) && true; rm -rf $d"	refuse	none	T224	-	a chain step that may fail leaves the variable as inherited
+safety-guard	Bash	"cd <P>/missing && d=$(mktemp -d) && true; rm -rf $d"	refuse	none	T224	-	a cd to no folder may fail
+safety-guard	Bash	"d=$(mktemp -d) && rm -r $d && ln -s $HOME/proj $d && rm -rf \"$d\"/*"	refuse	none	T224	-	the folder replaced by a link
+safety-guard	Bash	"d=$(mktemp -d) && rm -rf $d/*"	refuse	none	T224	-	unquoted: only "$d"/* names the entries
+safety-guard	Bash	"_=$(mktemp -d); echo ~; rm -rf $_"	refuse	none	T224	-	found on main: $_ is the last argument of the command before (the home folder after echo ~), never a scratch folder
+safety-guard	Bash	"cd <P> && d=$(mktemp -d) && APP_DB=$d/t.db API_KEY= node --import tsx src/main.ts items | head -6; rm -rf $d"	refuse	none	T224	-	the owner's line (L5): a cd that fails skips the assignment; the refusal names the safe form
+safety-guard	Bash	"d=$(mktemp -d -t x); rm -rf \"$d\"/*"	refuse	none	T224	-	L4 B1: a failed mktemp leaves d empty, and "$d"/* is /*
+safety-guard	Bash	"d=$(mktemp -d) || true; rm -rf \"$d\"/*"	refuse	none	T224	-	L4 B1: "$d"/* outside the assignment's && chain
+safety-guard	Bash	"d=$(mktemp -d -t x) && true || rm -rf \"$d\"/*"	refuse	none	T224	-	L4 B1: "$d"/* after ||
+safety-guard	Bash	"cd +1 && XDG_CONFIG_HOME=$(mktemp -d); rm -rf $XDG_CONFIG_HOME"	refuse	none	T224	-	L4 B2: zsh cd +1 fails, the variable keeps its inherited value
+safety-guard	Bash	"cd <P>/apps/cli && GOPATH=$(mktemp -d) && node x; rm -rf \"$GOPATH\"/*"	refuse	none	T224	-	L4 B2: a cd that may fail before the assignment
+safety-guard	Bash	"d=$(mktemp -d) && print -vd ~ && rm -rf $d"	refuse	none	T224	-	L6 B4, found on main: zsh's print -vd ~ assigns d the home folder
+safety-guard	Bash	"d=$(mktemp -d) && print -vd / && rm -rf \"$d\"/*"	refuse	none	T224	-	L6 B4: zsh print -vd / assigns d, and "$d"/* is /*
+safety-guard	Bash	"x=d; d=$(mktemp -d) && : /*(e:'eval $x=$HOME':) && rm -rf $d"	refuse	none	T224	-	L8, found on main: a zsh glob qualifier runs eval in the shell, assigning d the home folder
+safety-guard	Bash	"x=d; d=$(mktemp -d) && repeat 1 typeset -g $x=$HOME && rm -rf $d"	refuse	none	T224	-	L8, found on main: zsh's repeat runs typeset in the shell
+safety-guard	Bash	"x=d; d=$(mktemp -d) && - eval $x=$HOME && rm -rf $d"	refuse	none	T224	-	L8, found on main: zsh's - runs eval in the shell
+safety-guard	Bash	"x=d; d=$(mktemp -d); private $x=$HOME; rm -rf \"$d\""	refuse	none	T224	-	L8, found on main: zsh's private assigns in the shell

@@ -29,9 +29,13 @@ import (
 //     variables, PATH TMPDIR IFS CDPATH BASH_CMDS BASH_ENV …, are
 //     uppercase) that is not one zsh ties to a special parameter
 //     (astZsh: path is PATH there); or the tracked one: the only statement-level assignment
-//     of its name, its value `$(mktemp …)` (mktempValue);
+//     of its name, its value `$(mktemp …)` (mktempValue); or a plain prefix
+//     assignment to any other name before a program that is no builtin or
+//     keyword (`APP_DB=$d/t.db node …`, T224): it is only that program's
+//     environment. It marks the facts prefixed, which freshVars does not read;
 //   - no function, coproc, select, time, [[ ]], (( )), let, declaration,
-//     C-style for, arithmetic assignment, ${x=}/${x:=}, or {var}> redirect;
+//     C-style for, arithmetic assignment, ${x=}/${x:=}, {var}> redirect, or
+//     extended glob (zsh's glob qualifiers run code in the shell, T224 L8);
 //   - no arithmetic context at all (L796): bash evaluates a variable's value
 //     as an arithmetic expression there, so z="PATH=0" and $((z)) assigns
 //     PATH: no $((…)), $[…], ${x:…}, ${!x} (an indirect name may carry a
@@ -51,17 +55,26 @@ var astLower = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
 // astZsh are zsh's lowercase special parameters: path, cdpath, fpath,
 // manpath, module_path, mailpath and psvar are tied to PATH, CDPATH, FPATH,
 // MANPATH, MODULE_PATH, MAILPATH and PSVAR, so assigning one changes what
-// a program word runs (L830). Never assignable, tracked or not.
-var astZsh = set("path", "cdpath", "fpath", "manpath", "module_path", "mailpath", "psvar")
+// a program word runs (L830); pipestatus reads as the last exit status and
+// histchars keeps only three characters (T224). Never assignable, tracked or not.
+var astZsh = set("path", "cdpath", "fpath", "manpath", "module_path", "mailpath", "psvar", "pipestatus", "histchars")
 
-// astBuiltins are bash 5.2's builtins (compgen -b) and keywords (compgen -k).
+// astBuiltins are bash 5.2's builtins (compgen -b) and keywords (compgen -k),
+// and zsh's builtins that assign a variable or change the shell's state
+// (T224 L6: `print -vd /` assigns d, `strftime -sd / 0` too), so none of them
+// is ever read as an external program; nor are `repeat`, `-` and `private`,
+// which run a command or assign in the shell itself (L8).
 var astBuiltins = set(".", ":", "[", "alias", "bg", "bind", "break", "builtin", "caller", "cd", "command", "compgen", "complete",
 	"compopt", "continue", "declare", "dirs", "disown", "echo", "enable", "eval", "exec", "exit", "export", "false", "fc", "fg",
 	"getopts", "hash", "help", "history", "jobs", "kill", "let", "local", "logout", "mapfile", "popd", "printf", "pushd", "pwd",
 	"read", "readarray", "readonly", "return", "set", "shift", "shopt", "source", "suspend", "test", "times", "trap", "true",
 	"type", "typeset", "ulimit", "umask", "unalias", "unset", "wait",
 	"if", "then", "else", "elif", "fi", "case", "esac", "for", "select", "while", "until", "do", "done", "in", "function", "time",
-	"{", "}", "!", "[[", "]]", "coproc")
+	"{", "}", "!", "[[", "]]", "coproc",
+	"print", "strftime", "zparseopts", "vared", "getln", "sysread", "zstat", "zformat", "zregexparse", "zmodload", "integer",
+	"float", "emulate", "setopt", "unsetopt", "noglob", "zle", "autoload", "functions", "disable", "alias", "zstyle", "ztcp",
+	"zsocket", "zselect", "sysopen", "rehash", "unhash", "unfunction", "r", "sched", "zpty", "zcompile", "pcre_match", "zsystem",
+	"nocorrect", "limit", "unlimit", "private", "repeat", "-")
 
 // astSafe are the builtins that change no shell state. printf is not one
 // (printf -v assigns).
@@ -71,8 +84,12 @@ var astSafe = set("echo", "true", "false", ":", "test", "[", "pwd")
 var astName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // astTrackable is a name a tracked mktemp assignment may set: not one of
-// bash's special variables.
+// bash's special variables. `_` never is: the shell sets it to the last
+// argument of each command, so after `echo ~` it is the home folder (T224).
 func astTrackable(n string) bool {
+	if n == "_" {
+		return false
+	}
 	if astLower.MatchString(n) {
 		return true
 	}
@@ -93,6 +110,9 @@ type mktempFacts struct {
 	mktemp map[string]bool
 	// moves is whether the line runs cd.
 	moves bool
+	// prefixed is whether a program runs with a prefix assignment to a
+	// name that is not all-lowercase (T224).
+	prefixed bool
 }
 
 // lineFacts reads line's tree; nil when it is unreadable or not proven safe.
@@ -124,6 +144,9 @@ func lineFacts(line string) *mktempFacts {
 			}
 		case *syntax.ArithmExp:
 			bad = true
+		case *syntax.ExtGlob:
+			// zsh runs a glob qualifier's code in the shell itself: `*(e:'eval d=~':)`, `*(+f)` (T224 L8).
+			bad = true
 		case *syntax.ParamExp:
 			if x.Exp != nil && (x.Exp.Op == syntax.AssignUnset || x.Exp.Op == syntax.AssignUnsetOrNull || x.Exp.Op == syntax.OtherParamOps) ||
 				x.Slice != nil || x.Excl || x.Index != nil && !astIndex(x.Index) {
@@ -140,6 +163,12 @@ func lineFacts(line string) *mktempFacts {
 				bad = true
 			}
 		case *syntax.CallExpr:
+			// A program that is no builtin or keyword runs in a child: its prefix assignments are its environment.
+			external := false
+			if len(x.Args) > 0 {
+				prog, ok := plainProgram(x.Args[0])
+				external = ok && !astBuiltins[prog]
+			}
 			for _, a := range x.Assigns {
 				if a.Name == nil || a.Append || a.Index != nil || a.Naked || a.Array != nil || astZsh[a.Name.Value] {
 					bad = true
@@ -153,7 +182,8 @@ func lineFacts(line string) *mktempFacts {
 					}
 				}
 				if !astLower.MatchString(a.Name.Value) {
-					bad = true
+					bad = bad || !external
+					facts.prefixed = true
 				}
 			}
 			if len(x.Args) == 0 {

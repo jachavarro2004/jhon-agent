@@ -387,8 +387,25 @@ func capped(a *Subagent) bool {
 	return false
 }
 
-// stoppedShort is a result that says the agent stopped short: its turn cap, or a refusal by the safety layer.
-var stoppedShort = lazyre.New(ci(`\bmax(?:imum)?[ -]?turns\b|\bturn (?:cap|limit)\b|safety-guard: refused|\brefused:`))
+// stoppedShort is a result that says the agent stopped short at its turn cap.
+var stoppedShort = lazyre.New(ci(`\bmax(?:imum)?[ -]?turns\b|\bturn (?:cap|limit)\b`))
+
+// jhonRefusal is one of Jhon's own refusal lines, quoted in a result or not,
+// by the exact prefix it is printed with (T224 S2): a guard's
+// `<name>-guard: <reason>` (engine/internal/hook; safety-guard's is
+// `safety-guard: refused: …`), pre-tool's sandbox refusal `sandbox: …; the
+// call is refused` and the sandbox's note on a refused write, `the sandbox
+// refused a write to …` (engine/internal/sandbox). The word "refused:"
+// anywhere else in a tool's output is no refusal. The prefix starts a word,
+// after markdown or a bracket too (`**safety-guard: …**`, `(…)`, `[…]`,
+// `_…_`, `__…__`), never inside another (`my-safety-guard: `,
+// `x_safety-guard: `, `x__safety-guard: `).
+var jhonRefusal = lazyre.New(`(?:^|[^A-Za-z0-9_-])_{0,2}(?:(?:safety|scope|route|vcs|secrets|framework|inspect)-guard: |sandbox: [^\n]*; the call is refused)|the sandbox refused a write to `)
+
+// stopped is whether a result says the agent stopped short: its turn cap, or a refusal of Jhon's.
+func stopped(result string) bool {
+	return stoppedShort.MatchString(result) || jhonRefusal.MatchString(result)
+}
 
 // relaunches is the launches among agents (one change's) that follow, for
 // the same agent type, one that stopped short: no result delivered, or a
@@ -415,7 +432,7 @@ func relaunches(s *Session, agents []*Subagent) int {
 		if prev == nil {
 			continue
 		}
-		if index, result := completion(s, prev); index < 0 || stoppedShort.MatchString(result) {
+		if index, result := completion(s, prev); index < 0 || stopped(result) {
 			n++
 		}
 	}
