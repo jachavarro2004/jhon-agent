@@ -8,21 +8,61 @@ Jhon uses it as an opt-in integration, off by default
 
 ## Turn it on
 
-Install it (its README has the details):
-
-```sh
-git clone https://github.com/jachavarro2004/jhon-studio ~/.local/share/jhon-studio && ln -s ~/.local/share/jhon-studio/bin/jhon-studio ~/.local/bin/jhon-studio
-```
-
-then turn it on in `jhon setup` (the `jhon-studio` row, under the optional
-integrations) or with `jhon settings set integrations.studio true`, and run
-`jhon doctor`: its `jhon-studio` section shows each check of
+Turn it on in `jhon setup` (the `jhon-studio` row, under the optional
+integrations): setup installs it from its signed release at its Install step.
+Or turn it on with `jhon settings set integrations.studio true` and run
+`jhon update`, which installs it the same way. Then run
+`jhon doctor`: its `jhon-studio` section says where it came from and shows each check of
 `jhon-studio doctor --json` (node, ffmpeg, Kokoro, HyperFrames, Chrome) and
 the fix for each one that fails. `jhon settings set integrations.studio false`
 turns it off again. `jhon setup` writes `integrations.studio` only while it is
 on and drops the line when you turn it back off, so a release older than the
 integration, after `jhon update --rollback`, still reads the settings file
 (with it on, turn it off before rolling back to such a release).
+
+## Install and update from its releases
+
+jhon installs jhon-studio from its signed GitHub releases
+(github.com/jachavarro2004/jhon-studio, the manifest's `doctor.source`),
+as it installs itself:
+
+1. It reads the repository's releases and takes the newest one whose
+   `requires_jhon` the running jhon satisfies ("The jhon it needs", below):
+   it downloads `jhon-studio-<version>.tar.gz` with its `.sha256` and
+   `.sigstore.json`, checks the sha256, then the cosign keyless signature:
+   it must come from that repository's `.github/workflows/release.yml` at
+   the tag `v<version>`, through GitHub's OIDC issuer. It then unpacks the
+   tarball into a temporary folder and asks the unpacked program's
+   `integration --json`, which must name the release's version. A newer
+   release that needs a newer jhon is passed over for the next older one.
+2. It unpacks it into `~/.local/share/jhon-studio/<version>` and links
+   `~/.local/bin/jhon-studio` to `<version>/bin/jhon-studio` atomically.
+   The version that was linked before stays on disk.
+
+Pre-releases (`-rc.N`) are taken only by a jhon that is itself a
+pre-release or a development build; a stable jhon takes stable releases
+only. Nothing unverified is installed: a missing or failing checksum or
+signature, a tarball with an absolute or `..` path, a link (symbolic or
+hard) or a device, or a program that answers another version stops the
+install with one message ending in `nothing was changed`. A
+`~/.local/bin/jhon-studio` that jhon did not link (a file, or a link
+elsewhere) is never replaced: move it away for jhon to install.
+
+`jhon update` updates it after jhon itself (`--check` only says whether a
+newer release that supports this jhon is out; `--json` lists it under
+`tools`), and `jhon update --rollback` links its previous version again,
+with jhon's. `jhon doctor` says which release is installed and where;
+`jhon doctor --remote` also says whether a newer one that supports this jhon
+is out. To install a release by hand, follow jhon-studio's README
+("Install").
+
+### A development clone
+
+To work on jhon-studio itself, clone it instead (jhon-studio's README,
+"Development"): a git checkout at `~/.local/share/jhon-studio` is a
+development install. `jhon setup` and `jhon update` leave it alone, never
+replacing it, and `jhon doctor` reports it as a development install. Move it
+away for jhon to install releases there.
 
 ## The command
 

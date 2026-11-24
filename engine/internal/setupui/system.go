@@ -36,6 +36,12 @@ type System struct {
 	// chosen tool found on PATH that does not fit it is noted (T237).
 	Ask  func(manifests.Manifest) (manifests.Answer, error)
 	Jhon string
+	// InstallTool installs a chosen cli integration's program from its
+	// signed GitHub releases (T242): the newest that supports Jhon,
+	// verified; a development clone is left alone. The CLI passes
+	// internal/update's. Nil, setup installs no tool, and a missing one's
+	// check says how to install it by hand.
+	InstallTool func(manifests.Manifest) error
 }
 
 // Pins are the versions setup installs (T50g): the CLI passes render's
@@ -206,11 +212,29 @@ func (s *System) Saved() Saved {
 	}
 }
 
+// released are the chosen optional integrations whose program setup
+// installs from its releases (InstallTool, manifests.Manifest.ReleaseRepo),
+// by Order; none without InstallTool.
+func (s *System) released(c Choices) []manifests.Manifest {
+	if s.InstallTool == nil {
+		return nil
+	}
+	var out []manifests.Manifest
+	for _, m := range binaries(c) {
+		if _, _, ok := m.ReleaseRepo(); ok && !m.Required {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 // Checks are git, claude when Claude Code is chosen, node when pi is (setup
 // installs pi itself with npm), and each integration's binary (Engram,
 // CodeGraph; an optional one's only when chosen on). A chosen cli tool
 // found on PATH whose answer does not fit this jhon (manifests.Judge) is
-// found with its one note: it is off, the core installs all the same.
+// found with its one note: it is off, the core installs all the same. A
+// chosen one setup installs from its releases (released) that is not on
+// PATH locks nothing: its Install step adds it.
 func (s *System) Checks(c Choices) []Check {
 	names := []string{"git"}
 	if c.ClaudeCode {
@@ -226,10 +250,17 @@ func (s *System) Checks(c Choices) []Check {
 			tools[m.Doctor.Binary] = m
 		}
 	}
+	installs := map[string]manifests.Manifest{}
+	for _, m := range s.released(c) {
+		installs[m.Doctor.Binary] = m
+	}
 	out := make([]Check, 0, len(names))
 	for _, n := range names {
 		if p := s.find(n); p != "" {
 			out = append(out, Check{Name: n, OK: true, Detail: p, Note: s.offNote(tools, n)})
+		} else if m, ok := installs[n]; ok {
+			owner, repo, _ := m.ReleaseRepo()
+			out = append(out, Check{Name: n, OK: true, Detail: "not on PATH yet: Install adds its newest signed release from github.com/" + owner + "/" + repo})
 		} else {
 			cmd, adv := s.fix(n)
 			out = append(out, Check{Name: n, Detail: "not on PATH", Fix: cmd, Advice: adv})
@@ -265,12 +296,17 @@ func runtimes(c Choices) string {
 }
 
 // Steps write the settings first: the install renders each runtime from
-// them, so a runtime turned off is not installed.
+// them, so a runtime turned off is not installed. Then each chosen tool
+// setup installs from its releases (released) has a step of its own.
 func (s *System) Steps(c Choices) []Step {
-	return []Step{
+	steps := []Step{
 		{Name: "Write settings", Detail: s.tilde(s.SettingsPath), WritesSettings: true},
 		{Name: "Install runtimes", Detail: runtimes(c)},
 	}
+	for _, m := range s.released(c) {
+		steps = append(steps, Step{Name: "Install " + m.Display, Detail: "its newest signed release that supports jhon " + s.Jhon})
+	}
+	return steps
 }
 
 func (s *System) RunStep(c Choices, i int) error {
@@ -282,6 +318,9 @@ func (s *System) RunStep(c Choices, i int) error {
 			return errors.New("this build has no installer")
 		}
 		return s.Install(c)
+	}
+	if tools := s.released(c); i >= 2 && i-2 < len(tools) {
+		return s.InstallTool(tools[i-2])
 	}
 	return errors.New("no install step " + strconv.Itoa(i))
 }

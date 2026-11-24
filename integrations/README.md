@@ -21,7 +21,7 @@ malformed manifest, naming the file and the field.
 | `claude-code.servers` | its MCP server ids in Claude Code: a tool is `mcp__<server>__<tool>` |
 | `pi.server`, `pi.command`, `pi.args`, `pi.url` | its server in pi's `mcp.json` |
 | `pi.tools.<capability>` | a capability's tools in pi where pi's names differ; else Claude Code's under the pi server's prefix |
-| `doctor.binary`, `doctor.version`, `doctor.source`, `doctor.probe`, `doctor.url` | what `jhon doctor` checks; `doctor.version` is the pin setup installs, and for a `cli` one the version Jhon was tested with, never a requirement (below) |
+| `doctor.binary`, `doctor.version`, `doctor.source`, `doctor.probe`, `doctor.url` | what `jhon doctor` checks; `doctor.version` is the pin setup installs, and for a `cli` one the version Jhon was tested with, never a requirement (below); `doctor.source` is where the binary comes from, and for a `cli` one of the form `github.com/<owner>/<repo>` the repository whose signed releases jhon installs (below) |
 | `setup.summary`, `setup.summary_narrow`, `setup.detail`, `setup.locked_note` | the setup UI's row text; an optional integration with `setup.summary` is a row of setup's optional ones, the others are set with `jhon settings set` |
 | `setup.install.<go\|npm\|brew\|manual>` | the install commands, `{version}` standing for the pin |
 
@@ -80,6 +80,38 @@ shows the installed one as `<binary> <version> (tested with
 <doctor.version>)`, never as a pin or a requirement. Only an `mcp-connector` off at launch keeps the
 claude.ai connectors out of `jhon start`.
 
+### A cli integration's releases
+
+jhon installs a `cli` program from its own signed GitHub releases (T242),
+as it installs itself, with no `git clone`. v1 has no field for where the
+releases are and who signs them, and adding one needs v2 (below), so jhon
+reads both from what v1 has, by one convention the engine holds
+(`engine/internal/update/tool.go`):
+
+| What | From |
+|---|---|
+| the repository | `doctor.source`, exactly `github.com/<owner>/<repo>` (a module path such as `github.com/<owner>/<repo>/v3`, or an npm package, is not released this way) |
+| the assets of release `v<version>` | `<doctor.binary>-<version>.tar.gz`, with its `.sha256` (a `sha256sum` line) and `.sigstore.json` (a cosign keyless bundle); the tarball holds `bin/<doctor.binary>` at its top, with no leading folder |
+| the signer | issuer `https://token.actions.githubusercontent.com`, identity `https://github.com/<owner>/<repo>/.github/workflows/release.yml@refs/tags/v<version>`, that exact tag |
+| the jhon it needs | the unpacked program's `integration --json` (`requires_jhon`, `contract`, above), which must name the release's version |
+
+With its setting on, `jhon setup` (an Install step of its own) and `jhon
+update` (after jhon itself) take the newest release, `vX.Y.Z` or
+`vX.Y.Z-rc.N`, whose answer fits the running jhon (Judge, above), at most
+ten downloads; a pre-release only when the running jhon is itself a
+pre-release or a development build. They verify the sha256 and the
+signature before anything is unpacked, refuse a tarball holding an absolute
+or `..` path, a link or a device, unpack it into
+`~/.local/share/<binary>/<version>`, and link `~/.local/bin/<binary>` to its
+`bin/<binary>` atomically; the previous version stays, and `jhon update
+--rollback` links it again. Every refusal says why and that nothing was
+changed. A git checkout at `~/.local/share/<binary>` is a development
+install, left alone; a `~/.local/bin/<binary>` that is not jhon's link to
+a version is never replaced. `jhon doctor` says which release is installed
+(or that it is a development install), and with `--remote` whether a newer
+release that supports this jhon is out. A `cli` program released elsewhere
+keeps its `setup.install` ways as before.
+
 The format is a small YAML subset: `key: value`, a flow list `[a, b]`, a
 block indented two spaces, `#` comments, and a value in double quotes when
 it holds `: ` or ` #`. A field v1 does not know is refused.
@@ -94,7 +126,8 @@ binary on a newer tree.
 
 - **Within v1** (no version change): add a manifest, an optional
   integration (`required: false`); change any value (a pin, a server, a
-  capability, the order, the setup text); add an entry to an open block
+  capability, the order, the setup text, a `cli` one's `doctor.source`,
+  which names its releases' repository: "A cli integration's releases"); add an entry to an open block
   (`pi.tools.<capability>`, a `setup.install` way v1 knows). Every field
   keeps its name, type and meaning. A `cli` program's answer to
   `integration --json` may gain an optional field an older jhon ignores

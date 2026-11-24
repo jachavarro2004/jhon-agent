@@ -1,7 +1,8 @@
 # jhon-studio: presentation videos for any project, a program of its own
-# repository (github.com/jachavarro2004/jhon-studio). A cli: it grants no
-# capability and mounts no MCP server; it answers `jhon-studio integration
-# --json` and `jhon-studio doctor --json` (integrations/README.md).
+# repository (github.com/jachavarro2004/jhon-studio), whose signed releases
+# jhon installs. A cli: it grants no capability and mounts no MCP server; it
+# answers `jhon-studio integration --json` and `jhon-studio doctor --json`
+# (integrations/README.md).
 # Schema jhon.integration/v1 (integrations/README.md); engine/internal/integrations reads it.
 schema: jhon.integration/v1
 name: studio
@@ -25,4 +26,7 @@ setup:
   summary_narrow: project videos
   detail: /jhon-studio:video in Claude Code, /jhon:video in pi
   install:
-    manual: "git clone https://github.com/jachavarro2004/jhon-studio ~/.local/share/jhon-studio && ln -s ~/.local/share/jhon-studio/bin/jhon-studio ~/.local/bin/jhon-studio"
+    # jhon installs it from its signed GitHub releases at doctor.source
+    # (T242; integrations/README.md, "A cli integration's releases"): setup
+    # with it on, and jhon update, take the newest that supports this jhon.
+    manual: "jhon setup and jhon update install its newest signed release that supports this jhon; by hand, see https://github.com/jachavarro2004/jhon-studio#install"

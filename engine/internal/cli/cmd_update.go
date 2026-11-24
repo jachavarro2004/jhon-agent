@@ -32,6 +32,13 @@ import (
 // `jhon sync` from a source checkout) is never replaced by a release, a
 // downgrade: update, --check, --json and the screens install nothing and
 // say so in one line, exit 2 for an install, 0 for --check and --json.
+//
+// Then, unless jhon's own step failed, each optional cli integration that
+// is on and released on GitHub (jhon-studio) is updated to its newest
+// release that supports the jhon that now runs, verified the same way, or
+// with --check only looked for (cmd_update_tools.go, T242); --json lists
+// them under "tools"; one that fails exits 1, changing nothing of it.
+// --rollback links each one's previous version again too.
 func init() { register("update", runUpdate) }
 
 const updateUsage = "usage: jhon update [--check] [--json] | jhon update --rollback\n"
@@ -74,16 +81,18 @@ func updatePlain(r release.Roots, c *update.Client, check, asJSON bool) int {
 		// stdout is the one object; the install's lines go to stderr.
 		o.W = os.Stderr
 	}
+	var tools []toolReport
 	report := func(status, latest string, err error) {
 		if !asJSON {
 			return
 		}
 		v := struct {
-			Current string `json:"current"`
-			Latest  string `json:"latest,omitempty"`
-			Status  string `json:"status"`
-			Error   string `json:"error,omitempty"`
-		}{c.Current, latest, status, ""}
+			Current string       `json:"current"`
+			Latest  string       `json:"latest,omitempty"`
+			Status  string       `json:"status"`
+			Error   string       `json:"error,omitempty"`
+			Tools   []toolReport `json:"tools,omitempty"`
+		}{c.Current, latest, status, "", tools}
 		if err != nil {
 			v.Error = err.Error()
 		}
@@ -97,43 +106,50 @@ func updatePlain(r release.Roots, c *update.Client, check, asJSON bool) int {
 		}
 		return o.Die("update failed: " + err.Error() + "; nothing was changed")
 	}
+	// done is the tools' step, against running (the jhon that runs once
+	// this update is over), then jhon's report: exit 1 when a tool failed.
+	done := func(status, latest, running string) int {
+		var toolFailed bool
+		tools, toolFailed = updateTools(o, running, check)
+		report(status, latest, nil)
+		if toolFailed {
+			return 1
+		}
+		return 0
+	}
 	ctx := context.Background()
 	l, err := c.Latest(ctx)
 	if errors.Is(err, update.ErrNoRelease) {
-		report("no-release", "", nil)
 		if !asJSON {
 			fmt.Fprintf(o.W, "no stable release is published yet; jhon %s is installed\n", c.Current)
 		}
-		return 0
+		return done("no-release", "", c.Current)
 	}
 	if err != nil {
 		return failed(l.Version, err)
 	}
 	if !update.Newer(c.Current, l.Version) {
-		report("up-to-date", l.Version, nil)
 		if !asJSON {
 			fmt.Fprintf(o.W, "jhon %s is up to date (latest release %s)\n", c.Current, l.Version)
 		}
-		return 0
+		return done("up-to-date", l.Version, c.Current)
 	}
 	if !asJSON {
 		fmt.Fprintf(o.W, "update available: jhon %s -> %s (released %s)\n", c.Current, l.Version, l.Date)
 	}
 	if check {
-		report("available", l.Version, nil)
 		if !asJSON {
 			fmt.Fprintln(o.W, "run 'jhon update' to install it")
 		}
-		return 0
+		return done("available", l.Version, c.Current)
 	}
 	verified := func(signer string) { o.OK("sha256 and signature verified: signed by " + signer) }
 	if _, err := c.Install(ctx, r, o, l, verified); err != nil {
 		return failed(l.Version, err)
 	}
-	report("updated", l.Version, nil)
 	fmt.Fprintf(o.W, "updated jhon %s -> %s\n", c.Current, l.Version)
 	restartDashboards(o.W)
-	return 0
+	return done("updated", l.Version, l.Version)
 }
 
 // devBuild is `jhon update` on a development build: no release is read,
@@ -158,7 +174,10 @@ func devBuild(current string, check, asJSON bool) int {
 	return 2
 }
 
-// rollBack is `jhon update --rollback`: re-activate the previous release.
+// rollBack is `jhon update --rollback`: re-activate the previous release,
+// then link each released tool's previous version again (T242). With no
+// older jhon kept, the tools still roll back; with nothing to roll back at
+// all, it says so and exits 1, as before.
 func rollBack(r release.Roots, current string) int {
 	o := out()
 	k, ok := update.Previous(r, current)
@@ -169,7 +188,17 @@ func rollBack(r release.Roots, current string) int {
 				active = k.Version
 			}
 		}
-		return o.Die("no release older than jhon " + active + " is kept; nothing was changed")
+		var lines bytes.Buffer
+		rolled, toolsOK := rollBackTools(&lines, o)
+		if rolled == 0 && toolsOK {
+			return o.Die("no release older than jhon " + active + " is kept; nothing was changed")
+		}
+		fmt.Fprintf(o.W, "no release older than jhon %s is kept; jhon stays at %s\n", active, active)
+		o.W.Write(lines.Bytes())
+		if !toolsOK {
+			return 1
+		}
+		return 0
 	}
 	from := current
 	for _, a := range release.KeptReleases(r) {
@@ -183,6 +212,12 @@ func rollBack(r release.Roots, current string) int {
 	}
 	fmt.Fprintf(o.W, "rolled back to jhon %s\n", k.Version)
 	restartDashboards(o.W)
+	var lines bytes.Buffer
+	_, toolsOK := rollBackTools(&lines, o)
+	o.W.Write(lines.Bytes())
+	if !toolsOK {
+		return 1
+	}
 	return 0
 }
 
@@ -195,6 +230,23 @@ func updateTUI(r release.Roots, c *update.Client) (int, error) {
 	sys.Updates = u
 	if err := setupui.Run(os.Stdin, os.Stdout, sys, setupui.ModeUpdate, setupui.Colors(palette.Semantic(p, desktop))); err != nil {
 		return die(err.Error())
+	}
+	// The tools follow jhon once the screens are closed, in plain lines:
+	// updated after jhon is current or updated, rolled back after a
+	// roll-back; nothing when the check failed or the owner left.
+	o := out()
+	switch u.then {
+	case "update":
+		if _, failed := updateTools(o, u.running, false); failed {
+			return 1, nil
+		}
+	case "rollback":
+		var lines bytes.Buffer
+		_, ok := rollBackTools(&lines, o)
+		o.W.Write(lines.Bytes())
+		if !ok {
+			return 1, nil
+		}
 	}
 	return 0, nil
 }
@@ -209,6 +261,9 @@ type tuiUpdater struct {
 	dir      string
 	artifact string
 	fetchErr error
+	// then is what the tools do once the screens close (updateTUI):
+	// "update" against running, "rollback", or nothing.
+	then, running string
 }
 
 func (u *tuiUpdater) close() {
@@ -225,8 +280,10 @@ func (u *tuiUpdater) Latest() (setupui.Release, error) {
 		rel.Previous = k.Version
 	}
 	l, err := u.c.Latest(context.Background())
+	u.then, u.running = "", u.c.Current
 	if errors.Is(err, update.ErrNoRelease) {
 		rel.NoStable = true
+		u.then = "update"
 		return rel, nil
 	}
 	if err != nil {
@@ -234,6 +291,7 @@ func (u *tuiUpdater) Latest() (setupui.Release, error) {
 	}
 	rel.Date, rel.Notes = l.Date, l.Notes
 	if !update.Newer(u.c.Current, l.Version) {
+		u.then = "update"
 		return rel, nil
 	}
 	rel.Latest = l.Version
@@ -248,7 +306,7 @@ func (u *tuiUpdater) Latest() (setupui.Release, error) {
 	return rel, nil
 }
 
-func (u *tuiUpdater) Update(setupui.Release) error {
+func (u *tuiUpdater) Update(rel setupui.Release) error {
 	if u.fetchErr != nil {
 		return fmt.Errorf("%v; nothing was changed", u.fetchErr)
 	}
@@ -259,6 +317,7 @@ func (u *tuiUpdater) Update(setupui.Release) error {
 	if release.InstallArtifact(u.r, &release.Out{W: &b, E: &b}, u.artifact) != 0 {
 		return errors.New(strings.TrimSpace(b.String()))
 	}
+	u.then, u.running = "update", rel.Latest
 	restartDashboards(io.Discard)
 	return nil
 }
@@ -272,6 +331,7 @@ func (u *tuiUpdater) Rollback(version string) error {
 	if release.Reactivate(u.r, &release.Out{W: &b, E: &b}, k) != 0 {
 		return errors.New(strings.TrimSpace(b.String()))
 	}
+	u.then = "rollback"
 	restartDashboards(io.Discard)
 	return nil
 }

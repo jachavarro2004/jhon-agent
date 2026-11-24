@@ -56,8 +56,18 @@ var askTimeout = 10 * time.Second
 // answer of another contract need not name a plugin_dir: Judge says why it
 // is off.
 func AskIntegration(m Manifest) (Answer, error) {
+	return askIntegration(m, m.Doctor.Binary)
+}
+
+// AskIntegrationAt is AskIntegration of the program at path, named by m's
+// binary: an unpacked release's, before it is installed (T242).
+func AskIntegrationAt(m Manifest, path string) (Answer, error) {
+	return askIntegration(m, path)
+}
+
+func askIntegration(m Manifest, path string) (Answer, error) {
 	var a Answer
-	out, err := ask(m.Doctor.Binary, "integration", "--json")
+	out, err := askAt(m.Doctor.Binary, path, "integration", "--json")
 	if err != nil {
 		return a, err
 	}
@@ -100,8 +110,12 @@ func (e *Exited) Unwrap() error { return e.Err }
 
 // ask runs bin with args, bounded by askTimeout: its standard output, or
 // why it gave none (a nonzero exit is an *Exited, which keeps its code).
-func ask(bin string, args ...string) ([]byte, error) {
-	path, err := exec.LookPath(bin)
+func ask(bin string, args ...string) ([]byte, error) { return askAt(bin, bin, args...) }
+
+// askAt is ask of the program at at (a name on PATH, or a path), named bin
+// in what it says.
+func askAt(bin, at string, args ...string) ([]byte, error) {
+	path, err := exec.LookPath(at)
 	if err != nil {
 		return nil, fmt.Errorf("%s is not on PATH", bin)
 	}

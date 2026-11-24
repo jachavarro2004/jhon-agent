@@ -1,14 +1,19 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/release"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/update"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/version"
 )
 
@@ -59,6 +64,7 @@ func (d doctor) cliIntegrations() {
 			o.Warn(fmt.Sprintf("%s is not on PATH (%s is on) — %s", m.Doctor.Binary, m.Setting, installAdvice(m)))
 			continue
 		}
+		d.toolOrigin(m)
 		if !d.cliFit(m) {
 			continue
 		}
@@ -74,6 +80,45 @@ func (d doctor) cliIntegrations() {
 				o.Warn(c.ID + ": " + c.Detail + " — fix: " + c.Fix)
 			}
 		}
+	}
+}
+
+// toolOrigin says where m's program came from when jhon installs it from
+// its releases (T242, update.ToolOf): a signed release, its version and
+// folder; a development clone, which jhon leaves alone; or a command jhon
+// did not link. With --remote, for a release, whether a newer one that
+// supports this jhon is out (downloaded and verified into a temporary
+// folder, nothing installed). A program jhon finds no trace of says nothing.
+func (d doctor) toolOrigin(m integrations.Manifest) {
+	t, ok := update.ToolOf(m)
+	if !ok {
+		return
+	}
+	o, p := d.o, t.PlaceIn(os.Getenv("HOME"))
+	in := t.Installed(p)
+	switch {
+	case in.Dev:
+		o.Note(fmt.Sprintf("%s is a development install: a git clone at %s, which jhon setup and jhon update leave alone", t.Binary, release.Tilde(p.Dir)))
+		return
+	case in.Foreign != "":
+		o.Note(fmt.Sprintf("%s is %s, not a release jhon installed: jhon setup and jhon update leave it alone", release.Tilde(p.Link), in.Foreign))
+		return
+	case in.Active == "":
+		return
+	}
+	o.OK(fmt.Sprintf("%s %s from its signed release v%s of %s (%s)", t.Binary, in.Active, in.Active, t.Source(), release.Tilde(filepath.Join(p.Dir, in.Active))))
+	if !d.remote {
+		o.Note("run 'jhon doctor --remote' to look for a newer " + t.Binary + " release that supports this jhon")
+		return
+	}
+	res, err := toolClient().InstallTool(context.Background(), t, p, version.Version, true)
+	switch {
+	case err != nil:
+		o.Warn("cannot look for a newer " + t.Binary + " release: " + trimUnchanged(err))
+	case res.Status == update.ToolAvailable:
+		o.Note(fmt.Sprintf("a newer release supports jhon %s: %s %s — run 'jhon update'", version.Version, t.Binary, res.To))
+	default:
+		o.OK(fmt.Sprintf("%s %s is the newest release of %s that supports jhon %s", t.Binary, in.Active, t.Source(), version.Version))
 	}
 }
 
