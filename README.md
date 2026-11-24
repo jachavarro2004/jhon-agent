@@ -9,6 +9,13 @@
   An agent framework for Claude Code and pi.
 </p>
 
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/jachavarro2004/jhon-agent?style=flat&color=e7bbc8&labelColor=1f1f28" alt="License: Apache-2.0"></a>
+  <a href="https://github.com/jachavarro2004/jhon-agent/actions/workflows/validate.yml"><img src="https://img.shields.io/github/actions/workflow/status/jachavarro2004/jhon-agent/validate.yml?branch=main&label=CI&style=flat&color=e7bbc8&labelColor=1f1f28" alt="CI"></a>
+  <a href="https://github.com/sponsors/jachavarro2004"><img src="https://img.shields.io/github/sponsors/jachavarro2004?label=Sponsor&logo=githubsponsors&style=flat&color=e7bbc8&labelColor=1f1f28" alt="GitHub Sponsors"></a>
+  <a href="https://github.com/jachavarro2004/jhon-agent/stargazers"><img src="https://img.shields.io/github/stars/jachavarro2004/jhon-agent?style=flat&color=e7bbc8&labelColor=1f1f28" alt="Stars"></a>
+</p>
+
 ### ▶ The presentation (3:39)
 
 https://github.com/user-attachments/assets/e5d924c2-0a05-4a5f-82a9-1ab303276258
@@ -461,6 +468,8 @@ own help.
 | [docs/modes-and-grants.md](docs/modes-and-grants.md) | where modes and grants apply |
 | [docs/jhon-studio.md](docs/jhon-studio.md) | jhon-studio, the opt-in video integration: `/jhon-studio:video` in Claude Code, `/jhon:video` in pi |
 | [docs/status-json.md](docs/status-json.md) | the shape of `jhon status --json` |
+| [docs/identity.md](docs/identity.md) | Jhon's one identity across its repos: the mark, the words, the look, the badges, the family, the support block, the community files |
+| [SUPPORT.md](SUPPORT.md) | where to ask, and how to support Jhon |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, release by release |
 | `prose/contracts/ldd.md` | the method itself |
 
@@ -515,6 +524,24 @@ nothing is recorded.
   whole module's vet and staticcheck and the conformance suite; a sha that
   already passed on this machine is skipped. Install both with
   `git config core.hooksPath tools/git-hooks`.
+
+## The Jhon family
+
+- **jhon-agent**: the framework (you are here).
+- **[jhon-studio](https://github.com/jachavarro2004/jhon-studio)**: presentation videos for any project.
+- **[The landing](https://jachavarro2004.github.io/jhon-site/)**: Jhon's site, jachavarro2004.github.io/jhon-site.
+- **[The profile](https://github.com/jachavarro2004)**: the author's GitHub profile, github.com/jachavarro2004.
+- **YouTube**: Jhon's films, a video for every release.
+
+## Support Jhon
+
+Jhon is free and open source.
+If it helps you, donate any amount you choose,
+once or monthly, on GitHub Sponsors.
+If you can't donate, a ⭐ on the repo helps
+keep the project maintained.
+
+[♥ Sponsor on GitHub](https://github.com/sponsors/jachavarro2004)
 
 ## License
 
