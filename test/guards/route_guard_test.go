@@ -1164,6 +1164,9 @@ func TestRouteGuardPrismSubjectEdges(t *testing.T) {
 		c.mend()
 		code(t, r.call(t, "Bash", pr, true), 0, c.name+" undone")
 	}
+	// On the change's branch: git's merge gate refuses a commit on main
+	// that no ready merge check covers (T219 S5).
+	support.Git(t, r.p, "checkout", "-q", "-b", "c1")
 	support.Git(t, r.p, "add", "-A")
 	support.Git(t, r.p, "commit", "-q", "-m", "c1")
 	code(t, r.call(t, "Bash", pr, true), 0, "committing everything keeps the subject")

@@ -114,9 +114,46 @@ func decideAlike(t *testing.T, s sgEnv, fw string, combined []string, tools map[
 		}
 	}
 	r := hook(t, s.env, "pre-tool", combined, payload)
-	if r.Code != wantCode || r.Stderr != wantErr || r.Stdout != wantOut {
-		t.Errorf("%s:\n got  %d %q %q\n want %d %q %q", label, r.Code, r.Stderr, r.Stdout, wantCode, wantErr, wantOut)
+	got := r.Stdout
+	// With the mode off, a command the guards let run carries the agent's
+	// marker (T219 S9): the same decision, with updatedInput.
+	if command, ok := input["command"].(string); ok && r.Code == 0 && (tool == "Bash" || tool == "Monitor") {
+		got, wantOut = unmarked(t, label, got, command), decisionOf(t, wantOut)
 	}
+	if r.Code != wantCode || r.Stderr != wantErr || got != wantOut {
+		t.Errorf("%s:\n got  %d %q %q\n want %d %q %q", label, r.Code, r.Stderr, got, wantCode, wantErr, wantOut)
+	}
+}
+
+// unmarked is pre-tool's answer to an agent's command with the mode off,
+// its updatedInput checked to be the command after the marker line and
+// taken out, as decisionOf gives it.
+func unmarked(t *testing.T, label, out, command string) string {
+	t.Helper()
+	var j map[string]map[string]any
+	if err := json.Unmarshal([]byte(out), &j); err != nil {
+		t.Errorf("%s: %q: %v", label, out, err)
+		return out
+	}
+	in, _ := j["hookSpecificOutput"]["updatedInput"].(map[string]any)
+	if c, _ := in["command"].(string); c != "export JHON_AGENT=1\n"+command {
+		t.Errorf("%s: the command run is %q", label, c)
+	}
+	delete(j["hookSpecificOutput"], "updatedInput")
+	return js(t, j)
+}
+
+// decisionOf is a guard's answer as pre-tool's marked answer carries it:
+// its hookSpecificOutput's fields, or the event's name alone for none.
+func decisionOf(t *testing.T, out string) string {
+	t.Helper()
+	j := map[string]map[string]any{"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+	if strings.TrimSpace(out) != "" {
+		if err := json.Unmarshal([]byte(out), &j); err != nil {
+			return out
+		}
+	}
+	return js(t, j)
 }
 
 func TestPreToolRefusesABrokenRender(t *testing.T) {

@@ -325,6 +325,15 @@ func (d doctor) project() {
 		for _, l := range staleLocks(top, time.Now()) {
 			d.o.Warn(l)
 		}
+		// T219 S6: under LDD git refuses a move of the default branch no
+		// ready merge check covers, through the merge gate.
+		if project.UsesLdd(top) {
+			if hook.MergeGateInstalled(top) {
+				d.o.OK("merge gate: git in " + top + " refuses a move of the default branch that no ready merge check covers")
+			} else {
+				d.o.Warn("merge gate: git in " + top + " does not refuse a move of the default branch that no ready merge check covers — run 'jhon hook merge-gate --install' there (route-guard installs it on the next guarded command)")
+			}
+		}
 	}
 }
 

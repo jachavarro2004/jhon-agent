@@ -85,8 +85,9 @@ func TestTheDefaultModeIsOffWhereBubblewrapCannotStart(t *testing.T) {
 		}
 		startsIn(t, starts)
 		h, _ := preTool(t, b, env, []string{"safety-guard"}, "Bash", `{"command":"ls"}`, true)
-		if h.Code != 0 || h.Stderr != "" || strings.Contains(h.Stdout, "updatedInput") || strings.Contains(h.Stdout, "sandbox") {
-			t.Errorf("%q: pre-tool Bash: exit %d, stdout %q, stderr %q; want it run as it came, unsandboxed", text, h.Code, h.Stdout, h.Stderr)
+		// Unsandboxed, as it came but for the agent's marker (T219 S9).
+		if h.Code != 0 || h.Stderr != "" || h.Stdout != `{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"export JHON_AGENT=1\nls"}}}` {
+			t.Errorf("%q: pre-tool Bash: exit %d, stdout %q, stderr %q; want it run as it came, unsandboxed, with the agent's marker", text, h.Code, h.Stdout, h.Stderr)
 		}
 		if n := startsIn(t, starts); n != 1 {
 			t.Errorf("%q: the hook call started bwrap %d times; want once", text, n)

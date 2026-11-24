@@ -317,8 +317,44 @@ artifact immutably: an image or package by its content digest; an
 infrastructure deploy (CDK, Terraform) by the full commit it deploys from,
 which must be the tested HEAD. A ready check writes `delivery.json`. What reaches the
 default branch is delivered (a merge into it, or a push to it), and so is a
-deploy or a release; a push of a change branch is review. A PR merged
-with `gh pr merge <n>` after its CI reported every check green is tested:
+deploy or a release; a push of a change branch is review. Any command that
+moves the default branch to another commit is a merge (`git merge`, `pull`,
+`reset <rev>` or `rebase` on it, a fetch or push refspec to `.` or a local
+path that writes it, `update-ref` with arguments or `--stdin`,
+`symbolic-ref`, `branch -f|-M|-C`, `checkout -B`, `switch -C`,
+`worktree add -B`): route-guard runs it only after a ready
+`jhon deliver check <change> --action merge` of that commit, run on its own
+line before it, and refuses one whose target it cannot read; a move to a
+commit the branch already holds, or an update from its own upstream (its
+configured remote, else origin), is not one. Git enforces the same rule
+whatever a line does at run time: in a repository under LDD, Jhon's merge
+gate (`hook.jhon-merge-gate`, a reference-transaction hook in the
+repository's local git configuration, written on the first guarded command
+or by `jhon hook merge-gate --install`) refuses any update of the default
+branch, a commit on it included, to a commit no ready merge check covers,
+and route-guard refuses a command that removes it or turns it off. It
+limits only the agent, never the owner: it judges a git that carries
+`JHON_AGENT=1`, which `jhon sandbox run`, pi's shell (the agent's bash and
+jobs) and Claude Code's pre-tool (the mode off) give the agent's commands
+and never the owner's (a terminal, `!`); route-guard refuses an agent line
+that drops or sets it. Accepted residual, which `jhon audit` reports only
+when the agent's line itself writes the move: a script file that turns the hook
+off for its own git commands, `git branch -M|-C` onto the default branch
+from a script (git runs no reference-transaction hook for a rename or a
+copy; route-guard refuses it on the line), direct writes to `.git/refs`,
+`packed-refs` or `.git/config` from inside the sandbox, a forged upstream
+written in the same transaction, and a delivery record written by hand.
+The gate limits the agent through the marker the agent's own commands
+carry: route-guard refuses a line that changes it, git's configuration
+through the environment, or env with a cleared environment, and never a
+line that only reads or searches for them. An agent that strips its own
+environment by means a line cannot show (a script, a program it starts,
+`eval` of a string built at run time) is outside what a line or a hook can
+stop, as is a remote-tracking ref forged in one step and merged in another;
+`jhon audit` reports a move of the default branch only when the agent's
+line itself writes it, so such a move is not reported. The owner's git pays
+only the hook's start, about 25-40 ms on a commit or a checkout. A
+PR merged with `gh pr merge <n>` after its CI reported every check green is tested:
 `gh pr checks <n>` (`--watch` waits for it) exiting 0, its output unfiltered
 or filtered to the `ci-success` gate row passing (the gate sums every
 check), with no push after it; a red or pending check is no ready CI.

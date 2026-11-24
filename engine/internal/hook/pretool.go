@@ -138,6 +138,16 @@ func PreTool(args []string, io IO) int {
 		fmt.Fprintln(io.Err, refusal)
 		return 2
 	}
+	// With no wrap (the mode off), the command still runs as the agent's:
+	// it carries the marker git's merge gate reads (T219 S9), handed back
+	// with no decision of pre-tool's own, so Claude Code's permissions decide
+	// as they would.
+	if marked := agentMarked(name, payload); marked != nil {
+		if answer, ok := sandboxedJSON(ask, notes, marked, true); ok {
+			fmt.Fprint(io.Out, answer)
+			return 0
+		}
+	}
 	if ask == nil && len(notes) > 0 {
 		fmt.Fprint(io.Out, noteJSON(strings.Join(notes, "; ")))
 		return 0

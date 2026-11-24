@@ -51,7 +51,7 @@ import { spawn } from "node:child_process";
 import { constants as osConstants } from "node:os";
 import { accessSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { createBashToolDefinition, getAgentDir, getShellConfig, SettingsManager, type BashOperations } from "@earendil-works/pi-coding-agent";
+import { createBashToolDefinition, createLocalBashOperations, getAgentDir, getShellConfig, SettingsManager, type BashOperations, type BashSpawnContext } from "@earendil-works/pi-coding-agent";
 import { HOOK_TIMEOUT_MS, runAsync, type Started } from "./guards.ts";
 import { BASH_BACKGROUND_TOOL, MONITOR_TOOL } from "./background-tasks.ts";
 import { SANDBOX_EVENT } from "./events.ts";
@@ -152,6 +152,24 @@ function shellEnv(): NodeJS.ProcessEnv {
 	return { ...process.env, [key]: current.split(delimiter).includes(bin) ? current : [bin, current].filter(Boolean).join(delimiter) };
 }
 
+/**
+ * The marker of a command the agent runs (T219 S9): git's merge gate judges
+ * only a git that carries it, so the owner's own commands (pi's `!`, the
+ * owner's jobs) are never refused. The shell adds it to the agent's bash, its
+ * background jobs and monitors, sub-agents included, with the sandbox on or
+ * off; never to this process's environment, which `!` inherits.
+ */
+export const AGENT_ENV = "JHON_AGENT";
+
+/** The agent's bash spawn: pi's own, with the marker added to its environment and nothing else changed. */
+export const markAgent = (c: BashSpawnContext): BashSpawnContext => ({ ...c, env: { ...c.env, [AGENT_ENV]: "1" } });
+
+/** pi's local operations for the agent's background command with the mode off: the same, with the marker. */
+function markedLocalOperations(shellPath: string | undefined): BashOperations {
+	const local = createLocalBashOperations({ shellPath });
+	return { exec: (command, cwd, options) => local.exec(command, cwd, { ...options, env: { ...(options.env ?? shellEnv()), [AGENT_ENV]: "1" } }) };
+}
+
 /** As pi's shell tools: the whole process group, so nothing the command started outlives it. */
 function killGroup(pid: number): void {
 	try { process.kill(-pid, "SIGKILL"); } catch {
@@ -245,10 +263,12 @@ export interface SandboxWiring {
 /**
  * Wire the sandbox on `pi` for the binary the guards call (`jhon`; with none
  * the guards already refuse every command, and nothing is asked): the status
- * is pinned at each session start, and where it says to sandbox, `bash` is
- * registered again from pi's own definition, the same name, description,
- * schema, prompt lines and renderers, with only its operations replaced.
- * With the mode off no tool is registered: `bash` is pi's built-in one.
+ * is pinned at each session start, and `bash` is registered again from pi's
+ * own definition, the same name, description, schema, prompt lines and
+ * renderers: where the status says to sandbox, with its operations replaced;
+ * with the mode off, as pi's own; either way its command carries the agent's
+ * marker (AGENT_ENV, T219 S9) and nothing else changes. Where the sandbox
+ * cannot run nothing is registered: the gate refuses the call.
  */
 export function wireSandbox(pi: any, o: { jhon: string | undefined; timeoutMs?: number; env?: NodeJS.ProcessEnv }): SandboxWiring {
 	let asked: Promise<SandboxPin> | undefined;
@@ -295,7 +315,7 @@ export function wireSandbox(pi: any, o: { jhon: string | undefined; timeoutMs?: 
 				const settings = SettingsManager.create(cwd, getAgentDir());
 				const shellPath = settings.getShellPath();
 				const operations = verdict.run === "sandbox" && o.jhon ? sandboxOperations({ jhon: o.jhon, project: verdict.project, shellPath }) : undefined;
-				return createBashToolDefinition(cwd, { commandPrefix: settings.getShellCommandPrefix(), shellPath, ...(operations ? { operations } : {}) })
+				return createBashToolDefinition(cwd, { commandPrefix: settings.getShellCommandPrefix(), shellPath, spawnHook: markAgent, ...(operations ? { operations } : {}) })
 					.execute(id, params, signal, onUpdate, ctx);
 			},
 		});
@@ -304,7 +324,8 @@ export function wireSandbox(pi: any, o: { jhon: string | undefined; timeoutMs?: 
 	const start = async (cwd: string) => {
 		const pin = await ask(cwd);
 		const verdict = sandboxVerdict(pin);
-		if ("run" in verdict && verdict.run === "sandbox") registerBash();
+		// With the mode off too: the agent's bash carries the marker (T219 S9).
+		if ("run" in verdict) registerBash();
 		return pin;
 	};
 	pi.on("session_start", async (_event: unknown, ctx: any) => { await start(ctx?.cwd ?? process.cwd()); return undefined; });
@@ -320,13 +341,15 @@ export function wireSandbox(pi: any, o: { jhon: string | undefined; timeoutMs?: 
 				registerBash();
 				return "jhon: the sandbox was pinned by this call, after the session started, so this command did not run; run it again";
 			}
+			// The mode off, pinned by this call: the next bash calls carry the agent's marker.
+			if (toolName === "bash" && !bashRegistered) registerBash();
 			return undefined;
 		},
 		jobOperations(shellPath) {
 			if (!o.jhon) return undefined;
 			const verdict = sandboxVerdict(pinned ?? { unread: "not asked yet in this session" });
 			if ("refuse" in verdict) throw new Error(verdict.refuse);
-			return verdict.run === "sandbox" ? sandboxOperations({ jhon: o.jhon, project: verdict.project, shellPath }) : undefined;
+			return verdict.run === "sandbox" ? sandboxOperations({ jhon: o.jhon, project: verdict.project, shellPath }) : markedLocalOperations(shellPath);
 		},
 		async startArgv(program, args, cwd) {
 			if (!o.jhon) return { program, args };

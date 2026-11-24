@@ -108,3 +108,23 @@ func TestProfileAtKeepsGitInsideTheProject(t *testing.T) {
 		}
 	}
 }
+
+// T219 S5: given the merge gate's entries, reference-transaction stays on
+// for it alone: the gate's entries replace the event's switch, every other
+// event stays off.
+func TestUnsandboxedEnvKeepsTheMergeGateAlone(t *testing.T) {
+	gate := [][2]string{{"hook.planted.enabled", "false"}, {"hook.jhon-merge-gate.command", "x"}}
+	got := strings.Join(UnsandboxedEnv(nil, nil, gate...), "\n") + "\n"
+	for _, event := range hookEvents {
+		off := "=hook." + event + ".enabled\nGIT_CONFIG_VALUE_"
+		if has := strings.Contains(got, off); has == (event == "reference-transaction") {
+			t.Errorf("hook.%s.enabled=false set: %v", event, has)
+		}
+	}
+	if !strings.Contains(got, "=hook.planted.enabled\n") || !strings.Contains(got, "=hook.jhon-merge-gate.command\n") {
+		t.Errorf("the gate's entries are missing:\n%s", got)
+	}
+	if strings.Contains(strings.Join(UnsandboxedEnv(nil, nil), "\n")+"\n", "=hook.jhon-merge-gate.") {
+		t.Errorf("with no gate, no gate entry")
+	}
+}
