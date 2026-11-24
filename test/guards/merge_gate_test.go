@@ -49,7 +49,7 @@ func newMG(t *testing.T) mgEnv {
 		"a/a_test.go": "package a\n",
 	})
 	m.commit(t, "change")
-	m.env = support.Env("HOME=/home/jhon-merge-test", "XDG_STATE_HOME="+filepath.Join(scratch, "state"), "JHON_ROOT="+support.Root())
+	m.env = support.Env("HOME=/home/jhon-merge-test", "XDG_STATE_HOME="+filepath.Join(scratch, "state"), "JHON_ROOT="+support.Root(), "GOCACHE="+goCache(t))
 	return m
 }
 
