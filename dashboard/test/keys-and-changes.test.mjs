@@ -116,6 +116,29 @@ test("app.css takes every color from the palette: no hex outside the fallback bl
   for (const frame of [".cbox", ".help", ".drawer"]) assert.match(css, new RegExp(`\\${frame}\\{[^}]*border:1px solid var\\(--frame-soft\\)`), `${frame} is framed in frameSoft`);
 });
 
+test("app.css's fallback is rose ink and its mono is FiraCode Nerd (odd/tasks/presentation-identity.md S6)", () => {
+  const css = readFileSync(fileURLToPath(new URL("../app.css", import.meta.url)), "utf8");
+  const root = css.match(/:root\{[^}]*\}/)[0];
+  // palette.CSS(palette.Fallback) in engine/internal/palette/palette.go: the frame, the page,
+  // the boxes, and rose ink's roles without a desktop palette.
+  const want = {
+    "--rail": "#161618", "--bg": "#1f1f28", "--panel": "#161618", "--surface": "#2a2a37", "--surface-hi": "#363646",
+    "--sel": "#53343f", "--sel-edge": "#e7bbc8", "--ink": "#e9e0e1", "--ink2": "#d2c3c6", "--soft": "#d2c3c6", "--faint": "#9b8d90",
+    "--rosa": "#e7bbc8", "--rosa-fill": "#53343f", "--rosa-ink": "#f2c5d2",
+    "--broken": "#ffb4ab", "--gold": "#e6c384", "--ok": "#98bb6c", "--accent-soft": "#b594a0", "--frame-soft": "#7b6772",
+  };
+  for (const [name, hex] of Object.entries(want)) assert.match(root, new RegExp(`${name}:${hex}[;}]`), `${name} falls back to ${hex}`);
+  for (const name of ["--line", "--line-strong", "--line-rosa", "--rosa-soft"]) {
+    const value = root.match(new RegExp(`${name}:([^;}]*)`))[1];
+    assert.match(value, name === "--line" ? /^rgba\(233,224,225,/ : /^rgba\(231,187,200,/, `${name} is rose ink's ink or primary, faded`);
+  }
+  const mono = root.match(/--mono:([^;}]*)/)[1];
+  assert.match(mono, /^"FiraCode Nerd Font"/, "the mono is FiraCode Nerd first");
+  assert.doesNotMatch(css, /JetBrains/, "no JetBrainsMono left");
+  assert.match(root, /--display:"Fraunces"/);
+  assert.match(root, /--ui:"Space Grotesk"/);
+});
+
 test("every state reads in the one table: a glyph and a word, the kanji seal beside them (design/system.md)", async () => {
   const { STATES, verdictOf, sessionRow, findingsPanel, lddCard, changesPanel } = await import("../app.js");
   assert.deepEqual(Object.fromEntries(Object.entries(STATES).map(([k, v]) => [k, [v.glyph, v.word, v.seal]])), {

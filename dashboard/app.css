@@ -1,19 +1,22 @@
-/* The colors below are the fallback: palette.css (`jhon palette`, rose ink,
-   or an optional desktop palette) follows and wins. Jhon's dashboard in rose ink, the owner's palette, with the rashin
+/* The colors below are the fallback, rose ink without a desktop palette
+   (palette.CSS(palette.Fallback), engine/internal/palette/palette.go):
+   palette.css (`jhon palette`, rose ink, or an optional desktop palette)
+   follows and wins. The fonts are Jhon's: Fraunces, Space Grotesk, FiraCode
+   Nerd (docs/identity.md). Jhon's dashboard in rose ink, the owner's palette, with the rashin
    language: sharp corners, hairlines, hard offset shadows, kanji seals beside
    the English names. Sakura pink drives selection, focus, tabs, filters, and
    meters; peachRed is kept only for broken rules; winterRed is the selected
    row (the owner's design 07). */
 :root{
-  --rail:#16161d;--bg:#1f1f28;--panel:#1a1a22;--surface:#2a2a37;--surface-hi:#363646;--sel:#43242b;--sel-edge:#8a4a5e;
-  --ink:#dcd7ba;--ink2:#c8c093;--soft:#a8a593;--faint:#8a8980;
-  --line:rgba(220,215,186,.11);--line-strong:rgba(220,215,186,.30);--line-rosa:rgba(210,126,153,.40);
-  --rosa:#d27e99;--rosa-soft:rgba(210,126,153,.10);--rosa-fill:#9b4d67;--rosa-ink:#fbeee2;
-  --broken:#ff5d62;--gold:#e6c384;--ok:#98bb6c;--accent-soft:#b594a0;--frame-soft:#7b6772;
+  --rail:#161618;--bg:#1f1f28;--panel:#161618;--surface:#2a2a37;--surface-hi:#363646;--sel:#53343f;--sel-edge:#e7bbc8;
+  --ink:#e9e0e1;--ink2:#d2c3c6;--soft:#d2c3c6;--faint:#9b8d90;
+  --line:rgba(233,224,225,.11);--line-strong:rgba(231,187,200,.30);--line-rosa:rgba(231,187,200,.40);
+  --rosa:#e7bbc8;--rosa-soft:rgba(231,187,200,.10);--rosa-fill:#53343f;--rosa-ink:#f2c5d2;
+  --broken:#ffb4ab;--gold:#e6c384;--ok:#98bb6c;--accent-soft:#b594a0;--frame-soft:#7b6772;
   --shadow:#0e0e13;
   --display:"Fraunces",Georgia,"Times New Roman",serif;
   --ui:"Space Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --mono:"JetBrainsMono Nerd Font","JetBrains Mono",ui-monospace,Menlo,Consolas,"DejaVu Sans Mono","Noto Sans CJK JP","Noto Sans JP",monospace;
+  --mono:"FiraCode Nerd Font","FiraCode Nerd Font Mono","Fira Code",ui-monospace,Menlo,Consolas,"DejaVu Sans Mono","Noto Sans CJK JP","Noto Sans JP",monospace;
   --jp:"Noto Sans CJK JP","Noto Sans JP","Hiragino Sans",sans-serif;
 }
 *{box-sizing:border-box;border-radius:0}
