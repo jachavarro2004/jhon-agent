@@ -293,7 +293,8 @@ var Elsewhere = func() map[string]string {
 }()
 
 // writeSettings sets every choice. A runtime turned on is written before
-// one turned off, so the file never holds two runtimes off in between.
+// one turned off, so the file never holds two runtimes off in between. An
+// offered optional integration at its default is left out of the file.
 func (s *System) writeSettings(c Choices) error {
 	type kv struct {
 		key string
@@ -304,14 +305,24 @@ func (s *System) writeSettings(c Choices) error {
 		vals = append(vals, kv{m.Setting, true})
 	}
 	vals = append(vals, kv{"integrations.telemetry", c.Telemetry})
-	for _, m := range offered() {
-		vals = append(vals, kv{m.Setting, c.Optional.On(m.Setting)})
-	}
 	if !c.ClaudeCode {
 		vals[0], vals[1] = vals[1], vals[0]
 	}
 	for _, v := range vals {
 		if _, err := settings.Set(s.SettingsPath, v.key, strconv.FormatBool(v.on)); err != nil {
+			return err
+		}
+	}
+	// An offered optional integration is written only when it differs from
+	// its default, and its line dropped when it is back at it: a binary that
+	// does not know the key (an older release after a rollback) still reads
+	// the file (odd/tasks/jhon-studio.md L11).
+	for _, m := range offered() {
+		if on := c.Optional.On(m.Setting); on != m.Default {
+			if _, err := settings.Set(s.SettingsPath, m.Setting, strconv.FormatBool(on)); err != nil {
+				return err
+			}
+		} else if _, err := settings.Unset(s.SettingsPath, m.Setting); err != nil {
 			return err
 		}
 	}

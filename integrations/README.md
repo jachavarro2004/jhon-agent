@@ -62,10 +62,15 @@ binary on a newer tree.
   integration (`required: false`); change any value (a pin, a server, a
   capability, the order, the setup text); add an entry to an open block
   (`pi.tools.<capability>`, a `setup.install` way v1 knows). Every field
-  keeps its name, type and meaning. Relaxing a rule so v1 accepts more is
-  within v1 too (a `cli` manifest may grant no capability, jhon-studio):
-  a running Jhon reads only its own compiled manifests, so the only reader
-  that refuses it is an older binary's `jhon validate` on a newer tree.
+  keeps its name, type and meaning. One exception was taken in v1, for
+  jhon-studio: a `cli` manifest may grant no capability. It adds no field,
+  no value, no type and no meaning; it only lifts a requirement between
+  two fields (`capabilities` for `kind`) for a kind v1 already has, which
+  mounts no tools. The one reader that refuses such a manifest is an older
+  binary's `jhon validate` run on a newer tree ("capabilities: missing"); a
+  running Jhon reads only its own compiled manifests. That refusal is
+  accepted for this case alone; any other change is judged by the Needs v2
+  list below.
 - **Needs v2**: add, remove or rename a field; change a field's type or
   meaning; add a value to a closed set (`kind`, `when_off`, a `setup.install`
   way) or give `doctor.probe` a meaning besides a version flag and `remote`; make another integration required. A v1 reader

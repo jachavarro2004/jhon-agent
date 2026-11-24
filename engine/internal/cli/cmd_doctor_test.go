@@ -132,7 +132,7 @@ func TestSetupInstallsTheVersionsTable(t *testing.T) {
 func TestDoctorVersionNoteForUnparsableOutput(t *testing.T) {
 	saved := probeVersion
 	defer func() { probeVersion = saved }()
-	probeVersion = func(string) (string, bool) { return "dev build", true }
+	probeVersion = func(string) (string, error) { return "dev build", nil }
 	var b strings.Builder
 	o := &release.Out{W: &b, E: &b}
 	doctor{o: o}.versions()
@@ -147,14 +147,14 @@ func TestDoctorVersionNoteForUnparsableOutput(t *testing.T) {
 func TestDoctorWarnsWhenAnInstalledVersionDiffersFromItsPin(t *testing.T) {
 	saved := probeVersion
 	defer func() { probeVersion = saved }()
-	probeVersion = func(command string) (string, bool) {
+	probeVersion = func(command string) (string, error) {
 		switch command {
 		case "claude":
-			return render.ClaudeCodeVersion + " (Claude Code)", true
+			return render.ClaudeCodeVersion + " (Claude Code)", nil
 		case "engram":
-			return "engram 0.0.1", true
+			return "engram 0.0.1", nil
 		}
-		return "", false
+		return "", errNotInstalled
 	}
 	var b strings.Builder
 	o := &release.Out{W: &b, E: &b}

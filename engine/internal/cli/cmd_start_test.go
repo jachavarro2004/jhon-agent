@@ -137,3 +137,21 @@ func TestAnOffCLIIntegrationLeavesTheConnectorsAlone(t *testing.T) {
 		t.Errorf("studio off, connectors on: %q", got)
 	}
 }
+
+// L11 (the verifier's probe): the claude.ai connectors follow
+// claude_code.connectors (m365's setting) alone, whatever integrations.studio
+// is: unset, off or on.
+func TestConnectorsFollowM365AloneWhateverStudioIs(t *testing.T) {
+	for _, studio := range []string{"", "\n[integrations]\nstudio = false\n", "\n[integrations]\nstudio = true\n"} {
+		for _, connectors := range []bool{false, true} {
+			text := "schema = 1\n\n[claude_code]\nconnectors = " + map[bool]string{false: "false", true: "true"}[connectors] + "\n" + studio
+			want := "ENABLE_CLAUDEAI_MCP_SERVERS=false"
+			if connectors {
+				want = ""
+			}
+			if got := connectorsSwitch(t, text); got != want {
+				t.Errorf("connectors %v, studio %q: %q, want %q", connectors, studio, got, want)
+			}
+		}
+	}
+}

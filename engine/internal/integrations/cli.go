@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -40,8 +41,8 @@ type Check struct {
 }
 
 // askTimeout bounds each question: a program that does not answer in it
-// has no answer, and nothing waits on it longer.
-const askTimeout = 10 * time.Second
+// has no answer, and nothing waits on it longer; a variable for the tests.
+var askTimeout = 10 * time.Second
 
 // AskIntegration is m's program's `integration --json`; an error says why
 // there is none (not on PATH, a failure, not the JSON, no plugin_dir).
@@ -61,11 +62,12 @@ func AskIntegration(m Manifest) (Answer, error) {
 }
 
 // AskDoctor is m's program's `doctor --json` checks, in its order; an exit
-// 1 that still prints its report is an answer.
+// 1 that still prints its report is an answer, one that prints nothing is
+// not ("<binary> exited 1").
 func AskDoctor(m Manifest) ([]Check, error) {
 	out, err := ask(m.Doctor.Binary, "doctor", "--json")
 	var exit *exec.ExitError
-	if err != nil && !(errors.As(err, &exit) && exit.ExitCode() == 1) {
+	if err != nil && !(errors.As(err, &exit) && exit.ExitCode() == 1 && len(bytes.TrimSpace(out)) > 0) {
 		return nil, err
 	}
 	var r struct {
@@ -77,8 +79,18 @@ func AskDoctor(m Manifest) ([]Check, error) {
 	return *r.Checks, nil
 }
 
+// Exited is a program that ran and exited with a code other than 0:
+// "<bin> exited <code>"; it unwraps to the *exec.ExitError.
+type Exited struct {
+	Bin string
+	Err *exec.ExitError
+}
+
+func (e *Exited) Error() string { return fmt.Sprintf("%s exited %d", e.Bin, e.Err.ExitCode()) }
+func (e *Exited) Unwrap() error { return e.Err }
+
 // ask runs bin with args, bounded by askTimeout: its standard output, or
-// why it gave none (an *exec.ExitError, wrapped, keeps its exit code).
+// why it gave none (a nonzero exit is an *Exited, which keeps its code).
 func ask(bin string, args ...string) ([]byte, error) {
 	path, err := exec.LookPath(bin)
 	if err != nil {
@@ -87,11 +99,17 @@ func ask(bin string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), askTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, args...)
-	// A program whose child keeps stdout open must not hold the caller past the bound.
+	// The cut kills the program's whole process group (ownGroup), and one
+	// whose child still keeps stdout open does not hold the caller past it.
+	ownGroup(cmd)
 	cmd.WaitDelay = time.Second
 	out, err := cmd.Output()
 	if ctx.Err() != nil {
 		return out, fmt.Errorf("%s %s: did not answer in %s", bin, strings.Join(args, " "), askTimeout)
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return out, &Exited{bin, exit}
 	}
 	if err != nil {
 		return out, fmt.Errorf("%s %s: %w", bin, strings.Join(args, " "), err)

@@ -19,7 +19,10 @@ integrations) or with `jhon settings set integrations.studio true`, and run
 `jhon doctor`: its `jhon-studio` section shows each check of
 `jhon-studio doctor --json` (node, ffmpeg, Kokoro, HyperFrames, Chrome) and
 the fix for each one that fails. `jhon settings set integrations.studio false`
-turns it off again.
+turns it off again. `jhon setup` writes `integrations.studio` only while it is
+on and drops the line when you turn it back off, so a release older than the
+integration, after `jhon update --rollback`, still reads the settings file
+(with it on, turn it off before rolling back to such a release).
 
 ## The command
 
@@ -39,7 +42,8 @@ Off (the default), nothing about video is shown or loaded: `jhon start` adds
 no plugin and never runs `jhon-studio`, pi has no `/jhon:video`, `jhon doctor`
 has no `jhon-studio` row, and `jhon setup` checks no `jhon-studio`.
 
-On but not answering (not on PATH, or `jhon-studio integration --json` fails),
+On but not answering (not on PATH, `jhon-studio integration --json` fails, or
+it hangs past 10 s, when it is stopped with every process it started),
 `jhon start` still starts Claude Code, without the plugin, and prints one note:
 
 ```text
