@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"io/fs"
@@ -97,11 +98,13 @@ func (d doctor) versions() {
 		if t.Setting != "" && !settings.On(t.Setting) {
 			continue
 		}
-		out, ok := probeVersion(t.Command)
+		out, err := probeVersion(t.Command)
 		got := installedVersion(out)
 		switch {
-		case !ok:
+		case errors.Is(err, errNotInstalled):
 			o.Note(fmt.Sprintf("%s is not installed (Jhon pins %s)", t.Command, t.Version))
+		case err != nil:
+			o.Note(fmt.Sprintf("%v (Jhon pins %s)", err, t.Version))
 		case got == "":
 			o.Note(fmt.Sprintf("%s printed no version (Jhon pins %s)", t.Command, t.Version))
 		case got == t.Version:
@@ -112,12 +115,16 @@ func (d doctor) versions() {
 	}
 }
 
+// errNotInstalled is probeVersion's command not on PATH.
+var errNotInstalled = errors.New("not on PATH")
+
 // probeVersion is `<command> --version`'s output, bounded to 5 seconds;
-// ok is false when the command is not on PATH or fails.
-var probeVersion = func(command string) (string, bool) {
+// errNotInstalled when the command is not on PATH, "<command> exited <code>"
+// when it fails (L11-L12: on PATH, it is installed).
+var probeVersion = func(command string) (string, error) {
 	path, err := exec.LookPath(command)
 	if err != nil {
-		return "", false
+		return "", errNotInstalled
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -125,7 +132,16 @@ var probeVersion = func(command string) (string, bool) {
 	// A shim whose child keeps stdout open must not hold doctor past the bound.
 	cmd.WaitDelay = time.Second
 	b, err := cmd.Output()
-	return string(b), err == nil
+	var exit *exec.ExitError
+	switch {
+	case ctx.Err() != nil:
+		return string(b), fmt.Errorf("%s --version did not answer in 5s", command)
+	case errors.As(err, &exit):
+		return string(b), fmt.Errorf("%s exited %d", command, exit.ExitCode())
+	case err != nil:
+		return string(b), fmt.Errorf("%s --version: %v", command, err)
+	}
+	return string(b), nil
 }
 
 // installedVersion is the first x.y.z in a --version output, "" when none.

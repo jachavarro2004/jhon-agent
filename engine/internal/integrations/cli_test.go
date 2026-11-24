@@ -47,7 +47,7 @@ func TestAskIntegrationSaysWhyItHasNoAnswer(t *testing.T) {
 		exit      int
 		want      string
 	}{
-		{"a failure", `{"plugin_dir":"/opt/p"}`, 1, "clifixture-bin integration --json: exit status 1"},
+		{"a failure", `{"plugin_dir":"/opt/p"}`, 1, "clifixture-bin exited 1"},
 		{"not JSON", "nope", 0, "clifixture-bin integration --json: not the JSON {version, plugin_dir, skill}"},
 		{"no plugin_dir", `{"version":"0.1.0"}`, 0, "clifixture-bin integration --json: names no plugin_dir"},
 	} {
@@ -74,6 +74,11 @@ func TestAskDoctorReadsEveryCheck(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(log); strings.TrimSpace(string(b)) != "doctor --json" {
 		t.Errorf("calls %q", b)
+	}
+	// L11-L12: an exit 1 with no output is that, not a malformed report.
+	fakeCLI(t, "clifixture-bin", "", 0, "", 1)
+	if _, err := AskDoctor(cliFixture); err == nil || err.Error() != "clifixture-bin exited 1" {
+		t.Errorf("exit 1, no output: %v", err)
 	}
 	fakeCLI(t, "clifixture-bin", "", 0, "{}", 1)
 	if _, err := AskDoctor(cliFixture); err == nil || err.Error() != "clifixture-bin doctor --json: not the JSON {ok, checks: [{id, ok, detail, fix}]}" {

@@ -30,11 +30,11 @@ func studioDoctor(t *testing.T, text, report string) (string, int) {
 	t.Setenv("PATH", dir+":/usr/bin:/bin")
 	saved := probeVersion
 	t.Cleanup(func() { probeVersion = saved })
-	probeVersion = func(command string) (string, bool) {
+	probeVersion = func(command string) (string, error) {
 		if command == "jhon-studio" && report != "" {
-			return "jhon-studio 0.0.9\n", true
+			return "jhon-studio 0.0.9\n", nil
 		}
-		return "", false
+		return "", errNotInstalled
 	}
 	var b strings.Builder
 	o := &release.Out{W: &b, E: &b}
@@ -88,5 +88,40 @@ func TestDoctorSaysWhenAnOnCLIIntegrationGivesNoChecks(t *testing.T) {
 	got, _ := studioDoctor(t, "schema = 1\n\n[integrations]\nstudio = true\n", "nope")
 	if want := "\njhon-studio\n  warn  jhon-studio doctor --json: not the JSON {ok, checks: [{id, ok, detail, fix}]}\n"; !strings.Contains(got, want) {
 		t.Errorf("lacks %q:\n%s", want, got)
+	}
+}
+
+// L11-L12: a jhon-studio on PATH that exits 1 with no output is said as
+// that, in the versions and in its section, never "not installed" or a
+// malformed report.
+func TestDoctorSaysAnOnCLIIntegrationThatExits1Silently(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.toml")
+	must(t, os.WriteFile(path, []byte("schema = 1\n\n[integrations]\nstudio = true\n"), 0o600))
+	t.Setenv("JHON_SETTINGS", path)
+	must(t, os.WriteFile(filepath.Join(dir, "jhon-studio"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
+	t.Setenv("PATH", dir+":/usr/bin:/bin")
+	var b strings.Builder
+	o := &release.Out{W: &b, E: &b}
+	d := doctor{o: o}
+	d.versions()
+	d.cliIntegrations()
+	got := b.String()
+	m, _ := integrations.Get("studio")
+	for _, want := range []string{
+		"  jhon-studio exited 1 (Jhon pins " + m.Doctor.Version + ")\n",
+		"\njhon-studio\n  warn  jhon-studio exited 1\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("lacks %q:\n%s", want, got)
+		}
+	}
+	for _, bad := range []string{"jhon-studio is not installed", "not the JSON"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("says %q:\n%s", bad, got)
+		}
+	}
+	if o.Failed != 0 {
+		t.Errorf("failed %d", o.Failed)
 	}
 }

@@ -92,6 +92,22 @@ func TestStudioIsAnOptInCLI(t *testing.T) {
 	}
 }
 
+// L11 (the verifier's probe): every MCP kind still needs a capability; only
+// a cli may grant none.
+func TestEveryMCPKindStillNeedsCapabilities(t *testing.T) {
+	for _, kind := range []string{"mcp-stdio", "mcp-http", "mcp-connector"} {
+		text := strings.NewReplacer("kind: mcp-stdio", "kind: "+kind, "capabilities: [alpha]\n", "", "  command: alpha\n", "  command: alpha\n  url: https://alpha.example.invalid/mcp\n").Replace(good)
+		_, probs := Load(fsOf(map[string]string{"alpha/manifest.yaml": text}))
+		var got []string
+		for _, p := range probs {
+			got = append(got, p.String())
+		}
+		if !slices.Contains(got, "integrations/alpha/manifest.yaml: capabilities: missing") {
+			t.Errorf("%s with no capabilities: %q", kind, got)
+		}
+	}
+}
+
 // A cli integration may grant no capability; an MCP one still must.
 func TestOnlyACLIMayGrantNoCapability(t *testing.T) {
 	cli := strings.NewReplacer("kind: mcp-stdio", "kind: cli", "capabilities: [alpha]\n", "").Replace(good)

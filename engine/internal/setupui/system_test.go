@@ -311,9 +311,19 @@ func TestEverySettingHasItsPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	written, _ := settings.Load(s.SettingsPath, func(string) (string, bool) { return "", false })
-	for _, v := range written {
-		if shown[v.Key] && v.Source != settings.SourceFile {
-			t.Errorf("setup shows %s but does not write it", v.Key)
+	// An offered optional integration left at its default stays out of the
+	// file (L12); every other key setup shows is written.
+	atDefault := map[string]bool{}
+	for _, m := range offered() {
+		atDefault[m.Setting] = !m.Default
+	}
+	for _, w := range written {
+		name := w.Key
+		if shown[name] && !atDefault[name] && w.Source != settings.SourceFile {
+			t.Errorf("setup shows %s but does not write it", name)
+		}
+		if atDefault[name] && w.Source == settings.SourceFile {
+			t.Errorf("setup writes %s at its default", name)
 		}
 	}
 }
@@ -378,6 +388,18 @@ func TestEngramFixWithGoOnlyKeepsTheDownloadAdvice(t *testing.T) {
 	}
 }
 
+// L11-L12: a setup that leaves jhon-studio off writes no integrations.studio.
+func TestSetupLeavingStudioOffWritesNoKey(t *testing.T) {
+	s, _ := scratch(t)
+	if err := s.RunStep(Choices{ClaudeCode: true, Telemetry: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(s.SettingsPath)
+	if strings.Contains(string(b), "studio") || !strings.Contains(string(b), "telemetry = true") {
+		t.Errorf("settings file:\n%s", b)
+	}
+}
+
 // odd/tasks/jhon-studio.md S3: setup offers jhon-studio, off by default; its
 // program is checked only once it is chosen, with its manual install as
 // advice, and its setting is written either way.
@@ -409,12 +431,17 @@ func TestSetupOffersStudioOffByDefault(t *testing.T) {
 	if got := s.Saved(); !got.Optional.On("integrations.studio") {
 		t.Errorf("Saved = %+v, want studio on", got)
 	}
+	if b, _ := os.ReadFile(s.SettingsPath); !strings.Contains(string(b), "studio = true") {
+		t.Errorf("settings file:\n%s", b)
+	}
+	// Back off, the key goes: the file holds only what differs from the
+	// default, so an older binary after a rollback still reads it (L11).
 	if err := s.RunStep(Choices{ClaudeCode: true}, 0); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(s.SettingsPath)
-	if got := values(t, s.SettingsPath)["integrations.studio"]; got != false || !strings.Contains(string(b), "studio = false") {
-		t.Errorf("integrations.studio written %v, want false:\n%s", got, b)
+	if got := values(t, s.SettingsPath)["integrations.studio"]; got != false || strings.Contains(string(b), "studio") {
+		t.Errorf("integrations.studio read %v, want false and no line:\n%s", got, b)
 	}
 	if got := s.Saved(); got.Optional.On("integrations.studio") {
 		t.Errorf("Saved = %+v, want studio off", got)

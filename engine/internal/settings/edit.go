@@ -67,6 +67,48 @@ func Set(path, key, raw string) (Value, error) {
 	return Value{Key: key, Value: v, Source: SourceFile}, nil
 }
 
+// Unset drops the line that sets key from the file at path, so it reads at
+// its default again, and a section it leaves with no key; the owner's
+// comments and every other byte stay (drop and dropEmptySection, as
+// Cleanup uses them). It reports whether a line went: an absent file, or
+// one that does not set key, is left as is. An unknown key is an
+// *InvalidError. Setup uses it for an integration turned back to its
+// default, so a binary that does not know the key still reads the file
+// (odd/tasks/jhon-studio.md L11).
+func Unset(path, key string) (bool, error) {
+	segs, err := splitKey(key)
+	if err != nil {
+		return false, &InvalidError{key, "unknown key"}
+	}
+	if _, ok := lookup(joinKey(segs)); !ok {
+		return false, &InvalidError{key, "unknown key"}
+	}
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	text := string(b)
+	if _, _, _, err := parse(path, text); err != nil {
+		return false, err
+	}
+	next, removed := drop(text, segs)
+	if !removed {
+		return false, nil
+	}
+	next = dropEmptySection(next, segs[:len(segs)-1])
+	vals, _, _, err := parse(path, next)
+	if err != nil {
+		return false, fmt.Errorf("%s: the edit would not read back (%v); edit the file by hand", path, err)
+	}
+	if _, still := vals[joinKey(segs)]; still {
+		return false, fmt.Errorf("%s: %s is set elsewhere in a form this edit cannot drop; edit the file by hand", path, key)
+	}
+	return true, writeAtomic(path, next)
+}
+
 // fromCommandLine is raw typed for the key: a bool or a whole number when
 // it reads as one, else the string (which check then refuses).
 func fromCommandLine(s spec, raw string) any {
