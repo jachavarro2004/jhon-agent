@@ -41,10 +41,12 @@ type Detection struct{ Claude, Pi string }
 
 // Check is one dependency: found (OK) or not, a detail to show, and when it
 // is missing either the one command that fixes it (Fix) or, where no one
-// command fits every system, what to do (Advice).
+// command fits every system, what to do (Advice). Note is said under a
+// found one that is off all the same: a tool that needs a newer jhon (T237);
+// it never locks Install.
 type Check struct {
-	Name, Detail, Fix, Advice string
-	OK                        bool
+	Name, Detail, Fix, Advice, Note string
+	OK                              bool
 }
 
 // Step is one install step. WritesSettings marks the step that writes the

@@ -1575,6 +1575,37 @@ test("with integrations.studio off, the default, nothing about video is register
   assert.equal(loadedWith(kid, { PI_CODING_AGENT_DIR: kid, JHON_PI_CHILD: "1" }).commands.has("jhon:video"), false);
 });
 
+// T237 (odd/tasks/studio-integration-v1.md S5): a jhon-studio that needs a newer jhon is off for the
+// run: `jhon start pi` says so once and names its setting in JHON_INTEGRATIONS_OFF, so nothing about
+// video is registered; another setting named there leaves /jhon:video as it was.
+test("a jhon-studio off for this run (JHON_INTEGRATIONS_OFF) registers no /jhon:video though integrations.studio is on", async (t) => {
+  useMemorySettings(t, { "integrations.studio": true });
+  const dir = agentDir();
+  assert.equal(loadedWith(dir, { PI_CODING_AGENT_DIR: dir, JHON_INTEGRATIONS_OFF: "integrations.studio" }).commands.has("jhon:video"), false);
+  assert.equal(loadedWith(dir, { PI_CODING_AGENT_DIR: dir, JHON_INTEGRATIONS_OFF: "integrations.other,integrations.studio" }).commands.has("jhon:video"), false);
+  assert.equal(loadedWith(dir, { PI_CODING_AGENT_DIR: dir, JHON_INTEGRATIONS_OFF: "integrations.other" }).commands.has("jhon:video"), true);
+  assert.equal(loadedWith(dir, { PI_CODING_AGENT_DIR: dir }).commands.has("jhon:video"), true);
+});
+
+// T238: /jhon:video's launch path is the same with Jhon's sandbox on: the shell asks jhon-studio for
+// its skill itself (the sandbox wraps the agent's commands, not the shell's own), and sends it.
+test("with sandbox.mode on, /jhon:video still reads jhon-studio's skill and sends it", async (t) => {
+  useMemorySettings(t, { "integrations.studio": true, "sandbox.mode": "on" });
+  const dir = agentDir();
+  const sent: string[] = [];
+  const { commands } = loadedWith(dir, { PI_CODING_AGENT_DIR: dir }, { sendUserMessage: (text: string) => sent.push(text) });
+  const studio = tempDir("jhon-pi-studio-sandbox-");
+  const skill = join(studio, "SKILL.md");
+  writeFileSync(skill, "---\nname: video\ndescription: Make a video.\n---\n\n# Make a video\n");
+  writeFileSync(join(studio, "jhon-studio"), `#!/bin/sh\n[ "$*" = 'integration --json' ] && echo '{"version":"0.1.0","plugin_dir":"${studio}","skill":"${skill}","requires_jhon":">=0.5.0-rc.1","contract":"jhon.integration/v1"}'\n`);
+  chmodSync(join(studio, "jhon-studio"), 0o755);
+  const saved = process.env.PATH;
+  process.env.PATH = `${studio}:/usr/bin:/bin`;
+  try { await commands.get("jhon:video").handler("readme", { isIdle: () => true, ui: { notify: () => {} } }); }
+  finally { process.env.PATH = saved; }
+  assert.deepEqual(sent, ["# Make a video\n\nARGUMENTS: readme"]);
+});
+
 test("with integrations.studio on, /jhon:video sends jhon-studio's video skill with the arguments, steering while the agent works; a jhon-studio that does not answer is said once", async (t) => {
   useMemorySettings(t, { "integrations.studio": true });
   const dir = agentDir();

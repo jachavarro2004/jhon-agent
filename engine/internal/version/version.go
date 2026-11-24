@@ -7,7 +7,11 @@
 // release CI stamps the tag (0.1.0). Both pass LDFlags's string.
 package version
 
-import "strings"
+import (
+	"strings"
+
+	"golang.org/x/mod/semver"
+)
 
 // Set by LDFlags at build time.
 var (
@@ -47,3 +51,9 @@ func String() string {
 	}
 	return Version + " (" + strings.Join(meta, ", ") + ")"
 }
+
+// IsDev is whether v is a development build's version: 0.0.0-dev unstamped,
+// 0.0.0-dev+<short commit> from jhon sync. `jhon update` installs nothing
+// over one, and a tool's minimum jhon (requires_jhon) is not checked
+// against one (integrations.Judge).
+func IsDev(v string) bool { return semver.Prerelease("v"+v) == "-dev" }

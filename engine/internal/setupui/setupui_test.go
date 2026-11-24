@@ -726,3 +726,29 @@ func TestALongAdviceWrapsAndALongNameKeepsItsGap(t *testing.T) {
 		}
 	}
 }
+
+// T237 (odd/tasks/studio-integration-v1.md S5): a tool that needs a newer
+// jhon is found (✓) with its one note under it, wrapped, never cut, and
+// Install stays open: the core works the same, the tool is off.
+func TestAToolThatNeedsANewerJhonIsFoundWithItsNote(t *testing.T) {
+	const note = "jhon-studio 0.2.0 requires jhon >=0.6.0, and this is jhon 0.5.0-rc.1: jhon-studio is off for this run; update jhon (jhon update), or install a jhon-studio version that supports jhon 0.5.0-rc.1"
+	for _, w := range []int{100, 80} {
+		f := newFake()
+		f.checks = append(artboardChecks(false), Check{Name: "jhon-studio", OK: true, Detail: "~/.local/bin/jhon-studio", Note: note})
+		m := press(setup(t, f, w), "enter", "enter", "enter")
+		s := frame(t, m, w, 24)
+		contains(t, s, "✓ jhon-studio  ~/.local/bin/jhon-studio", "Dependencies   all found")
+		if strings.Contains(s, "…") || strings.Contains(s, "Install locked") {
+			t.Errorf("%d columns: the note is cut or Install is locked:\n%s", w, s)
+		}
+		var joined string
+		for _, ln := range strings.Split(s, "\n") {
+			if _, content, ok := strings.Cut(ln, "│"); ok && strings.HasPrefix(content, "    ") {
+				joined += strings.TrimSpace(content) + " "
+			}
+		}
+		if !strings.Contains(joined, note) {
+			t.Errorf("%d columns: the note's lines %q lack %q", w, joined, note)
+		}
+	}
+}

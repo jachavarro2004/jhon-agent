@@ -488,7 +488,7 @@ Each top directory has a README that says what is in it and how it is used.
 | `dashboard/` | The dashboard page (`index.html`, `app.css`, `app.js`, no build step), reading only the JSON the binary serves. `dashboard/CONTRACT.md` |
 | `test/` | The conformance suite, black-box tests of the binary by area (`guards/`, `ldd/`, `render/`, `release/`, `audit/`); `shell/test/` holds the shell's. `test/README.md` |
 | `tools/` | The rule coverage matrix (`go run ./tools/coverage`), the git hooks, and the bench. `tools/README.md` |
-| `docs/` | Design records and the README's diagrams. |
+| `docs/` | Design records and the README's diagrams; an install carries only `docs/jhon-studio.md`, which the main session's text points to while jhon-studio is on. |
 
 ### How rendering works
 

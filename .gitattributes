@@ -22,8 +22,12 @@
 # validates what it carries; the repository's own evidence (README refs,
 # audit fixtures, matrix evidence) is checked in the checkout. third_party/
 # ships: go.mod replaces bubbletea with it and the release builds from the archive.
+# docs/ ships one page, jhon-studio's: the main session's text points to it
+# while integrations.studio is on (T238). A directory export-ignore would
+# skip the page with it, so each file under docs/ is ignored, the page unset.
 /test export-ignore
-/docs export-ignore
+/docs/** export-ignore
+/docs/jhon-studio.md -export-ignore
 /openspec export-ignore
 /tools export-ignore
 /.codegraph export-ignore

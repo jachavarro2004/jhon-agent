@@ -9,6 +9,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/manifest"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/version"
 )
 
 // remoteProbed is doctor's row for each optional integration its manifest
@@ -39,11 +40,14 @@ func (d doctor) remoteProbed(remote bool) {
 
 // cliIntegrations is a section for each optional cli integration that is on
 // (jhon-studio, odd/tasks/jhon-studio.md S3), after the versions, headed by
-// its display name: its program's own checks, `<doctor.binary> doctor
-// --json` (integrations.AskDoctor), each that passes ok and each that fails
-// a warning with its fix; its program not on PATH, a warning with how to
-// install it. Nothing of it fails Jhon's doctor: it is the owner's opt-in,
-// and Jhon runs without it. One that is off shows nothing.
+// its display name: first how its answer fits this jhon (cliFit, T237),
+// then its program's own checks, `<doctor.binary> doctor --json`
+// (integrations.AskDoctor), each that passes ok and each that fails a
+// warning with its fix; its program not on PATH, a warning with how to
+// install it. One that does not fit this jhon is off for the run: its one
+// note, a warning, and its checks are not asked. Nothing of it fails Jhon's
+// doctor: it is the owner's opt-in, and Jhon runs without it. One that is
+// off shows nothing.
 func (d doctor) cliIntegrations() {
 	o := d.o
 	for _, m := range integrations.Optional() {
@@ -53,6 +57,9 @@ func (d doctor) cliIntegrations() {
 		o.Head(m.Display)
 		if _, err := exec.LookPath(m.Doctor.Binary); err != nil {
 			o.Warn(fmt.Sprintf("%s is not on PATH (%s is on) — %s", m.Doctor.Binary, m.Setting, installAdvice(m)))
+			continue
+		}
+		if !d.cliFit(m) {
 			continue
 		}
 		checks, err := integrations.AskDoctor(m)
@@ -68,6 +75,33 @@ func (d doctor) cliIntegrations() {
 			}
 		}
 	}
+}
+
+// cliFit says how m's answer, `<binary> integration --json`, fits this jhon
+// (integrations.Judge), and false when it does not: a warning with its one
+// note. A minimum it meets is ok; an answer that declares none, and a
+// development build of jhon, which checks none, are notes. A program that
+// gives no answer says nothing here (jhon start notes it; its checks
+// follow).
+func (d doctor) cliFit(m integrations.Manifest) bool {
+	a, err := integrations.AskIntegration(m)
+	if err != nil {
+		return true
+	}
+	fit := integrations.Judge(m, a, version.Version)
+	named := m.Doctor.Binary + " " + a.Version
+	switch {
+	case fit.Off != "":
+		d.o.Warn(fit.Off)
+		return false
+	case fit.NoMinimum:
+		d.o.Note(fmt.Sprintf("%s declares no minimum jhon (no requires_jhon in %s integration --json): taken as compatible", named, m.Doctor.Binary))
+	case fit.Unchecked:
+		d.o.Note(fmt.Sprintf("%s requires jhon %s: not checked on a development build of jhon (%s)", named, a.RequiresJhon, version.Version))
+	default:
+		d.o.OK(fmt.Sprintf("%s requires jhon %s; this is jhon %s", named, a.RequiresJhon, version.Version))
+	}
+	return true
 }
 
 // installAdvice is how m's manifest says to install its binary: its manual

@@ -96,7 +96,7 @@ import { reviewRenderers } from "../lib/ui/review-card.ts";
 import { createWorktree, sameRepoWorktree, worktreeNote } from "../lib/worktree.ts";
 import { completeWord, lddChanges, PROFILE_ACTIONS } from "../lib/ui/jhon-commands.ts";
 import { LDD_SKILL, lddCompletions, lddPrompt } from "../lib/ldd-command.ts";
-import { STUDIO_SETTING, VIDEO_DESCRIPTION, studioSkill, videoPrompt } from "../lib/studio-command.ts";
+import { STUDIO_SETTING, VIDEO_DESCRIPTION, offForSession, studioSkill, videoPrompt } from "../lib/studio-command.ts";
 import { ModelChoice, settingsDefaults, UNCHOSEN_ENDED, UNCHOSEN_HINT, UNCHOSEN_NO, UNCHOSEN_YES, unchosenQuestion } from "../lib/model-choice.ts";
 import { JhonPanel, jhonPanelKey, modelsOffered, registryModels, type ProfilesData, type View } from "../lib/ui/jhon-panel.ts";
 import { compactAt } from "../lib/ui/bars.ts";
@@ -764,7 +764,8 @@ export default function jhon(pi: any): void {
     });
     // odd/tasks/jhon-studio.md S3: jhon-studio's video skill, only while integrations.studio is on
     // (off, nothing about video is registered); its skill is read where jhon-studio says, at each use.
-    if (shellSettings().bool(STUDIO_SETTING)) pi.registerCommand("jhon:video", {
+    // T237: nor while `jhon start pi` kept it off for the session (a jhon-studio that needs a newer jhon).
+    if (shellSettings().bool(STUDIO_SETTING) && !offForSession(STUDIO_SETTING)) pi.registerCommand("jhon:video", {
       description: VIDEO_DESCRIPTION,
       handler: async (args: string, ctx: any) => {
         const skill = await studioSkill();

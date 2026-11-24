@@ -14,6 +14,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/render"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sandbox"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/version"
 )
 
 // `jhon start [<claude args>]` and `jhon start pi [<pi args>]`:
@@ -58,14 +59,19 @@ func runStart(argv []string) (int, error) {
 // plugin folder its program names, `<doctor.binary> integration --json`
 // (integrations.AskIntegration). Claude Code takes --plugin-dir more than
 // once (2.1.323's --help: "repeatable"). One that is on but gives no
-// plugin folder is a note each, and the session starts without it; one that
-// is off is never asked.
+// plugin folder is a note each, and the session starts without it; one
+// whose answer does not fit this jhon (integrations.Judge: a newer minimum,
+// another contract) is off for the session with its one note (T237); one
+// that is off is never asked.
 func launchPlugins() (args, notes []string) {
-	for _, m := range integrations.OffAt("launch") {
-		if m.Kind != "cli" || m.Doctor.Binary == "" || !settings.On(m.Setting) {
-			continue
-		}
+	for _, m := range onCLITools() {
 		a, err := integrations.AskIntegration(m)
+		if err == nil {
+			if fit := integrations.Judge(m, a, version.Version); fit.Off != "" {
+				notes = append(notes, "jhon: "+fit.Off)
+				continue
+			}
+		}
 		if err == nil && !release.IsDir(a.PluginDir) {
 			err = fmt.Errorf("its plugin_dir, %s, is not a folder", a.PluginDir)
 		}
@@ -76,6 +82,47 @@ func launchPlugins() (args, notes []string) {
 		args = append(args, "--plugin-dir", a.PluginDir)
 	}
 	return args, notes
+}
+
+// onCLITools are the cli integrations the launch keeps out while they are
+// off (when_off: launch) that are on: the ones a session's start asks.
+func onCLITools() []integrations.Manifest {
+	var out []integrations.Manifest
+	for _, m := range integrations.OffAt("launch") {
+		if m.Kind == "cli" && m.Doctor.Binary != "" && settings.On(m.Setting) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// integrationsOffEnv names, for pi's shell, the setting of each cli
+// integration that is on but off for this run (T237): the shell registers
+// nothing of one it names (shell/lib/studio-command.ts).
+const integrationsOffEnv = "JHON_INTEGRATIONS_OFF"
+
+// toolsOffEnv is env for pi's session: with integrationsOffEnv naming,
+// comma-separated, the setting of each on cli integration whose answer does
+// not fit this jhon (integrations.Judge), and that one note each; without
+// the variable when none is off, a value the caller held never kept. One
+// that does not answer is not named: /jhon:video says why at its use.
+func toolsOffEnv(env []string) ([]string, []string) {
+	env = slices.DeleteFunc(env, func(kv string) bool { return strings.HasPrefix(kv, integrationsOffEnv+"=") })
+	var off, notes []string
+	for _, m := range onCLITools() {
+		a, err := integrations.AskIntegration(m)
+		if err != nil {
+			continue
+		}
+		if fit := integrations.Judge(m, a, version.Version); fit.Off != "" {
+			off = append(off, m.Setting)
+			notes = append(notes, "jhon: "+fit.Off)
+		}
+	}
+	if len(off) > 0 {
+		env = append(env, integrationsOffEnv+"="+strings.Join(off, ","))
+	}
+	return env, notes
 }
 
 // sandboxProjectEnv is env with sandbox.ProjectEnv naming the project this
@@ -145,7 +192,8 @@ func firstByteEnv(env []string) []string {
 }
 
 // startPi runs pi on ~/.pi/jhon, Jhon's own agent directory, so the owner's
-// ~/.pi/agent never steers it.
+// ~/.pi/agent never steers it. A cli integration that is on but does not
+// fit this jhon is off for the session, with its note (toolsOffEnv).
 func startPi(argv []string) (int, error) {
 	dir := os.Getenv("HOME") + "/.pi/jhon"
 	if !release.IsFile(dir + "/settings.json") {
@@ -154,7 +202,10 @@ func startPi(argv []string) (int, error) {
 		fmt.Fprintf(o.E, "%sjhon:%s %s has no settings.json; run `jhon sync` with pi installed (~/.pi present) first\n", o.R, o.Z, dir)
 		return 1, nil
 	}
-	env := withEnv(firstByteEnv(sandboxProjectEnv(os.Environ())), "PI_CODING_AGENT_DIR="+dir)
+	env, notes := toolsOffEnv(withEnv(firstByteEnv(sandboxProjectEnv(os.Environ())), "PI_CODING_AGENT_DIR="+dir))
+	for _, n := range notes {
+		fmt.Fprintln(os.Stderr, n)
+	}
 	return execProgram(envOr("JHON_PI", "pi"), argv, env)
 }
 

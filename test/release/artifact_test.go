@@ -296,6 +296,11 @@ func TestReleaseArtifactProbes(t *testing.T) {
 // repository's own evidence.
 var devOnly = []string{"test", "design", "docs", "openspec", "tools", ".codegraph", ".github", "staticcheck.conf", "shell/test", "dashboard/test"}
 
+// shippedDocs are the pages of docs/ an install carries all the same (T238,
+// odd/tasks/studio-integration-v1.md S5): jhon-studio's, which the main
+// session's text points to while integrations.studio is on.
+var shippedDocs = []string{"docs/", "docs/jhon-studio.md"}
+
 func TestReleaseArtifactLeavesOutDevelopment(t *testing.T) {
 	parallel(t)
 	src := scratchSource(t)
@@ -309,6 +314,9 @@ func TestReleaseArtifactLeavesOutDevelopment(t *testing.T) {
 		listing := strings.Split(strings.TrimSpace(sh(t, out, "tar", "-tzf", artifact)), "\n")
 		for _, l := range listing {
 			l = strings.TrimPrefix(l, "./")
+			if slices.Contains(shippedDocs, l) {
+				continue
+			}
 			for _, d := range devOnly {
 				if l == d || l == d+"/" || strings.HasPrefix(l, d+"/") {
 					t.Errorf("the artifact ships %s", l)
@@ -319,6 +327,9 @@ func TestReleaseArtifactLeavesOutDevelopment(t *testing.T) {
 		// release's binary is built from the archive.
 		if !slices.Contains(listing, "third_party/bubbletea/go.mod") {
 			t.Error("the artifact lost third_party/bubbletea")
+		}
+		if !slices.Contains(listing, "docs/jhon-studio.md") {
+			t.Error("the artifact lacks docs/jhon-studio.md, which the main session's text points to while jhon-studio is on")
 		}
 		unpacked := temp(t)
 		sh(t, unpacked, "tar", "-xzf", artifact)

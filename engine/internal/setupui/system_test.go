@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	manifests "github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
 )
 
@@ -26,6 +27,9 @@ func scratch(t *testing.T, onPath ...string) (*System, *[]Choices) {
 		return nil
 	})
 	s.Home = dir
+	s.Ask = func(manifests.Manifest) (manifests.Answer, error) {
+		return manifests.Answer{}, errors.New("not asked in this test")
+	}
 	s.LookPath = func(name string) (string, error) {
 		for _, n := range onPath {
 			if n == name {
@@ -445,5 +449,51 @@ func TestSetupOffersStudioOffByDefault(t *testing.T) {
 	}
 	if got := s.Saved(); got.Optional.On("integrations.studio") {
 		t.Errorf("Saved = %+v, want studio off", got)
+	}
+}
+
+// T237 (odd/tasks/studio-integration-v1.md S5): setup asks a chosen tool
+// found on PATH what jhon it needs; one that needs a newer jhon is found
+// with the one note, and nothing locks Install. One that fits, declares
+// nothing, or does not answer has no note (PRESERVE: found is ✓ as before).
+func TestSetupNotesAToolThatNeedsANewerJhon(t *testing.T) {
+	s, _ := scratch(t, "git", "claude", "engram", "codegraph", "jhon-studio")
+	s.Jhon = "0.5.0-rc.1"
+	on := Choices{ClaudeCode: true}
+	on.set("integrations.studio", true)
+	studio := func(answer manifests.Answer, err error) Check {
+		var asked []string
+		s.Ask = func(m manifests.Manifest) (manifests.Answer, error) {
+			asked = append(asked, m.Name)
+			return answer, err
+		}
+		for _, c := range s.Checks(on) {
+			if c.Name == "jhon-studio" {
+				if len(asked) != 1 || asked[0] != "studio" {
+					t.Errorf("asked %q", asked)
+				}
+				return c
+			}
+		}
+		t.Fatal("no jhon-studio check")
+		return Check{}
+	}
+	path := filepath.Join(s.Home, "bin", "jhon-studio")
+	want := Check{Name: "jhon-studio", OK: true, Detail: "~/bin/jhon-studio",
+		Note: "jhon-studio 0.2.0 requires jhon >=0.6.0, and this is jhon 0.5.0-rc.1: jhon-studio is off for this run; update jhon (jhon update), or install a jhon-studio version that supports jhon 0.5.0-rc.1"}
+	if got := studio(manifests.Answer{Version: "0.2.0", PluginDir: path, RequiresJhon: ">=0.6.0"}, nil); got != want {
+		t.Errorf("a newer minimum: %+v", got)
+	}
+	want.Note = ""
+	for name, a := range map[string]manifests.Answer{
+		"fits":             {Version: "0.2.0", RequiresJhon: ">=0.5.0-rc.1", Contract: manifests.Contract},
+		"declares nothing": {Version: "0.1.0"},
+	} {
+		if got := studio(a, nil); got != want {
+			t.Errorf("%s: %+v", name, got)
+		}
+	}
+	if got := studio(manifests.Answer{}, errors.New("jhon-studio exited 2")); got != want {
+		t.Errorf("no answer: %+v", got)
 	}
 }

@@ -120,7 +120,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            the opt-in integrations (jhon-studio among them,
                            off by default), check git, claude, node,
                            engram and codegraph (and jhon-studio when it is
-                           chosen) with the fix for each, then
+                           chosen) with the fix for each (a jhon-studio
+                           that needs a newer jhon, its requires_jhon, is
+                           found with one note and is off; Install stays
+                           open), then
                            write the settings and install the runtimes from the
                            active release; exit 2 without a terminal
   jhon start [<claude args>]
@@ -136,7 +139,14 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            integration --json names (its
                            /jhon-studio:video), and
                            when it does not answer the session starts
-                           without it, with one note
+                           without it, with one note; when the running
+                           jhon is not in its requires_jhon range (older
+                           than its minimum) or its contract is not
+                           jhon.integration/v1, it is off for the session,
+                           with one note naming its version, what it
+                           requires and the fix (update jhon, or install a
+                           jhon-studio version that supports this one); a
+                           development build of jhon satisfies any minimum
                            with -p/--print, where --agent already makes the
                            orchestrator the system prompt, it sets
                            JHON_AGENT_LOADED=jhon-orchestrator and the
@@ -144,7 +154,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
   jhon start pi [<pi args>]
                            start pi on Jhon's agent directory, ~/.pi/jhon (the
                            orchestrator, the agents, and the guards); every
-                           other argument goes to pi
+                           other argument goes to pi; a jhon-studio that is on
+                           but off for the session (as for jhon start) is said
+                           in the same one note and named in
+                           JHON_INTEGRATIONS_OFF, so pi has no /jhon:video
                            both set CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS=60000
                            (Claude Code retries an API that sends nothing after
                            60 s, not minutes) unless it is already set
@@ -215,8 +228,15 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            repository under LDD it runs in has no merge
                            gate in git (jhon hook merge-gate --install);
                            with integrations.studio on, a jhon-studio
-                           section: jhon-studio doctor --json's checks,
-                           each failing one a warning with its fix
+                           section: how jhon-studio integration --json's
+                           requires_jhon fits this jhon (ok; a note when it
+                           declares none, or on a development build, where
+                           it is not checked; a warning with the fix when it
+                           needs a newer jhon or another contract, and then
+                           nothing else of it), then jhon-studio doctor
+                           --json's checks, each failing one a warning with
+                           its fix; its version is shown as "tested with"
+                           the manifest's, never as a pin
   jhon hook merge-gate --install
                            write the merge gate into the local git
                            configuration of the repository under LDD it
@@ -290,7 +310,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            jhon-studio, presentation videos for any
                            project: /jhon-studio:video in Claude Code,
                            /jhon:video in pi, and
-                           jhon doctor's jhon-studio section;
+                           jhon doctor's jhon-studio section; on, the main
+                           session's text says a request for a video means
+                           its skill and points to its page,
+                           ~/.local/share/jhon/current/docs/jhon-studio.md
+                           (the next sync applies the sentence);
                            agents.act_on_announce (on by default) sends
                            a main session's turn back once when its
                            reply announces an action it did not take

@@ -11,8 +11,9 @@
  *     XDG_CACHE_HOME (jhon's caches) on scratch directories;
  *   - JHON_PROFILES on a profile file that does not exist;
  *   - no JHON_SANDBOX_PROJECT (a sandbox pin of the session that runs the
- *     suite) and none of the variables that override a setting
- *     (engine/internal/settings/settings.go, `env:`).
+ *     suite), no JHON_INTEGRATIONS_OFF (the tools `jhon start pi` kept off
+ *     for that session, T237) and none of the variables that override a
+ *     setting (engine/internal/settings/settings.go, `env:`).
  *
  * The parent's values are replaced, not kept: a suite run from a shell whose
  * JHON_SETTINGS names the owner's file is isolated all the same. A test that
@@ -58,4 +59,5 @@ Object.assign(process.env, {
 	JHON_PROFILES: join(ISOLATED_ROOT, "profiles.json"),
 });
 delete process.env.JHON_SANDBOX_PROJECT;
+delete process.env.JHON_INTEGRATIONS_OFF;
 for (const name of SETTING_OVERRIDES) delete process.env[name];
