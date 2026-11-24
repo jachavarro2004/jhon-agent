@@ -125,7 +125,15 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            found with one note and is off; Install stays
                            open), then
                            write the settings and install the runtimes from the
-                           active release; exit 2 without a terminal
+                           active release; with jhon-studio chosen, setup
+                           installs jhon-studio from its newest signed
+                           release that supports this jhon (its Install
+                           step: sha256 and cosign checked, unpacked into
+                           ~/.local/share/jhon-studio/<version>, linked
+                           from ~/.local/bin/jhon-studio; a missing one
+                           locks nothing); a development clone at
+                           ~/.local/share/jhon-studio is left alone; exit 2
+                           without a terminal
   jhon start [<claude args>]
                            start a Jhon session: claude --agent jhon-orchestrator
                            with the release's plugin, which carries the
@@ -193,10 +201,22 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            release yet (--json status no-release), 1 failed;
                            a development build (0.0.0-dev, from jhon sync)
                            installs nothing and says to run jhon sync: exit 2,
-                           0 with --check or --json ("dev": true)
+                           0 with --check or --json ("dev": true); after
+                           jhon, it then updates jhon-studio, when it is
+                           on, to its newest signed release that supports
+                           the jhon that runs (a pre-release only for a
+                           pre-release or development jhon), verified the
+                           same way, the previous version kept; --check
+                           only says whether one is out, --json lists it
+                           under tools; a development clone is left alone;
+                           a jhon-studio that fails exits 1, nothing of it
+                           changed
   jhon update --rollback   re-activate the previous release kept on disk; after
                            an update or a rollback, a running dashboard proven
                            Jhon's from another release is restarted on its port
+                           and it also links jhon-studio's previous version
+                           again when it is on (with no older jhon kept,
+                           jhon-studio alone)
   jhon doctor [--remote]   every health check in one command; no network call
                            unless --remote, which compares origin and mirror
                            with HEAD through ls-remote and asks context7's
@@ -228,7 +248,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            repository under LDD it runs in has no merge
                            gate in git (jhon hook merge-gate --install);
                            with integrations.studio on, a jhon-studio
-                           section: how jhon-studio integration --json's
+                           section: which jhon-studio release is installed
+                           (or that it is a development clone), and with
+                           --remote also looks for a newer jhon-studio
+                           release that supports this jhon; how
+                           jhon-studio integration --json's
                            requires_jhon fits this jhon (ok; a note when it
                            declares none, or on a development build, where
                            it is not checked; a warning with the fix when it

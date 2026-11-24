@@ -30,7 +30,12 @@ const (
 	IdentityPattern = `^https://github\.com/jachavarro2004/jhon-agent/\.github/workflows/release\.yml@refs/tags/v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-rc\.(0|[1-9]\d*))?$`
 )
 
-var identity = regexp.MustCompile(IdentityPattern)
+// Signer is who must have signed a release: the OIDC issuer, and a pattern
+// of the certificate's identity, anchored at both ends.
+type Signer struct{ Issuer, Identity string }
+
+// jhonSigner is jhon's own releases' signer.
+var jhonSigner = Signer{Issuer, IdentityPattern}
 
 // Trust is what a signature is checked against: the trusted material (the
 // certificate authorities, transparency logs and timestamp authorities)
@@ -104,6 +109,16 @@ func checkSum(artifact, sum string) error {
 // a bundle with no RFC 3161 timestamp verifies on its Rekor time; no RFC 3161
 // timestamp is required (T6's log, L19, said one was).
 func Verify(artifact, bundlePath string, t Trust) (string, error) {
+	return VerifyAs(artifact, bundlePath, t, jhonSigner)
+}
+
+// VerifyAs is Verify against signer s: a tool's releases are signed by its
+// own repository's release workflow (T242, tool.go).
+func VerifyAs(artifact, bundlePath string, t Trust, s Signer) (string, error) {
+	identity, err := regexp.Compile(s.Identity)
+	if err != nil {
+		return "", err
+	}
 	name := filepath.Base(artifact)
 	b, err := bundle.LoadJSONFromPath(bundlePath)
 	if err != nil {
@@ -117,7 +132,7 @@ func Verify(artifact, bundlePath string, t Trust) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	id, err := verify.NewShortCertificateIdentity(Issuer, "", "", IdentityPattern)
+	id, err := verify.NewShortCertificateIdentity(s.Issuer, "", "", s.Identity)
 	if err != nil {
 		return "", err
 	}
@@ -127,7 +142,7 @@ func Verify(artifact, bundlePath string, t Trust) (string, error) {
 	}
 	defer f.Close()
 	if _, err := v.Verify(b, verify.NewPolicy(verify.WithArtifact(f), verify.WithCertificateIdentity(id))); err != nil {
-		if san, iss, ok := signer(b); ok && (iss != Issuer || !identity.MatchString(san)) {
+		if san, iss, ok := signer(b); ok && (iss != s.Issuer || !identity.MatchString(san)) {
 			return "", fmt.Errorf("%s is signed by %s (issuer %s), not by the release workflow", name, san, iss)
 		}
 		return "", fmt.Errorf("the signature of %s does not verify: %v", name, err)

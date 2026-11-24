@@ -59,7 +59,7 @@ func runDoctor(argv []string) (int, error) {
 		}
 		remote = true
 	}
-	d := doctor{r, o, src}
+	d := doctor{r: r, o: o, src: src, remote: remote}
 	o.Head("contracts")
 	d.rendered()
 	d.discovery()
@@ -185,6 +185,8 @@ type doctor struct {
 	o *release.Out
 	// src is the tree judged: the source checkout, or the installed release.
 	src string
+	// remote is --remote: the network may be asked.
+	remote bool
 }
 
 // installedRelease is the release the runtime runs from when it is one under

@@ -386,7 +386,7 @@ after a backup. The main groups:
 
 | Integration | What it gives | How |
 |---|---|---|
-| [jhon-studio](https://github.com/jachavarro2004/jhon-studio) | presentation videos for any project: `/jhon-studio:video` in Claude Code, `/jhon:video` in pi | opt-in: `jhon setup`, or `jhon settings set integrations.studio true`; see [docs/jhon-studio.md](docs/jhon-studio.md) |
+| [jhon-studio](https://github.com/jachavarro2004/jhon-studio) | presentation videos for any project: `/jhon-studio:video` in Claude Code, `/jhon:video` in pi | opt-in: `jhon setup`, or `jhon settings set integrations.studio true` and `jhon update`; either installs its newest signed release that supports this jhon; see [docs/jhon-studio.md](docs/jhon-studio.md) |
 
 **Profiles** choose each agent's model per runtime (`jhon profile list`,
 `jhon profile use <name>`); `default` is `prose/agents.yaml`. A pi model is

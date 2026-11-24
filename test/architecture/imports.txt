@@ -170,6 +170,7 @@ internal/sh -> internal/lazyre
 internal/telemetry -> internal/project
 internal/telemetry -> internal/rename
 internal/toml -> internal/js
+internal/update -> internal/integrations
 internal/update -> internal/release
 internal/update -> internal/version
 internal/vcs -> internal/contract

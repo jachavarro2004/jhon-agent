@@ -422,7 +422,9 @@ func TestSetupOffersStudioOffByDefault(t *testing.T) {
 	if got := strings.Join(names, " "); got != "git claude engram codegraph jhon-studio" {
 		t.Errorf("checks with studio chosen: %s", got)
 	}
-	const manual = "git clone https://github.com/jachavarro2004/jhon-studio ~/.local/share/jhon-studio && ln -s ~/.local/share/jhon-studio/bin/jhon-studio ~/.local/bin/jhon-studio"
+	// Without a tool installer (this test's System), the manifest's manual
+	// way is the advice: the signed release, never a git clone (T242).
+	const manual = "jhon setup and jhon update install its newest signed release that supports this jhon; by hand, see https://github.com/jachavarro2004/jhon-studio#install"
 	if studio.OK || studio.Detail != "not on PATH" || studio.Fix != "" || studio.Advice != manual {
 		t.Errorf("jhon-studio = %+v", studio)
 	}
@@ -495,5 +497,73 @@ func TestSetupNotesAToolThatNeedsANewerJhon(t *testing.T) {
 	}
 	if got := studio(manifests.Answer{}, errors.New("jhon-studio exited 2")); got != want {
 		t.Errorf("no answer: %+v", got)
+	}
+}
+
+// T242 (odd/tasks/studio-integration-v1.md S5): with a tool installer,
+// setup installs a chosen jhon-studio from its signed release: a missing
+// one locks nothing, says where its release comes from, and has an Install
+// step of its own after the runtimes', which calls the installer with its
+// manifest; an error there is the step's.
+func TestSetupInstallsAChosenToolFromItsRelease(t *testing.T) {
+	s, _ := scratch(t, "git", "claude", "engram", "codegraph")
+	s.Jhon = "0.5.0-rc.1"
+	var asked []string
+	s.InstallTool = func(m manifests.Manifest) error {
+		asked = append(asked, m.Name)
+		return nil
+	}
+	on := Choices{ClaudeCode: true}
+	on.set("integrations.studio", true)
+	var studio Check
+	for _, c := range s.Checks(on) {
+		if c.Name == "jhon-studio" {
+			studio = c
+		}
+	}
+	want := Check{Name: "jhon-studio", OK: true, Detail: "not on PATH yet: Install adds its newest signed release from github.com/jachavarro2004/jhon-studio"}
+	if studio != want {
+		t.Errorf("jhon-studio check = %+v", studio)
+	}
+	steps := s.Steps(on)
+	if len(steps) != 3 || steps[2] != (Step{Name: "Install jhon-studio", Detail: "its newest signed release that supports jhon 0.5.0-rc.1"}) {
+		t.Fatalf("steps = %+v", steps)
+	}
+	if err := s.RunStep(on, 2); err != nil || len(asked) != 1 || asked[0] != "studio" {
+		t.Errorf("RunStep(2) = %v, asked %q", err, asked)
+	}
+	s.InstallTool = func(manifests.Manifest) error {
+		return errors.New("checksum mismatch for jhon-studio-0.2.0.tar.gz; nothing was changed")
+	}
+	if err := s.RunStep(on, 2); err == nil || err.Error() != "checksum mismatch for jhon-studio-0.2.0.tar.gz; nothing was changed" {
+		t.Errorf("a failing install: %v", err)
+	}
+	if err := s.RunStep(on, 3); err == nil || err.Error() != "no install step 3" {
+		t.Errorf("RunStep(3) = %v", err)
+	}
+}
+
+// PRESERVE: with studio off, or no installer, setup's steps are the two it
+// had, and a chosen jhon-studio on PATH is found as before.
+func TestSetupStepsAreUnchangedWithoutAToolToInstall(t *testing.T) {
+	s, _ := scratch(t, "git", "claude", "engram", "codegraph", "jhon-studio")
+	s.InstallTool = func(manifests.Manifest) error { t.Error("installed a tool"); return nil }
+	off := Choices{ClaudeCode: true}
+	if steps := s.Steps(off); len(steps) != 2 || steps[1].Name != "Install runtimes" {
+		t.Errorf("studio off: %+v", s.Steps(off))
+	}
+	if err := s.RunStep(off, 2); err == nil || err.Error() != "no install step 2" {
+		t.Errorf("RunStep(2) with studio off = %v", err)
+	}
+	on := off
+	on.set("integrations.studio", true)
+	s.InstallTool = nil
+	if steps := s.Steps(on); len(steps) != 2 {
+		t.Errorf("no installer: %+v", steps)
+	}
+	for _, c := range s.Checks(on) {
+		if c.Name == "jhon-studio" && (!c.OK || c.Detail != "~"+string(filepath.Separator)+filepath.Join("bin", "jhon-studio")) {
+			t.Errorf("jhon-studio on PATH = %+v", c)
+		}
 	}
 }

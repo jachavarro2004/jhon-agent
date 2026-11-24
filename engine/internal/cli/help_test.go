@@ -246,3 +246,25 @@ func TestSettingsHelpNamesTheShellKeys(t *testing.T) {
 		t.Errorf("jhon settings --help does not say %q:\n%s", want, out)
 	}
 }
+
+// T242 (odd/tasks/studio-integration-v1.md S5): setup, update and doctor's
+// own help say that jhon-studio is installed from its signed release, the
+// newest that supports this jhon, rolled back with jhon, a development
+// clone left alone, and doctor's --remote looks for a newer one. Words are
+// compared across the help's line breaks.
+func TestHelpSaysToolsInstallFromTheirSignedReleases(t *testing.T) {
+	for cmd, wants := range map[string][]string{
+		"setup": {"installs jhon-studio from its newest signed release that supports this jhon", "a development clone at ~/.local/share/jhon-studio is left alone"},
+		"update": {"then updates jhon-studio, when it is on, to its newest signed release that supports the jhon that runs",
+			"--json lists it under tools", "it also links jhon-studio's previous version again"},
+		"doctor": {"which jhon-studio release is installed (or that it is a development clone)", "--remote also looks for a newer jhon-studio release that supports this jhon"},
+	} {
+		_, out := capture(t, []string{cmd, "--help"})
+		flat := strings.Join(strings.Fields(out), " ")
+		for _, want := range wants {
+			if !strings.Contains(flat, want) {
+				t.Errorf("jhon %s --help lacks %q:\n%s", cmd, want, out)
+			}
+		}
+	}
+}

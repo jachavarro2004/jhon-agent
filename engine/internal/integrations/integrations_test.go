@@ -73,7 +73,9 @@ func TestEmbeddedManifests(t *testing.T) {
 
 // odd/tasks/jhon-studio.md S3: jhon-studio is an opt-in cli integration, off
 // by default, which the launch keeps out while it is off; it grants no
-// capability (a cli mounts no tools) and setup offers only its manual install.
+// capability (a cli mounts no tools) and setup offers only its manual install,
+// which is its signed release, never a git clone (T242); its doctor.source
+// names the repository jhon installs its releases from.
 func TestStudioIsAnOptInCLI(t *testing.T) {
 	s, ok := Get("studio")
 	if !ok || s.Kind != "cli" || s.Display != "jhon-studio" || s.Setting != "integrations.studio" || s.Default || s.Required ||
@@ -86,9 +88,19 @@ func TestStudioIsAnOptInCLI(t *testing.T) {
 	if s.Setup.Summary != "presentation videos for any project" || s.Setup.SummaryNarrow == "" || s.Setup.Detail == "" {
 		t.Errorf("studio's setup text: %+v", s.Setup)
 	}
-	const manual = "git clone https://github.com/jachavarro2004/jhon-studio ~/.local/share/jhon-studio && ln -s ~/.local/share/jhon-studio/bin/jhon-studio ~/.local/bin/jhon-studio"
+	const manual = "jhon setup and jhon update install its newest signed release that supports this jhon; by hand, see https://github.com/jachavarro2004/jhon-studio#install"
 	if vias := s.InstallVias(); !slices.Equal(vias, []string{"manual"}) || s.InstallCommand("manual", s.Doctor.Version) != manual {
 		t.Errorf("studio's install: %v %q", vias, s.InstallCommand("manual", s.Doctor.Version))
+	}
+	if owner, repo, ok := s.ReleaseRepo(); !ok || owner != "jachavarro2004" || repo != "jhon-studio" {
+		t.Errorf("studio's ReleaseRepo = %q, %q, %v", owner, repo, ok)
+	}
+	// No other manifest is released this way: Engram's source is a module
+	// path, CodeGraph's an npm package, and neither is a cli.
+	for _, m := range All() {
+		if _, _, ok := m.ReleaseRepo(); ok && m.Name != "studio" {
+			t.Errorf("%s is released from GitHub as jhon reads it", m.Name)
+		}
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 func studioDoctor(t *testing.T, text, report string) (string, int) {
 	t.Helper()
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 	path := filepath.Join(dir, "settings.toml")
 	must(t, os.WriteFile(path, []byte(text), 0o600))
 	t.Setenv("JHON_SETTINGS", path)
@@ -99,6 +100,7 @@ func TestDoctorSaysAnOnCLIIntegrationThatExits1Silently(t *testing.T) {
 	path := filepath.Join(dir, "settings.toml")
 	must(t, os.WriteFile(path, []byte("schema = 1\n\n[integrations]\nstudio = true\n"), 0o600))
 	t.Setenv("JHON_SETTINGS", path)
+	t.Setenv("HOME", dir)
 	must(t, os.WriteFile(filepath.Join(dir, "jhon-studio"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
 	t.Setenv("PATH", dir+":/usr/bin:/bin")
 	var b strings.Builder
@@ -175,6 +177,7 @@ func studioAnswering(t *testing.T, answer string) (string, string, int) {
 	path := filepath.Join(dir, "settings.toml")
 	must(t, os.WriteFile(path, []byte("schema = 1\n\n[integrations]\nstudio = true\n"), 0o600))
 	t.Setenv("JHON_SETTINGS", path)
+	t.Setenv("HOME", dir)
 	log := filepath.Join(dir, "calls")
 	must(t, os.WriteFile(filepath.Join(dir, "jhon-studio"), []byte("#!/bin/sh\necho \"$*\" >> '"+log+"'\ncase \"$*\" in\n"+
 		"  'integration --json') cat <<'EOF'\n"+answer+"\nEOF\n ;;\n"+
