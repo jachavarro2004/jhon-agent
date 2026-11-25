@@ -246,17 +246,24 @@ telemetry event. Everything inside the sandbox sees `JHON_IN_SANDBOX=1`:
 runs inside and that the status outside it gives the real state (`inside` and
 `can_run` true in `--json`), instead of reporting bubblewrap's failure. Each
 command runs in a PID namespace of its own, so when it ends every process it
-started ends too, one it detached (`setsid`, `nohup`, a double fork)
-included. While a sandboxed command that can write a project runs, a line of
-that project that would run outside the sandbox (git, gh, docker, a deploy
-tool) waits up to 3 seconds and is then refused with a note: such a command
-could otherwise change what the outside line reads (the repository's git
-configuration) while it reads it. While an outside git or gh line runs, a
-sandboxed command that can write its project waits and is refused the same
-way; a deploy tool or another outside line, which runs the project's code by
-design, holds no sandboxed command. A long-running
-sandboxed command (a dev server in the background) therefore holds the
-project's `git push` until it ends. With
+started inside the sandbox ends too, one it detached (`setsid`, `nohup`, a
+double fork) included. While a sandboxed command that can write a project
+runs, a line of that project that would run outside the sandbox (git, gh,
+docker, a deploy tool) waits up to 3 seconds and is then refused with a note:
+such a command could otherwise change what the outside line reads (the
+repository's git configuration) while it reads it; and while such a line
+runs, a sandboxed command that can write its project waits and is refused the
+same way. A line that puts anything in the background (`&`, a coprocess)
+never runs outside the sandbox, as it would outlive that check. A
+long-running sandboxed command (a dev server in the background) therefore
+holds the project's `git push` until it ends, and a long deploy holds the
+project's sandboxed commands. Docker's and podman's sockets are hidden inside
+the sandbox: through one a container can write anywhere you can and outlive
+the command. `jhon settings set sandbox.docker true` shows them again, and
+`jhon sandbox status` and `jhon doctor` then name it as an escape you
+accepted. herdr's sockets (its API runs commands in its panes), the system
+bus, sshd's local socket and the pi harness's socket folder are hidden too.
+With
 `sandbox.mode = "on"` set and a sandbox that cannot run (no bubblewrap,
 user namespaces off) every command is refused with the fix and `jhon
 doctor` fails; `sandbox.mode = "off"` turns it off. Off, nothing guards a shell command's

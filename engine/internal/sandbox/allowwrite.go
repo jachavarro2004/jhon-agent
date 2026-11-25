@@ -210,12 +210,8 @@ func (in Input) keptPaths() (hidden, own []string) {
 		}
 	}
 	hidden = append(hidden, snapshots...)
-	hidden = append(hidden, in.under(".snapshots"), in.Env["XDG_RUNTIME_DIR"], in.RuntimeDir, in.under(".Xauthority"), in.Env["SSH_AUTH_SOCK"])
-	hidden = append(hidden, in.SocketFolders...)
-	if path, ok := strings.CutPrefix(in.Env["DBUS_SESSION_BUS_ADDRESS"], "unix:path="); ok {
-		path, _, _ = strings.Cut(path, ",")
-		hidden = append(hidden, path)
-	}
+	hidden = append(hidden, in.under(".snapshots"), in.Env["XDG_RUNTIME_DIR"], in.RuntimeDir, in.Registry)
+	hidden = append(hidden, in.socketPaths()...)
 	own = slices.Concat(in.Protected, []string{filepath.Join(config, "jhon"), filepath.Join(in.xdg("XDG_DATA_HOME", ".local/share"), "jhon")})
 	for _, rel := range slices.Concat(framework, runtimeHomes) {
 		own = append(own, in.under(rel))

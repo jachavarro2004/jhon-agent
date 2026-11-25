@@ -19,41 +19,32 @@ import (
 // a line that runs outside the sandbox reads what a sandboxed command may
 // write (the repository's git configuration, a program in the project), so
 // it does not run while a sandboxed command that can write its project
-// runs; and while an outside line that runs git (or gh, which runs git in
-// the project) runs, no such sandboxed command starts (L35, "Solo durante
-// git de afuera": a deploy tool or another outside line, which runs the
-// project's code by design, holds no sandboxed command). Each run of
-// `jhon sandbox run` records itself in a folder of Jhon's state (read-only
-// inside the sandbox) before it starts and removes its record when it ends;
-// a record whose process is gone is stale, ignored and removed. Checking
-// and recording happen under one lock, so two runs never both pass.
+// runs, and while it runs (git, gh, docker or a deploy tool alike, L37) no
+// such sandboxed command starts. Each run of `jhon sandbox run` records
+// itself in a folder of Jhon's state before it starts and removes its
+// record when it ends; the sandbox hides that folder. A record whose
+// process is gone is stale, ignored and removed. Checking and recording
+// happen under one lock, taken without blocking: a run never waits for the
+// lock past the registry's wait (L36 A), so two runs never both pass and
+// none waits on another's lock for long.
 
-// Run kinds: a sandboxed run, a line that runs outside the sandbox and runs
-// git or gh, and any other line that runs outside it.
+// Run kinds: a sandboxed run, and a line that runs outside the sandbox.
 const (
-	KindSandboxed  = "sandboxed"
-	KindOutsideGit = "outside-git"
-	KindOutside    = "outside"
+	KindSandboxed = "sandboxed"
+	KindOutside   = "outside"
 )
 
 // holds is whether a live run of kind other keeps a run of kind self from
-// starting: every outside line waits for a sandboxed run, a sandboxed run
-// waits only for an outside git line, and a record of no known kind (one
-// that cannot be read) keeps every run waiting.
-func holds(other, self string) bool {
-	switch other {
-	case KindSandboxed:
-		return self != KindSandboxed
-	case KindOutsideGit:
-		return self == KindSandboxed
-	case KindOutside:
-		return false
-	}
-	return true
-}
+// starting: one of the other kind, or a record of no known kind (one that
+// cannot be read), which keeps every run waiting.
+func holds(other, self string) bool { return other != self }
+
+// ErrLocked is Enter's error when the registry's lock stayed held for the
+// whole wait.
+var ErrLocked = errors.New("the registry's lock is held")
 
 // RegistryWait is how long a run waits for a run that holds it (holds) and
-// shares its areas to end before it is refused.
+// shares its areas, or for the registry's lock, before it is refused.
 const RegistryWait = 3 * time.Second
 
 // RunRecord is one running run: its process (jhon's, which bubblewrap or
@@ -83,7 +74,8 @@ func (e ErrBusy) Error() string { return "run " + strconv.Itoa(e.Run.PID) + " is
 // record. It fails closed: a folder, lock or record that cannot be read or
 // written is an error, never a pass, and a record that cannot be read
 // counts as a live run of any kind sharing every area while its process
-// lives. err is ErrBusy for a run that still runs.
+// lives. err is ErrBusy for a run that still runs, ErrLocked for a lock
+// held past the wait.
 func (r Registry) Enter(kind string, areas []string, wait time.Duration) (leave func(), err error) {
 	if r.Dir == "" || !filepath.IsAbs(r.Dir) {
 		return nil, errors.New("no folder for the registry of running runs")
@@ -95,6 +87,13 @@ func (r Registry) Enter(kind string, areas []string, wait time.Duration) (leave 
 	deadline := time.Now().Add(wait)
 	for {
 		busy, err := r.tryEnter(self)
+		if errors.Is(err, ErrLocked) {
+			if !time.Now().Before(deadline) {
+				return nil, ErrLocked
+			}
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -115,14 +114,17 @@ func (r Registry) file(pid int) string {
 }
 
 // tryEnter records self unless a live run that holds it shares one of its
-// areas, which it gives; under the registry's lock.
+// areas, which it gives; under the registry's lock, which it does not wait
+// for: ErrLocked when another process holds it.
 func (r Registry) tryEnter(self RunRecord) (*RunRecord, error) {
 	lock, err := os.OpenFile(filepath.Join(r.Dir, ".lock"), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err
 	}
 	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); errors.Is(err, syscall.EWOULDBLOCK) {
+		return nil, ErrLocked
+	} else if err != nil {
 		return nil, err
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)

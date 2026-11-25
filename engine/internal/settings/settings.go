@@ -192,6 +192,11 @@ func schema() []spec {
 		// cdk, sam, terraform), which a line runs outside the sandbox as it
 		// runs docker (sandbox.ProfileAt); empty by default.
 		{key: "sandbox.deploy_tools", kind: kNames, def: []string{}},
+		// T249 L37: whether a sandboxed command may reach the container
+		// sockets (rootless docker's and podman's under the runtime dir), off
+		// by default: through one a container can write anywhere the owner
+		// can, so status and doctor name it as an escape the owner accepted.
+		{key: "sandbox.docker", kind: kBool, def: false},
 		{key: "pi.profile", kind: kName, def: "default"},
 		{key: "shell.appearance.animations", kind: kEnum, def: "full", enum: []string{"full", "off"}},
 		{key: "shell.appearance.ascii", kind: kBool, def: false, env: "JHON_SHELL_ASCII", fromEnv: envBoolIs1},

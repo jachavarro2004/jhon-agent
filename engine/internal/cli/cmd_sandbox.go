@@ -158,6 +158,11 @@ func sandboxRun(argv []string) (int, error) {
 		return sandboxUsageError("run takes a program after --")
 	}
 	program := argv[i+1:]
+	// The sandbox hides the registry's folder where it exists when the
+	// sandbox is read (sandbox.Input.Registry): the first run, which makes
+	// it, reads the sandbox again once it is there.
+	_, err := os.Stat(runRegistry().Dir)
+	registryThere := err == nil
 	if profile == sandbox.Unsandboxed {
 		// git runs with the repository's hooks, ssh command, helpers,
 		// transports and every other key of its own that runs a command
@@ -165,15 +170,11 @@ func sandboxRun(argv []string) (int, error) {
 		// with a PATH no sandboxed command may change (sandbox.OutsidePath,
 		// T249 A1): what this process runs from here on (git) too.
 		// It runs only while no sandboxed command that can write what it
-		// reads runs, and, for a line that runs git or gh, none starts until
-		// it ends (sandbox.Registry, L34, L35).
+		// reads runs, and none starts until it ends (sandbox.Registry, L34,
+		// L37).
 		// A line that ends up in the work profile keeps its PATH.
 		if in := sandboxInput(pinned); sandbox.RunsOutside(sandbox.ThisHost(), in, program) {
-			kind := sandbox.KindOutside
-			if sandbox.RunsGit(program[2]) {
-				kind = sandbox.KindOutsideGit
-			}
-			leave, refused := enterRegistry(kind, sandbox.OutsideAreas(in, program[2]))
+			leave, refused := enterRegistry(sandbox.KindOutside, sandbox.OutsideAreas(in, program[2]))
 			if refused != "" {
 				fmt.Fprintln(os.Stderr, refused)
 				return sandboxRefused, nil
@@ -209,12 +210,15 @@ func sandboxRun(argv []string) (int, error) {
 		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
 		return sandboxRefused, nil
 	}
-	// It runs only while no line that runs git or gh outside the sandbox
-	// and reads what it can write runs (sandbox.Registry, L34, L35).
+	// It runs only while no line that runs outside the sandbox and reads
+	// what it can write runs (sandbox.Registry, L34, L37).
 	leave, refused := enterRegistry(sandbox.KindSandboxed, sandbox.WritableAreas(in))
 	if refused != "" {
 		fmt.Fprintln(os.Stderr, refused)
 		return sandboxRefused, nil
+	}
+	if !registryThere {
+		in = sandboxInput(pinned)
 	}
 	// What runs here runs for an agent (T219 S9): git's merge gate judges it.
 	env := append(append(os.Environ(), sandbox.UVToolEnv(in)...), hook.AgentVariable+"=1")
@@ -233,10 +237,10 @@ func runRegistry() sandbox.Registry {
 
 // enterRegistry records this run of kind with areas (sandbox.Registry.Enter,
 // waiting up to sandbox.RegistryWait), and gives the function that removes
-// the record; refused is the note when it may not run: a run that holds it
-// and shares its areas still runs (a sandboxed run for an outside line, an
-// outside git line for a sandboxed run, L35), or the registry cannot be
-// read or written, which refuses it too (fail closed).
+// the record; refused is the note when it may not run: a run of the other
+// kind that shares its areas still runs (L34, L37), or the registry cannot
+// be read or written or its lock stays held for the wait (L36 A), which
+// refuses it too (fail closed).
 func enterRegistry(kind string, areas []string) (leave func(), refused string) {
 	r := runRegistry()
 	leave, err := r.Enter(kind, areas, sandbox.RegistryWait)
@@ -244,7 +248,9 @@ func enterRegistry(kind string, areas []string) (leave func(), refused string) {
 	switch {
 	case err == nil:
 		return leave, ""
-	case errors.As(err, &busy) && kind != sandbox.KindSandboxed:
+	case errors.Is(err, sandbox.ErrLocked):
+		return nil, "jhon sandbox: the record of running commands (" + r.Dir + ") is locked by another process past " + sandbox.RegistryWait.String() + ", so whether a sandboxed command could change what this runs is unknown, and nothing was run; fix: run it again; if it stays locked, find the process that holds " + filepath.Join(r.Dir, ".lock") + " (fuser " + filepath.Join(r.Dir, ".lock") + ") and end it"
+	case errors.As(err, &busy) && kind == sandbox.KindOutside:
 		return nil, "jhon sandbox: a sandboxed command that can write what this line reads is still running (pid " + strconv.Itoa(busy.Run.PID) + "), and a line that runs outside the sandbox does not run while one does: that command could change what the line reads (the repository's git configuration, a program it runs), so nothing was run; fix: wait for that command to end, or stop it, then run the line again"
 	case errors.As(err, &busy):
 		return nil, "jhon sandbox: a line that runs outside the sandbox and reads what this command can write is still running (pid " + strconv.Itoa(busy.Run.PID) + "), and no sandboxed command that can write what it reads starts while it runs, so nothing was run; fix: wait for that line to end, then run the command again"
@@ -362,6 +368,8 @@ func sandboxInputAt(dir, pinned string) sandbox.Input {
 		in.Protected = append(in.Protected, source)
 	}
 	in.Telemetry = telemetry.Dir()
+	in.Registry = runRegistry().Dir
+	in.Docker = settings.On("sandbox.docker")
 	return in
 }
 
@@ -428,6 +436,9 @@ type sandboxState struct {
 	// sandbox can run, on one line with the fix: Jhon's own files where a
 	// sandboxed command could change them (ownFilesProblem); "" when none.
 	RunRefused string `json:"run_refused,omitempty"`
+	// AcceptedEscapes are the ways out of the sandbox the owner's settings
+	// open on purpose (L37): the docker socket with sandbox.docker on.
+	AcceptedEscapes []string `json:"accepted_escapes,omitempty"`
 }
 
 // claudeBashRules are the Bash deny and ask rules in Claude Code's settings
@@ -552,6 +563,9 @@ func sandboxNow(pinned string) sandboxState {
 	in := sandboxInput(pinned)
 	s.MissingAllowWrite = sandbox.MissingAllowWrite(in)
 	s.UnusedWriteAreas = sandbox.UnusedWriteAreas(in)
+	if in.Docker {
+		s.AcceptedEscapes = append(s.AcceptedEscapes, sandbox.DockerEscape)
+	}
 	if p := ownFilesProblem(in); p != nil {
 		s.RunRefused = p.Line()
 	}
@@ -616,6 +630,9 @@ func sandboxStatus(asJSON bool, pinned string) (int, error) {
 	if s.RunRefused != "" {
 		where += "; " + runRefusedLine + s.RunRefused
 	}
+	for _, e := range s.AcceptedEscapes {
+		where += "; " + e
+	}
 	fmt.Println(s.line() + where)
 	return 0, nil
 }
@@ -664,6 +681,9 @@ func (d doctor) sandbox() {
 	}
 	for _, u := range s.UnusedWriteAreas {
 		d.o.Warn(u.Line())
+	}
+	for _, e := range s.AcceptedEscapes {
+		d.o.Warn(e)
 	}
 	if s.RunRefused != "" {
 		if s.Mode == "on" {

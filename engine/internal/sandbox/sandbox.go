@@ -62,7 +62,8 @@ type Input struct {
 	RuntimeDir string
 	// SocketFolders are the folders outside the runtime dir where the
 	// terminal's and the desktop's programs keep their sockets, hidden when
-	// they exist: Current gives tmux's, X11's and ICE's under /tmp.
+	// they exist: Current gives tmux's, X11's, ICE's and the pi harness's
+	// (gentle-pi) under /tmp.
 	SocketFolders []string
 	// AllowWrite is sandbox.allow_write, each folder absolute.
 	AllowWrite []string
@@ -74,6 +75,13 @@ type Input struct {
 	Protected []string
 	// Telemetry is the telemetry folder, writable inside the read-only share.
 	Telemetry string
+	// Registry is the folder of the registry of running runs (Registry):
+	// hidden inside the sandbox, where no command has a reason to see it or
+	// to hold its lock (L36 A).
+	Registry string
+	// Docker is sandbox.docker: the container sockets (containerSockets)
+	// are shown inside the sandbox, an escape the owner accepted (L37).
+	Docker bool
 	// Stat is what path is on disk, through symlinks: its real path and
 	// whether it is a directory; ok is false when it does not exist.
 	Stat func(path string) (real string, dir, ok bool)
@@ -124,9 +132,28 @@ var runtimeHomes = []string{".claude", ".pi", ".agents"}
 var snapshots = []string{"/.snapshots", "/home/.snapshots", "/timeshift", "/run/timeshift"}
 
 // containerSockets are the sockets under $XDG_RUNTIME_DIR shown in the
-// private one: docker's and podman's (docker is a non-goal of the design,
-// with a guard of its own).
+// private one with sandbox.docker on (Input.Docker, L37): docker's and
+// podman's. Through one a container can write anywhere the owner can, and
+// it outlives the run, so by default they are hidden with the rest.
 var containerSockets = []string{"docker.sock", "podman/podman.sock"}
+
+// DockerEscape is what status and doctor say of the container sockets shown
+// inside the sandbox (L37).
+const DockerEscape = "docker socket inside the sandbox: a container can write anywhere the user can, and outlive the command (sandbox.docker = true; jhon settings set sandbox.docker false hides it)"
+
+// systemSockets are the machine's sockets outside the runtime dir that run
+// a command or act for the owner, hidden when they exist (L36): the system
+// bus (its services act for the active session) and sshd's local socket
+// (a login). The rest under /run (systemd's varlink sockets, the journal,
+// polkit's agent helper, root-only ones) stay: none runs a command or
+// writes outside the work areas for the owner.
+var systemSockets = []string{"/run/dbus", "/run/ssh-unix-local"}
+
+// homeSockets are the folders under the home ($XDG_CONFIG_HOME's for those
+// under .config) that hold the sockets of a program that runs commands for
+// whoever connects, hidden when they exist (L36): herdr's, whose API runs a
+// command in a pane or types into one.
+var homeSockets = []string{".config/herdr"}
 
 // CredentialVariables are the variables that carry a credential: gh's and
 // git's tokens, the SSH agent socket, and the programs git and ssh ask for
@@ -164,6 +191,29 @@ func (in Input) xdg(name, rel string) string {
 		return v
 	}
 	return in.under(rel)
+}
+
+// socketPaths are the socket paths and folders outside the runtime dirs the
+// sandbox hides, whether or not they exist (layout hides the ones that
+// do): in.SocketFolders, the X authority file, systemSockets, homeSockets
+// (and $XDG_CONFIG_HOME's), the session and system buses an address names,
+// and the SSH agent's socket.
+func (in Input) socketPaths() []string {
+	out := slices.Concat(in.SocketFolders, []string{in.under(".Xauthority")}, systemSockets)
+	config := in.xdg("XDG_CONFIG_HOME", ".config")
+	for _, rel := range homeSockets {
+		out = append(out, in.under(rel))
+		if moved, ok := strings.CutPrefix(rel, ".config/"); ok {
+			out = append(out, filepath.Join(config, moved))
+		}
+	}
+	for _, bus := range []string{"DBUS_SESSION_BUS_ADDRESS", "DBUS_SYSTEM_BUS_ADDRESS"} {
+		if path, ok := strings.CutPrefix(in.Env[bus], "unix:path="); ok {
+			path, _, _ = strings.Cut(path, ",")
+			out = append(out, path)
+		}
+	}
+	return append(out, in.Env["SSH_AUTH_SOCK"])
 }
 
 // within is whether p is one of areas or inside one.
@@ -290,19 +340,17 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 		}
 		if _, dir, ok := in.Stat(run); ok && dir {
 			add(run, mount{kind: private, sealed: true})
-			for _, s := range containerSockets {
-				add(filepath.Join(run, s), mount{kind: read, shown: true})
+			if in.Docker {
+				for _, s := range containerSockets {
+					add(filepath.Join(run, s), mount{kind: read, shown: true})
+				}
 			}
 		}
 	}
-	for _, p := range slices.Concat(in.SocketFolders, []string{in.under(".Xauthority")}) {
+	for _, p := range in.socketPaths() {
 		add(p, mount{kind: hide, sealed: true})
 	}
-	if path, ok := strings.CutPrefix(in.Env["DBUS_SESSION_BUS_ADDRESS"], "unix:path="); ok {
-		path, _, _ = strings.Cut(path, ",")
-		add(path, mount{kind: hide, sealed: true})
-	}
-	add(in.Env["SSH_AUTH_SOCK"], mount{kind: hide, sealed: true})
+	add(in.Registry, mount{kind: hide, sealed: true})
 
 	// Writable: the scratch roots, each only where one may be.
 	var allowed []string
@@ -720,7 +768,7 @@ func Current(cwd, pinned string) Input {
 		Tmp: scratchRoots(), Home: project.Realish(project.Home()), Env: map[string]string{},
 		Path:          filepath.SplitList(os.Getenv("PATH")),
 		RuntimeDir:    "/run/user/" + uid,
-		SocketFolders: []string{"/tmp/tmux-" + uid, "/tmp/.X11-unix", "/tmp/.ICE-unix"},
+		SocketFolders: []string{"/tmp/tmux-" + uid, "/tmp/.X11-unix", "/tmp/.ICE-unix", "/tmp/gentle-pi-" + uid},
 		Stat:          remembered(Disk),
 		Lstat:         DiskLstat,
 	}

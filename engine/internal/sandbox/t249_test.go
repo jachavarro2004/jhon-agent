@@ -1,11 +1,14 @@
 package sandbox
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // T249 blocker 1: an allow_write folder outside the home whose parent a run
@@ -107,29 +110,69 @@ func TestGitFoldersAreWhereTheLineAndEachGitWork(t *testing.T) {
 	}
 }
 
-// L35 ("Solo durante git de afuera"): every outside line waits for a
-// sandboxed run; a sandboxed run waits only for an outside git (or gh)
-// line; a record of no known kind holds every run.
+// L37 ("Esperar durante toda linea de afuera"): a run of one kind holds a
+// run of the other, git or deploy alike; a record of no known kind holds
+// every run.
 func TestWhichRunHoldsWhich(t *testing.T) {
 	for _, c := range []struct {
 		other, self string
 		want        bool
 	}{
-		{KindSandboxed, KindOutsideGit, true}, {KindSandboxed, KindOutside, true}, {KindSandboxed, KindSandboxed, false},
-		{KindOutsideGit, KindSandboxed, true}, {KindOutsideGit, KindOutside, false}, {KindOutsideGit, KindOutsideGit, false},
-		{KindOutside, KindSandboxed, false}, {KindOutside, KindOutside, false}, {KindOutside, KindOutsideGit, false},
-		{"", KindSandboxed, true}, {"", KindOutside, true}, {"", KindOutsideGit, true},
+		{KindSandboxed, KindOutside, true}, {KindSandboxed, KindSandboxed, false},
+		{KindOutside, KindSandboxed, true}, {KindOutside, KindOutside, false},
+		{"", KindSandboxed, true}, {"", KindOutside, true},
 	} {
 		if got := holds(c.other, c.self); got != c.want {
 			t.Errorf("holds(%q, %q) = %v, want %v", c.other, c.self, got, c.want)
 		}
 	}
+}
+
+// L36 A: a lock held by another open file makes Enter wait no longer than
+// its wait, then fail with ErrLocked, with no record written: the run is
+// refused, never run unchecked.
+func TestEnterNeverWaitsOnTheLockPastItsWait(t *testing.T) {
+	r := Registry{Dir: t.TempDir()}
+	f, err := os.OpenFile(filepath.Join(r.Dir, ".lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	// flock locks belong to an open file: Enter's own open of the same file
+	// conflicts with this one as another process's would.
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	leave, err := r.Enter(KindSandboxed, []string{"/p"}, 300*time.Millisecond)
+	if took := time.Since(start); took > 2*time.Second {
+		t.Errorf("Enter waited %s on the lock", took)
+	}
+	if leave != nil || !errors.Is(err, ErrLocked) {
+		t.Errorf("Enter with the lock held: leave %v, err %v; want ErrLocked", leave != nil, err)
+	}
+	if _, err := os.Stat(r.file(os.Getpid())); err == nil {
+		t.Error("Enter wrote a record with the lock held")
+	}
+	syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	leave, err = r.Enter(KindSandboxed, []string{"/p"}, 300*time.Millisecond)
+	if err != nil || leave == nil {
+		t.Fatalf("Enter once the lock is free: %v", err)
+	}
+	leave()
+}
+
+// L36 B1: a line that puts anything in the background, or starts a
+// coprocess, is not in the foreground.
+func TestForeground(t *testing.T) {
 	for line, want := range map[string]bool{
-		"git pull --ff-only": true, "cd /p && git -C x fetch origin": true, "gh pr list": true,
-		"aws s3 sync dist s3://x": false, "cdk deploy": false, "docker compose up -d": false,
+		"git fetch origin": true, "(git fetch origin)": true, "cd /p && git push": true, "{ git fetch; }": true,
+		"git fetch origin &": false, "(git fetch origin &)": false, "{ git fetch & }": false,
+		"coproc git fetch origin": false, "git fetch & disown": false, "git fetch | cat &": false,
+		"if true; then git fetch & fi": false, "git fetch origin 'unclosed": false,
 	} {
-		if got := RunsGit(line); got != want {
-			t.Errorf("RunsGit(%q) = %v, want %v", line, got, want)
+		if got := foreground(line); got != want {
+			t.Errorf("foreground(%q) = %v, want %v", line, got, want)
 		}
 	}
 }

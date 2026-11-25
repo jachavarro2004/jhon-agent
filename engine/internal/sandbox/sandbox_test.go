@@ -281,15 +281,27 @@ func TestTheSnapshotFoldersAreHidden(t *testing.T) {
 }
 
 // The runtime dir is a private folder with the container sockets shown in
-// it; the socket folders outside it and the X authority file are hidden
-// (F6).
+// it with sandbox.docker on (L37); the socket folders outside it, the X
+// authority file, herdr's sockets, the system bus and sshd's local socket
+// are hidden (F6, L36).
 func TestTheSessionSocketsAreNotThere(t *testing.T) {
 	d := with(machine, disk{
 		"/run/user/1000/docker.sock": "file", "/run/user/1000/podman": "dir", "/run/user/1000/podman/podman.sock": "file", "/run/user/1000/wayland-1": "file",
 		"/tmp/tmux-1000": "dir", "/tmp/.X11-unix": "dir", "/tmp/.ICE-unix": "dir", "/home/u/.Xauthority": "file",
+		"/home/u/.config/herdr": "dir", "/data/config/herdr": "dir", "/run/dbus": "dir", "/run/ssh-unix-local": "dir", "/data/system_bus": "file",
 	})
 	in := sample(d)
 	in.SocketFolders = []string{"/tmp/tmux-1000", "/tmp/.X11-unix", "/tmp/.ICE-unix"}
+	in.Env["XDG_CONFIG_HOME"], in.Env["DBUS_SYSTEM_BUS_ADDRESS"] = "/data/config", "unix:path=/data/system_bus,guid=x"
+	for _, f := range []string{"/home/u/.config/herdr", "/data/config/herdr", "/run/dbus", "/run/ssh-unix-local"} {
+		if args := Args(in); index(args, "--tmpfs", f) < 0 || index(args, "--remount-ro", f) < 0 {
+			t.Errorf("%s is not an empty read-only folder:\n%s", f, strings.Join(args, " "))
+		}
+	}
+	if args := Args(in); index(args, "--dev-bind", "/data/system_bus") < 0 {
+		t.Errorf("the system bus a variable names is not hidden:\n%s", strings.Join(args, " "))
+	}
+	in.Docker = true
 	args := Args(in)
 	got := strings.Join(args, " ")
 	run := index(args, "--tmpfs", "/run/user/1000")
@@ -387,8 +399,8 @@ func realSandbox(t *testing.T) (bwrap, base string) {
 
 // The user's runtime dir (/run/user/<uid>) is private whether or not
 // $XDG_RUNTIME_DIR names it; where the variable names another folder, both
-// are, each with the container sockets and never the agent socket (L888
-// continuation, item 2).
+// are, each with the container sockets when sandbox.docker is on (L37; by
+// default none) and never the agent socket (L888 continuation, item 2).
 func TestTheUsersRuntimeDirIsPrivateWhateverTheVariableSays(t *testing.T) {
 	d := with(machine, disk{
 		"/run/user/1000/docker.sock": "file", "/run/user/1000/wayland-1": "file",
@@ -410,6 +422,11 @@ func TestTheUsersRuntimeDirIsPrivateWhateverTheVariableSays(t *testing.T) {
 		if c.variable != "" {
 			in.Env["XDG_RUNTIME_DIR"] = c.variable
 		}
+		// By default no container socket is shown.
+		if got := strings.Join(Args(in), " "); strings.Contains(got, "docker.sock") || strings.Contains(got, "podman.sock") {
+			t.Errorf("%s: a container socket is shown with sandbox.docker off:\n%s", c.name, got)
+		}
+		in.Docker = true
 		args := Args(in)
 		got := strings.Join(args, " ")
 		for _, p := range c.private {
@@ -439,8 +456,9 @@ func TestTheUsersRuntimeDirIsPrivateWhateverTheVariableSays(t *testing.T) {
 }
 
 // The same inside a real sandbox, against fake folders under the test's own
-// scratch: both runtime dirs are empty but for docker's socket, mode 0700 and
-// writable, and nothing written in them reaches the real ones.
+// scratch: both runtime dirs are empty, but for docker's socket with
+// sandbox.docker on, mode 0700 and writable, and nothing written in them
+// reaches the real ones.
 func TestTheUsersRuntimeDirIsPrivateInARealSandbox(t *testing.T) {
 	bwrap, base := realSandbox(t)
 	users, moved, home := filepath.Join(base, "run-user"), filepath.Join(base, "run-moved"), filepath.Join(base, "home", "u")
@@ -462,16 +480,22 @@ func TestTheUsersRuntimeDirIsPrivateInARealSandbox(t *testing.T) {
 		{"the variable unset", map[string]string{}},
 		{"the variable naming another folder", map[string]string{"XDG_RUNTIME_DIR": moved}},
 	} {
-		in := Input{Cwd: base, Home: home, RuntimeDir: users, Env: c.env, Stat: Disk}
 		folders := []string{users}
 		if c.env["XDG_RUNTIME_DIR"] != "" {
 			folders = append(folders, moved)
 		}
-		cmd := exec.Command(bwrap, append(append(Args(in), "--", "sh", "-c", look, "sh"), folders...)...)
-		cmd.WaitDelay = 10 * time.Second
-		out, err := cmd.CombinedOutput()
-		if want := strings.Repeat("700\ndocker.sock\n", len(folders)); err != nil || string(out) != want {
-			t.Errorf("%s: %v, %q; want %q", c.name, err, out, want)
+		for _, docker := range []bool{false, true} {
+			in := Input{Cwd: base, Home: home, RuntimeDir: users, Env: c.env, Stat: Disk, Docker: docker}
+			cmd := exec.Command(bwrap, append(append(Args(in), "--", "sh", "-c", look, "sh"), folders...)...)
+			cmd.WaitDelay = 10 * time.Second
+			out, err := cmd.CombinedOutput()
+			each := "700\n"
+			if docker {
+				each = "700\ndocker.sock\n"
+			}
+			if want := strings.Repeat(each, len(folders)); err != nil || string(out) != want {
+				t.Errorf("%s, docker %v: %v, %q; want %q", c.name, docker, err, out, want)
+			}
 		}
 		for _, d := range folders {
 			if _, err := os.Stat(filepath.Join(d, "new")); err == nil {

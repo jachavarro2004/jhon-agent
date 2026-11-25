@@ -78,7 +78,7 @@ export const SETTINGS_DEFAULTS: Readonly<Record<string, SettingValue>> = Object.
  * `integrations.context7` is read by the render and doctor alone (T133e);
  * `agents.act_on_announce` by `jhon hook announce-stop`, which pi's shell runs (T135, lib/announce-stop.ts).
  */
-export const ENGINE_ONLY_SETTINGS: readonly string[] = Object.freeze(["integrations.context7", "agents.act_on_announce", "sandbox.mode", "sandbox.allow_write", "sandbox.deploy_tools"]);
+export const ENGINE_ONLY_SETTINGS: readonly string[] = Object.freeze(["integrations.context7", "agents.act_on_announce", "sandbox.mode", "sandbox.allow_write", "sandbox.deploy_tools", "sandbox.docker"]);
 
 export type SettingsKey = keyof typeof SETTINGS_DEFAULTS & string;
 export type ShellKey = "panel" | "agents" | "jobs" | "usage" | "todos";

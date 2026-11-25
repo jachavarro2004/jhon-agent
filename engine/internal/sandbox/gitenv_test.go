@@ -31,16 +31,19 @@ func TestUnsandboxedEnvAppendsTheOverridesAfterTheOwners(t *testing.T) {
 		"GIT_CONFIG_KEY_7=protocol.fd.allow", "GIT_CONFIG_VALUE_7=never",
 		"GIT_CONFIG_KEY_8=protocol.file.allow", "GIT_CONFIG_VALUE_8=never",
 		"GIT_CONFIG_KEY_9=submodule.recurse", "GIT_CONFIG_VALUE_9=false",
-		"GIT_CONFIG_KEY_10=fetch.recurseSubmodules", "GIT_CONFIG_VALUE_10=false"}, "\n")
+		"GIT_CONFIG_KEY_10=fetch.recurseSubmodules", "GIT_CONFIG_VALUE_10=false",
+		// L36: no gc or maintenance left running after the line.
+		"GIT_CONFIG_KEY_11=gc.autoDetach", "GIT_CONFIG_VALUE_11=false",
+		"GIT_CONFIG_KEY_12=maintenance.autoDetach", "GIT_CONFIG_VALUE_12=false"}, "\n")
 	// L1318 (b): every hook event off, configured hooks included.
 	for i, event := range hookEvents {
-		want += "\nGIT_CONFIG_KEY_" + strconv.Itoa(11+i) + "=hook." + event + ".enabled\nGIT_CONFIG_VALUE_" + strconv.Itoa(11+i) + "=false"
+		want += "\nGIT_CONFIG_KEY_" + strconv.Itoa(13+i) + "=hook." + event + ".enabled\nGIT_CONFIG_VALUE_" + strconv.Itoa(13+i) + "=false"
 	}
-	want += "\nGIT_CONFIG_COUNT=" + strconv.Itoa(11+len(hookEvents))
+	want += "\nGIT_CONFIG_COUNT=" + strconv.Itoa(13+len(hookEvents))
 	if got != want {
 		t.Errorf("UnsandboxedEnv =\n%s\nwant\n%s", got, want)
 	}
-	if got := UnsandboxedEnv([]string{"GIT_CONFIG_COUNT=x"}, nil, nil); got[1] != "GIT_CONFIG_KEY_0=core.hooksPath" || got[len(got)-1] != "GIT_CONFIG_COUNT="+strconv.Itoa(9+len(hookEvents)) {
+	if got := UnsandboxedEnv([]string{"GIT_CONFIG_COUNT=x"}, nil, nil); got[1] != "GIT_CONFIG_KEY_0=core.hooksPath" || got[len(got)-1] != "GIT_CONFIG_COUNT="+strconv.Itoa(11+len(hookEvents)) {
 		t.Errorf("a count that is not a number: %q", got)
 	}
 }
@@ -140,7 +143,7 @@ func TestUnsandboxedEnvTurnsTheRepositorysProxyOffAndAddsItsKeys(t *testing.T) {
 		t.Errorf("no GIT_PROXY_COMMAND= after the owner's environment: %q", got[:3])
 	}
 	joined := strings.Join(got, "\n") + "\n"
-	if !strings.Contains(joined, "GIT_CONFIG_KEY_8=fetch.recurseSubmodules\nGIT_CONFIG_VALUE_8=false\nGIT_CONFIG_KEY_9=filter.evil.clean\nGIT_CONFIG_VALUE_9=\nGIT_CONFIG_KEY_10=hook.applypatch-msg.enabled\n") {
+	if !strings.Contains(joined, "GIT_CONFIG_KEY_10=maintenance.autoDetach\nGIT_CONFIG_VALUE_10=false\nGIT_CONFIG_KEY_11=filter.evil.clean\nGIT_CONFIG_VALUE_11=\nGIT_CONFIG_KEY_12=hook.applypatch-msg.enabled\n") {
 		t.Errorf("the repository's key does not follow the fixed overrides:\n%s", joined)
 	}
 	owner := UnsandboxedEnv([]string{"GIT_PROXY_COMMAND=/usr/bin/corkscrew"}, nil, nil)
