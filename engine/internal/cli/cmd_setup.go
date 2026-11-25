@@ -80,7 +80,11 @@ func installTool(m integrations.Manifest) error {
 	if !ok {
 		return errors.New(m.Doctor.Binary + " is not released where jhon installs from")
 	}
-	_, err := toolClient().InstallTool(context.Background(), t, t.PlaceIn(project.Home()), version.Version, false)
+	res, err := toolClient().InstallTool(context.Background(), t, t.PlaceIn(project.Home()), version.Version, false)
+	if err == nil && res.Status == update.ToolForeign {
+		// Asked for this tool alone, a place jhon did not make is a refusal.
+		return errors.New(res.Note + "; move it away for jhon to install " + t.Binary + " there; nothing was changed")
+	}
 	return err
 }
 

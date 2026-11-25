@@ -165,7 +165,7 @@ func devBuild(current string, check, asJSON bool) int {
 		fmt.Println(string(b))
 		return 0
 	}
-	line := "jhon: this is a development build (" + current + ") installed by `jhon sync`; `jhon update` installs only published releases. Run `jhon sync` in the source checkout to update it.\n"
+	line := "jhon: this is a development build (" + current + ") installed by `jhon sync`; `jhon update` installs only published releases. Run `jhon sync` in the source checkout to update it." + devToolsNote() + "\n"
 	if check {
 		fmt.Print(line)
 		return 0
@@ -191,6 +191,7 @@ func rollBack(r release.Roots, current string) int {
 		var lines bytes.Buffer
 		rolled, toolsOK := rollBackTools(&lines, o)
 		if rolled == 0 && toolsOK {
+			o.W.Write(lines.Bytes())
 			return o.Die("no release older than jhon " + active + " is kept; nothing was changed")
 		}
 		fmt.Fprintf(o.W, "no release older than jhon %s is kept; jhon stays at %s\n", active, active)

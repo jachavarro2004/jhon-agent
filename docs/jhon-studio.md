@@ -33,11 +33,17 @@ as it installs itself:
    it must come from that repository's `.github/workflows/release.yml` at
    the tag `v<version>`, through GitHub's OIDC issuer. It then unpacks the
    tarball into a temporary folder and asks the unpacked program's
-   `integration --json`, which must name the release's version. A newer
-   release that needs a newer jhon is passed over for the next older one.
-2. It unpacks it into `~/.local/share/jhon-studio/<version>` and links
-   `~/.local/bin/jhon-studio` to `<version>/bin/jhon-studio` atomically.
-   The version that was linked before stays on disk.
+   `integration --json`, which must name the release's version. That run
+   gets only `HOME` (a temporary folder, also its working folder) and
+   `PATH` (its own `bin`, the folder of the interpreter its first line
+   names through `env`, such as `node`, and the system's folders); its
+   answer is read up to 64 KiB, and every process it started is stopped
+   when it returns. A newer release that needs a newer jhon is passed over
+   for the next older one.
+2. It unpacks it into `~/.local/share/jhon-studio/<version>`, records that
+   folder's digest under `~/.local/share/jhon-studio/.jhon-verified/`, and
+   links `~/.local/bin/jhon-studio` to `<version>/bin/jhon-studio`
+   atomically. The version that was linked before stays on disk.
 
 Pre-releases (`-rc.N`) are taken only by a jhon that is itself a
 pre-release or a development build; a stable jhon takes stable releases
@@ -46,7 +52,21 @@ signature, a tarball with an absolute or `..` path, a link (symbolic or
 hard) or a device, or a program that answers another version stops the
 install with one message ending in `nothing was changed`. A
 `~/.local/bin/jhon-studio` that jhon did not link (a file, or a link
-elsewhere) is never replaced: move it away for jhon to install.
+elsewhere), or a `~/.local/share/jhon-studio` that is a link, is never
+replaced or written through: `jhon update` notes it once and leaves it
+alone, as it does a development clone (jhon itself still updates, exit
+0), and `jhon setup` refuses its Install step with the fix, move it away.
+Each is checked again right before jhon writes, and one swapped in while
+the install runs is left as it is and refuses it. A version folder is
+linked, by an install or a roll-back, only while its files still have the
+digest jhon recorded when it verified them (one already there from
+elsewhere is linked only when it is the signed release); an active folder
+that is missing is installed again from its release, and one that changed
+is reported (move it away), never called up to date. On a development
+build of jhon, `jhon update` installs nothing, jhon-studio included:
+`jhon setup` installs it there. If the run that reads what jhon it needs
+cannot start because the temporary folder's file system is mounted
+`noexec`, jhon says so: set `TMPDIR` to a folder where programs may run.
 
 `jhon update` updates it after jhon itself (`--check` only says whether a
 newer release that supports this jhon is out; `--json` lists it under

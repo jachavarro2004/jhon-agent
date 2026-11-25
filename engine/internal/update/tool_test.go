@@ -454,14 +454,249 @@ func TestInstallToolLeavesADevelopmentCloneAndAForeignLinkAlone(t *testing.T) {
 			t.Fatal(err)
 		}
 		before := tree(t, p)
-		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
-		if err == nil || !regexp.MustCompile(`^.*/\.local/bin/jhon-studio is .*, not a link to a jhon-studio release jhon installed; move it away for jhon to install one; nothing was changed$`).MatchString(err.Error()) {
-			t.Errorf("%s: %v", name, err)
+		// L18 A3: a link jhon did not make is skipped with one note, not a
+		// failure, as a development clone is.
+		res, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if err != nil || res.Status != ToolForeign || !regexp.MustCompile(`^.*/\.local/bin/jhon-studio is (a file|a link to /opt/jhon-studio/bin/jhon-studio), not jhon's link to a jhon-studio release$`).MatchString(res.Note) {
+			t.Errorf("%s: %+v, %v", name, res, err)
+		}
+		if _, _, err := RollbackTool(tool, p); !errors.As(err, new(*ForeignError)) {
+			t.Errorf("%s: RollbackTool = %v", name, err)
 		}
 		if after := tree(t, p); !mapsEqual(before, after) {
 			t.Errorf("%s: changed", name)
 		}
 	}
+
+	// L18 A1: a share folder that is a link is never written through.
+	p = home(t, tool)
+	elsewhere := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(p.Dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, p.Dir); err != nil {
+		t.Fatal(err)
+	}
+	res, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+	if err != nil || res.Status != ToolForeign || res.Note != p.Dir+" is a link to "+elsewhere+", not a folder" {
+		t.Errorf("a share folder that is a link: %+v, %v", res, err)
+	}
+	if es, _ := os.ReadDir(elsewhere); len(es) != 0 {
+		t.Errorf("written through the link: %v", es)
+	}
+}
+
+// hostile is a tarball of jhon-studio v whose program, asked what jhon it
+// needs, first runs sh (with the minimal environment it is given).
+func hostile(t *testing.T, v, sh string) []byte {
+	return pack(t, []entry{{name: "bin/jhon-studio", mode: 0o755, body: "#!/bin/sh\ncase \"$*\" in\n  'integration --json') " + sh +
+		"\n    echo '{\"version\":\"" + v + "\",\"plugin_dir\":\"/p\"}' ;;\nesac\n"}})
+}
+
+// installed01 is a place where 0.1.0 is installed from its release, and a
+// client whose repository then publishes rel.
+func installed01(t *testing.T, vs *ca.VirtualSigstore) (*repo, *Client, Place) {
+	t.Helper()
+	tool := studioTool(t)
+	r := &repo{}
+	c := r.serve(t, vs)
+	p := home(t, tool)
+	r.releases = []toolRelease{signedTool(t, vs, "0.1.0", studioTar(t, "0.1.0", ""), "")}
+	if _, err := c.InstallTool(context.Background(), tool, p, "0.5.0", false); err != nil {
+		t.Fatal(err)
+	}
+	return r, c, p
+}
+
+// names are the entries of dir, sorted.
+func names(t *testing.T, dir string) string {
+	t.Helper()
+	es, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, e := range es {
+		out = append(out, e.Name())
+	}
+	return strings.Join(out, " ")
+}
+
+// L18 A1: what the install's own program, or anything else, swaps in while
+// it runs is left as it is: a file at the link, a link at the share folder.
+// The install is refused before anything is written, through the link or
+// elsewhere.
+func TestInstallToolLeavesWhatAHostileProgramSwaps(t *testing.T) {
+	tool := studioTool(t)
+	vs := virtual(t)
+	ctx := context.Background()
+	t.Run("the link for a file and the share folder for a link", func(t *testing.T) {
+		r, c, p := installed01(t, vs)
+		elsewhere, moved := t.TempDir(), p.Dir+".moved"
+		r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", hostile(t, "0.2.0",
+			"rm -f '"+p.Link+"' && printf mine > '"+p.Link+"' && mv '"+p.Dir+"' '"+moved+"' && ln -s '"+elsewhere+"' '"+p.Dir+"'"), "")}, r.releases...)
+		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if err == nil || err.Error() != p.Dir+" became a link to "+elsewhere+" during the install; it was left as it is; nothing was changed" {
+			t.Errorf("error = %v", err)
+		}
+		if b, err := os.ReadFile(p.Link); err != nil || string(b) != "mine" {
+			t.Errorf("the link's file: %q, %v", b, err)
+		}
+		if l, err := os.Readlink(p.Dir); err != nil || l != elsewhere {
+			t.Errorf("the share link: %q, %v", l, err)
+		}
+		if got := names(t, elsewhere); got != "" {
+			t.Errorf("written through the link: %s", got)
+		}
+		if got := names(t, moved); got != ".jhon-verified 0.1.0" {
+			t.Errorf("written into the moved folder: %s", got)
+		}
+	})
+	t.Run("the link for a file", func(t *testing.T) {
+		r, c, p := installed01(t, vs)
+		r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", hostile(t, "0.2.0", "rm -f '"+p.Link+"' && printf mine > '"+p.Link+"'"), "")}, r.releases...)
+		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if err == nil || err.Error() != p.Link+" became a file, not jhon's link to a jhon-studio release, during the install; it was left as it is; nothing was changed" {
+			t.Errorf("error = %v", err)
+		}
+		if b, _ := os.ReadFile(p.Link); string(b) != "mine" {
+			t.Errorf("the link's file: %q", b)
+		}
+		if got := names(t, p.Dir); got != ".jhon-verified 0.1.0" {
+			t.Errorf("share folder: %s", got)
+		}
+	})
+	t.Run("the link swapped for a file right before it moves", func(t *testing.T) {
+		r, c, p := installed01(t, vs)
+		r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", studioTar(t, "0.2.0", ""), "")}, r.releases...)
+		hookBeforeLink = func() {
+			os.Remove(p.Link)
+			os.WriteFile(p.Link, []byte("mine"), 0o644)
+		}
+		t.Cleanup(func() { hookBeforeLink = nil })
+		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if err == nil || err.Error() != "jhon-studio 0.2.0 is at "+filepath.Join(p.Dir, "0.2.0")+" but not linked: "+p.Link+" became a file, not jhon's link to a jhon-studio release, during the install; it was left as it is" {
+			t.Errorf("error = %v", err)
+		}
+		if b, _ := os.ReadFile(p.Link); string(b) != "mine" {
+			t.Errorf("the link's file: %q", b)
+		}
+		if es, _ := os.ReadDir(filepath.Dir(p.Link)); len(es) != 1 {
+			t.Errorf("left beside the link: %v", es)
+		}
+	})
+	t.Run("the share folder swapped for a link once it is open", func(t *testing.T) {
+		r, c, p := installed01(t, vs)
+		elsewhere, moved := t.TempDir(), p.Dir+".moved"
+		r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", studioTar(t, "0.2.0", ""), "")}, r.releases...)
+		hookShareOpen = func() {
+			os.Rename(p.Dir, moved)
+			os.Symlink(elsewhere, p.Dir)
+		}
+		t.Cleanup(func() { hookShareOpen = nil })
+		link := linked(t, p)
+		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if err == nil || !strings.HasPrefix(err.Error(), "jhon-studio 0.2.0 is at ") || !strings.HasSuffix(err.Error(), " but not linked: "+p.Dir+" became a link to "+elsewhere+" during the install; it was left as it is") {
+			t.Errorf("error = %v", err)
+		}
+		if got := names(t, elsewhere); got != "" {
+			t.Errorf("written through the link: %s", got)
+		}
+		if linked(t, p) != link {
+			t.Errorf("link moved to %s", linked(t, p))
+		}
+	})
+}
+
+// L18 A3: a version folder already there is linked only when it is the
+// verified release, a missing active folder is installed again, and a
+// changed one is reported, never called up to date; a roll-back links only
+// a folder that matches what jhon installed.
+func TestInstallToolLinksOnlyVerifiedFolders(t *testing.T) {
+	tool := studioTool(t)
+	vs := virtual(t)
+	ctx := context.Background()
+	write := func(t *testing.T, dir string, files map[string]string, mode map[string]os.FileMode) {
+		t.Helper()
+		for n, body := range files {
+			if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(n)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, n), []byte(body), mode[n]|0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	release02 := map[string]string{"bin/jhon-studio": studioScript("0.2.0", ""), "plugin/README.md": "plugin 0.2.0\n"}
+	exec := map[string]os.FileMode{"bin/jhon-studio": 0o755}
+	t.Run("a folder that differs from the release is refused", func(t *testing.T) {
+		r, c, p := installed01(t, vs)
+		r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", studioTar(t, "0.2.0", ""), "")}, r.releases...)
+		write(t, filepath.Join(p.Dir, "0.2.0"), map[string]string{"bin/jhon-studio": "#!/bin/sh\necho evil\n", "plugin/README.md": "plugin 0.2.0\n"}, exec)
+		link := linked(t, p)
+		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if err == nil || err.Error() != filepath.Join(p.Dir, "0.2.0")+" is not jhon-studio's signed release 0.2.0 (its files differ); move it away for jhon to install it; nothing was changed" {
+			t.Errorf("error = %v", err)
+		}
+		if linked(t, p) != link {
+			t.Errorf("linked %s", linked(t, p))
+		}
+	})
+	t.Run("a folder that is the release is linked and recorded", func(t *testing.T) {
+		r, c, p := installed01(t, vs)
+		r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", studioTar(t, "0.2.0", ""), "")}, r.releases...)
+		write(t, filepath.Join(p.Dir, "0.2.0"), release02, exec)
+		res, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if err != nil || res.Status != ToolUpdated || res.To != "0.2.0" {
+			t.Errorf("result = %+v, %v", res, err)
+		}
+		if in := tool.Installed(p); in.Active != "0.2.0" || !in.Verified {
+			t.Errorf("Installed = %+v", in)
+		}
+	})
+	t.Run("a missing active folder is installed again", func(t *testing.T) {
+		_, c, p := installed01(t, vs)
+		if err := os.RemoveAll(filepath.Join(p.Dir, "0.1.0")); err != nil {
+			t.Fatal(err)
+		}
+		if in := tool.Installed(p); in.Active != "0.1.0" || in.Verified {
+			t.Errorf("Installed = %+v", in)
+		}
+		if res, err := c.InstallTool(ctx, tool, p, "0.5.0", true); err != nil || res.Status != ToolAvailable || res.From != "0.1.0" || res.To != "0.1.0" {
+			t.Errorf("check = %+v, %v", res, err)
+		}
+		res, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if err != nil || res.Status != ToolRepaired || res.From != "0.1.0" || res.To != "0.1.0" {
+			t.Errorf("result = %+v, %v", res, err)
+		}
+		if in := tool.Installed(p); in.Active != "0.1.0" || !in.Verified {
+			t.Errorf("Installed = %+v", in)
+		}
+	})
+	t.Run("a changed active folder is reported, not up to date", func(t *testing.T) {
+		_, c, p := installed01(t, vs)
+		write(t, filepath.Join(p.Dir, "0.1.0"), map[string]string{"plugin/README.md": "changed\n"}, nil)
+		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if err == nil || err.Error() != filepath.Join(p.Dir, "0.1.0")+" is not jhon-studio's signed release 0.1.0 (its files differ); move it away for jhon to install it; nothing was changed" {
+			t.Errorf("error = %v", err)
+		}
+	})
+	t.Run("a roll-back to a changed folder is refused", func(t *testing.T) {
+		r, c, p := installed01(t, vs)
+		r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", studioTar(t, "0.2.0", ""), "")}, r.releases...)
+		if _, err := c.InstallTool(ctx, tool, p, "0.5.0", false); err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(p.Dir, "0.1.0"), map[string]string{"plugin/new": "x"}, nil)
+		link := linked(t, p)
+		_, _, err := RollbackTool(tool, p)
+		if err == nil || err.Error() != filepath.Join(p.Dir, "0.1.0")+" is not the jhon-studio 0.1.0 jhon installed (its files differ, or jhon did not install it); nothing was changed" {
+			t.Errorf("error = %v", err)
+		}
+		if linked(t, p) != link {
+			t.Errorf("linked %s", linked(t, p))
+		}
+	})
 }
 
 // Nothing unverified is installed: a missing or failing checksum or

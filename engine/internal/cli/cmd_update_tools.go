@@ -70,6 +70,10 @@ func updateTools(o *release.Out, jhon string, check bool) (reports []toolReport,
 			o.Die(t.Binary + ": " + err.Error())
 		case res.Status == update.ToolDevelopment:
 			fmt.Fprintf(o.W, "%s is a development clone at %s: jhon update leaves it alone\n", t.Binary, release.Tilde(p.Dir))
+		case res.Status == update.ToolForeign:
+			fmt.Fprintf(o.W, "%s: jhon update leaves it alone\n", res.Note)
+		case res.Status == update.ToolAvailable && res.From == res.To:
+			fmt.Fprintf(o.W, "%s %s needs reinstalling (its folder is missing, or is not the one jhon verified): run 'jhon update'\n", t.Binary, res.To)
 		case res.Status == update.ToolUpToDate:
 			fmt.Fprintf(o.W, "%s %s is up to date (the newest release of %s that supports jhon %s)\n", t.Binary, res.To, t.Source(), jhon)
 		case res.Status == update.ToolAvailable && res.From == "":
@@ -78,9 +82,12 @@ func updateTools(o *release.Out, jhon string, check bool) (reports []toolReport,
 			fmt.Fprintf(o.W, "update available: %s %s -> %s\nrun 'jhon update' to install it\n", t.Binary, res.From, res.To)
 		default:
 			o.OK(t.Binary + " " + res.To + ": sha256 and signature verified: signed by " + res.Signer)
-			if res.Status == update.ToolInstalled {
+			switch res.Status {
+			case update.ToolInstalled:
 				fmt.Fprintf(o.W, "installed %s %s at %s\n", t.Binary, res.To, release.Tilde(filepath.Join(p.Dir, res.To)))
-			} else {
+			case update.ToolRepaired:
+				fmt.Fprintf(o.W, "reinstalled %s %s at %s (its folder was missing, or was not the one jhon verified)\n", t.Binary, res.To, release.Tilde(filepath.Join(p.Dir, res.To)))
+			default:
 				fmt.Fprintf(o.W, "updated %s %s -> %s\n", t.Binary, res.From, res.To)
 			}
 		}
@@ -98,9 +105,12 @@ func rollBackTools(w *bytes.Buffer, o *release.Out) (rolled int, ok bool) {
 	for _, t := range releasedTools() {
 		p := t.PlaceIn(home)
 		from, to, err := update.RollbackTool(t, p)
+		var foreign *update.ForeignError
 		switch {
 		case errors.Is(err, update.ErrDevelopmentTool):
 			fmt.Fprintf(w, "%s is a development clone at %s: left alone\n", t.Binary, release.Tilde(p.Dir))
+		case errors.As(err, &foreign):
+			fmt.Fprintf(w, "%s: left alone\n", foreign.Note)
 		case errors.Is(err, update.ErrNoOlderTool) && from == "":
 		case errors.Is(err, update.ErrNoOlderTool):
 			fmt.Fprintf(w, "no %s release older than %s is kept; it stays at %s\n", t.Binary, from, from)
@@ -119,4 +129,17 @@ func rollBackTools(w *bytes.Buffer, o *release.Out) (rolled int, ok bool) {
 // a check that installs nothing need not say.
 func trimUnchanged(err error) string {
 	return strings.TrimSuffix(err.Error(), "; nothing was changed")
+}
+
+// devToolsNote is what a development build's jhon update adds when tools
+// are on: setup installs them there.
+func devToolsNote() string {
+	var names []string
+	for _, t := range releasedTools() {
+		names = append(names, t.Binary)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return " On a development build, `jhon setup` installs " + strings.Join(names, " and ") + " from its signed release."
 }
