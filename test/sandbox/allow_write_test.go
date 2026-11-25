@@ -70,7 +70,7 @@ func TestAMissingAllowWriteFolderJhonWillNotMakeIsNamedWithWhy(t *testing.T) {
 	}
 	linked, hidden, later := filepath.Join(b.home, "linked", "new"), filepath.Join(b.home, ".gnupg", "work"), filepath.Join(b.home, "later", "out")
 	b.settings(t, "schema = 1\n\n[sandbox]\nallow_write = [\"~/linked/new\", \"~/.gnupg/work\", \""+outside+"\", \"~/later/out\"]\n")
-	whyLinked := filepath.Join(b.home, "linked") + " is a link, and Jhon creates no folder through a link: set sandbox.allow_write to the folder it leads to, or create it yourself (mkdir -p " + linked + ")"
+	whyLinked := filepath.Join(b.home, "linked") + " is a link, and Jhon creates no folder through a link: set sandbox.allow_write to the folder it leads to, as the sandbox opens no link for writing"
 	whyHidden := "it lies in " + filepath.Join(b.home, ".gnupg") + ", which the sandbox hides: pick a folder elsewhere"
 	whyOutside := "Jhon creates a missing folder only under the home folder (" + b.home + "): create it yourself (mkdir -p " + outside + ")"
 

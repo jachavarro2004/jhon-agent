@@ -60,12 +60,12 @@ func readOnly(r support.Result) bool {
 // bubblewrap is the one Jhon trusts, never one a sandboxed command planted on
 // PATH: a writable tool folder sits before /usr/bin on a normal PATH, so a
 // PATH lookup would run the plant outside the sandbox and the wrapped program
-// never at all (T128a, B1). The owner opened mise's folder here: by default
-// it is no longer writable (F2).
+// never at all (T128a, B1). The PATH folder lies in the cache, writable by
+// default (an owner's sandbox.allow_write that holds a PATH folder stops the
+// run, L28).
 func TestBubblewrapIsNotTakenFromAWritablePATHFolder(t *testing.T) {
 	b := newBox(t)
-	b.settings(t, "schema = 1\n\n[sandbox]\nallow_write = [\"~/.local/share/mise\"]\n")
-	shims := filepath.Join(b.home, ".local", "share", "mise", "shims")
+	shims := filepath.Join(b.home, ".cache", "tools", "shims")
 	escaped := filepath.Join(b.base, "escaped")
 	script(t, filepath.Join(shims, "bwrap"), "#!/bin/sh\necho I-AM-OUTSIDE > "+escaped+"\n")
 	env := append(slices.Clone(b.env), "PATH="+shims+":"+os.Getenv("PATH"))
@@ -140,27 +140,37 @@ func TestGitIsNotTakenFromAWritablePATHFolder(t *testing.T) {
 	}
 }
 
-// A PATH folder outside the project is read-only inside the sandbox, also
-// inside a writable folder: a tool folder of the default list, and one the
-// owner opened. The folders around it stay writable, and a PATH folder in
-// the project is the project's (F2).
+// A PATH folder outside the project is read-only inside the sandbox, and a
+// PATH folder in the project is the project's (F2). A cache of the default
+// list under the home that holds one is not writable either, and a write
+// there says why (L29). A sandbox.allow_write folder the owner opened that
+// holds a PATH folder stops the run with the fix (L28).
 func TestAPATHFolderIsReadOnlyInsideAWritableFolder(t *testing.T) {
 	b := newBox(t)
-	b.settings(t, "schema = 1\n\n[sandbox]\nallow_write = [\"~/.local/share/mise\"]\n")
 	shims := filepath.Join(b.home, ".local", "share", "mise", "shims")
 	gradle := filepath.Join(b.home, ".gradle", "bin")
 	inProject := filepath.Join(b.proj, "node_modules", ".bin")
 	mkdirs(t, shims, gradle, inProject, filepath.Join(b.home, ".gradle", "caches"))
 	env := append(slices.Clone(b.env), "PATH="+strings.Join([]string{shims, gradle, inProject, os.Getenv("PATH")}, ":"))
-	for _, dir := range []string{shims, gradle} {
-		r := support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c", `echo plant > "$1/bwrap"`, "sh", dir)
-		if !readOnly(r) || exists(filepath.Join(dir, "bwrap")) {
-			t.Errorf("a write in the PATH folder %s: exit %d, stderr %q; want a read-only refusal and no file", dir, r.Code, r.Stderr)
-		}
+	r := support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c", `echo plant > "$1/bwrap"`, "sh", gradle)
+	if !readOnly(r) || exists(filepath.Join(gradle, "bwrap")) {
+		t.Errorf("a write in the PATH folder %s: exit %d, stderr %q; want a read-only refusal and no file", gradle, r.Code, r.Stderr)
 	}
-	r := support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c", `echo x > "$HOME/.gradle/caches/x" && echo x > "$HOME/.local/share/mise/x" && echo x > node_modules/.bin/tool && echo done`)
+	r = support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c", `echo x > node_modules/.bin/tool && echo done`)
 	if r.Code != 0 || r.Stdout != "done\n" {
-		t.Errorf("a write beside the PATH folders and in the project's own: exit %d, stderr %q", r.Code, r.Stderr)
+		t.Errorf("a write in the project's own PATH folder: exit %d, stderr %q", r.Code, r.Stderr)
+	}
+	beside := filepath.Join(b.home, ".gradle", "caches", "x")
+	r = support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c", `echo x > "$HOME/.gradle/caches/x"`)
+	note := "the sandbox refused a write to " + beside + ", which does not exist; the tool folder " + filepath.Join(b.home, ".gradle") + " is not used for writing: it holds the PATH folder " + gradle + ", where a sandboxed command could put a program run later outside the sandbox: move the tool's bin out of the cache, or take it off PATH; that is a stop: tell the owner the path and why, never write it elsewhere\n"
+	if !readOnly(r) || !strings.HasSuffix(r.Stderr, note) || exists(beside) {
+		t.Errorf("a write beside the PATH folder in ~/.gradle: exit %d, stderr %q; want it refused, ending with %q", r.Code, r.Stderr, note)
+	}
+	b.settings(t, "schema = 1\n\n[sandbox]\nallow_write = [\"~/.local/share/mise\"]\n")
+	r = support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c", `echo plant > "$1/bwrap"`, "sh", shims)
+	want := "jhon sandbox: sandbox.allow_write folder " + filepath.Join(b.home, ".local", "share", "mise") + " holds the PATH folder " + shims + ", where a sandboxed command could put a program run later outside the sandbox, so nothing was run; fix: name a concrete subfolder in sandbox.allow_write, such as ~/.local/share/<app>, not a folder that holds Jhon's own files or a PATH folder\n"
+	if r.Code != 126 || r.Stderr != want || exists(filepath.Join(shims, "bwrap")) {
+		t.Errorf("an allow_write folder that holds a PATH folder: exit %d, stderr %q; want 126 and %q", r.Code, r.Stderr, want)
 	}
 }
 

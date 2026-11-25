@@ -106,7 +106,7 @@ func (in Input) whyNotCreate(f string, mounts []mount) (why string, writable boo
 			break
 		}
 		if real != cur {
-			return cur + " is a link, and Jhon creates no folder through a link: set sandbox.allow_write to the folder it leads to, or create it yourself (mkdir -p " + f + ")", false
+			return cur + " is a link, and Jhon creates no folder through a link: set sandbox.allow_write to the folder it leads to, as the sandbox opens no link for writing", false
 		}
 		if !dir {
 			return cur + " is a file, not a folder", false
@@ -286,6 +286,13 @@ func refusal(in Input, path string, missing []MissingFolder) string {
 	}
 	switch {
 	case m == nil:
+		// An area the sandbox does not use as it is or passes through a
+		// link (L28).
+		for _, u := range UnusedWriteAreas(in) {
+			if project.Within(p, u.Path) || project.Within(real, u.Real) {
+				return head + exists + "; " + u.Line() + stop
+			}
+		}
 		for _, f := range missing {
 			if f.Why == "" {
 				continue

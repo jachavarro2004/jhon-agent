@@ -206,7 +206,17 @@ and never a PATH folder or one that holds one, nor through a parent that
 breaks those rules; its parents stay read-only. A writable area named
 inside another one (an `allow_write` folder in the project or `/tmp`, a
 `$TMPDIR` or a cache a variable names under `/tmp`) gets no mount of its
-own, so a link a command left in its place never opens where it leads.
+own, and no writable area but the project's folders is bound when it is or
+passes through a link: name the real path, the folder the link leads to,
+as `jhon sandbox status` and the note on a refused write say. An
+`allow_write` folder that is or holds Jhon's release, the `jhon` program,
+the source checkout, Jhon's protected files or a PATH folder stops every
+sandboxed command with the fix: name a concrete subfolder such as
+`~/.local/share/<app>`. A default cache or store under the home (the cache, gradle's
+folder, go's module cache and the like) that holds a PATH folder is not
+writable inside the sandbox; status names it with the fix (move the tool's
+bin out of the cache, or take it off PATH). `/tmp` and `$TMPDIR` are not
+judged so.
 `jhon sandbox status` says which ones the next command creates and why
 Jhon will not create any other. A command that fails on a read-only
 path ends with a note telling the agent to stop and name the path: whether

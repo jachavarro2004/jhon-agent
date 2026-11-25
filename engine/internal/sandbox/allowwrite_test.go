@@ -55,7 +55,7 @@ func TestAMissingAllowWriteFolderIsCreatedOnlyWhereItIsSafe(t *testing.T) {
 		{Folder: "/home/u/tools/bin", Why: "it is /home/u/tools/bin, a PATH folder, which the sandbox keeps read-only: pick a folder that is not on PATH"},
 		{Folder: "/home/u/tools/sub", Create: true},
 		{Folder: "/opt/new", Why: "Jhon creates a missing folder only under the home folder (/home/u): create it yourself (mkdir -p /opt/new)"},
-		{Folder: "/home/u/link/new", Why: "/home/u/link is a link, and Jhon creates no folder through a link: set sandbox.allow_write to the folder it leads to, or create it yourself (mkdir -p /home/u/link/new)"},
+		{Folder: "/home/u/link/new", Why: "/home/u/link is a link, and Jhon creates no folder through a link: set sandbox.allow_write to the folder it leads to, as the sandbox opens no link for writing"},
 		{Folder: "/home/u/notes/x", Why: "/home/u/notes is a file, not a folder"},
 	}
 	if !slices.Equal(got, want) {

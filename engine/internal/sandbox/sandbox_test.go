@@ -141,6 +141,8 @@ func TestAHiddenFolderHoldsNothing(t *testing.T) {
 	}
 }
 
+// A hidden or read-only path that is a link is mounted where it leads; a
+// writable one (the cache here) takes no mount at all (L28).
 func TestAMissingPathTakesNoMountAndALinkIsBoundWhereItLeads(t *testing.T) {
 	d := disk{
 		"/home/u": "dir", "/home/u/project": "dir", "/tmp": "dir",
@@ -155,7 +157,6 @@ func TestAMissingPathTakesNoMountAndALinkIsBoundWhereItLeads(t *testing.T) {
 	want := "--ro-bind / / --dev-bind /dev /dev" +
 		" --bind /tmp /tmp" +
 		" --bind /home/u/project /home/u/project" +
-		" --bind /mnt/big/cache /mnt/big/cache" +
 		" --tmpfs /mnt/vault/aws" +
 		" --dev-bind /dev/null /home/u/project/dotfiles/npmrc" +
 		" --remount-ro /mnt/vault/aws" +
@@ -218,7 +219,8 @@ func TestToolFoldersAreCachesAndStoresAndFollowTheirVariables(t *testing.T) {
 
 // A PATH folder outside the project is read-only: inside a writable folder
 // it is mounted after it, outside every one it is the machine's already, and
-// one in the project is the project's (F2).
+// one in the project is the project's (F2); a home cache that holds one is
+// not writable (L29).
 func TestAPATHFolderOutsideTheProjectIsReadOnly(t *testing.T) {
 	d := with(machine, disk{
 		"/usr/bin": "dir", "/home/u/.gradle": "dir", "/home/u/.gradle/bin": "dir", "/home/u/tools": "dir", "/home/u/tools/bin": "dir",
@@ -228,9 +230,16 @@ func TestAPATHFolderOutsideTheProjectIsReadOnly(t *testing.T) {
 	in.AllowWrite = []string{"/home/u/tools", "/home/u/tools/bin"}
 	in.Path = []string{"/home/u/.gradle/bin", "/home/u/tools/bin", "/home/u/.cache/bin", "/home/u/project/node_modules/.bin", "/usr/bin", "/opt/missing/bin", "relative"}
 	args := Args(in)
-	for _, c := range [][2]string{{"/home/u/.gradle", "/home/u/.gradle/bin"}, {"/home/u/tools", "/home/u/tools/bin"}, {"/home/u/.cache", "/home/u/.cache/bin"}} {
+	for _, c := range [][2]string{{"/home/u/tools", "/home/u/tools/bin"}} {
 		if outer, inner := index(args, "--bind", c[0]), index(args, "--ro-bind", c[1]); !(outer >= 0 && outer < inner) || index(args, "--bind", c[1]) >= 0 {
 			t.Errorf("%s writable at %d, the PATH folder %s read-only at %d; want that order:\n%s", c[0], outer, c[1], inner, strings.Join(args, " "))
+		}
+	}
+	// A cache or store under the home that holds a PATH folder is not bound
+	// writable at all (L29): the PATH folder is the machine's, read-only.
+	for _, c := range [][2]string{{"/home/u/.gradle", "/home/u/.gradle/bin"}, {"/home/u/.cache", "/home/u/.cache/bin"}} {
+		if index(args, "--bind", c[0]) >= 0 || index(args, "--bind", c[1]) >= 0 {
+			t.Errorf("%s or its PATH folder %s is bound writable:\n%s", c[0], c[1], strings.Join(args, " "))
 		}
 	}
 	for _, none := range []string{"/usr/bin", "/home/u/project/node_modules/.bin", "/opt/missing/bin", "relative"} {

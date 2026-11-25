@@ -220,7 +220,50 @@ func ownFilesProblem(in sandbox.Input) *sandbox.Problem {
 	if p == nil {
 		p = sandbox.StateFolder(in, filepath.Dir(grant.Dir()), xdgVariable("XDG_STATE_HOME"))
 	}
+	if p == nil {
+		p = sandbox.KeptProblem(in, keptOwn(in))
+	}
 	return p
+}
+
+// keptOwn are Jhon's own paths a sandbox.allow_write folder must not let a
+// sandboxed command replace (sandbox.KeptProblem, L28): the release folder
+// (under the home, and under $XDG_DATA_HOME) and the folder its `current`
+// leads to, each `jhon` program in a PATH folder outside the project and
+// the default ~/.local/bin/jhon, each with where it leads, the source
+// checkout (sourceCheckout) and the protected paths (in.Protected).
+func keptOwn(in sandbox.Input) []sandbox.Kept {
+	data := os.Getenv("XDG_DATA_HOME")
+	if !filepath.IsAbs(data) {
+		data = filepath.Join(in.Home, ".local", "share")
+	}
+	var kept []sandbox.Kept
+	add := func(what, p string) {
+		if filepath.IsAbs(p) {
+			kept = append(kept, sandbox.Kept{What: what, Path: p})
+			if real, err := filepath.EvalSymlinks(p); err == nil && real != p {
+				kept = append(kept, sandbox.Kept{What: what, Path: real})
+			}
+		}
+	}
+	for _, share := range []string{release.Locate().Share, filepath.Join(data, "jhon")} {
+		add("Jhon's release folder", share)
+		add("Jhon's current release", filepath.Join(share, "current"))
+	}
+	add("the jhon program", filepath.Join(in.Home, ".local", "bin", "jhon"))
+	for _, dir := range in.Path {
+		if !filepath.IsAbs(dir) || slices.ContainsFunc(in.Roots, func(r string) bool { return project.Within(dir, r) }) {
+			continue
+		}
+		if fi, err := os.Stat(filepath.Join(dir, "jhon")); err == nil && !fi.IsDir() {
+			add("the jhon program", filepath.Join(dir, "jhon"))
+		}
+	}
+	add("Jhon's source checkout", sourceCheckout(in))
+	for _, p := range in.Protected {
+		add("one of Jhon's protected paths", p)
+	}
+	return kept
 }
 
 // xdgVariable is name when the XDG variable moves Jhon's folder (an
@@ -317,6 +360,13 @@ type sandboxState struct {
 	// exist and no writable area holds: whether the next sandboxed command
 	// makes each, or why Jhon will not (sandbox.MissingAllowWrite, T239).
 	MissingAllowWrite []sandbox.MissingFolder `json:"missing_allow_write,omitempty"`
+	// UnusedWriteAreas are the writable areas the sandbox does not bind as
+	// each is or passes through a link (sandbox.UnusedWriteAreas, L28).
+	UnusedWriteAreas []sandbox.Unused `json:"unused_write_areas,omitempty"`
+	// RunRefused is why `jhon sandbox run` runs nothing here though the
+	// sandbox can run, on one line with the fix: Jhon's own files where a
+	// sandboxed command could change them (ownFilesProblem); "" when none.
+	RunRefused string `json:"run_refused,omitempty"`
 }
 
 // claudeBashRules are the Bash deny and ask rules in Claude Code's settings
@@ -440,6 +490,10 @@ func sandboxNow(pinned string) sandboxState {
 	}
 	in := sandboxInput(pinned)
 	s.MissingAllowWrite = sandbox.MissingAllowWrite(in)
+	s.UnusedWriteAreas = sandbox.UnusedWriteAreas(in)
+	if p := ownFilesProblem(in); p != nil {
+		s.RunRefused = p.Line()
+	}
 	if slices.ContainsFunc(s.MissingAllowWrite, func(m sandbox.MissingFolder) bool { return m.Create }) {
 		if _, p := runProblem(in); p != nil {
 			for i, m := range s.MissingAllowWrite {
@@ -495,6 +549,12 @@ func sandboxStatus(asJSON bool, pinned string) (int, error) {
 	for _, m := range s.MissingAllowWrite {
 		where += "; " + missingAllowWriteLine(m)
 	}
+	for _, u := range s.UnusedWriteAreas {
+		where += "; " + u.Line()
+	}
+	if s.RunRefused != "" {
+		where += "; " + runRefusedLine + s.RunRefused
+	}
 	fmt.Println(s.line() + where)
 	return 0, nil
 }
@@ -541,7 +601,21 @@ func (d doctor) sandbox() {
 			d.o.Warn(missingAllowWriteLine(m))
 		}
 	}
+	for _, u := range s.UnusedWriteAreas {
+		d.o.Warn(u.Line())
+	}
+	if s.RunRefused != "" {
+		if s.Mode == "on" {
+			d.o.Bad(runRefusedLine + s.RunRefused + "; until then every command of the model is refused")
+		} else {
+			d.o.Warn(runRefusedLine + s.RunRefused)
+		}
+	}
 }
+
+// runRefusedLine opens what status and doctor say of a run refused for
+// Jhon's own files (sandboxState.RunRefused).
+const runRefusedLine = "jhon sandbox run runs nothing here: "
 
 // mergeGateEntries are the merge gate's entries for an unsandboxed git line
 // (hook.MergeGateUnsandboxed, T219 S5) in the repository of the pinned
