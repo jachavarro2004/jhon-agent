@@ -27,7 +27,8 @@ const maxGitFolderEntries = 200000
 //     real paths): a .git file or a commondir that names another
 //     repository's is not the project's;
 //   - no entry in either, walked without following a link and at most
-//     maxGitFolderEntries, is a link;
+//     maxGitFolderEntries, is a link, or anything but a folder or a regular
+//     file (a FIFO git would wait on, a socket, a device);
 //   - no regular file outside objects/ has more than one link: git rewrites
 //     those in place or beside them. Objects are written as new files and
 //     never in place, and `git clone --local` hard-links them, so they are
@@ -62,7 +63,13 @@ func (in Input) GitFolderProblem(gitDir, commonDir string) string {
 				problem = p + " in the repository's git folder is a link, which git would write through"
 				return fs.SkipAll
 			}
-			if !d.Type().IsRegular() {
+			if !d.IsDir() && !d.Type().IsRegular() {
+				// A FIFO, a socket or a device: git would wait on one or
+				// write to it (L41).
+				problem = p + " in the repository's git folder is not a folder or a regular file"
+				return fs.SkipAll
+			}
+			if d.IsDir() {
 				return nil
 			}
 			if rel, _ := filepath.Rel(dir, p); rel == "objects" || strings.HasPrefix(rel, "objects"+string(filepath.Separator)) {

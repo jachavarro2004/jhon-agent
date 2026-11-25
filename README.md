@@ -207,9 +207,11 @@ other key (`http.cookieFile`, `http.proxy`, `url.*.insteadOf`,
 `include.path`, a filter, `core.worktree`, a key git adds later) keeps the
 line in the sandbox: a sandboxed command could have written it, and a list of
 the keys that run a command or write a file was broken twice. A line whose
-git folders lie outside the project, or hold a link or a hard-linked file git
-writes (`FETCH_HEAD`, a reflog, a ref), runs in the sandbox too, with a note:
-git would write through it outside the sandbox. uv's tools go to a
+git folders lie outside the project, or hold a link, a hard-linked file git
+writes (`FETCH_HEAD`, a reflog, a ref) or a FIFO, socket or device, or are
+named with white space around them (git keeps it, a trimmed name would be
+another folder), runs in the sandbox too, with a note: git would write
+through it outside the sandbox, or wait on it. uv's tools go to a
 sandbox-only folder under the cache, and uv's own tool folder in the home stays
 read-only. A `sandbox.allow_write` folder that does not exist yet is
 created before the next sandboxed command starts, outside the sandbox, so
