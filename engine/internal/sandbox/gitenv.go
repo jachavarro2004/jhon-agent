@@ -161,9 +161,12 @@ func ProjectGitConfig(listing string) (entries [][2]string, refuse string) {
 // is one ProjectGitConfig overrides: a filter's clean, smudge and process
 // and a diff driver's command and textconv run nothing; a merge driver runs
 // false, so the merge stops with a conflict; a remote's vcs names no
-// helper, so its fetch fails, and its upload-pack and receive-pack are
-// git's own; the editors are :, the pager none, a pager.<command> off; the
-// signing programs git's defaults and gpg.ssh.defaultKeyCommand false.
+// helper, so its fetch fails; the editors are :, the pager none, a
+// pager.<command> off; the signing programs git's defaults and
+// gpg.ssh.defaultKeyCommand false. A remote's uploadpack and receivepack
+// get none: git takes the repository's first value, so a later one changes
+// nothing (and git warns of it), and they run on the remote's host, over
+// ssh, the local transports being off (gitOverrides).
 func neutralGit(key string) (string, bool) {
 	section, rest, _ := strings.Cut(key, ".")
 	sub, name := "", rest
@@ -195,10 +198,6 @@ func neutralGit(key string) (string, bool) {
 		return "", true
 	case section == "remote" && sub != "" && name == "vcs":
 		return "", true
-	case section == "remote" && sub != "" && name == "uploadpack":
-		return "git-upload-pack", true
-	case section == "remote" && sub != "" && name == "receivepack":
-		return "git-receive-pack", true
 	case section == "gpg" && sub != "" && name == "program":
 		return "false", true
 	}

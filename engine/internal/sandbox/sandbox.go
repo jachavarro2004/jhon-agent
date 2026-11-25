@@ -539,8 +539,12 @@ func writable(in Input) []string {
 // precedes the program.
 //
 // The whole machine is bound read-only, with /dev as it is (the devices, and
-// /dev/shm writable); no PID or network namespace is made, so /proc and
-// /sys are the machine's, read-only. Then every area (layout), each only
+// /dev/shm writable), /sys the machine's, read-only. The program runs in a
+// PID namespace of its own, with its /proc (T249, L34 "Sin procesos vivos
+// del sandbox"): when it ends, bubblewrap's init ends and the kernel ends
+// every process left in the namespace, a setsid or double-forked one
+// included, and --die-with-parent ends it all when jhon ends. No network
+// namespace is made. Then every area (layout), each only
 // when it exists and at its real path: bubblewrap fails on a missing source,
 // and a symlinked path is bound where it leads, but a writable area reached
 // through a folder a sandboxed command may write takes no mount of its own
@@ -559,7 +563,7 @@ func writable(in Input) []string {
 // marks what runs inside (T217).
 func Args(in Input) []string {
 	mounts, tmpdir := layout(in, true)
-	args := []string{"--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev"}
+	args := []string{"--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc"}
 	var folders []string
 	var kept []mount
 	for _, m := range mounts {
@@ -603,7 +607,7 @@ func Args(in Input) []string {
 	if in.Env["TMPDIR"] != "" && !tmpdir {
 		args = append(args, "--setenv", "TMPDIR", "/tmp")
 	}
-	args = append(args, "--setenv", InsideVariable, "1", "--die-with-parent")
+	args = append(args, "--setenv", InsideVariable, "1", "--unshare-pid", "--die-with-parent")
 	if in.Cwd != "" {
 		args = append(args, "--chdir", in.Cwd)
 	}
@@ -626,10 +630,10 @@ func Inside() bool { return os.Getenv(InsideVariable) == "1" }
 // bubblewrap that cannot take one of them fails the probe as it would fail
 // a run.
 var probeArgs = []string{
-	"--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev",
+	"--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc",
 	"--bind", "/tmp", "/tmp", "--perms", "0700", "--tmpfs", "/tmp", "--remount-ro", "/tmp",
 	"--unsetenv", "SSH_AUTH_SOCK", "--setenv", "TMPDIR", "/tmp",
-	"--die-with-parent", "--chdir", "/",
+	"--unshare-pid", "--die-with-parent", "--chdir", "/",
 }
 
 // ProjectFolder is the real path of a folder the caller pins as the project

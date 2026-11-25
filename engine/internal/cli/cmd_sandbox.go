@@ -164,11 +164,24 @@ func sandboxRun(argv []string) (int, error) {
 		// overridden (sandbox.UnsandboxedEnv, L1306, T249 A2), and the line
 		// with a PATH no sandboxed command may change (sandbox.OutsidePath,
 		// T249 A1): what this process runs from here on (git) too.
+		// It runs only while no sandboxed command that can write what it
+		// reads runs, and none starts until it ends (sandbox.Registry, L34).
+		// A line that ends up in the work profile keeps its PATH.
 		if in := sandboxInput(pinned); sandbox.RunsOutside(sandbox.ThisHost(), in, program) {
+			leave, refused := enterRegistry(sandbox.KindOutside, sandbox.OutsideAreas(in, program[2]))
+			if refused != "" {
+				fmt.Fprintln(os.Stderr, refused)
+				return sandboxRefused, nil
+			}
+			path := os.Getenv("PATH")
 			os.Setenv("PATH", sandbox.OutsidePath(in))
 			if project, ok := projectGitConfig(program[2], in.Cwd); ok {
-				return sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), project, mergeGateEntries(pinned)...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil)
+				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), project, mergeGateEntries(pinned)...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil)
+				leave()
+				return code, err
 			}
+			leave()
+			os.Setenv("PATH", path)
 		}
 		profile = sandbox.Work
 	}
@@ -191,10 +204,46 @@ func sandboxRun(argv []string) (int, error) {
 		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
 		return sandboxRefused, nil
 	}
+	// It runs only while no line that runs outside the sandbox and reads
+	// what it can write runs (sandbox.Registry, L34).
+	leave, refused := enterRegistry(sandbox.KindSandboxed, sandbox.WritableAreas(in))
+	if refused != "" {
+		fmt.Fprintln(os.Stderr, refused)
+		return sandboxRefused, nil
+	}
 	// What runs here runs for an agent (T219 S9): git's merge gate judges it.
 	env := append(append(os.Environ(), sandbox.UVToolEnv(in)...), hook.AgentVariable+"=1")
 	refusal := func(path string) string { return sandbox.Refusal(in, path, missing) }
-	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal)
+	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal)
+	leave()
+	return code, err
+}
+
+// runRegistry is the registry of running runs (sandbox.Registry): a folder
+// of Jhon's state folder, which the sandbox keeps read-only and refuses to
+// run with where a sandboxed command could change it.
+func runRegistry() sandbox.Registry {
+	return sandbox.Registry{Dir: filepath.Join(filepath.Dir(grant.Dir()), "sandbox-runs")}
+}
+
+// enterRegistry records this run of kind with areas (sandbox.Registry.Enter,
+// waiting up to sandbox.RegistryWait), and gives the function that removes
+// the record; refused is the note when it may not run: a run of the other
+// kind that shares its areas still runs, or the registry cannot be read or
+// written, which refuses it too (fail closed).
+func enterRegistry(kind string, areas []string) (leave func(), refused string) {
+	r := runRegistry()
+	leave, err := r.Enter(kind, areas, sandbox.RegistryWait)
+	var busy sandbox.ErrBusy
+	switch {
+	case err == nil:
+		return leave, ""
+	case errors.As(err, &busy) && kind == sandbox.KindOutside:
+		return nil, "jhon sandbox: a sandboxed command that can write what this line reads is still running (pid " + strconv.Itoa(busy.Run.PID) + "), and a line that runs outside the sandbox does not run while one does: that command could change what the line reads (the repository's git configuration, a program it runs), so nothing was run; fix: wait for that command to end, or stop it, then run the line again"
+	case errors.As(err, &busy):
+		return nil, "jhon sandbox: a line that runs outside the sandbox and reads what this command can write is still running (pid " + strconv.Itoa(busy.Run.PID) + "), and no sandboxed command that can write what it reads starts while it runs, so nothing was run; fix: wait for that line to end, then run the command again"
+	}
+	return nil, "jhon sandbox: the record of running commands (" + r.Dir + ") cannot be read or written (" + err.Error() + "), so whether a sandboxed command could change what this runs is unknown, and nothing was run; fix: make " + r.Dir + " a folder you can write"
 }
 
 // runProblem is what `jhon sandbox run` checks before it runs anything in

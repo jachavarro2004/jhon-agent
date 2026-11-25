@@ -200,13 +200,16 @@ runs with the repository's hooks (configured hooks included), ssh command,
 fsmonitor and credential helpers overridden, and so is every other key the
 repository's own configuration (with what its `include.*` brings in) sets
 that runs a command: filters, merge and diff drivers, `diff.external`, a
-remote's `vcs`, `uploadpack` and `receivepack`, the editors, the pager,
+remote's `vcs`, the editors, the pager,
 `core.askPass`, `core.alternateRefsCommand` and the signing programs take
 your global value or one that runs nothing (a merge driver becomes `false`,
 a conflict), and `core.gitProxy` runs no proxy; a repository that sets
 `core.worktree` keeps the line in the sandbox, as it would move what a pull
-checks out outside the project. `url.*.insteadOf` in the repository's
-configuration is not overridden, an accepted residual risk. uv's tools go to a
+checks out outside the project. `url.*.insteadOf` and a remote's
+`uploadpack` and `receivepack` in the repository's configuration are not
+overridden (git takes the repository's first `uploadpack` and `receivepack`,
+which run on the remote's host over ssh, the local transports being off), an
+accepted residual risk. uv's tools go to a
 sandbox-only folder under the cache, and uv's own tool folder in the home stays
 read-only. A `sandbox.allow_write` folder that does not exist yet is
 created before the next sandboxed command starts, outside the sandbox, so
@@ -241,9 +244,16 @@ characters in the path escaped, and each run records a `jhon.sandbox`
 telemetry event. Everything inside the sandbox sees `JHON_IN_SANDBOX=1`:
 `jhon sandbox status` run there, where no other sandbox can start, says it
 runs inside and that the status outside it gives the real state (`inside` and
-`can_run` true in `--json`), instead of reporting bubblewrap's failure. There
-is no PID namespace: a child a command detaches
-(`setsid`, `nohup`) outlives the sandbox's bubblewrap. With
+`can_run` true in `--json`), instead of reporting bubblewrap's failure. Each
+command runs in a PID namespace of its own, so when it ends every process it
+started ends too, one it detached (`setsid`, `nohup`, a double fork)
+included. While a sandboxed command that can write a project runs, a line of
+that project that would run outside the sandbox (git, gh, docker, a deploy
+tool) waits up to 3 seconds and is then refused with a note, and the other
+way round: such a command could otherwise change what the outside line reads
+(the repository's git configuration) while it reads it. A long-running
+sandboxed command (a dev server in the background) therefore holds the
+project's `git push` until it ends. With
 `sandbox.mode = "on"` set and a sandbox that cannot run (no bubblewrap,
 user namespaces off) every command is refused with the fix and `jhon
 doctor` fails; `sandbox.mode = "off"` turns it off. Off, nothing guards a shell command's
