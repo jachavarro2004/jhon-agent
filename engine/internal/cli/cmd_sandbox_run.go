@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -65,23 +64,24 @@ func ownerCredentialHelpers() [][2]string {
 	return out
 }
 
-// gitListingLimit bounds the configuration projectGitConfig reads in one
-// folder: a longer listing runs the line in the sandbox.
+// gitListingLimit bounds the configuration repositoryGitConfigSafe reads
+// in one folder: a longer listing runs the line in the sandbox.
 const gitListingLimit = 4 << 20
 
-// projectGitConfig are the entries an unsandboxed line started in cwd runs
-// git with for the keys of the repositories it works in that run a command
-// (sandbox.GitFolders, sandbox.ProjectGitConfig, T249 A2): each folder's
-// `git config --list --show-scope -z`, with this process's environment
-// without GIT_CONFIG_PARAMETERS (as the line runs) and at most 5 s and
-// gitListingLimit bytes each. ok is false when the line must run in the
-// sandbox instead: a listing that fails, times out or is too long, or a
-// repository that sets core.worktree. With no git on PATH the line can run
-// none, and needs none.
-func projectGitConfig(line, cwd string) (entries [][2]string, ok bool) {
+// repositoryGitConfigSafe is whether an unsandboxed line started in cwd may
+// run outside the sandbox given the configuration of each repository it
+// works in (sandbox.GitFolders, T249 A2, L39): each folder's `git config
+// --list --show-scope -z`, with this process's environment without
+// GIT_CONFIG_PARAMETERS (as the line runs) and at most 5 s and
+// gitListingLimit bytes, sets only keys on the allowlist, or gate's (the
+// merge gate's entries the line runs with) with their values
+// (sandbox.RepositoryGitConfig). false sends the line to the sandbox: a
+// listing that fails, times out or is too long, or any other key. With no
+// git on PATH the line can run none, and needs no check.
+func repositoryGitConfigSafe(line, cwd string, gate [][2]string) bool {
 	git, err := exec.LookPath("git")
 	if err != nil {
-		return nil, true
+		return true
 	}
 	var env []string
 	for _, kv := range os.Environ() {
@@ -91,7 +91,7 @@ func projectGitConfig(line, cwd string) (entries [][2]string, ok bool) {
 	}
 	folders := sandbox.GitFolders(line, cwd)
 	if folders == nil {
-		return nil, false
+		return false
 	}
 	for _, dir := range folders {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -101,20 +101,11 @@ func projectGitConfig(line, cwd string) (entries [][2]string, ok bool) {
 		cmd.Stdout = out
 		err := cmd.Run()
 		cancel()
-		if err != nil || out.over {
-			return nil, false
-		}
-		more, refuse := sandbox.ProjectGitConfig(out.String())
-		if refuse != "" {
-			return nil, false
-		}
-		for _, e := range more {
-			if !slices.Contains(entries, e) {
-				entries = append(entries, e)
-			}
+		if err != nil || out.over || sandbox.RepositoryGitConfig(out.String(), gate) != "" {
+			return false
 		}
 	}
-	return entries, true
+	return true
 }
 
 // limitedBuffer keeps at most limit bytes of what is written to it, and

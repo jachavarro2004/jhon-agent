@@ -16,6 +16,8 @@
 package sandbox
 
 import (
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -82,6 +84,10 @@ type Input struct {
 	// Docker is sandbox.docker: the container sockets (containerSockets)
 	// are shown inside the sandbox, an escape the owner accepted (L37).
 	Docker bool
+	// ContainerHosts are the endpoints the docker CLI's contexts name
+	// (~/.docker/contexts): with Docker off, each unix one is hidden, as
+	// DOCKER_HOST's and CONTAINER_HOST's are (L39).
+	ContainerHosts []string
 	// Stat is what path is on disk, through symlinks: its real path and
 	// whether it is a directory; ok is false when it does not exist.
 	Stat func(path string) (real string, dir, ok bool)
@@ -140,6 +146,32 @@ var containerSockets = []string{"docker.sock", "podman/podman.sock"}
 // DockerEscape is what status and doctor say of the container sockets shown
 // inside the sandbox (L37).
 const DockerEscape = "docker socket inside the sandbox: a container can write anywhere the user can, and outlive the command (sandbox.docker = true; jhon settings set sandbox.docker false hides it)"
+
+// systemContainerSockets are where a docker or podman engine run by the
+// system keeps its socket (/var/run is a link to /run on most systems, kept
+// for the ones where it is not), and homeContainerSockets the folders under
+// the home where Docker Desktop keeps its own: hidden with sandbox.docker
+// off (L39), as is any unix socket DOCKER_HOST, CONTAINER_HOST or a docker
+// context names (containerHosts).
+var (
+	systemContainerSockets = []string{"/run/docker.sock", "/var/run/docker.sock", "/run/podman", "/var/run/podman", "/run/containerd"}
+	homeContainerSockets   = []string{".docker/desktop", ".docker/run"}
+)
+
+// containerHosts are the unix socket paths of the container engines in: the
+// ones DOCKER_HOST and CONTAINER_HOST name, and the docker contexts'
+// (Input.ContainerHosts); tcp:// and ssh:// endpoints name no path.
+func (in Input) containerHosts() []string {
+	var out []string
+	for _, h := range slices.Concat([]string{in.Env["DOCKER_HOST"], in.Env["CONTAINER_HOST"]}, in.ContainerHosts) {
+		if p, ok := strings.CutPrefix(h, "unix://"); ok && filepath.IsAbs(p) {
+			out = append(out, filepath.Clean(p))
+		} else if p, ok := strings.CutPrefix(h, "unix:"); ok && filepath.IsAbs(p) {
+			out = append(out, filepath.Clean(p))
+		}
+	}
+	return out
+}
 
 // systemSockets are the machine's sockets outside the runtime dir that run
 // a command or act for the owner, hidden when they exist (L36): the system
@@ -213,7 +245,56 @@ func (in Input) socketPaths() []string {
 			out = append(out, path)
 		}
 	}
+	// The container engines' sockets, unless the owner shows them (L37,
+	// L39): through one a container can write anywhere the owner can.
+	if !in.Docker {
+		out = append(out, systemContainerSockets...)
+		docker := in.under(".docker")
+		if d := in.Env["DOCKER_CONFIG"]; filepath.IsAbs(d) {
+			docker = d
+		}
+		for _, rel := range homeContainerSockets {
+			out = append(out, in.under(rel), filepath.Join(docker, strings.TrimPrefix(rel, ".docker/")))
+		}
+		out = append(out, in.containerHosts()...)
+	}
 	return append(out, in.Env["SSH_AUTH_SOCK"])
+}
+
+// DockerContexts are the endpoints the docker CLI's contexts name: the
+// docker endpoint's Host in each <config>/contexts/meta/*/meta.json, where
+// <config> is $DOCKER_CONFIG or ~/.docker, at most 64 contexts and 64 KiB
+// each (Input.ContainerHosts).
+func DockerContexts(home string, env map[string]string) []string {
+	config := filepath.Join(home, ".docker")
+	if d := env["DOCKER_CONFIG"]; filepath.IsAbs(d) {
+		config = d
+	}
+	metas, _ := filepath.Glob(filepath.Join(config, "contexts", "meta", "*", "meta.json"))
+	var out []string
+	for i, m := range metas {
+		if i >= 64 {
+			break
+		}
+		f, err := os.Open(m)
+		if err != nil {
+			continue
+		}
+		var meta struct {
+			Endpoints map[string]struct{ Host string }
+		}
+		err = json.NewDecoder(io.LimitReader(f, 64<<10)).Decode(&meta)
+		f.Close()
+		if err != nil {
+			continue
+		}
+		for _, e := range meta.Endpoints {
+			if e.Host != "" {
+				out = append(out, e.Host)
+			}
+		}
+	}
+	return out
 }
 
 // within is whether p is one of areas or inside one.
@@ -776,6 +857,7 @@ func Current(cwd, pinned string) Input {
 		k, v, _ := strings.Cut(kv, "=")
 		in.Env[k] = v
 	}
+	in.ContainerHosts = DockerContexts(in.Home, in.Env)
 	return in
 }
 
