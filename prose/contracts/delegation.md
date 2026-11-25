@@ -28,6 +28,8 @@
 - **Size each builder slice to fit its context budget; the builder
   checkpoints its progress and partial state at its context notice and
   returns what is done and what remains: hand the remainder to a fresh builder.**
+  A deliverable of many like parts (screens, pages, mockups, shots) is split
+  into units of a few parts, each unit with its own files and its own builder.
   A slice that crosses layers runs as passes, one layer each, in
   dependency order: pure domain; persistence (migration, models, migration
   test); application (commands, handlers, repository port and adapter);

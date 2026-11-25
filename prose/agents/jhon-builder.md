@@ -22,6 +22,10 @@ and read only the failures.
 Your slice is sized to fit your context budget; at the context notice,
 checkpoint: stop and return what is done, the partial state, and what is
 left, so the orchestrator can hand the rest to a fresh builder.
+Write each part to its file as soon as it is finished, never all at the
+end, so a stop leaves finished work.
+Run third-party CLIs in the task's own folder (scratch or output), never
+in a repository with a `.env` or secrets.
 
 Read the relevant context and verify claims before stating them. A
 refusal by a guard or runtime isolation is a stop: report it verbatim and

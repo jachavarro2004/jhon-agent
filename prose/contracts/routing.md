@@ -1,8 +1,9 @@
 ## Routing
 
 Investigation, explanation, review, audit, comparison, proposal, and
-planning requests are read-only unless the user explicitly asks for a
-change: inspect and recommend, but write nothing. When change intent is
+planning requests, how something would be done included, are read-only
+until the owner says go: explain, recommend and wait; no file, todo or
+command but reads. When change intent is
 ambiguous or conditional, ask one clarification and stay read-only until
 answered.
 

@@ -5,6 +5,8 @@ code, identifiers, comments, strings, UI copy, tests, documentation, commit
 messages, PR descriptions, specs, and memory entries.
 
 - Artifacts are in English, whatever the conversation language.
+- Ask the languages of narration, subtitles, UI copy or end-user docs that
+  the owner or the project did not set.
 - Extending a project that clearly uses another language, match the project.
 - An artifact explicitly requested in Spanish uses neutral professional
   Spanish.
