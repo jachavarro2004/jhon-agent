@@ -190,8 +190,8 @@ func TestTheUnsandboxedProfileRunsOnlyANetworkLineOutsideTheSandbox(t *testing.T
 }
 
 // note is the G3 note for path, on its own line: a path that does not
-// exist, outside every writable area (T239).
-func note(path string) string { return outsideNote(path) }
+// exist, directly in the home (T239, L26 A4).
+func note(path string) string { return homeNote(path) }
 
 // G3: a wrapped command that fails on a read-only path gets the note once,
 // after its own output, on stderr; one that does not fail, or fails for

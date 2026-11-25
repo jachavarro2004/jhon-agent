@@ -120,8 +120,11 @@ func TestWhereAreasNestTheInnerOneIsMountedLast(t *testing.T) {
 	args = Args(in)
 	local, share, telemetry := index(args, "--bind", "/home/u/.local"), index(args, "--ro-bind", "/home/u/.local/share/jhon"), index(args, "--bind", "/home/u/.local/share/jhon/telemetry")
 	state := index(args, "--ro-bind", "/home/u/.local/state/jhon")
-	if !(local >= 0 && local < share && share < telemetry && local < state) {
-		t.Errorf("~/.local at %d, the share at %d, the telemetry at %d, the state at %d; want that order:\n%s", local, share, telemetry, state, strings.Join(args, " "))
+	// The telemetry folder takes no mount of its own there (L26): the way to
+	// it, ~/.local/share, is a plain folder in the writable ~/.local that a
+	// command could rename and rebuild with a link where the folder was.
+	if !(local >= 0 && local < share && telemetry < 0 && local < state) {
+		t.Errorf("~/.local at %d, the share at %d, the telemetry at %d, the state at %d; want that order and no telemetry mount:\n%s", local, share, telemetry, state, strings.Join(args, " "))
 	}
 }
 

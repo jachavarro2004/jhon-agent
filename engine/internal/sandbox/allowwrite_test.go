@@ -156,7 +156,7 @@ func TestCreateAllowWriteMakesTheFolderAndFollowsNoLink(t *testing.T) {
 func TestTheRefusalSaysWhichSettingOpensThePathAndWhetherItExists(t *testing.T) {
 	d := with(machine, disk{
 		"/home/u/notes": "file", "/home/u/tools": "dir", "/home/u/tools/bin": "dir", "/home/u/.ssh/id": "file",
-		"/home/u/project/ro": "dir",
+		"/home/u/project/ro": "dir", "/home/u/docs": "dir", "/etc/passwd": "file",
 	})
 	in := sample(d)
 	in.AllowWrite = []string{"/home/u/tools"}
@@ -164,9 +164,21 @@ func TestTheRefusalSaysWhichSettingOpensThePathAndWhetherItExists(t *testing.T) 
 	missing := []MissingFolder{{Folder: "/home/u/.gnupg/work", Why: "it lies in /home/u/.gnupg, which the sandbox hides: pick a folder elsewhere"}}
 	const stop = "; that is a stop: tell the owner the path and why, never write it elsewhere"
 	open := "; no folder the sandbox opens for writing holds it: sandbox.allow_write opens it, or a folder that holds it, from the next command (jhon settings set sandbox.allow_write <folder>,…)"
+	// A4: a file directly in the home, the home itself, and a path outside
+	// it get no suggestion of a setting: the owner decides.
+	home := "; no folder the sandbox opens for writing holds it, and no setting should open it: it lies directly in the home folder; whether to write it is the owner's decision"
+	outside := "; no folder the sandbox opens for writing holds it, and no setting should open it: it lies outside the home folder; whether to write it is the owner's decision"
 	for _, c := range []struct{ path, want string }{
-		{"/home/u/notes", "the sandbox refused a write to /home/u/notes, which exists" + open + stop},
-		{"/home/u/escape.txt", "the sandbox refused a write to /home/u/escape.txt, which does not exist" + open + stop},
+		{"/home/u/docs", "the sandbox refused a write to /home/u/docs, which exists" + home + stop},
+		{"/home/u/docs/x", "the sandbox refused a write to /home/u/docs/x, which does not exist" + open + stop},
+		{"/home/u/notes", "the sandbox refused a write to /home/u/notes, which exists" + home + stop},
+		{"/home/u/escape.txt", "the sandbox refused a write to /home/u/escape.txt, which does not exist" + home + stop},
+		{"/home/u/.bashrc", "the sandbox refused a write to /home/u/.bashrc, which does not exist" + home + stop},
+		{"/home/u", "the sandbox refused a write to /home/u, which exists" + outside + stop},
+		{"/etc/passwd", "the sandbox refused a write to /etc/passwd, which exists" + outside + stop},
+		{"/opt/x/y", "the sandbox refused a write to /opt/x/y, which does not exist" + outside + stop},
+		// A3: control characters are escaped, never carried.
+		{"/home/u/docs/a\rb\x1b[2J\u2028c\u0085d\te\x00", `the sandbox refused a write to /home/u/docs/a\x0db\x1b[2J\u2028c\x85d\x09e\x00, which does not exist` + open + stop},
 		{"/home/u/.gnupg", "the sandbox refused a write to /home/u/.gnupg, which does not exist; sandbox.allow_write names /home/u/.gnupg/work, which does not exist and Jhon did not create it: it lies in /home/u/.gnupg, which the sandbox hides: pick a folder elsewhere" + stop},
 		{"/home/u/.gnupg/work/x", "the sandbox refused a write to /home/u/.gnupg/work/x, which does not exist; sandbox.allow_write names /home/u/.gnupg/work, which does not exist and Jhon did not create it: it lies in /home/u/.gnupg, which the sandbox hides: pick a folder elsewhere" + stop},
 		{"/home/u/tools/bin/x", "the sandbox refused a write to /home/u/tools/bin/x, which does not exist; it is in /home/u/tools/bin, a PATH folder, which stays read-only so that no sandboxed command changes a program run later: sandbox.allow_write does not open it" + stop},
@@ -183,5 +195,32 @@ func TestTheRefusalSaysWhichSettingOpensThePathAndWhetherItExists(t *testing.T) 
 	}
 	if !strings.HasPrefix(Refusal(in, "/home/u/notes", nil), "the sandbox refused a write to ") {
 		t.Error("the note lost the words the audit reads it by")
+	}
+	// A3: RefusalNote, the unsandboxed run's note, escapes them too, and
+	// invalid UTF-8 and the bidirectional controls.
+	if got, want := RefusalNote("/a\x1b]0;x\x07\u202e\xff"), `the sandbox refused a write to /a\x1b]0;x\x07\u202e\xff; that is a stop: tell the owner the path (jhon settings sandbox.allow_write), never write it elsewhere`; got != want {
+		t.Errorf("RefusalNote =\n%s\nwant\n%s", got, want)
+	}
+	for _, note := range []string{Refusal(in, "/home/u/x\u2029\u0085\r\n", missing), RefusalNote("/x\u009b")} {
+		if strings.ContainsFunc(note, func(r rune) bool { return r < 0x20 || r >= 0x7f && r <= 0x9f || r == 0x2028 || r == 0x2029 }) {
+			t.Errorf("the note carries a control character: %q", note)
+		}
+	}
+}
+
+// A1: a parent Jhon would make on the way must pass the rules a folder
+// does: no PATH folder, nor one that holds a path the sandbox hides.
+func TestAMissingAllowWriteFolderIsNotMadeThroughAParentTheRulesRefuse(t *testing.T) {
+	in := sample(machine)
+	in.Path = []string{"/home/u/pp/q/bin"}
+	in.Env["SSH_AUTH_SOCK"] = "/home/u/agent/sock"
+	in.AllowWrite = []string{"/home/u/pp/q/bin/x", "/home/u/agent/x", "/home/u/fine/x"}
+	want := []MissingFolder{
+		{Folder: "/home/u/pp/q/bin/x", Why: "Jhon would create /home/u/pp on the way, and it holds /home/u/pp/q/bin, a PATH folder, which the sandbox keeps read-only: pick a folder that holds none"},
+		{Folder: "/home/u/agent/x", Why: "Jhon would create /home/u/agent on the way, and it holds /home/u/agent/sock, which the sandbox hides: pick a folder that holds none"},
+		{Folder: "/home/u/fine/x", Create: true},
+	}
+	if got := MissingAllowWrite(in); !slices.Equal(got, want) {
+		t.Errorf("MissingAllowWrite =\n%s\nwant\n%s", show(got), show(want))
 	}
 }

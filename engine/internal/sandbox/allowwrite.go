@@ -90,10 +90,19 @@ func (in Input) whyNotCreate(f string, mounts []mount) (why string, writable boo
 	}
 	rel, _ := filepath.Rel(home, f)
 	cur := home
-	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+	parts := strings.Split(rel, string(filepath.Separator))
+	for i, part := range parts {
 		cur = filepath.Join(cur, part)
 		real, dir, ok := in.Stat(cur)
 		if !ok {
+			// Each parent made on the way, from this first missing part to
+			// f's own folder, passes the rules f does (L26 A1).
+			for j := i; j < len(parts)-1; j++ {
+				parent := filepath.Join(append([]string{home}, parts[:j+1]...)...)
+				if why := in.kept(parent); why != "" {
+					return "Jhon would create " + parent + " on the way, and " + why, false
+				}
+			}
 			break
 		}
 		if real != cur {
@@ -243,18 +252,27 @@ func CreateAllowWrite(in Input) (created []string, missing []MissingFolder) {
 // and why it is read-only, with the setting that opens it or that none
 // does: a folder of missing (CreateAllowWrite's) that holds it, or that it
 // holds as mkdir -p met it first; no writable area (sandbox.allow_write
-// opens it); a PATH folder, Jhon's or the runtimes' own, or a hidden path
-// (none opens it); or a writable area, where the file system itself refused
-// it. It ends with the stop. With path "", RefusalNote's.
+// opens it, but for a file directly in the home, the home itself or a path
+// outside it, which no setting should open: the owner decides, L26 A4); a
+// PATH folder, Jhon's or the runtimes' own, or a hidden path (none opens
+// it); or a writable area, where the file system itself refused it. It
+// ends with the stop, its control characters escaped (escapeControls, L26
+// A3). With path "", RefusalNote's.
 func Refusal(in Input, path string, missing []MissingFolder) string {
 	if path == "" || !filepath.IsAbs(path) {
 		return RefusalNote(path)
 	}
+	return escapeControls(refusal(in, path, missing))
+}
+
+// refusal is Refusal before its control characters are escaped.
+func refusal(in Input, path string, missing []MissingFolder) string {
 	p := filepath.Clean(path)
 	const stop = "; that is a stop: tell the owner the path and why, never write it elsewhere"
 	head := "the sandbox refused a write to " + path
 	exists := ", which does not exist"
-	if _, _, ok := in.Stat(p); ok {
+	_, _, found := in.Stat(p)
+	if found {
 		exists = ", which exists"
 	}
 	mounts, _ := layout(in, true)
@@ -273,9 +291,19 @@ func Refusal(in Input, path string, missing []MissingFolder) string {
 				continue
 			}
 			fr := realPath(f.Folder, in.Stat)
-			if project.Within(p, f.Folder) || project.Within(f.Folder, p) || project.Within(real, fr) || project.Within(fr, real) {
+			// In the folder, or a missing folder on the way to it (mkdir -p
+			// met that one first).
+			if project.Within(p, f.Folder) || project.Within(real, fr) || !found && (project.Within(f.Folder, p) || project.Within(fr, real)) {
 				return head + exists + "; sandbox.allow_write names " + f.Folder + ", which does not exist and Jhon did not create it: " + f.Why + stop
 			}
+		}
+		// A file directly in the home (~/.bashrc), the home itself and a
+		// path outside it get no setting suggested (L26 A4).
+		switch in.homeDepth(p, real) {
+		case outsideHome:
+			return head + exists + "; no folder the sandbox opens for writing holds it, and no setting should open it: it lies outside the home folder; whether to write it is the owner's decision" + stop
+		case inHome:
+			return head + exists + "; no folder the sandbox opens for writing holds it, and no setting should open it: it lies directly in the home folder; whether to write it is the owner's decision" + stop
 		}
 		return head + exists + "; no folder the sandbox opens for writing holds it: sandbox.allow_write opens it, or a folder that holds it, from the next command (jhon settings set sandbox.allow_write <folder>,…)" + stop
 	case m.sealed && !m.shown:
@@ -292,4 +320,28 @@ func Refusal(in Input, path string, missing []MissingFolder) string {
 		return head + exists + "; " + where(m) + ", a container socket the sandbox shows read-only: no setting opens it" + stop
 	}
 	return head + exists + "; " + where(m) + ", a PATH folder, which stays read-only so that no sandboxed command changes a program run later: sandbox.allow_write does not open it" + stop
+}
+
+// Where a refused path lies against the home (homeDepth).
+const (
+	belowHome   = iota // in a folder under the home
+	inHome             // directly in the home folder
+	outsideHome        // the home itself, or outside it
+)
+
+// homeDepth is where p lies, as written (homed) and where its links lead
+// (real), whichever is nearer the home or outside it; a home that is / or
+// not absolute leaves every path outside it.
+func (in Input) homeDepth(p, real string) int {
+	home := filepath.Clean(in.Home)
+	depth := func(x string) int {
+		switch {
+		case !filepath.IsAbs(home) || home == string(filepath.Separator) || x == home || !project.Within(x, home):
+			return outsideHome
+		case filepath.Dir(x) == home:
+			return inHome
+		}
+		return belowHome
+	}
+	return max(depth(in.homed(p)), depth(real))
 }
