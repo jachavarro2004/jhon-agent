@@ -709,7 +709,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            /var/run/docker.sock, /run/podman,
                            /run/containerd, ~/.docker/desktop and
                            ~/.docker/run, and every unix socket DOCKER_HOST,
-                           CONTAINER_HOST or a docker context names; nor are
+                           CONTAINER_HOST or a docker context names (the
+                           scheme in any case, a query string ignored);
+                           nor are
                            tmux's, X11's, ICE's and the pi harness's
                            (gentle-pi) socket folders under /tmp, the
                            sockets of a pane manager under ~/.config whose
@@ -819,8 +821,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            format keys of core and extensions, core.hooksPath
                            (overridden), a remote's url and pushurl (no
                            <transport>:: helper), fetch, push, tagopt and
-                           prune, a branch's remote, merge, rebase and
-                           pushremote, user.name, user.email and
+                           prune, a branch's merge and rebase, its remote
+                           and pushremote judged as a url, user.name,
+                           user.email and
                            user.signingKey, commit.gpgSign, tag.gpgSign,
                            gpg.format, gpg.ssh.allowedSignersFile,
                            init.defaultBranch, pull.rebase and pull.ff (not
@@ -831,7 +834,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            url.*.insteadOf, include.path, a filter, core.
                            worktree, a key git adds later), or whose
                            configuration git cannot list, runs the line with
-                           the work profile. A caller whose
+                           the work profile; so does a line whose git
+                           folders (the git dir and the common dir) lie
+                           outside the project, or hold a link or a file
+                           git writes that is hard-linked (objects aside),
+                           as git would write through it outside the
+                           sandbox. Such a line says why on stderr first.
+                           A caller whose
                            stdout and stderr are one file (2>&1) gets the
                            program's output as one stream, in its order. In the
                            work profile uv's tools go to

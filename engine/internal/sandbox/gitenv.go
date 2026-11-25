@@ -145,8 +145,9 @@ func RepositoryGitConfig(listing string, forced [][2]string) string {
 //     from a promisor remote with keys of its own);
 //   - a remote's url and pushurl (not a <transport>:: helper, not an
 //     option), fetch and push refspecs (refs inside the repository),
-//     tagopt (--tags or --no-tags) and prune; a branch's remote, merge,
-//     rebase (not interactive, which opens an editor) and pushremote;
+//     tagopt (--tags or --no-tags) and prune; a branch's merge, rebase
+//     (not interactive, which opens an editor), and remote and pushremote,
+//     judged as a remote's url (either may be a URL itself);
 //   - user.name and user.email; the signing switches and format
 //     (commit.gpgsign, tag.gpgsign, gpg.format) and user.signingkey, which
 //     picks one of the owner's keys (an accepted choice: the programs,
@@ -188,7 +189,11 @@ func safeRepositoryKey(key, value string) bool {
 		return true
 	case section == "remote" && sub != "" && name == "tagopt":
 		return value == "--tags" || value == "--no-tags"
-	case section == "branch" && sub != "" && (name == "remote" || name == "merge" || name == "pushremote"):
+	case section == "branch" && sub != "" && (name == "remote" || name == "pushremote"):
+		// It names a remote, or is itself the URL when no remote has that
+		// name: judged as a remote's url (L40 A4).
+		return !strings.Contains(value, "::") && !strings.HasPrefix(value, "-")
+	case section == "branch" && sub != "" && name == "merge":
 		return true
 	case section == "branch" && sub != "" && name == "rebase":
 		return notInteractive(value)
