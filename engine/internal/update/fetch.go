@@ -11,6 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/release"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/version"
@@ -38,13 +41,49 @@ func httpsRedirects(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// statusError is an answer other than 200 OK.
+// statusError is an answer other than 200 OK; limited, when GitHub's rate
+// limit refused it (rateLimited), says so in place of the status.
 type statusError struct {
 	url, status string
 	code        int
+	limited     string
 }
 
-func (e *statusError) Error() string { return e.url + " answered " + e.status }
+func (e *statusError) Error() string {
+	if e.limited != "" {
+		return e.url + " refused: " + e.limited
+	}
+	return e.url + " answered " + e.status
+}
+
+// rateLimited is why resp, a 403 or a 429, is GitHub's rate limit, "" when
+// it is not (T8c): a 429, a 403 with X-RateLimit-Remaining 0, or a body
+// whose message names the rate limit, as GitHub documents it. The reset
+// comes from X-RateLimit-Reset (seconds since the epoch), else Retry-After
+// (seconds). jhon sends no token, so the only way on is to wait for it.
+func rateLimited(resp *http.Response) string {
+	if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusTooManyRequests {
+		return ""
+	}
+	var body struct{ Message string }
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+	json.Unmarshal(b, &body)
+	exhausted := resp.Header.Get("X-RateLimit-Remaining") == "0"
+	if !exhausted && resp.StatusCode != http.StatusTooManyRequests && !strings.Contains(strings.ToLower(body.Message), "rate limit") {
+		return ""
+	}
+	why := resp.Status
+	if exhausted {
+		why += ", X-RateLimit-Remaining: 0"
+	}
+	wait := "; jhon sends no GitHub token, so retry later, once it resets"
+	if n, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil && n > 0 {
+		wait = "; it resets at " + time.Unix(n, 0).UTC().Format("2006-01-02 15:04:05 UTC") + "; jhon sends no GitHub token, so retry after the reset"
+	} else if n, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && n >= 0 {
+		wait = fmt.Sprintf("; it resets in %d s; jhon sends no GitHub token, so retry after the reset", n)
+	}
+	return "GitHub's API rate limit for this address is used up (" + why + ")" + wait
+}
 
 // get writes rawURL's body to w, or says what failed: the scheme, the
 // network, the status, or a body larger than limit, which names it name.
@@ -68,7 +107,7 @@ func (c *Client) get(ctx context.Context, rawURL, name string, w io.Writer, limi
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return &statusError{rawURL, resp.Status, resp.StatusCode}
+		return &statusError{rawURL, resp.Status, resp.StatusCode, rateLimited(resp)}
 	}
 	n, err := io.Copy(w, io.LimitReader(resp.Body, limit+1))
 	if err != nil {

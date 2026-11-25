@@ -305,12 +305,36 @@ func TestStart(t *testing.T) {
 
 	t.Run("jhon start pi refuses before a render wrote the directory, and names jhon sync", func(t *testing.T) {
 		t.Parallel()
-		r, argv, _, _ := startPi(t, false)
+		r, argv, _, home := startPi(t, false)
 		equal(t, r.Code, 1)
 		if argv != nil {
 			t.Fatal("pi ran")
 		}
-		match(t, r.Stderr, `jhon sync`)
+		equal(t, r.Stderr, "jhon: "+filepath.Join(home, ".pi", "jhon")+" has no settings.json; run `jhon sync` with pi installed (~/.pi present) first\n")
+	})
+
+	// T8b (odd/tasks/studio-integration-v1.md L45): a release install has no
+	// checkout for jhon sync; jhon setup, with pi among its runtimes, writes
+	// the directory there.
+	t.Run("on a release install jhon start pi names jhon setup, not jhon sync", func(t *testing.T) {
+		t.Parallel()
+		base := temp(t)
+		home, runtime := filepath.Join(base, "home"), filepath.Join(base, "release")
+		for _, d := range []string{filepath.Join(home, ".pi", "jhon"), runtime} {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		seen := filepath.Join(base, "seen")
+		pi := filepath.Join(base, "pi")
+		recordArgv(t, pi, seen)
+		r := support.Run(t, support.Cmd{Args: []string{support.Bin(t), "start", "pi"}, Dir: base,
+			Env: support.Env("HOME="+home, "JHON_PI="+pi, "JHON_ROOT="+runtime, "JHON_SOURCE=")})
+		equal(t, r.Code, 1)
+		if seenArgv(seen) != nil {
+			t.Fatal("pi ran")
+		}
+		equal(t, r.Stderr, "jhon: "+filepath.Join(home, ".pi", "jhon")+" has no settings.json; run `jhon setup` and pick pi among its runtimes first\n")
 	})
 }
 

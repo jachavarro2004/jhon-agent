@@ -24,6 +24,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/session"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/version"
 )
 
 // `jhon doctor [--remote]` and `jhon doctor --runtime <name>`: every
@@ -94,7 +95,9 @@ func runDoctor(argv []string) (int, error) {
 // integration's binary is compared only while it is on. A kind cli tool's
 // manifest version is the one Jhon was tested with, never a pin or a
 // requirement (T237): its installed version is ok whatever it is, and what
-// it needs of jhon is its own requires_jhon (cliIntegrations).
+// it needs of jhon is its own requires_jhon (cliIntegrations); one that is
+// off for this run by that answer warns so, pointing to its section (T8a).
+// The version shown is the whole one, its pre-release included.
 func (d doctor) versions() {
 	o := d.o
 	o.Head("versions")
@@ -104,7 +107,7 @@ func (d doctor) versions() {
 		}
 		out, err := probeVersion(t.Command)
 		got := installedVersion(out)
-		if testedWith(t.Command) {
+		if m, ok := testedWith(t.Command); ok {
 			tested := "(tested with " + t.Version + ")"
 			switch {
 			case errors.Is(err, errNotInstalled):
@@ -113,6 +116,8 @@ func (d doctor) versions() {
 				o.Note(fmt.Sprintf("%v %s", err, tested))
 			case got == "":
 				o.Note(fmt.Sprintf("%s printed no version %s", t.Command, tested))
+			case offForThisRun(m):
+				o.Warn(fmt.Sprintf("%s %s %s is off for this run: see the %s section", t.Command, got, tested, m.Display))
 			default:
 				o.OK(fmt.Sprintf("%s %s %s", t.Command, got, tested))
 			}
@@ -133,15 +138,23 @@ func (d doctor) versions() {
 	}
 }
 
-// testedWith is whether command is a kind cli integration's binary, whose
-// manifest version is the one Jhon was tested with.
-func testedWith(command string) bool {
+// testedWith is the kind cli integration whose binary command is, whose
+// manifest version is the one Jhon was tested with; false for none.
+func testedWith(command string) (integrations.Manifest, bool) {
 	for _, m := range integrations.All() {
 		if m.Kind == "cli" && m.Doctor.Binary == command {
-			return true
+			return m, true
 		}
 	}
-	return false
+	return integrations.Manifest{}, false
+}
+
+// offForThisRun is whether m's answer, `<binary> integration --json`, keeps
+// it off for this run (integrations.Judge), as cliFit says in its section;
+// a program that gives no answer is not off here (its section says why).
+func offForThisRun(m integrations.Manifest) bool {
+	a, err := integrations.AskIntegration(m)
+	return err == nil && integrations.Judge(m, a, version.Version).Off != ""
 }
 
 // errNotInstalled is probeVersion's command not on PATH.
@@ -173,12 +186,13 @@ var probeVersion = func(command string) (string, error) {
 	return string(b), nil
 }
 
-// installedVersion is the first x.y.z in a --version output, "" when none.
+// installedVersion is the first x.y.z in a --version output with its
+// pre-release (0.1.0-rc.1), never its build metadata; "" when none.
 func installedVersion(out string) string {
 	return semver.FindString(out)
 }
 
-var semver = regexp.MustCompile(`\d+\.\d+\.\d+`)
+var semver = regexp.MustCompile(`\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?`)
 
 type doctor struct {
 	r release.Roots

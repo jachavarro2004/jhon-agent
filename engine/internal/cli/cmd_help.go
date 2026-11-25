@@ -165,7 +165,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            other argument goes to pi; a jhon-studio that is on
                            but off for the session (as for jhon start) is said
                            in the same one note and named in
-                           JHON_INTEGRATIONS_OFF, so pi has no /jhon:video
+                           JHON_INTEGRATIONS_OFF, so pi has no /jhon:video;
+                           before a render wrote ~/.pi/jhon/settings.json it
+                           runs nothing, exit 1, and names the fix (on a
+                           release install, jhon setup with pi among its
+                           runtimes; from a source checkout, jhon sync)
                            both set CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS=60000
                            (Claude Code retries an API that sends nothing after
                            60 s, not minutes) unless it is already set
@@ -217,7 +221,14 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            folder is linked only while it is the one jhon
                            verified, and a missing one is installed again;
                            a jhon-studio that fails exits 1, nothing of it
-                           changed
+                           changed; one signed by its release workflow at
+                           another tag or ref is refused naming the
+                           identity expected (the release's tag) and the
+                           one found; a 403 or 429 from GitHub's API under
+                           its rate limit (X-RateLimit-Remaining: 0, or its
+                           documented message) is said as such, with the
+                           reset time GitHub gives: jhon sends no GitHub
+                           token, so retry after the reset
   jhon update --rollback   re-activate the previous release kept on disk; after
                            an update or a rollback, a running dashboard proven
                            Jhon's from another release is restarted on its port
@@ -266,8 +277,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            needs a newer jhon or another contract, and then
                            nothing else of it), then jhon-studio doctor
                            --json's checks, each failing one a warning with
-                           its fix; its version is shown as "tested with"
-                           the manifest's, never as a pin
+                           its fix; its version, whole with its pre-release
+                           (0.1.0-rc.1), is shown as "tested with" the
+                           manifest's, never as a pin, and warns that it is
+                           off for this run when it does not fit this jhon
   jhon hook merge-gate --install
                            write the merge gate into the local git
                            configuration of the repository under LDD it

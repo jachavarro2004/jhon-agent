@@ -31,11 +31,14 @@ const (
 )
 
 // Signer is who must have signed a release: the OIDC issuer, and a pattern
-// of the certificate's identity, anchored at both ends.
-type Signer struct{ Issuer, Identity string }
+// of the certificate's identity, anchored at both ends. Want, when the
+// pattern is one identity exactly (a tool's release workflow at its tag),
+// is that identity, named in a refusal of the same workflow at another
+// ref (T8c).
+type Signer struct{ Issuer, Identity, Want string }
 
 // jhonSigner is jhon's own releases' signer.
-var jhonSigner = Signer{Issuer, IdentityPattern}
+var jhonSigner = Signer{Issuer: Issuer, Identity: IdentityPattern}
 
 // Trust is what a signature is checked against: the trusted material (the
 // certificate authorities, transparency logs and timestamp authorities)
@@ -143,12 +146,23 @@ func VerifyAs(artifact, bundlePath string, t Trust, s Signer) (string, error) {
 	defer f.Close()
 	if _, err := v.Verify(b, verify.NewPolicy(verify.WithArtifact(f), verify.WithCertificateIdentity(id))); err != nil {
 		if san, iss, ok := signer(b); ok && (iss != s.Issuer || !identity.MatchString(san)) {
+			if iss == s.Issuer && sameWorkflow(san, s.Want) {
+				return "", fmt.Errorf("%s is signed by the release workflow at another ref, not at the release's tag: expected %s, found %s", name, s.Want, san)
+			}
 			return "", fmt.Errorf("%s is signed by %s (issuer %s), not by the release workflow", name, san, iss)
 		}
 		return "", fmt.Errorf("the signature of %s does not verify: %v", name, err)
 	}
 	san, _, _ := signer(b)
 	return san, nil
+}
+
+// sameWorkflow is whether identity san names want's workflow (what comes
+// before its @) at some ref; false when want is "".
+func sameWorkflow(san, want string) bool {
+	w, _, ok := strings.Cut(want, "@")
+	got, _, found := strings.Cut(san, "@")
+	return ok && found && got == w
 }
 
 // signer is the identity and issuer the bundle's certificate claims.

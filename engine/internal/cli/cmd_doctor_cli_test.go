@@ -136,6 +136,8 @@ func TestDoctorShowsACLIToolsManifestVersionAsTestedWith(t *testing.T) {
 	for _, c := range []struct{ out, want string }{
 		{"jhon-studio " + m.Doctor.Version + "\n", "  ok    jhon-studio " + m.Doctor.Version + " (tested with " + m.Doctor.Version + ")\n"},
 		{"jhon-studio 9.1.0\n", "  ok    jhon-studio 9.1.0 (tested with " + m.Doctor.Version + ")\n"},
+		// T8a: the pre-release is part of the version shown (L45).
+		{"0.1.0-rc.1\n", "  ok    jhon-studio 0.1.0-rc.1 (tested with " + m.Doctor.Version + ")\n"},
 		{"dev build\n", "  jhon-studio printed no version (tested with " + m.Doctor.Version + ")\n"},
 	} {
 		dir := t.TempDir()
@@ -161,6 +163,41 @@ func TestDoctorShowsACLIToolsManifestVersionAsTestedWith(t *testing.T) {
 			if strings.Contains(got, bad) {
 				t.Errorf("says %q:\n%s", bad, got)
 			}
+		}
+		if o.Failed != 0 {
+			t.Errorf("failed %d", o.Failed)
+		}
+	}
+}
+
+// T8a (L45): a tool that is on but off for this run, as its own section
+// says, is no plain ok in the versions: its row warns that it is off and
+// points to that section; one that fits keeps its ok row.
+func TestDoctorVersionRowOfAToolOffForThisRunWarns(t *testing.T) {
+	m, _ := integrations.Get("studio")
+	for _, c := range []struct{ answer, row string }{
+		{`{"version":"0.2.0","plugin_dir":"/p","requires_jhon":">=0.6.0","contract":"jhon.integration/v1"}`,
+			"  warn  jhon-studio 0.2.0 (tested with " + m.Doctor.Version + ") is off for this run: see the jhon-studio section\n"},
+		{`{"version":"0.2.0","contract":"jhon.integration/v2"}`,
+			"  warn  jhon-studio 0.2.0 (tested with " + m.Doctor.Version + ") is off for this run: see the jhon-studio section\n"},
+		{`{"version":"0.2.0","plugin_dir":"/p","requires_jhon":">=0.5.0-rc.1","contract":"jhon.integration/v1"}`,
+			"  ok    jhon-studio 0.2.0 (tested with " + m.Doctor.Version + ")\n"},
+	} {
+		jhonIs(t, "0.5.0-rc.1")
+		dir := t.TempDir()
+		path := filepath.Join(dir, "settings.toml")
+		must(t, os.WriteFile(path, []byte("schema = 1\n\n[integrations]\nstudio = true\n"), 0o600))
+		t.Setenv("JHON_SETTINGS", path)
+		t.Setenv("HOME", dir)
+		must(t, os.WriteFile(filepath.Join(dir, "jhon-studio"), []byte("#!/bin/sh\ncase \"$*\" in\n"+
+			"  'integration --json') cat <<'EOF'\n"+c.answer+"\nEOF\n ;;\n"+
+			"  '--version') echo 0.2.0 ;;\n  *) exit 2 ;;\nesac\n"), 0o755))
+		t.Setenv("PATH", dir+":/usr/bin:/bin")
+		var b strings.Builder
+		o := &release.Out{W: &b, E: &b}
+		doctor{o: o}.versions()
+		if got := b.String(); !strings.Contains(got, c.row) || strings.Contains(got, "ok    jhon-studio") != strings.HasPrefix(c.row, "  ok") {
+			t.Errorf("%s: lacks %q:\n%s", c.answer, c.row, got)
 		}
 		if o.Failed != 0 {
 			t.Errorf("failed %d", o.Failed)
