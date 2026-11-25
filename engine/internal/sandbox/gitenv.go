@@ -14,7 +14,9 @@ import (
 // they win over the repository's: no hook, no ssh command but ssh, no
 // fsmonitor, no credential helper of the repository's (an empty value
 // drops every helper read so far; the owner's are added back after it), no
-// ext::, fd:: or local-path transport, no submodule recursion. The
+// ext::, fd:: or local-path transport, no submodule recursion, and no
+// automatic gc or maintenance in the background, which would outlive the
+// line and its record in the registry (L36). The
 // repository's other keys that run a command (ProjectGitConfig, T249 A2)
 // follow them, and git's proxy for git:// is off (GIT_PROXY_COMMAND, empty,
 // unless the owner's environment names one). url.*.insteadOf in the
@@ -30,6 +32,8 @@ var gitOverrides = [][2]string{
 	{"protocol.file.allow", "never"},
 	{"submodule.recurse", "false"},
 	{"fetch.recurseSubmodules", "false"},
+	{"gc.autoDetach", "false"},
+	{"maintenance.autoDetach", "false"},
 }
 
 // hookEvents are the hook events of githooks(5) (git 2.56): an unsandboxed

@@ -393,8 +393,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            list only deploy tools. A work line that holds
                            one, failed or not, ends with a note that it
                            runs outside the sandbox only on a line of its
-                           own (jhon sandbox run).
-                           All three are the owner's: the file is read-only
+                           own (jhon sandbox run). sandbox.docker (false by
+                           default) shows docker's and podman's sockets
+                           inside the sandbox again: through one a
+                           container can write anywhere you can and outlive
+                           the command, so jhon sandbox status and jhon
+                           doctor name it as an escape you accepted.
+                           All four are the owner's: the file is read-only
                            inside the sandbox.
                            shell.keys.* are the shell's shortcuts, each a
                            key or off: panel (alt+j, the LDD status), agents
@@ -696,11 +701,17 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            (/.snapshots, /home/.snapshots, ~/.snapshots,
                            /timeshift, /run/timeshift). $XDG_RUNTIME_DIR and
                            /run/user/<uid>, whether or not the variable
-                           names it, are private empty folders (mode 0700)
-                           that show only docker's and podman's sockets, so the
-                           session bus, the keyring and the desktop's
-                           sockets are not there; nor are tmux's, X11's and
-                           ICE's socket folders under /tmp. GH_TOKEN,
+                           names it, are private empty folders (mode 0700),
+                           so the session bus, the keyring, the desktop's
+                           sockets and docker's and podman's (unless
+                           sandbox.docker is true) are not there; nor are
+                           tmux's, X11's, ICE's and the pi harness's
+                           (gentle-pi) socket folders under /tmp, the
+                           sockets of a pane manager under ~/.config whose
+                           API runs commands in its panes, the system bus
+                           (/run/dbus) and sshd's local socket
+                           (/run/ssh-unix-local).
+                           GH_TOKEN,
                            GITHUB_TOKEN, GH_ENTERPRISE_TOKEN,
                            GITHUB_ENTERPRISE_TOKEN, SSH_AUTH_SOCK,
                            GIT_ASKPASS and SSH_ASKPASS are unset. No
@@ -708,24 +719,27 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            reachable (closing them takes a network
                            namespace). The program runs in a PID namespace
                            of its own, with its own /proc: when it ends,
-                           every process it started ends with it, one it
-                           detached (setsid, nohup, a double fork, a
-                           daemon) too, and the runtime's stop and
-                           --die-with-parent end them all. While a
+                           every process it started inside the sandbox ends
+                           with it, one it detached (setsid, nohup, a
+                           double fork, a daemon) too, and the runtime's
+                           stop and --die-with-parent end them all; a
+                           container started through the docker socket
+                           (sandbox.docker true) is the docker daemon's,
+                           outside the sandbox, and outlives it. While a
                            sandboxed command that can write a project runs,
                            a line of that project that would run outside
                            the sandbox (git, gh, docker,
                            sandbox.deploy_tools) waits up to 3 s, then
                            runs nothing and exits 126 with a note; while
-                           such a line that runs git or gh runs, a
-                           sandboxed command that can write what it reads
-                           waits the same, then is refused the same way (a
-                           deploy tool or another outside line, which runs
-                           the project's code by design, holds no sandboxed
-                           command). Each run is recorded under
-                           Jhon's state folder (sandbox-runs, read-only in
-                           the sandbox) until it ends; a record that cannot
-                           be read or written refuses the run.
+                           such a line runs, a sandboxed command that can
+                           write what it reads waits the same, then is
+                           refused the same way. A line that puts anything
+                           in the background (&, a coprocess) never runs
+                           outside the sandbox: it would outlive its record.
+                           Each run is recorded under Jhon's state folder
+                           (sandbox-runs, hidden in the sandbox) until it
+                           ends; a record that cannot be read or written,
+                           or a lock on it held past 3 s, refuses the run.
                            When its output is not a terminal (a runtime's
                            call), jhon stays the program's parent: a
                            failure whose output says a path is read-only
@@ -787,7 +801,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            core.sshCommand=ssh, core.fsmonitor=false,
                            credential.helper reset then the owner's global
                            and system helpers, the ext, fd and file
-                           transports off, no submodule recursion, and
+                           transports off, no submodule recursion, no gc or
+                           maintenance in the background (gc.autoDetach and
+                           maintenance.autoDetach false), and
                            hook.<event>.enabled=false for every hook event,
                            which also stops hooks named in the
                            configuration, hook.<name>.command), every other
@@ -844,7 +860,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            sandbox.deploy_tools lists (the owner's deploy
                            tools, such as aws or cdk, by its bare name, any
                            arguments), and the line redirects to no file;
-                           work for any other line,
+                           work for any other line, for one that puts
+                           anything in the background (&, also in a
+                           subshell, or a coprocess),
                            and for one it cannot read or whose words the
                            shell would still rewrite (a $, a backtick, an
                            unquoted glob or brace but a lone {word} such as

@@ -338,9 +338,9 @@ func listen(t *testing.T, path string) {
 	t.Cleanup(func() { l.Close() })
 }
 
-// The runtime dir is a private one: empty but for the container sockets,
-// writable, mode 0700, and nothing written in it reaches the real one: the
-// agent socket is not there (F6).
+// The runtime dir is a private one: empty (with sandbox.docker on, but for
+// the container sockets, L37), writable, mode 0700, and nothing written in
+// it reaches the real one: the agent socket is not there (F6).
 func TestTheRuntimeDirIsPrivateAndShowsOnlyTheContainerSockets(t *testing.T) {
 	b := newBox(t)
 	run := filepath.Join(b.base, "run")
@@ -351,8 +351,13 @@ func TestTheRuntimeDirIsPrivateAndShowsOnlyTheContainerSockets(t *testing.T) {
 	b.env = append(b.env, "XDG_RUNTIME_DIR="+run, "SSH_AUTH_SOCK="+filepath.Join(run, "agent.sock"))
 	look := `cd "$XDG_RUNTIME_DIR" && stat -c %a . && find . -mindepth 1 | sort && echo x > new && cat new && test -S docker.sock && test -S podman/podman.sock && echo sockets`
 	r := b.sh(t, b.proj, "", look)
+	if want := "700\nx\n"; r.Code != 1 || r.Stdout != want {
+		t.Errorf("work, sandbox.docker off: exit %d, stdout %q, stderr %q; want 1 and %q", r.Code, r.Stdout, r.Stderr, want)
+	}
+	b.settings(t, "schema = 1\n\n[sandbox]\ndocker = true\n")
+	r = b.sh(t, b.proj, "", look)
 	if want := "700\n./docker.sock\n./podman\n./podman/podman.sock\nx\nsockets\n"; r.Code != 0 || r.Stdout != want {
-		t.Errorf("work: exit %d, stdout %q, stderr %q; want %q", r.Code, r.Stdout, r.Stderr, want)
+		t.Errorf("work, sandbox.docker on: exit %d, stdout %q, stderr %q; want %q", r.Code, r.Stdout, r.Stderr, want)
 	}
 	if exists(filepath.Join(run, "new")) {
 		t.Error("a file written in the private runtime dir reached the real one")

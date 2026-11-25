@@ -430,7 +430,8 @@ func TestTheOverridesFollowTheOwnersOwnAndRefuseALocalPath(t *testing.T) {
 	// The entries in their order, then in the fake ssh's byte order (LC_ALL=C sort).
 	entries := [][2]string{{"user.name", "the-owner"}, {"core.hooksPath", "/dev/null"}, {"core.sshCommand", "ssh"}, {"core.fsmonitor", "false"},
 		{"credential.helper", ""}, {"credential.helper", "cache --timeout=1"}, {"credential.https://example.invalid.helper", "store"},
-		{"protocol.ext.allow", "never"}, {"protocol.fd.allow", "never"}, {"protocol.file.allow", "never"}, {"submodule.recurse", "false"}, {"fetch.recurseSubmodules", "false"}}
+		{"protocol.ext.allow", "never"}, {"protocol.fd.allow", "never"}, {"protocol.file.allow", "never"}, {"submodule.recurse", "false"}, {"fetch.recurseSubmodules", "false"},
+		{"gc.autoDetach", "false"}, {"maintenance.autoDetach", "false"}}
 	for _, event := range []string{"applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit", "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-commit",
 		"pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-receive", "update", "proc-receive", "post-receive", "post-update",
 		"reference-transaction", "push-to-checkout", "pre-auto-gc", "post-rewrite", "sendemail-validate", "fsmonitor-watchman", "post-index-change"} {

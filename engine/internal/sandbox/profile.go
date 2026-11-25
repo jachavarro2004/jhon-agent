@@ -75,20 +75,6 @@ func profileAt(command, cwd string, roots []string, stat func(string) (string, b
 	return Unsandboxed
 }
 
-// RunsGit is whether a line that runs outside the sandbox runs git: a git or
-// gh program on it (gh runs git in the project), or a line the reader
-// cannot read (L35: the registry holds sandboxed commands only for such a
-// line).
-func RunsGit(command string) bool {
-	programs, err := sh.JudgeString(command, nil, nil, sh.Opts{})
-	if err != nil {
-		return true
-	}
-	return slices.ContainsFunc(programs, func(p sh.Program) bool {
-		return len(p.Argv) > 0 && (filepath.Base(p.Argv[0]) == "git" || filepath.Base(p.Argv[0]) == "gh")
-	})
-}
-
 // realPath is p, absolute and clean, with its longest existing head
 // replaced by its real path (stat), so a folder not made yet is judged by
 // where its parent is.
@@ -496,7 +482,7 @@ func ProfileFor(command string) string { return classify(command, false, nil) }
 // (ProfileAt).
 func classify(command string, zsh bool, tools []string) string {
 	cmds, err := sh.Parse(command)
-	if err != nil || sh.DefinesFunction(command) || !literal(command, zsh) {
+	if err != nil || sh.DefinesFunction(command) || !literal(command, zsh) || !foreground(command) {
 		return Work
 	}
 	for _, c := range cmds {
@@ -529,6 +515,31 @@ func classify(command string, zsh bool, tools []string) string {
 		}
 	}
 	return Unsandboxed
+}
+
+// foreground is whether every command of the line runs in the foreground
+// (T249, L36 B1): no statement put in the background (&, also inside a
+// subshell or a group) and no coprocess, so the line's programs end before
+// the shell does and no program it started outlives the run's record in
+// the registry. A line the parser cannot read is not.
+func foreground(command string) bool {
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(command), "")
+	if err != nil {
+		return false
+	}
+	ok := true
+	syntax.Walk(f, func(n syntax.Node) bool {
+		switch x := n.(type) {
+		case *syntax.Stmt:
+			if x.Background || x.Coprocess {
+				ok = false
+			}
+		case *syntax.CoprocClause:
+			ok = false
+		}
+		return ok
+	})
+	return ok
 }
 
 // quiet is whether a redirect writes no file: a copy or a close of a

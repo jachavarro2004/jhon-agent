@@ -350,6 +350,7 @@ var Elsewhere = func() map[string]string {
 		"sandbox.mode":           "jhon settings set sandbox.mode on|off (on by default where the sandbox can run)",
 		"sandbox.allow_write":    "jhon settings set sandbox.allow_write <folder>,<folder>",
 		"sandbox.deploy_tools":   "jhon settings set sandbox.deploy_tools <program>,<program>",
+		"sandbox.docker":         "jhon settings set sandbox.docker true|false (false by default: the docker socket hidden inside the sandbox)",
 	}
 	for _, m := range manifests.Optional() {
 		if m.Setup.Summary == "" {
