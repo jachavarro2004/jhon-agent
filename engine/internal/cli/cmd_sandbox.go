@@ -166,8 +166,9 @@ func sandboxRun(argv []string) (int, error) {
 	if profile == sandbox.Unsandboxed {
 		// git runs with the repository's hooks, ssh command, helpers and
 		// transports overridden (sandbox.UnsandboxedEnv, L1306), only for a
-		// repository whose configuration is on the allowlist
-		// (repositoryGitConfigSafe, T249 A2, L39), and the line
+		// repository whose configuration is on the allowlist and whose git
+		// folders hold no link (repositoryGitProblem, T249 A2, L39, L40; the
+		// line runs in the sandbox otherwise, with a note), and the line
 		// with a PATH no sandboxed command may change (sandbox.OutsidePath,
 		// T249 A1): what this process runs from here on (git) too.
 		// It runs only while no sandboxed command that can write what it
@@ -183,13 +184,15 @@ func sandboxRun(argv []string) (int, error) {
 			path := os.Getenv("PATH")
 			os.Setenv("PATH", sandbox.OutsidePath(in))
 			gate := mergeGateEntries(pinned)
-			if repositoryGitConfigSafe(program[2], in.Cwd, gate) {
+			why := repositoryGitProblem(in, program[2], gate)
+			if why == "" {
 				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), gate...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil)
 				leave()
 				return code, err
 			}
 			leave()
 			os.Setenv("PATH", path)
+			fmt.Fprintln(os.Stderr, "jhon sandbox: "+why+"; the line runs in the sandbox instead")
 		}
 		profile = sandbox.Work
 	}

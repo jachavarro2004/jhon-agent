@@ -68,20 +68,29 @@ func ownerCredentialHelpers() [][2]string {
 // in one folder: a longer listing runs the line in the sandbox.
 const gitListingLimit = 4 << 20
 
-// repositoryGitConfigSafe is whether an unsandboxed line started in cwd may
-// run outside the sandbox given the configuration of each repository it
-// works in (sandbox.GitFolders, T249 A2, L39): each folder's `git config
-// --list --show-scope -z`, with this process's environment without
-// GIT_CONFIG_PARAMETERS (as the line runs) and at most 5 s and
-// gitListingLimit bytes, sets only keys on the allowlist, or gate's (the
-// merge gate's entries the line runs with) with their values
-// (sandbox.RepositoryGitConfig). false sends the line to the sandbox: a
-// listing that fails, times out or is too long, or any other key. With no
-// git on PATH the line can run none, and needs no check.
-func repositoryGitConfigSafe(line, cwd string, gate [][2]string) bool {
+// repositoryGitProblem is why an unsandboxed line of in may not run outside
+// the sandbox given each repository it works in (sandbox.GitFolders), ""
+// when it may (T249 A2, L39, L40). For each folder, with this process's
+// environment without GIT_CONFIG_PARAMETERS (as the line runs) and at most
+// 5 s each:
+//
+//   - its `git config --list --show-scope -z` (at most gitListingLimit
+//     bytes) sets only keys on the allowlist, or gate's (the merge gate's
+//     entries the line runs with) with their values
+//     (sandbox.RepositoryGitConfig);
+//   - the git folders `git rev-parse --path-format=absolute --git-dir
+//     --git-common-dir` names hold no link and no hard-linked file git
+//     writes, and lie in the project (Input.GitFolderProblem). A folder in
+//     no repository (gh's, a deploy tool's) has none, when its listing
+//     shows no repository scope.
+//
+// A listing or a rev-parse that fails, times out or is too long is a
+// problem too. With no git on PATH the line can run none, and needs no
+// check.
+func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string) string {
 	git, err := exec.LookPath("git")
 	if err != nil {
-		return true
+		return ""
 	}
 	var env []string
 	for _, kv := range os.Environ() {
@@ -89,23 +98,47 @@ func repositoryGitConfigSafe(line, cwd string, gate [][2]string) bool {
 			env = append(env, kv)
 		}
 	}
-	folders := sandbox.GitFolders(line, cwd)
+	folders := sandbox.GitFolders(line, in.Cwd)
 	if folders == nil {
-		return false
+		return "the line cannot be read for the folders its git works in"
 	}
-	for _, dir := range folders {
+	run := func(args ...string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		cmd := exec.CommandContext(ctx, git, "-C", dir, "config", "--list", "--show-scope", "-z")
+		defer cancel()
+		cmd := exec.CommandContext(ctx, git, args...)
 		cmd.Dir, cmd.Env = "/", env
 		out := &limitedBuffer{limit: gitListingLimit}
 		cmd.Stdout = out
 		err := cmd.Run()
-		cancel()
-		if err != nil || out.over || sandbox.RepositoryGitConfig(out.String(), gate) != "" {
-			return false
+		if err == nil && out.over {
+			err = errors.New("its answer is too long")
+		}
+		return out.String(), err
+	}
+	for _, dir := range folders {
+		listing, err := run("-C", dir, "config", "--list", "--show-scope", "-z")
+		if err != nil {
+			return "git cannot list the configuration in " + dir + " (" + err.Error() + ")"
+		}
+		if why := sandbox.RepositoryGitConfig(listing, gate); why != "" {
+			return why
+		}
+		gitDirs, err := run("-C", dir, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
+		if err != nil {
+			if strings.Contains(listing, "local\x00") || strings.Contains(listing, "worktree\x00") {
+				return "git cannot name the git folders in " + dir + " (" + err.Error() + ")"
+			}
+			continue
+		}
+		names := strings.Split(strings.TrimSpace(gitDirs), "\n")
+		if len(names) != 2 {
+			return "git names no git folders in " + dir
+		}
+		if why := in.GitFolderProblem(names[0], names[1]); why != "" {
+			return why
 		}
 	}
-	return true
+	return ""
 }
 
 // limitedBuffer keeps at most limit bytes of what is written to it, and

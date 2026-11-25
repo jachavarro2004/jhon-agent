@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/guard"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
@@ -164,9 +165,23 @@ var (
 func (in Input) containerHosts() []string {
 	var out []string
 	for _, h := range slices.Concat([]string{in.Env["DOCKER_HOST"], in.Env["CONTAINER_HOST"]}, in.ContainerHosts) {
-		if p, ok := strings.CutPrefix(h, "unix://"); ok && filepath.IsAbs(p) {
-			out = append(out, filepath.Clean(p))
-		} else if p, ok := strings.CutPrefix(h, "unix:"); ok && filepath.IsAbs(p) {
+		// The scheme in any case and the path without a query or a
+		// fragment, as podman reads CONTAINER_HOST (url.Parse, L40 A1).
+		if len(h) < len("unix:") || !strings.EqualFold(h[:len("unix:")], "unix:") {
+			continue
+		}
+		p := h[len("unix:"):]
+		if i := strings.IndexAny(p, "?#"); i >= 0 {
+			p = p[:i]
+		}
+		if strings.HasPrefix(p, "//") && !strings.HasPrefix(p, "///") {
+			// unix://host/path names no host for a socket; the path is
+			// what follows the host.
+			if i := strings.Index(p[2:], "/"); i >= 0 {
+				p = p[2+i:]
+			}
+		}
+		if filepath.IsAbs(p) {
 			out = append(out, filepath.Clean(p))
 		}
 	}
@@ -276,8 +291,17 @@ func DockerContexts(home string, env map[string]string) []string {
 		if i >= 64 {
 			break
 		}
-		f, err := os.Open(m)
+		// Only a regular file, opened without blocking: a FIFO or a device
+		// in its place would hang every next run (L40 A2).
+		if fi, err := os.Lstat(m); err != nil || !fi.Mode().IsRegular() {
+			continue
+		}
+		f, err := os.OpenFile(m, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 		if err != nil {
+			continue
+		}
+		if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+			f.Close()
 			continue
 		}
 		var meta struct {
