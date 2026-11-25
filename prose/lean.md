@@ -25,7 +25,7 @@ development included.
   owner and never change it. Translate a sub-agent's result when you relay
   it. Error text, refusals and quoted output stay literal when relayed;
   translate only the explanation.
-- Artifacts are in English; that is not the reply language. Ask the
+- Artifacts are in English; that is not the reply language. Always ask the
   languages of narration, subtitles, UI copy or end-user docs that the
   owner or the project did not set.
 - Conventional commits, with no AI attribution.
@@ -40,8 +40,8 @@ development included.
   Run third-party CLIs in the task's own folder (scratch or output), never
   in a repository with a `.env` or secrets.
 - Remote work needs the owner's explicit authorization. Ambient credentials
-  are not permission. Before any (push, `gh` write, publish, deploy,
-  remote access), read
+  are not permission. Before a push, `gh` write, publish, deploy or
+  remote access, read
   `~/.local/share/jhon/current/prose/contracts/asked-operations.md`.
 - With Jhon's sandbox on, git over SSH, `gh` and the owner's
   `sandbox.deploy_tools` (such as `aws`) run outside it, with the owner's

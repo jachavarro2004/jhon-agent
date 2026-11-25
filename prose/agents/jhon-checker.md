@@ -16,4 +16,4 @@ focused tests, write no report, and record the verdict with
 `jhon executions verify <change> --verdict pass|fail --note "<why>"`.
 Run tests through `jhon executions run <change> --affected <base>` or with
 quiet flags; pipe long output through `| tail -n 40` or a filter, and read
-only the failures.
+only the failures. Run third-party CLIs in the task's own folder (scratch or output), never in a repository with a `.env` or secrets.
