@@ -84,6 +84,9 @@ func TestGeneralHelpPutsTheUserFirst(t *testing.T) {
 func TestGeneralHelpByRole(t *testing.T) {
 	home, root := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
+	// The install record names the source (T249): the home's own state
+	// folder, never the caller's XDG_STATE_HOME.
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
 	t.Setenv("JHON_SOURCE", "")
 	t.Setenv("JHON_ROOT", root)
 	_, user := capture(t, []string{"--help"})

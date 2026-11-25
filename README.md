@@ -187,6 +187,9 @@ taken, so list only deploy tools) run outside the sandbox the same way, so a dep
 your cloud credentials (the AWS ones) and the rest of your environment: on a line of their own, or with
 other programs that run outside, with no pipe to another program, redirect to a file, `$` or
 backtick, and taken from a PATH folder a sandboxed command cannot write;
+such a line gets a PATH without the project's folders and every other
+folder a sandboxed command may change, so a program planted there is never
+what git, gh, docker or a deploy tool runs by its name;
 anything else on the line keeps it in the sandbox, and such a line ends, failed
 or not, with a note that the tool runs outside the sandbox only on a line of
 its own (`aws sts get-caller-identity --region us-east-1`, not `export
@@ -194,8 +197,16 @@ AWS_REGION=…; aws … | tail -1`). The agent's always-on text says the same
 before it runs anything: a failure inside the sandbox is fixed by running the
 program alone, not by turning the sandbox off. That git
 runs with the repository's hooks (configured hooks included), ssh command,
-fsmonitor and credential helpers overridden; `url.*.insteadOf` and `include.*` in the repository's
-configuration are not, an accepted residual risk. uv's tools go to a
+fsmonitor and credential helpers overridden, and so is every other key the
+repository's own configuration (with what its `include.*` brings in) sets
+that runs a command: filters, merge and diff drivers, `diff.external`, a
+remote's `vcs`, `uploadpack` and `receivepack`, the editors, the pager,
+`core.askPass`, `core.alternateRefsCommand` and the signing programs take
+your global value or one that runs nothing (a merge driver becomes `false`,
+a conflict), and `core.gitProxy` runs no proxy; a repository that sets
+`core.worktree` keeps the line in the sandbox, as it would move what a pull
+checks out outside the project. `url.*.insteadOf` in the repository's
+configuration is not overridden, an accepted residual risk. uv's tools go to a
 sandbox-only folder under the cache, and uv's own tool folder in the home stays
 read-only. A `sandbox.allow_write` folder that does not exist yet is
 created before the next sandboxed command starts, outside the sandbox, so
@@ -206,12 +217,15 @@ and never a PATH folder or one that holds one, nor through a parent that
 breaks those rules; its parents stay read-only. A writable area named
 inside another one (an `allow_write` folder in the project or `/tmp`, a
 `$TMPDIR` or a cache a variable names under `/tmp`) gets no mount of its
-own, and no writable area but the project's folders is bound when it is or
-passes through a link: name the real path, the folder the link leads to,
+own, and no writable area, the project's own folders and `<root>-worktrees`
+included, is bound when it is or passes through a link (only the home's own
+way, as `$HOME` is written, is yours; another link that leads to the home is
+a link): name the real path, the folder the link leads to,
 as `jhon sandbox status` and the note on a refused write say. An
 `allow_write` folder that is or holds Jhon's release, the `jhon` program,
-the source checkout, Jhon's protected files or a PATH folder stops every
-sandboxed command with the fix: name a concrete subfolder such as
+the source checkout, Jhon's protected files, a PATH folder or the folder a
+link in one leads to (~/.local/bin/claude into ~/.local/share/claude)
+stops every sandboxed command with the fix: name a concrete subfolder such as
 `~/.local/share/<app>`. A default cache or store under the home (the cache, gradle's
 folder, go's module cache and the like) that holds a PATH folder is not
 writable inside the sandbox; status names it with the fix (move the tool's
@@ -539,7 +553,10 @@ first.
 
 Clone the repository anywhere. A checkout run directly (`build/jhon`, from
 `go build -o build/jhon ./engine/cmd/jhon`) is its own source; `jhon sync`
-records the checkout it ran from in its install record, and the installed
+records the checkout it ran from in its install record
+(~/.local/state/jhon/install.json, in the state folder no sandboxed command
+may write; a record left in ~/.cache/jhon by an older jhon is moved there
+once, outside the sandbox), and the installed
 `jhon` works on that one outside a checkout. `JHON_SOURCE` names
 another. A checkout at `~/dev/jhon`, the old default, is still found when
 nothing is recorded.

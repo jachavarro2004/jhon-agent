@@ -175,9 +175,10 @@ func TestNoInstallRecordNoteByRole(t *testing.T) {
 		checkout bool
 		want     string
 	}{
-		{true, "no install record (~/.cache/jhon/install.json); run `jhon sync` to create it"},
-		{false, "no install record (~/.cache/jhon/install.json): no runtime is installed yet; run `jhon setup` to choose one"},
+		{true, "no install record (~/.local/state/jhon/install.json); run `jhon sync` to create it"},
+		{false, "no install record (~/.local/state/jhon/install.json): no runtime is installed yet; run `jhon setup` to choose one"},
 	} {
+		t.Setenv("XDG_STATE_HOME", "")
 		r := Sessions(Sources{Home: t.TempDir(), Now: now, Claude: listing(), Checkout: func() bool { return tc.checkout }})
 		if r.Note == nil || *r.Note != tc.want {
 			t.Errorf("checkout %v: note %v, want %q", tc.checkout, r.Note, tc.want)
@@ -196,8 +197,9 @@ func TestHasCheckout(t *testing.T) {
 	if hasCheckout() {
 		t.Error("a release root with no source anywhere is a checkout")
 	}
+	t.Setenv("XDG_STATE_HOME", "")
 	recorded := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(home, ".cache", "jhon"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(home, InstallRecord)), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(home, InstallRecord), []byte(`{"installed_at":"2026-11-16T10:00:00.000Z","commit":"abc","source":"`+recorded+`"}`), 0o644); err != nil {

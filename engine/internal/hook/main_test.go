@@ -14,5 +14,15 @@ func TestMain(m *testing.M) {
 	os.Setenv("JHON_ROOT", root)
 	os.Setenv("JHON_ENGRAM", "/dev/null/engram")
 	codegraphProgram = "/dev/null/codegraph"
-	os.Exit(m.Run())
+	// The owner's state folder is never read nor written (T249): the guards'
+	// stale-session note reads the install record there.
+	state, err := os.MkdirTemp("", "jhon-hook-state-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_STATE_HOME", state)
+	os.Unsetenv("JHON_IN_SANDBOX")
+	code := m.Run()
+	os.RemoveAll(state)
+	os.Exit(code)
 }

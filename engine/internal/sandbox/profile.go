@@ -97,17 +97,7 @@ func realPath(p string, stat func(string) (string, bool, bool)) string {
 // a clone, write the new folder inside it: the folder named after the
 // repository, or the one given.
 func gitInside(args []string, cwd string, inside func(string) bool) bool {
-	dir, k := cwd, 0
-	for ; k < len(args) && strings.HasPrefix(args[k], "-"); k++ {
-		if args[k] == "-C" && k+1 < len(args) {
-			k++
-			if filepath.IsAbs(args[k]) {
-				dir = args[k]
-			} else {
-				dir = filepath.Join(dir, args[k])
-			}
-		}
-	}
+	dir, k := gitFolder(args, cwd)
 	if !inside(dir) {
 		return false
 	}
@@ -124,6 +114,52 @@ func gitInside(args []string, cwd string, inside func(string) bool) bool {
 		target = filepath.Join(dir, target)
 	}
 	return inside(target)
+}
+
+// gitFolder is the folder git's arguments, run in cwd, work in (each -C
+// taken in turn from the one before), and the index of the first word after
+// git's own options.
+func gitFolder(args []string, cwd string) (string, int) {
+	dir, k := cwd, 0
+	for ; k < len(args) && strings.HasPrefix(args[k], "-"); k++ {
+		if args[k] == "-C" && k+1 < len(args) {
+			k++
+			if filepath.IsAbs(args[k]) {
+				dir = args[k]
+			} else {
+				dir = filepath.Join(dir, args[k])
+			}
+		}
+	}
+	return dir, k
+}
+
+// GitFolders are the folders whose git configuration an unsandboxed line
+// started in cwd may read (T249 A2): the folder it works in (cwd, or the
+// one its leading `cd` names, where gh, docker and a deploy tool may run
+// git too) and the one each git on it works in (gitFolder), each once.
+// nil for a line the reader cannot read.
+func GitFolders(command, cwd string) []string {
+	programs, err := sh.JudgeString(command, nil, nil, sh.Opts{})
+	if err != nil || !filepath.IsAbs(cwd) {
+		return nil
+	}
+	if dir, ok := leadingCd(command); ok {
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(cwd, dir)
+		}
+		cwd = dir
+	}
+	out := []string{filepath.Clean(cwd)}
+	for _, p := range programs {
+		if len(p.Argv) == 0 || p.Argv[0] != "git" {
+			continue
+		}
+		if dir, _ := gitFolder(p.Argv[1:], cwd); !slices.Contains(out, filepath.Clean(dir)) {
+			out = append(out, filepath.Clean(dir))
+		}
+	}
+	return out
 }
 
 // cloneTarget is the folder git clone's arguments make: the second
@@ -176,9 +212,10 @@ func cloneTarget(args []string) string {
 // in.DeployTools the shell finds first on PATH, lie outside every writable
 // area of in, and
 // PATH has no relative folder (L888, F1, as for bubblewrap). Anything else
-// runs with the work profile.
+// runs with the work profile. The project's roots are the ones that are no
+// link (ownRoots, T249). The line then runs with OutsidePath.
 func RunsOutside(h Host, in Input, argv []string) bool {
-	if len(argv) != 3 || argv[1] != "-c" || !filepath.IsAbs(argv[0]) || !slices.Contains(shells, filepath.Base(argv[0])) || profileAt(argv[2], in.Cwd, in.Roots, in.Stat, filepath.Base(argv[0]) == "zsh", in.DeployTools) != Unsandboxed {
+	if len(argv) != 3 || argv[1] != "-c" || !filepath.IsAbs(argv[0]) || !slices.Contains(shells, filepath.Base(argv[0])) || profileAt(argv[2], in.Cwd, in.ownRoots(), in.Stat, filepath.Base(argv[0]) == "zsh", in.DeployTools) != Unsandboxed {
 		return false
 	}
 	open := writable(in)
@@ -214,6 +251,34 @@ func RunsOutside(h Host, in Input, argv []string) bool {
 		}
 	}
 	return true
+}
+
+// OutsidePath is PATH for a line that runs outside the sandbox (RunsOutside,
+// T249 A1): PATH's folders, in their order, but a relative one and one a
+// sandboxed command may change (mayChange: a project folder, the caches,
+// $TMPDIR, sandbox.allow_write, any folder on the way to one of them), so
+// no program a command planted there is what git, gh, docker or a deploy
+// tool runs by its name outside the sandbox. A folder of the project's
+// roots is left out whether or not the sandbox binds it.
+func OutsidePath(in Input) string {
+	mounts, _ := layout(in, false)
+	var roots []string
+	for _, r := range slices.Concat(in.Roots, []string{in.CommonDir}, in.Worktrees) {
+		if filepath.IsAbs(r) {
+			roots = append(roots, filepath.Clean(r), realPath(r, in.Stat))
+		}
+	}
+	var keep []string
+	for _, dir := range in.Path {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		if within(filepath.Clean(dir), roots) || within(realPath(dir, in.Stat), roots) || changeable(mounts, dir) {
+			continue
+		}
+		keep = append(keep, dir)
+	}
+	return strings.Join(keep, string(filepath.ListSeparator))
 }
 
 // Unsandboxed is the answer for a line that runs outside the sandbox: not

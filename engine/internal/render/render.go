@@ -25,7 +25,7 @@ const Usage = `usage: jhon render-engine --validate | --check | --print <agent> 
   --install           from a release under ~/.local/share/jhon/releases/<commit>
                       only, as ` + "`jhon sync`" + ` runs it: validate, then write every
                       runtime projection into $HOME through ~/.local/share/jhon/current
-                      and record the install in ~/.cache/jhon/install.json
+                      and record the install in ~/.local/state/jhon/install.json
   --preflight         from a release, as ` + "`jhon sync`" + ` runs it before switching
                       current: validate the release and the install it would
                       make (settings.json, the links it would keep); writes nothing
@@ -538,7 +538,7 @@ func (e *engine) write() int {
 	// was installed. The source checkout `jhon sync` recorded is sync's to
 	// write; a render keeps it.
 	if !e.args.check && s.installed {
-		record := filepath.Join(e.home, session.InstallRecord)
+		record := session.InstallPath(e.home)
 		commit := e.releaseCommit()
 		prev, ok := session.ReadInstall(e.home)
 		moved := s.drift > 0 || !ok || prev.Commit != commit

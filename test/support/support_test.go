@@ -3,6 +3,7 @@ package support
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -64,5 +65,55 @@ func TestTheBinaryKeyCoversThirdParty(t *testing.T) {
 	write("third_party/bubbletea/tea.go", "package tea // changed\n")
 	if after := inputsHash(root); after == before {
 		t.Fatalf("the key %s did not change with third_party/", after)
+	}
+}
+
+// lookupEnv is the value of key in env, and whether it is there.
+func lookupEnv(env []string, key string) (string, bool) {
+	for _, kv := range env {
+		if k, v, ok := strings.Cut(kv, "="); ok && k == key {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// T249: Jhon's install record lives in the state folder
+// (${XDG_STATE_HOME:-~/.local/state}/jhon/install.json), so a test env must
+// never hand the caller's XDG_STATE_HOME to a jhon it runs: with HOME
+// overridden it is unset, so the state folder is under that HOME, with one of
+// the test's own that one is kept, and otherwise it is a folder of the test
+// binary's own, never the caller's.
+func TestEnvNeverPassesTheCallersStateFolder(t *testing.T) {
+	callerHome, _ := os.UserHomeDir()
+	if got, set := lookupEnv(Env("HOME=/h"), "XDG_STATE_HOME"); set {
+		t.Errorf("Env(HOME=/h): XDG_STATE_HOME %q; want it unset, so the state folder is under /h", got)
+	}
+	if got, set := lookupEnv(isolateState([]string{"HOME=/h", "XDG_STATE_HOME=" + callerState}), "XDG_STATE_HOME"); set && callerState != "" {
+		t.Errorf("the caller's XDG_STATE_HOME with HOME=/h: %q; want it dropped", got)
+	}
+	if got, _ := lookupEnv(Env("HOME=/h", "XDG_STATE_HOME=/s"), "XDG_STATE_HOME"); got != "/s" {
+		t.Errorf("Env with the test's own XDG_STATE_HOME: %q, want /s", got)
+	}
+	own, ok := lookupEnv(Env(), "XDG_STATE_HOME")
+	if !ok || !filepath.IsAbs(own) || own == callerState || callerHome != "" && strings.HasPrefix(own, filepath.Join(callerHome, ".local")) {
+		t.Fatalf("Env(): XDG_STATE_HOME %q (set %v), want a folder of the test binary's own, not the caller's %q", own, ok, callerState)
+	}
+	if fi, err := os.Stat(own); err != nil || !fi.IsDir() {
+		t.Errorf("the test binary's state folder %s is no folder: %v", own, err)
+	}
+	// Run gives a nil environment, and one that carries the caller's
+	// value, the same folder.
+	show := []string{"sh", "-c", `printf %s "$XDG_STATE_HOME"`}
+	if r := Run(t, Cmd{Args: show}); r.Stdout != own {
+		t.Errorf("Run with a nil env: XDG_STATE_HOME %q, want %q", r.Stdout, own)
+	}
+	if callerState != "" {
+		if r := Run(t, Cmd{Args: show, Env: append(os.Environ(), "XDG_STATE_HOME="+callerState)}); r.Stdout != own {
+			t.Errorf("Run with the caller's XDG_STATE_HOME: %q, want %q", r.Stdout, own)
+		}
+	}
+	if r := Run(t, Cmd{Args: show, Env: []string{"HOME=/h", "PATH=" + os.Getenv("PATH")}}); r.Stdout != "" {
+		t.Errorf("Run with HOME=/h: XDG_STATE_HOME %q; want it unset", r.Stdout)
 	}
 }

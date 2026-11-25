@@ -136,7 +136,7 @@ func TestReleaseArtifact(t *testing.T) {
 		if !exists(filepath.Join(env.home, ".claude", "agents", "jhon-orchestrator.md")) {
 			t.Fatal("the agents were not projected\n" + installed.Out())
 		}
-		match(t, support.Read(t, filepath.Join(env.home, ".cache", "jhon", "install.json")), first)
+		match(t, support.Read(t, filepath.Join(env.home, ".local", "state", "jhon", "install.json")), first)
 		noMatch(t, installed.Out(), `herdr`)
 		equal(t, exists(filepath.Join(env.home, ".local", "bin", "herdr-jhon")), false)
 	})
@@ -506,7 +506,7 @@ func TestUserReleaseWithoutCheckout(t *testing.T) {
 		wantCode(t, in, 0)
 		// A user is never told to sync (T10i).
 		noMatch(t, in.Out(), "jhon sync")
-		match(t, in.Stdout, "(?m)no install record \\(~/\\.cache/jhon/install\\.json\\): no runtime is installed yet; run `jhon setup` to choose one$")
+		match(t, in.Stdout, "(?m)no install record \\(~/\\.local/state/jhon/install\\.json\\): no runtime is installed yet; run `jhon setup` to choose one$")
 		for _, cmd := range []string{"setup", "update"} {
 			h := run(t, home, filepath.Join(home.home, ".local", "bin", "jhon"), []string{cmd, "--help"}, "PATH="+bin)
 			wantCode(t, h, 0)

@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -13,9 +14,12 @@ import (
 // they win over the repository's: no hook, no ssh command but ssh, no
 // fsmonitor, no credential helper of the repository's (an empty value
 // drops every helper read so far; the owner's are added back after it), no
-// ext::, fd:: or local-path transport, no submodule recursion.
-// url.*.insteadOf and include.* in the repository's configuration are not
-// neutralized: an accepted residual risk.
+// ext::, fd:: or local-path transport, no submodule recursion. The
+// repository's other keys that run a command (ProjectGitConfig, T249 A2)
+// follow them, and git's proxy for git:// is off (GIT_PROXY_COMMAND, empty,
+// unless the owner's environment names one). url.*.insteadOf in the
+// repository's configuration is not neutralized: an accepted residual risk;
+// what include.* brings in is read as the repository's own.
 var gitOverrides = [][2]string{
 	{"core.hooksPath", "/dev/null"},
 	{"core.sshCommand", "ssh"},
@@ -54,7 +58,10 @@ var hookEvents = []string{
 // hook the repository names for reference-transaction disabled, the gate's
 // own values forced): they replace the switch that turns the event off, so
 // git runs the gate alone for it.
-func UnsandboxedEnv(env []string, helpers [][2]string, gate ...[2]string) []string {
+//
+// project are the entries ProjectGitConfig gives for the repository's own
+// keys that run a command; they follow gitOverrides.
+func UnsandboxedEnv(env []string, helpers, project [][2]string, gate ...[2]string) []string {
 	n := 0
 	for _, kv := range env {
 		if v, ok := strings.CutPrefix(kv, "GIT_CONFIG_COUNT="); ok {
@@ -64,6 +71,7 @@ func UnsandboxedEnv(env []string, helpers [][2]string, gate ...[2]string) []stri
 		}
 	}
 	var out []string
+	proxy := false
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
 		if k == "GIT_CONFIG_PARAMETERS" || k == "GIT_CONFIG_COUNT" || k == "CDPATH" {
@@ -72,7 +80,14 @@ func UnsandboxedEnv(env []string, helpers [][2]string, gate ...[2]string) []stri
 		if i, ok := configIndex(k); ok && i >= n {
 			continue
 		}
+		proxy = proxy || k == "GIT_PROXY_COMMAND"
 		out = append(out, kv)
+	}
+	// git reads core.gitProxy only when the variable is unset; empty, it
+	// runs no proxy (the repository's would win over a later entry: git
+	// takes its first matching value).
+	if !proxy {
+		out = append(out, "GIT_PROXY_COMMAND=")
 	}
 	var entries [][2]string
 	for _, o := range gitOverrides {
@@ -81,6 +96,7 @@ func UnsandboxedEnv(env []string, helpers [][2]string, gate ...[2]string) []stri
 			entries = append(entries, helpers...)
 		}
 	}
+	entries = append(entries, project...)
 	for _, event := range hookEvents {
 		if event == "reference-transaction" && len(gate) > 0 {
 			entries = append(entries, gate...)
@@ -92,6 +108,101 @@ func UnsandboxedEnv(env []string, helpers [][2]string, gate ...[2]string) []stri
 		out = append(out, "GIT_CONFIG_KEY_"+strconv.Itoa(n+i)+"="+e[0], "GIT_CONFIG_VALUE_"+strconv.Itoa(n+i)+"="+e[1])
 	}
 	return append(out, "GIT_CONFIG_COUNT="+strconv.Itoa(n+len(entries)))
+}
+
+// ProjectGitConfig is what an unsandboxed line takes from the configuration
+// `git config --list --show-scope -z` lists in a folder it works in (T249
+// A2; GitFolders): an entry for each key the repository's own configuration
+// (the local and worktree scopes, with what their include.* bring in; any
+// scope but system, global and command) sets that runs a command, in the
+// listing's order: the owner's last value for it (system, global or
+// command), else a value that runs nothing the repository chose
+// (neutralGit). The keys gitOverrides sets already (core.hooksPath,
+// core.sshCommand, core.fsmonitor, the credential helpers, protocol.*,
+// hook.*) and core.gitProxy (UnsandboxedEnv's GIT_PROXY_COMMAND) take
+// none. refuse is why the line may not run outside the sandbox at all: the
+// repository's core.worktree, which moves the files git writes (a pull's
+// checkout) outside the project; "" when nothing stands in the way.
+func ProjectGitConfig(listing string) (entries [][2]string, refuse string) {
+	type entry struct{ scope, key, value string }
+	var all []entry
+	fields := strings.Split(listing, "\x00")
+	for i := 0; i+1 < len(fields); i += 2 {
+		key, value, _ := strings.Cut(fields[i+1], "\n")
+		all = append(all, entry{fields[i], key, value})
+	}
+	owner := map[string]string{}
+	var keys []string
+	for _, e := range all {
+		switch e.scope {
+		case "system", "global", "command":
+			owner[e.key] = e.value
+			continue
+		}
+		if e.key == "core.worktree" {
+			refuse = "the repository's configuration sets core.worktree, which would move the files git writes outside the project"
+		}
+		if _, ok := neutralGit(e.key); ok && !slices.Contains(keys, e.key) {
+			keys = append(keys, e.key)
+		}
+	}
+	for _, k := range keys {
+		v, mine := owner[k]
+		if !mine {
+			v, _ = neutralGit(k)
+		}
+		entries = append(entries, [2]string{k, v})
+	}
+	return entries, refuse
+}
+
+// neutralGit is the value for key, a key as git lists it (section and name
+// in lower case), that runs nothing the repository chose, and whether key
+// is one ProjectGitConfig overrides: a filter's clean, smudge and process
+// and a diff driver's command and textconv run nothing; a merge driver runs
+// false, so the merge stops with a conflict; a remote's vcs names no
+// helper, so its fetch fails, and its upload-pack and receive-pack are
+// git's own; the editors are :, the pager none, a pager.<command> off; the
+// signing programs git's defaults and gpg.ssh.defaultKeyCommand false.
+func neutralGit(key string) (string, bool) {
+	section, rest, _ := strings.Cut(key, ".")
+	sub, name := "", rest
+	if i := strings.LastIndex(rest, "."); i >= 0 {
+		sub, name = rest[:i], rest[i+1:]
+	}
+	switch key {
+	case "core.askpass", "core.pager", "core.alternaterefscommand", "diff.external":
+		return "", true
+	case "core.editor", "sequence.editor":
+		return ":", true
+	case "gpg.program", "gpg.openpgp.program":
+		return "gpg", true
+	case "gpg.x509.program":
+		return "gpgsm", true
+	case "gpg.ssh.program":
+		return "ssh-keygen", true
+	case "gpg.ssh.defaultkeycommand":
+		return "false", true
+	}
+	switch {
+	case section == "pager" && sub == "":
+		return "false", true
+	case section == "filter" && sub != "" && slices.Contains([]string{"clean", "smudge", "process"}, name):
+		return "", true
+	case section == "merge" && sub != "" && name == "driver":
+		return "false", true
+	case section == "diff" && sub != "" && (name == "command" || name == "textconv"):
+		return "", true
+	case section == "remote" && sub != "" && name == "vcs":
+		return "", true
+	case section == "remote" && sub != "" && name == "uploadpack":
+		return "git-upload-pack", true
+	case section == "remote" && sub != "" && name == "receivepack":
+		return "git-receive-pack", true
+	case section == "gpg" && sub != "" && name == "program":
+		return "false", true
+	}
+	return "", false
 }
 
 // configIndex is the n of GIT_CONFIG_KEY_<n> or GIT_CONFIG_VALUE_<n>.

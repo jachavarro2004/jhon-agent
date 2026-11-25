@@ -30,10 +30,85 @@ import (
 // file sandbox.mode is on on Linux (T128f): a test that needs the
 // unsandboxed path of the Claude Code wrap or doctor sets it off in its own
 // settings file, and one that pins the default gives an empty file.
+//
+// Nor the owner's state folder (T249): Jhon's install record lives there
+// (${XDG_STATE_HOME:-~/.local/state}/jhon/install.json) with the grants and
+// the modes, so XDG_STATE_HOME is unset here, and every environment a test
+// runs a program with (Env, Run) names a state folder of the test's own
+// (isolateState).
 func init() {
 	os.Setenv("JHON_TELEMETRY", "off")
 	os.Unsetenv("XDG_CONFIG_HOME")
 	os.Unsetenv("JHON_SETTINGS")
+	os.Unsetenv("XDG_STATE_HOME")
+	os.Unsetenv("JHON_IN_SANDBOX")
+}
+
+// callerState and callerHome are the XDG_STATE_HOME and HOME of whoever runs
+// the tests, read before init touches the environment.
+var (
+	callerState = os.Getenv("XDG_STATE_HOME")
+	callerHome  = os.Getenv("HOME")
+)
+
+// isolateState is env with XDG_STATE_HOME the test's own: kept when env
+// names one that is not the caller's; with env's HOME not the caller's, the
+// caller's dropped and none added, so the program's state folder is the
+// one under that HOME (and a test that unsets the variable keeps it unset);
+// else a folder of the test binary's own (binaryState). So no test reads or
+// writes the owner's install record, grants or modes.
+func isolateState(env []string) []string {
+	var home, state string
+	var hasHome, hasState bool
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		switch k {
+		case "HOME":
+			home, hasHome = v, true
+		case "XDG_STATE_HOME":
+			state, hasState = v, true
+		}
+	}
+	if hasState && state != "" && state != callerState {
+		return env
+	}
+	ownHome := hasHome && filepath.IsAbs(home) && home != callerHome
+	if ownHome && !hasState {
+		return env
+	}
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if k, _, _ := strings.Cut(kv, "="); k != "XDG_STATE_HOME" {
+			out = append(out, kv)
+		}
+	}
+	if ownHome {
+		return out
+	}
+	return append(out, "XDG_STATE_HOME="+binaryState())
+}
+
+var (
+	stateOnce   sync.Once
+	stateFolder string
+)
+
+// binaryState is the state folder of a program a test runs with the
+// caller's HOME: a folder beside the test binary when go test built it in
+// its work folder (go-build…), which go removes after the run; else a new
+// temporary folder.
+func binaryState() string {
+	stateOnce.Do(func() {
+		if exe, err := os.Executable(); err == nil && strings.Contains(exe, string(filepath.Separator)+"go-build") {
+			dir := filepath.Join(filepath.Dir(exe), "xdg-state")
+			if os.MkdirAll(dir, 0o700) == nil {
+				stateFolder = dir
+				return
+			}
+		}
+		stateFolder, _ = os.MkdirTemp("", "jhon-test-state-")
+	})
+	return stateFolder
 }
 
 // Root is the repository root. Under -trimpath (a release's `go test
@@ -213,7 +288,11 @@ func Run(t testing.TB, c Cmd) Result {
 	procs <- struct{}{}
 	defer func() { <-procs }()
 	cmd := exec.Command(c.Args[0], c.Args[1:]...)
-	cmd.Dir, cmd.Env = c.Dir, c.Env
+	env := c.Env
+	if env == nil {
+		env = os.Environ()
+	}
+	cmd.Dir, cmd.Env = c.Dir, isolateState(env)
 	cmd.Stdin = strings.NewReader(c.Stdin)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
@@ -259,7 +338,8 @@ func init() {
 
 // Env is this process's environment with overrides (KEY=VALUE) applied and
 // every GIT_* variable removed, so a test run from a git hook never points
-// git at the framework's own repository.
+// git at the framework's own repository, and XDG_STATE_HOME the test's own
+// (isolateState).
 func Env(overrides ...string) []string {
 	keys := map[string]bool{}
 	for _, o := range overrides {
@@ -274,7 +354,7 @@ func Env(overrides ...string) []string {
 		}
 		out = append(out, kv)
 	}
-	return append(out, overrides...)
+	return isolateState(append(out, overrides...))
 }
 
 // Git runs git in dir with a fixed identity and no signing; it fails the

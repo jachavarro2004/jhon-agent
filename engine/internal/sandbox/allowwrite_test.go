@@ -79,10 +79,20 @@ func TestAMissingAllowWriteFolderIsCreatedOnlyWhereItIsSafe(t *testing.T) {
 	// settings name under the link's path is the one under the real home.
 	d = with(d, disk{"/home": "-> /var/home", "/home/u": "-> /var/home/u", "/var/home": "dir", "/var/home/u": "dir"})
 	in = sample(d)
-	in.Home = "/var/home/u"
+	in.Home, in.Env["HOME"] = "/var/home/u", "/home/u"
 	in.AllowWrite = []string{"/home/u/videos2/out"}
 	if got, want := MissingAllowWrite(in), []MissingFolder{{Folder: "/home/u/videos2/out", Create: true}}; !slices.Equal(got, want) {
 		t.Errorf("under a linked home: %s, want %s", show(got), show(want))
+	}
+	// T249: only HOME's own way is the home's; another link that leads to
+	// the home (a folder a command replaced with one) is a link like any
+	// other, and nothing is made through it.
+	d = with(d, disk{"/srv/aw": "dir", "/srv/aw/build": "-> /var/home/u"})
+	in = sample(d)
+	in.Home, in.Env["HOME"] = "/var/home/u", "/home/u"
+	in.AllowWrite = []string{"/srv/aw/build/new"}
+	if got := MissingAllowWrite(in); len(got) != 1 || got[0].Create || !strings.HasPrefix(got[0].Why, "Jhon creates a missing folder only under the home folder") {
+		t.Errorf("through a link to the home elsewhere: %s; want nothing made", show(got))
 	}
 }
 

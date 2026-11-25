@@ -366,7 +366,7 @@ func TestRelease(t *testing.T) {
 
 		// Provenance comes from the captured commit.
 		var record struct{ Commit, Source string }
-		if err := json.Unmarshal([]byte(support.Read(t, filepath.Join(env.home, ".cache", "jhon", "install.json"))), &record); err != nil {
+		if err := json.Unmarshal([]byte(support.Read(t, filepath.Join(env.home, ".local", "state", "jhon", "install.json"))), &record); err != nil {
 			t.Fatal(err)
 		}
 		equal(t, record.Commit, commit)
