@@ -48,7 +48,7 @@ func TestJhonsSourceCheckoutIsReadOnlyFromALinkedWorktree(t *testing.T) {
 
 	// B1: from the linked worktree, the source checkout is read-only.
 	y := filepath.Join(src, "y")
-	if r := run(wt, y); r.Code == 0 || r.Stdout != "" || !strings.HasSuffix(r.Stderr, y+": Read-only file system\n"+note(y)) {
+	if r := run(wt, y); r.Code == 0 || r.Stdout != "" || !strings.HasSuffix(r.Stderr, y+": Read-only file system\n"+ownNote(y, src)) {
 		t.Errorf("a write to the source checkout from a linked worktree: exit %d, stdout %q, stderr %q; want a read-only failure with the note", r.Code, r.Stdout, r.Stderr)
 	}
 	if exists(y) {

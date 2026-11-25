@@ -364,7 +364,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            the folders such a command may write besides the
                            project's, separated by commas, each absolute or
                            under ~/, never /, the home folder or one above
-                           it (an empty list is written in the file: []);
+                           it (an empty list is written in the file: []); a
+                           folder that does not exist yet is created by the
+                           next sandboxed command, before the sandbox
+                           starts, when it lies under the home, through no
+                           link, and neither in nor around a path the
+                           sandbox hides or keeps read-only, nor on PATH;
+                           jhon sandbox status names any other with why;
                            sandbox.deploy_tools is the owner's deploy tools
                            (empty by default; for example aws,cdk,sam),
                            program names separated by commas, each bare (no
@@ -588,7 +594,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            checkouts, ~/.npm, pnpm's store, bun's install
                            cache, ~/.gradle, ~/.m2/repository,
                            ~/.nuget/packages, mise's cache, pip's and uv's
-                           caches), sandbox.allow_write and Jhon's telemetry
+                           caches), sandbox.allow_write (a folder there
+                           that does not exist yet is created first, outside
+                           the sandbox, only under the home, with no link
+                           followed and never in or around a hidden or
+                           read-only path or a PATH folder; its parents
+                           stay read-only) and Jhon's telemetry
                            folder; everything else is read-only,
                            Jhon's settings, grants, modes and releases
                            included, wherever they are, Jhon's source
@@ -659,9 +670,20 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            call), jhon stays the program's parent: a
                            failure whose output says a path is read-only
                            (Read-only file system) ends with one line on
-                           stderr, the sandbox refused a write to <path>;
-                           that is a stop: tell the owner the path (jhon
-                           settings sandbox.allow_write), never write it
+                           stderr, the sandbox refused a write to <path>,
+                           which exists (or does not exist), then why: no
+                           folder the sandbox opens for writing holds it
+                           (sandbox.allow_write opens it, or a folder that
+                           holds it, from the next command), a
+                           sandbox.allow_write folder that does not exist
+                           and Jhon did not create (and why), a PATH folder
+                           (sandbox.allow_write does not open it), Jhon's
+                           or the runtimes' own files (no setting opens
+                           them), a path the sandbox hides (no setting
+                           opens it; whether it exists is not said), or a
+                           folder the sandbox opens for writing (the file
+                           system itself refused it), and that is a stop:
+                           tell the owner the path and why, never write it
                            elsewhere; a failure of a line that holds git
                            with a network subcommand or gh ends with one
                            line, git over SSH and gh run outside the
@@ -775,7 +797,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            and the fix, else ""), can_run, reason, fix,
                            timed_out (the probe did not end in time;
                            can_run stays false), inside, project ("" for
-                           none); --project as for run; exit 0, 2 on a
+                           none), and missing_allow_write when a
+                           sandbox.allow_write folder does not exist and
+                           no writable folder holds it: each folder,
+                           create (the next sandboxed command creates it)
+                           and why Jhon will not, which the line also says
+                           (jhon doctor warns of each it will not create);
+                           --project as for run; exit 0, 2 on a
                            usage error. Run inside Jhon's sandbox
                            (JHON_IN_SANDBOX=1), where another cannot
                            start, it probes nothing: it says so and that

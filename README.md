@@ -197,9 +197,18 @@ runs with the repository's hooks (configured hooks included), ssh command,
 fsmonitor and credential helpers overridden; `url.*.insteadOf` and `include.*` in the repository's
 configuration are not, an accepted residual risk. uv's tools go to a
 sandbox-only folder under the cache, and uv's own tool folder in the home stays
-read-only. A command that fails on a read-only
-path ends with a note telling the agent to stop and name the path
-(the `sandbox.allow_write` setting), and each run records a `jhon.sandbox`
+read-only. A `sandbox.allow_write` folder that does not exist yet is
+created before the next sandboxed command starts, outside the sandbox, so
+you need not make it by hand: only under the home, with no link followed,
+never in or around a path the sandbox hides or keeps read-only (the
+credentials, Jhon's settings, state and releases, the runtimes' folders)
+and never a PATH folder or one that holds one; its parents stay read-only.
+`jhon sandbox status` says which ones the next command creates and why
+Jhon will not create any other. A command that fails on a read-only
+path ends with a note telling the agent to stop and name the path: whether
+it exists and why it is read-only, with the setting that opens it
+(`sandbox.allow_write`) or that none does (a PATH folder, Jhon's own files,
+a hidden path), and each run records a `jhon.sandbox`
 telemetry event. Everything inside the sandbox sees `JHON_IN_SANDBOX=1`:
 `jhon sandbox status` run there, where no other sandbox can start, says it
 runs inside and that the status outside it gives the real state (`inside` and
@@ -378,7 +387,7 @@ after a backup. The main groups:
 |---|---|
 | `[runtimes]` | `claude_code`, `pi`: which runtimes are installed (both by default, at least one) |
 | `[integrations]` | `engram` and `codegraph` (always on), `context7` (hosted documentation for `jhon-scout` and `jhon-builder`, on by default), `studio` (jhon-studio, opt-in), telemetry (opt-in), the palette |
-| `[sandbox]` | `mode` (`on` or `off`, on by default on Linux where the sandbox can run, off elsewhere), `allow_write` |
+| `[sandbox]` | `mode` (`on` or `off`, on by default on Linux where the sandbox can run, off elsewhere), `allow_write` (a missing folder under the home is created for the next sandboxed command) |
 | `[agents]` | `act_on_announce`: a turn that announces an action and takes none is sent back once |
 | `[pi]`, `[shell.*]` | the active profile, and the shell's appearance, behaviour and keys |
 

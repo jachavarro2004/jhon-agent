@@ -22,12 +22,16 @@ import (
 // words, argv[0] first, with env. On a terminal it replaces this process,
 // as run always did; otherwise it supervises it (sandboxSupervised), and
 // a failure ends with failNote when it is not "", any exit but a signal's
-// with runNote.
-func sandboxProgram(path string, argv, env []string, profile, failNote, runNote string) (int, error) {
+// with runNote. refusal is the note on a refused write to a path
+// (sandbox.Refusal for the work profile); nil gives sandbox.RefusalNote.
+func sandboxProgram(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string) (int, error) {
 	if isTerminal(os.Stdout) || isTerminal(os.Stderr) {
 		return execProgram(path, argv[1:], env)
 	}
-	return sandboxSupervised(path, argv, env, profile, failNote, runNote)
+	if refusal == nil {
+		refusal = sandbox.RefusalNote
+	}
+	return sandboxSupervised(path, argv, env, profile, failNote, runNote, refusal)
 }
 
 // ownerCredentialHelpers are the owner's credential helpers, the system's
@@ -73,8 +77,9 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 // this process gets handed to it (T128g, L1303). When it ends:
 //
 //   - a failure whose output (stdout or stderr) said a path is read-only
-//     ends with one note on stderr, sandbox.RefusalNote, on a line of its
-//     own (G3);
+//     ends with one note on stderr, refusal's for the path, on a line of
+//     its own (G3): for a work run sandbox.Refusal, which says whether the
+//     path exists and which setting opens it, or that none does (T239);
 //   - a failure, not a signal's, ends with failNote on a line of its own
 //     when it is not "": sandbox.DeliveryNote for a work line that holds
 //     git over SSH or gh (T181, L1503). bubblewrap reports a shell a
@@ -88,7 +93,7 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 //     refused path, through telemetry when it is on (G4);
 //   - its exit code is the program's, and a program killed by a signal
 //     kills this process with the same signal.
-func sandboxSupervised(path string, argv, env []string, profile, failNote, runNote string) (int, error) {
+func sandboxSupervised(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string) (int, error) {
 	watch := &sandbox.Watch{}
 	errOut := &lastByte{w: os.Stderr}
 	cmd := &exec.Cmd{Path: path, Args: argv, Env: env, Stdin: os.Stdin,
@@ -137,7 +142,7 @@ func sandboxSupervised(path string, argv, env []string, profile, failNote, runNo
 	refused, said := watch.Refused()
 	var notes []string
 	if said && code != 0 {
-		notes = append(notes, sandbox.RefusalNote(refused))
+		notes = append(notes, refusal(refused))
 	}
 	if failNote != "" && code != 0 && code <= 128 && killedBy == 0 {
 		notes = append(notes, failNote)
