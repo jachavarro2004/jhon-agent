@@ -5,6 +5,7 @@ package integrations
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -142,5 +143,43 @@ func TestAskUnpackedSaysWhyItCannotRun(t *testing.T) {
 	_, err = AskUnpacked(cliFixture, program, home)
 	if want := "cannot run clifixture-bin at " + program + ": its file system is mounted noexec; set TMPDIR to a folder on a file system where programs may run"; err == nil || err.Error() != want {
 		t.Errorf("noexec: %v\nwant %s", err, want)
+	}
+}
+
+// Focused re-verify probes (studio-integration-v1 L21, S5/A2): the run spares a
+// child jhon started before it and leaves no daemon after a cut.
+func TestAskUnpackedSparesAChildStartedBefore(t *testing.T) {
+	sib := exec.Command("sleep", "30")
+	if err := sib.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sib.Process.Kill()
+	program, home := unpackedAt(t, "#!/bin/sh\necho '"+answer+"'\n", 0o755)
+	if _, err := AskUnpacked(cliFixture, program, home); err != nil {
+		t.Fatal(err)
+	}
+	if !running(sib.Process.Pid) {
+		t.Error("a child jhon started before the run was killed")
+	}
+}
+
+func TestAskUnpackedCutLeavesNoDaemon(t *testing.T) {
+	saved := askTimeout
+	askTimeout = time.Second
+	t.Cleanup(func() { askTimeout = saved })
+	pid := filepath.Join(t.TempDir(), "pid")
+	program, home := unpackedAt(t, "#!/bin/sh\n( setsid sh -c 'echo $$ > \""+pid+"\"; exec sleep 60' & )\nsleep 60\n", 0o755)
+	start := time.Now()
+	if _, err := AskUnpacked(cliFixture, program, home); err == nil || !strings.Contains(err.Error(), "did not answer in 1s") || time.Since(start) > 3*time.Second {
+		t.Errorf("err %v after %s", err, time.Since(start))
+	}
+	b, _ := os.ReadFile(pid)
+	p, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+	deadline := time.Now().Add(2 * time.Second)
+	for p > 0 && running(p) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if p == 0 || running(p) {
+		t.Errorf("daemon %d outlived the cut", p)
 	}
 }
