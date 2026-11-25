@@ -6,6 +6,8 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0-rc.1] - 2026-11-25
+
 ### Added
 
 - jhon-studio, an opt-in integration for presentation videos of any project (odd/tasks/jhon-studio.md T4): `integrations/studio/manifest.yaml`, kind `cli`, `integrations.studio`, off by default. `jhon setup` offers it under the optional integrations, checks `jhon-studio` only once it is chosen (and installs it from its signed release, below), and writes `integrations.studio` only while it differs from the default, dropping the line when it is turned back off, so an older release after a rollback still reads the settings file; with it on, `jhon start` adds the plugin folder `jhon-studio integration --json` names as a second `--plugin-dir`, so Claude Code has `/jhon-studio:video`, and when jhon-studio does not answer the session starts without it, with one note (a jhon-studio that hangs is cut at 10 s with every process it started); pi's shell registers `/jhon:video`, which sends the skill `jhon-studio integration --json` names, read at each use, with the arguments; `jhon doctor` compares its version and shows a `jhon-studio` section with each check of `jhon-studio doctor --json` and the fix of each that fails (warnings, never a failure; one that exits with no report is `jhon-studio exited <code>`); the dashboard's integrations card shows it. Off, nothing about video is shown or loaded. A `cli` manifest may grant no capability (it mounts no tools), and a `cli` one off at launch no longer keeps the claude.ai connectors out: only an `mcp-connector` one does. See [docs/jhon-studio.md](docs/jhon-studio.md).
