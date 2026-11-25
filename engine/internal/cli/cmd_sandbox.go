@@ -165,10 +165,15 @@ func sandboxRun(argv []string) (int, error) {
 		// with a PATH no sandboxed command may change (sandbox.OutsidePath,
 		// T249 A1): what this process runs from here on (git) too.
 		// It runs only while no sandboxed command that can write what it
-		// reads runs, and none starts until it ends (sandbox.Registry, L34).
+		// reads runs, and, for a line that runs git or gh, none starts until
+		// it ends (sandbox.Registry, L34, L35).
 		// A line that ends up in the work profile keeps its PATH.
 		if in := sandboxInput(pinned); sandbox.RunsOutside(sandbox.ThisHost(), in, program) {
-			leave, refused := enterRegistry(sandbox.KindOutside, sandbox.OutsideAreas(in, program[2]))
+			kind := sandbox.KindOutside
+			if sandbox.RunsGit(program[2]) {
+				kind = sandbox.KindOutsideGit
+			}
+			leave, refused := enterRegistry(kind, sandbox.OutsideAreas(in, program[2]))
 			if refused != "" {
 				fmt.Fprintln(os.Stderr, refused)
 				return sandboxRefused, nil
@@ -204,8 +209,8 @@ func sandboxRun(argv []string) (int, error) {
 		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
 		return sandboxRefused, nil
 	}
-	// It runs only while no line that runs outside the sandbox and reads
-	// what it can write runs (sandbox.Registry, L34).
+	// It runs only while no line that runs git or gh outside the sandbox
+	// and reads what it can write runs (sandbox.Registry, L34, L35).
 	leave, refused := enterRegistry(sandbox.KindSandboxed, sandbox.WritableAreas(in))
 	if refused != "" {
 		fmt.Fprintln(os.Stderr, refused)
@@ -228,9 +233,10 @@ func runRegistry() sandbox.Registry {
 
 // enterRegistry records this run of kind with areas (sandbox.Registry.Enter,
 // waiting up to sandbox.RegistryWait), and gives the function that removes
-// the record; refused is the note when it may not run: a run of the other
-// kind that shares its areas still runs, or the registry cannot be read or
-// written, which refuses it too (fail closed).
+// the record; refused is the note when it may not run: a run that holds it
+// and shares its areas still runs (a sandboxed run for an outside line, an
+// outside git line for a sandboxed run, L35), or the registry cannot be
+// read or written, which refuses it too (fail closed).
 func enterRegistry(kind string, areas []string) (leave func(), refused string) {
 	r := runRegistry()
 	leave, err := r.Enter(kind, areas, sandbox.RegistryWait)
@@ -238,7 +244,7 @@ func enterRegistry(kind string, areas []string) (leave func(), refused string) {
 	switch {
 	case err == nil:
 		return leave, ""
-	case errors.As(err, &busy) && kind == sandbox.KindOutside:
+	case errors.As(err, &busy) && kind != sandbox.KindSandboxed:
 		return nil, "jhon sandbox: a sandboxed command that can write what this line reads is still running (pid " + strconv.Itoa(busy.Run.PID) + "), and a line that runs outside the sandbox does not run while one does: that command could change what the line reads (the repository's git configuration, a program it runs), so nothing was run; fix: wait for that command to end, or stop it, then run the line again"
 	case errors.As(err, &busy):
 		return nil, "jhon sandbox: a line that runs outside the sandbox and reads what this command can write is still running (pid " + strconv.Itoa(busy.Run.PID) + "), and no sandboxed command that can write what it reads starts while it runs, so nothing was run; fix: wait for that line to end, then run the command again"
