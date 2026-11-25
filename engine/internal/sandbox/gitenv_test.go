@@ -192,7 +192,7 @@ func TestProjectGitConfigNeutralisesTheRepositorysCommands(t *testing.T) {
 		{"filter.Evil.clean", ""}, {"filter.Evil.smudge", ""},
 		{"merge.ours.driver", "false"},
 		{"diff.pic.textconv", ""}, {"diff.pic.command", ""}, {"diff.external", ""},
-		{"remote.origin.vcs", ""}, {"remote.origin.uploadpack", "git-upload-pack"}, {"remote.origin.receivepack", "git-receive-pack"},
+		{"remote.origin.vcs", ""},
 		{"core.editor", "nvim"}, {"sequence.editor", ":"}, {"core.pager", ""}, {"pager.fetch", "false"},
 		{"core.askpass", ""}, {"core.alternaterefscommand", ""},
 		{"gpg.program", "gpg"}, {"gpg.ssh.program", "ssh-keygen"}, {"gpg.x509.program", "gpgsm"}, {"gpg.ssh.defaultkeycommand", "false"},

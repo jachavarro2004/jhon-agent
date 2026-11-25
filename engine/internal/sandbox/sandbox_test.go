@@ -63,7 +63,7 @@ func with(d disk, more disk) disk {
 
 func TestArgsOfTheWorkProfile(t *testing.T) {
 	got := strings.Join(Args(sample(machine)), " ")
-	want := "--ro-bind / / --dev-bind /dev /dev" +
+	want := "--ro-bind / / --dev-bind /dev /dev --proc /proc" +
 		" --bind /tmp /tmp" +
 		" --bind /home/u/.cache /home/u/.cache" +
 		" --dev-bind /dev/null /home/u/.netrc" +
@@ -75,7 +75,7 @@ func TestArgsOfTheWorkProfile(t *testing.T) {
 		" --remount-ro /home/u/.ssh --remount-ro /home/u/.config/gh" +
 		" --unsetenv SSH_AUTH_SOCK" +
 		" --setenv JHON_IN_SANDBOX 1" +
-		" --die-with-parent --chdir /home/u/project"
+		" --unshare-pid --die-with-parent --chdir /home/u/project"
 	if got != want {
 		t.Errorf("Args(work) =\n%s\nwant\n%s", got, want)
 	}
@@ -154,7 +154,7 @@ func TestAMissingPathTakesNoMountAndALinkIsBoundWhereItLeads(t *testing.T) {
 	in := sample(d)
 	in.AllowWrite = []string{"/opt/missing"}
 	got := strings.Join(Args(in), " ")
-	want := "--ro-bind / / --dev-bind /dev /dev" +
+	want := "--ro-bind / / --dev-bind /dev /dev --proc /proc" +
 		" --bind /tmp /tmp" +
 		" --bind /home/u/project /home/u/project" +
 		" --tmpfs /mnt/vault/aws" +
@@ -162,7 +162,7 @@ func TestAMissingPathTakesNoMountAndALinkIsBoundWhereItLeads(t *testing.T) {
 		" --remount-ro /mnt/vault/aws" +
 		" --unsetenv SSH_AUTH_SOCK" +
 		" --setenv JHON_IN_SANDBOX 1" +
-		" --die-with-parent --chdir /home/u/project"
+		" --unshare-pid --die-with-parent --chdir /home/u/project"
 	if got != want {
 		t.Errorf("Args =\n%s\nwant\n%s", got, want)
 	}
@@ -254,7 +254,7 @@ func TestTheSandboxUnsetsTheCredentialVariables(t *testing.T) {
 	in := sample(machine)
 	in.Env = map[string]string{"GH_TOKEN": "x", "GITHUB_TOKEN": "", "GIT_ASKPASS": "/usr/bin/ask", "HOME": "/home/u", "ANTHROPIC_API_KEY": "x"}
 	got := strings.Join(Args(in), " ")
-	if !strings.Contains(got, " --unsetenv GH_TOKEN --unsetenv GITHUB_TOKEN --unsetenv GIT_ASKPASS --setenv JHON_IN_SANDBOX 1 --die-with-parent") || strings.Count(got, "--unsetenv") != 3 {
+	if !strings.Contains(got, " --unsetenv GH_TOKEN --unsetenv GITHUB_TOKEN --unsetenv GIT_ASKPASS --setenv JHON_IN_SANDBOX 1 --unshare-pid --die-with-parent") || strings.Count(got, "--unsetenv") != 3 {
 		t.Errorf("work unsets the credential variables that are set, and only them:\n%s", got)
 	}
 	if want := []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "SSH_AUTH_SOCK", "GIT_ASKPASS", "SSH_ASKPASS"}; !slices.Equal(CredentialVariables, want) {
@@ -635,7 +635,7 @@ func TestTheProbeUsesEveryOptionARunMayUse(t *testing.T) {
 			t.Errorf("Args gives bubblewrap %s, which the probe does not try: %v", a, probeArgs)
 		}
 	}
-	for _, option := range []string{"--ro-bind", "--dev-bind", "--bind", "--perms", "--tmpfs", "--remount-ro", "--unsetenv", "--setenv", "--die-with-parent", "--chdir"} {
+	for _, option := range []string{"--ro-bind", "--dev-bind", "--bind", "--perms", "--tmpfs", "--remount-ro", "--unsetenv", "--setenv", "--proc", "--unshare-pid", "--die-with-parent", "--chdir"} {
 		if !slices.Contains(probeArgs, option) {
 			t.Errorf("the probe does not try %s: %v", option, probeArgs)
 		}

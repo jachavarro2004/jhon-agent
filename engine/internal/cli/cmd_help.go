@@ -704,13 +704,25 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            GITHUB_TOKEN, GH_ENTERPRISE_TOKEN,
                            GITHUB_ENTERPRISE_TOKEN, SSH_AUTH_SOCK,
                            GIT_ASKPASS and SSH_ASKPASS are unset. No
-                           network or process isolation:
-                           abstract unix sockets stay reachable (closing
-                           them takes a network namespace), and with no PID
-                           namespace a child the program detaches (setsid,
-                           nohup, a daemon) outlives bubblewrap: the
-                           runtime's kill and --die-with-parent end
-                           bubblewrap and the program, not that child.
+                           network isolation: abstract unix sockets stay
+                           reachable (closing them takes a network
+                           namespace). The program runs in a PID namespace
+                           of its own, with its own /proc: when it ends,
+                           every process it started ends with it, one it
+                           detached (setsid, nohup, a double fork, a
+                           daemon) too, and the runtime's stop and
+                           --die-with-parent end them all. While a
+                           sandboxed command that can write a project runs,
+                           a line of that project that would run outside
+                           the sandbox (git, gh, docker,
+                           sandbox.deploy_tools) waits up to 3 s, then
+                           runs nothing and exits 126 with a note; while
+                           such a line runs, a sandboxed command that can
+                           write what it reads waits the same, then is
+                           refused the same way. Each run is recorded under
+                           Jhon's state folder (sandbox-runs, read-only in
+                           the sandbox) until it ends; a record that cannot
+                           be read or written refuses the run.
                            When its output is not a terminal (a runtime's
                            call), jhon stays the program's parent: a
                            failure whose output says a path is read-only
@@ -781,10 +793,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            one that runs nothing (a filter's clean, smudge
                            and process, a merge driver (false: a conflict),
                            a diff driver's command and textconv,
-                           diff.external, a remote's vcs, uploadpack and
-                           receivepack, the editors, the pager, askpass,
-                           core.alternateRefsCommand, the signing
-                           programs), git's proxy for git:// off
+                           diff.external, a remote's vcs, the editors, the
+                           pager, askpass, core.alternateRefsCommand, the
+                           signing programs), git's proxy for git:// off
                            (GIT_PROXY_COMMAND empty unless set), and
                            GIT_CONFIG_PARAMETERS unset; a repository that
                            sets core.worktree, or whose configuration git
@@ -792,9 +803,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            profile. A caller whose
                            stdout and stderr are one file (2>&1) gets the
                            program's output as one stream, in its order.
-                           url.*.insteadOf in the repository's
-                           configuration is not overridden: an accepted
-                           residual risk. In the
+                           url.*.insteadOf and a remote's uploadpack and
+                           receivepack in the repository's configuration
+                           are not overridden (git takes the repository's
+                           first uploadpack and receivepack, which run on
+                           the remote's host over ssh, the local transports
+                           being off): an accepted residual risk. In the
                            work profile uv's tools go to
                            $XDG_CACHE_HOME/jhon/sandbox/uv-tools (UV_TOOL_DIR
                            and UV_TOOL_BIN_DIR, unless already set);
