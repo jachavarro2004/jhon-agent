@@ -66,11 +66,16 @@ func AskIntegrationAt(m Manifest, path string) (Answer, error) {
 }
 
 func askIntegration(m Manifest, path string) (Answer, error) {
-	var a Answer
 	out, err := askAt(m.Doctor.Binary, path, "integration", "--json")
 	if err != nil {
-		return a, err
+		return Answer{}, err
 	}
+	return readAnswer(m, out)
+}
+
+// readAnswer is out read as m's program's `integration --json`.
+func readAnswer(m Manifest, out []byte) (Answer, error) {
+	var a Answer
 	if json.Unmarshal(out, &a) != nil {
 		return a, fmt.Errorf("%s integration --json: not the JSON {version, plugin_dir, skill}", m.Doctor.Binary)
 	}
@@ -126,16 +131,47 @@ func askAt(bin, at string, args ...string) ([]byte, error) {
 	// whose child still keeps stdout open does not hold the caller past it.
 	ownGroup(cmd)
 	cmd.WaitDelay = time.Second
-	out, err := cmd.Output()
+	var out bounded
+	cmd.Stdout = &out
+	return answered(ctx, bin, args, cmd.Run(), &out)
+}
+
+// maxAnswer is the most a program's answer may hold; a longer one is
+// refused, and the program stops on its next write.
+const maxAnswer = 64 << 10
+
+// bounded keeps a program's output up to maxAnswer bytes; past it, a
+// write fails, which closes the pipe the program writes to.
+type bounded struct {
+	buf  bytes.Buffer
+	over bool
+}
+
+var errLong = errors.New("answer too long")
+
+func (b *bounded) Write(p []byte) (int, error) {
+	if b.over || b.buf.Len()+len(p) > maxAnswer {
+		b.over = true
+		return 0, errLong
+	}
+	return b.buf.Write(p)
+}
+
+// answered is a run's output, or why it gave none: too long, cut at
+// askTimeout, an exit other than 0 (an *Exited), or another failure.
+func answered(ctx context.Context, bin string, args []string, err error, out *bounded) ([]byte, error) {
+	if out.over {
+		return nil, fmt.Errorf("%s %s: answered more than %d bytes", bin, strings.Join(args, " "), maxAnswer)
+	}
 	if ctx.Err() != nil {
-		return out, fmt.Errorf("%s %s: did not answer in %s", bin, strings.Join(args, " "), askTimeout)
+		return out.buf.Bytes(), fmt.Errorf("%s %s: did not answer in %s", bin, strings.Join(args, " "), askTimeout)
 	}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
-		return out, &Exited{bin, exit}
+		return out.buf.Bytes(), &Exited{bin, exit}
 	}
 	if err != nil {
-		return out, fmt.Errorf("%s %s: %w", bin, strings.Join(args, " "), err)
+		return out.buf.Bytes(), fmt.Errorf("%s %s: %w", bin, strings.Join(args, " "), err)
 	}
-	return out, nil
+	return out.buf.Bytes(), nil
 }

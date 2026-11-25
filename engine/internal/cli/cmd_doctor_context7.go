@@ -101,9 +101,12 @@ func (d doctor) toolOrigin(m integrations.Manifest) {
 		o.Note(fmt.Sprintf("%s is a development install: a git clone at %s, which jhon setup and jhon update leave alone", t.Binary, release.Tilde(p.Dir)))
 		return
 	case in.Foreign != "":
-		o.Note(fmt.Sprintf("%s is %s, not a release jhon installed: jhon setup and jhon update leave it alone", release.Tilde(p.Link), in.Foreign))
+		o.Note(in.Foreign + ": jhon setup and jhon update leave it alone")
 		return
 	case in.Active == "":
+		return
+	case !in.Verified:
+		o.Warn(fmt.Sprintf("%s %s at %s is not the release jhon installed (missing, changed, or installed by hand) — run 'jhon update'", t.Binary, in.Active, release.Tilde(filepath.Join(p.Dir, in.Active))))
 		return
 	}
 	o.OK(fmt.Sprintf("%s %s from its signed release v%s of %s (%s)", t.Binary, in.Active, in.Active, t.Source(), release.Tilde(filepath.Join(p.Dir, in.Active))))

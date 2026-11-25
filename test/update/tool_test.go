@@ -127,6 +127,18 @@ func TestUpdateInstallsAToolFromItsSignedRelease(t *testing.T) {
 		`https://github\.com/jachavarro2004/jhon-studio/\.github/workflows/release\.yml@refs/tags/v0\.1\.0\ninstalled jhon-studio 0\.1\.0 at ~/\.local/share/jhon-studio/0\.1\.0\n$`)
 	linksTo("0.1.0")
 
+	// L18 A3: a deleted active folder is installed again, never "up to date".
+	if err := os.RemoveAll(filepath.Join(studio, "0.1.0")); err != nil {
+		t.Fatal(err)
+	}
+	r = e.run(t, jhon, []string{"update", "--check"}, env...)
+	wantCode(t, r, 0)
+	match(t, r.Stdout, `\njhon-studio 0\.1\.0 needs reinstalling \(its folder is missing, or is not the one jhon verified\): run 'jhon update'\n$`)
+	r = e.run(t, jhon, []string{"update"}, env...)
+	wantCode(t, r, 0)
+	match(t, r.Stdout, `\nreinstalled jhon-studio 0\.1\.0 at ~/\.local/share/jhon-studio/0\.1\.0 \(its folder was missing, or was not the one jhon verified\)\n$`)
+	linksTo("0.1.0")
+
 	// A newer release that supports this jhon updates it beside the first.
 	rels.add(t, vs, srv.URL, "0.3.0", ">=0.5.0", studioAt("v0.3.0"))
 	r = e.run(t, jhon, []string{"update"}, env...)

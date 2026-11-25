@@ -256,7 +256,9 @@ func TestHelpSaysToolsInstallFromTheirSignedReleases(t *testing.T) {
 	for cmd, wants := range map[string][]string{
 		"setup": {"installs jhon-studio from its newest signed release that supports this jhon", "a development clone at ~/.local/share/jhon-studio is left alone"},
 		"update": {"then updates jhon-studio, when it is on, to its newest signed release that supports the jhon that runs",
-			"--json lists it under tools", "it also links jhon-studio's previous version again"},
+			"--json lists it under tools", "it also links jhon-studio's previous version again",
+			"are noted once and left alone (exit 0)", "a version folder is linked only while it is the one jhon verified",
+			"and, with jhon-studio on, that jhon setup installs it there"},
 		"doctor": {"which jhon-studio release is installed (or that it is a development clone)", "--remote also looks for a newer jhon-studio release that supports this jhon"},
 	} {
 		_, out := capture(t, []string{cmd, "--help"})

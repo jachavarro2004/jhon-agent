@@ -5,10 +5,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -104,50 +107,165 @@ func (t Tool) program(p Place, version string) string {
 	return filepath.Join(p.Dir, version, "bin", t.Binary)
 }
 
-// Installed is what is on disk: a development clone; the version the link
-// points at; what the link is when jhon did not make it; and the versions
+// Installed is what is on disk: a development clone; why jhon leaves the
+// place alone (Foreign: the share folder is not a folder, or the link is
+// not jhon's); the version the link points at, and whether its folder is
+// the one jhon verified and recorded there (Verified); and the versions
 // kept, oldest first.
 type Installed struct {
-	Dev     bool
-	Active  string
-	Foreign string
-	Kept    []string
+	Dev      bool
+	Foreign  string
+	Active   string
+	Verified bool
+	Kept     []string
 }
 
-// Installed reads t's place p.
+// Installed reads t's place p, never through a link at p.Dir.
 func (t Tool) Installed(p Place) Installed {
 	var in Installed
+	if why := t.shareNotOurs(p); why != "" {
+		in.Foreign = why
+		return in
+	}
 	if _, err := os.Lstat(filepath.Join(p.Dir, ".git")); err == nil {
 		in.Dev = true
 		return in
 	}
 	if es, err := os.ReadDir(p.Dir); err == nil {
 		for _, e := range es {
-			if toolVersion.MatchString(e.Name()) && release.IsFile(t.program(p, e.Name())) {
+			if e.IsDir() && toolVersion.MatchString(e.Name()) && release.IsFile(t.program(p, e.Name())) {
 				in.Kept = append(in.Kept, e.Name())
 			}
 		}
 	}
 	slices.SortFunc(in.Kept, func(a, b string) int { return semver.Compare("v"+a, "v"+b) })
+	in.Active, in.Foreign = t.linkState(p)
+	if in.Active != "" {
+		in.Verified = t.verified(p, in.Active)
+	}
+	return in
+}
+
+// shareNotOurs says why p.Dir is not a folder jhon installs into: a link,
+// or not a folder; "" when it is one, or is not there.
+func (t Tool) shareNotOurs(p Place) string {
+	fi, err := os.Lstat(p.Dir)
+	switch {
+	case err != nil:
+		return ""
+	case fi.Mode()&os.ModeSymlink != 0:
+		target, _ := os.Readlink(p.Dir)
+		return release.Tilde(p.Dir) + " is a link to " + target + ", not a folder"
+	case !fi.IsDir():
+		return release.Tilde(p.Dir) + " is a file, not a folder"
+	}
+	return ""
+}
+
+// linkState is the version p.Link points at when it is jhon's link to a
+// version's program; else, when it is there, why it is not jhon's.
+func (t Tool) linkState(p Place) (active, foreign string) {
 	fi, err := os.Lstat(p.Link)
 	switch {
 	case err != nil:
+		return "", ""
 	case fi.Mode()&os.ModeSymlink == 0:
-		in.Foreign = "a file"
-	default:
-		target, _ := os.Readlink(p.Link)
-		abs := target
-		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(filepath.Dir(p.Link), abs)
-		}
-		v := filepath.Base(filepath.Dir(filepath.Dir(abs)))
-		if toolVersion.MatchString(v) && filepath.Clean(abs) == t.program(p, v) {
-			in.Active = v
-		} else {
-			in.Foreign = "a link to " + target
-		}
+		return "", release.Tilde(p.Link) + " is a file, not jhon's link to a " + t.Binary + " release"
 	}
-	return in
+	target, _ := os.Readlink(p.Link)
+	if v, ok := t.ours(p, target); ok {
+		return v, ""
+	}
+	return "", release.Tilde(p.Link) + " is a link to " + target + ", not jhon's link to a " + t.Binary + " release"
+}
+
+// ours is the version whose program target (a link's) names, when it names
+// one under p.Dir.
+func (t Tool) ours(p Place, target string) (string, bool) {
+	abs := target
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(filepath.Dir(p.Link), abs)
+	}
+	v := filepath.Base(filepath.Dir(filepath.Dir(abs)))
+	return v, toolVersion.MatchString(v) && filepath.Clean(abs) == t.program(p, v)
+}
+
+// verifiedDir, under a tool's share folder, records the digest of each
+// version folder jhon placed there from a verified release
+// (VerifiedRecord): a folder is linked, by an install or a roll-back, only
+// while its files still have that digest (TreeDigest).
+const verifiedDir = ".jhon-verified"
+
+// VerifiedRecord is where version's digest is recorded under p.
+func VerifiedRecord(p Place, version string) string {
+	return filepath.Join(p.Dir, verifiedDir, version)
+}
+
+// verified is whether p.Dir/<version> is a folder whose digest is the one
+// recorded for it.
+func (t Tool) verified(p Place, version string) bool {
+	fi, err := os.Lstat(filepath.Join(p.Dir, version))
+	if err != nil || !fi.IsDir() {
+		return false
+	}
+	rec, err := os.ReadFile(VerifiedRecord(p, version))
+	if err != nil {
+		return false
+	}
+	d, err := TreeDigest(filepath.Join(p.Dir, version))
+	return err == nil && strings.TrimSpace(string(rec)) == d
+}
+
+// TreeDigest is the sha256 of a folder's tree: each entry's path in order,
+// its kind, a file's owner execute bit and its content's sha256, so a file
+// changed, added, removed, made executable or swapped for a link changes it.
+func TreeDigest(dir string) (string, error) {
+	r, err := os.OpenRoot(dir)
+	if err != nil {
+		return "", err
+	}
+	defer r.Close()
+	return treeDigest(r.FS(), ".")
+}
+
+func treeDigest(fsys fs.FS, dir string) (string, error) {
+	h := sha256.New()
+	err := fs.WalkDir(fsys, dir, func(name string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if name == dir {
+			return nil
+		}
+		rel := strings.TrimPrefix(strings.TrimPrefix(name, dir), "/")
+		switch {
+		case d.IsDir():
+			fmt.Fprintf(h, "d %s\n", rel)
+		case d.Type().IsRegular():
+			fi, err := d.Info()
+			if err != nil {
+				return err
+			}
+			f, err := fsys.Open(name)
+			if err != nil {
+				return err
+			}
+			fh := sha256.New()
+			_, err = io.Copy(fh, f)
+			f.Close()
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(h, "f %s %t %x\n", rel, fi.Mode().Perm()&0o100 != 0, fh.Sum(nil))
+		default:
+			fmt.Fprintf(h, "o %s %v\n", rel, d.Type())
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // ToolStatus is what InstallTool did or found.
@@ -156,6 +274,12 @@ type ToolStatus string
 const (
 	// ToolDevelopment is a development clone, left alone.
 	ToolDevelopment ToolStatus = "development"
+	// ToolForeign is a place jhon did not make (ToolResult.Note says why),
+	// left alone.
+	ToolForeign ToolStatus = "foreign"
+	// ToolRepaired is the active version installed again: its folder was
+	// missing, or had no record of jhon's verification.
+	ToolRepaired ToolStatus = "repaired"
 	// ToolUpToDate is no newer release that supports this jhon.
 	ToolUpToDate ToolStatus = "up-to-date"
 	// ToolAvailable is a newer one found by a check, not installed.
@@ -168,11 +292,12 @@ const (
 // ToolResult is InstallTool's answer: From the active version before ("" for
 // none), To the one active after (or, for a check, the one available),
 // Signer who signed it, Skipped the notes of the newer releases that do not
-// support this jhon.
+// support this jhon, Note why a ToolForeign place is left alone.
 type ToolResult struct {
 	Status           ToolStatus
 	From, To, Signer string
 	Skipped          []string
+	Note             string
 }
 
 // ToolRelease is one release of a tool: its version, whether it is a
@@ -296,14 +421,19 @@ func (c *Client) InstallTool(ctx context.Context, t Tool, p Place, jhon string, 
 		return res, nil
 	}
 	if in.Foreign != "" {
-		return res, fmt.Errorf("%s is %s, not a link to a %s release jhon installed; move it away for jhon to install one; nothing was changed", release.Tilde(p.Link), in.Foreign, t.Binary)
+		res.Status, res.Note = ToolForeign, in.Foreign
+		return res, nil
 	}
 	rels, err := c.ToolReleases(ctx, t, semver.Prerelease("v"+jhon) != "")
 	if err != nil {
 		return res, unchanged(err)
 	}
+	// An active folder that is missing, or is not the one jhon verified,
+	// is installed again from its release: its version is a candidate too.
+	repair := in.Active != "" && !in.Verified
 	rels = slices.DeleteFunc(rels, func(r ToolRelease) bool {
-		return in.Active != "" && semver.Compare("v"+r.Version, "v"+in.Active) <= 0
+		n := semver.Compare("v"+r.Version, "v"+in.Active)
+		return in.Active != "" && (n < 0 || n == 0 && !repair)
 	})
 	if len(rels) > maxCandidates {
 		rels = rels[:maxCandidates]
@@ -324,10 +454,15 @@ func (c *Client) InstallTool(ctx context.Context, t Tool, p Place, jhon string, 
 		if err != nil {
 			return res, unchanged(err)
 		}
-		if err := t.unpack(artifact, look); err != nil {
+		want, err := t.unpackTo(artifact, look)
+		if err != nil {
 			return res, unchanged(err)
 		}
-		a, err := integrations.AskIntegrationAt(t.Manifest, filepath.Join(look, "bin", t.Binary))
+		home := filepath.Join(cand, "home")
+		if err := os.Mkdir(home, 0o700); err != nil {
+			return res, unchanged(err)
+		}
+		a, err := integrations.AskUnpacked(t.Manifest, filepath.Join(look, "bin", t.Binary), home)
 		if err != nil {
 			return res, unchanged(fmt.Errorf("cannot read what jhon %s %s requires: %v", t.Binary, r.Version, err))
 		}
@@ -346,14 +481,22 @@ func (c *Client) InstallTool(ctx context.Context, t Tool, p Place, jhon string, 
 			res.Status = ToolAvailable
 			return res, nil
 		}
-		if err := t.place(p, artifact, r.Version); err != nil {
+		if err := t.place(p, artifact, r.Version, want); err != nil {
 			return res, err
 		}
-		res.Status = ToolInstalled
-		if in.Active != "" {
+		switch {
+		case r.Version == in.Active:
+			res.Status = ToolRepaired
+		case in.Active != "":
 			res.Status = ToolUpdated
+		default:
+			res.Status = ToolInstalled
 		}
 		return res, nil
+	}
+	if repair {
+		return res, fmt.Errorf("%s %s at %s is missing or is not the release jhon installed, and no release of %s that supports jhon %s can take its place; nothing was changed",
+			t.Binary, in.Active, release.Tilde(filepath.Join(p.Dir, in.Active)), t.Source(), jhon)
 	}
 	if in.Active == "" {
 		switch {
@@ -368,48 +511,141 @@ func (c *Client) InstallTool(ctx context.Context, t Tool, p Place, jhon string, 
 	return res, nil
 }
 
-// place unpacks the verified artifact into p.Dir/<version>, through a
-// folder beside it renamed into place (a version already there is kept as
-// it is), and links p.Link to its program atomically.
-func (t Tool) place(p Place, artifact, version string) error {
-	if err := os.MkdirAll(p.Dir, 0o755); err != nil {
+// Test hooks: hookShareOpen runs once the share folder is open, and
+// hookBeforeLink right before the link moves (link.go); nil outside tests.
+var hookShareOpen, hookBeforeLink func()
+
+// became is a place that changed during the install: left as it is.
+func became(why string) string {
+	w := strings.TrimSuffix(strings.Replace(why, " is ", " became ", 1), ", not a folder")
+	if strings.Contains(w, ", not ") {
+		w += ","
+	}
+	return w + " during the install; it was left as it is"
+}
+
+// place puts the verified artifact, whose tree's digest is want, at
+// p.Dir/<version> and links p.Link to its program. Right before it writes,
+// p.Dir must be a folder (made when missing, never through a link) that is
+// not a clone, and p.Link absent or jhon's link: anything else, even one
+// swapped in during the install, is left as it is and refuses it. It writes
+// through the folder it opened (os.Root), never through a link: a new
+// version is unpacked beside, renamed into place and recorded
+// (VerifiedRecord); one already there is linked only when its digest is
+// want. The link moves atomically, and never over what is not jhon's
+// (link.go).
+func (t Tool) place(p Place, artifact, version, want string) error {
+	if err := os.MkdirAll(filepath.Dir(p.Dir), 0o755); err != nil {
 		return unchanged(err)
 	}
+	if err := os.Mkdir(p.Dir, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+		return unchanged(err)
+	}
+	if why := t.shareNotOurs(p); why != "" {
+		return errors.New(became(why) + "; nothing was changed")
+	}
+	if _, foreign := t.linkState(p); foreign != "" {
+		return errors.New(became(foreign) + "; nothing was changed")
+	}
+	r, err := os.OpenRoot(p.Dir)
+	if err != nil {
+		return unchanged(err)
+	}
+	defer r.Close()
+	if why := t.notOpened(p, r); why != "" {
+		return errors.New(became(why) + "; nothing was changed")
+	}
+	if _, err := r.Lstat(".git"); err == nil {
+		return fmt.Errorf("%s became a development clone during the install; it was left as it is; nothing was changed", release.Tilde(p.Dir))
+	}
+	if hookShareOpen != nil {
+		hookShareOpen()
+	}
 	target := filepath.Join(p.Dir, version)
-	if !release.IsFile(t.program(p, version)) {
-		stage, err := os.MkdirTemp(p.Dir, ".unpacking-")
-		if err != nil {
+	differ := fmt.Errorf("%s is not %s's signed release %s (its files differ); move it away for jhon to install it; nothing was changed", release.Tilde(target), t.Binary, version)
+	if fi, err := r.Lstat(version); err == nil {
+		if !fi.IsDir() {
+			return differ
+		}
+		if d, err := treeDigest(r.FS(), version); err != nil || d != want {
+			return differ
+		}
+	} else {
+		stage := fmt.Sprintf(".unpacking-%d-%d", os.Getpid(), time.Now().UnixNano())
+		if err := r.Mkdir(stage, 0o700); err != nil {
 			return unchanged(err)
 		}
-		if err := t.unpack(artifact, stage); err != nil {
-			os.RemoveAll(stage)
+		if err := t.unpack(artifact, r, stage); err != nil {
+			r.RemoveAll(stage)
 			return unchanged(err)
 		}
-		if err := os.Chmod(stage, 0o755); err != nil {
-			os.RemoveAll(stage)
+		if d, err := treeDigest(r.FS(), stage); err != nil || d != want {
+			r.RemoveAll(stage)
+			return unchanged(fmt.Errorf("%s unpacked twice to different files", t.Asset(version)))
+		}
+		if err := r.Chmod(stage, 0o755); err != nil {
+			r.RemoveAll(stage)
 			return unchanged(err)
 		}
-		if err := os.Rename(stage, target); err != nil {
-			os.RemoveAll(stage)
+		if err := r.Rename(stage, version); err != nil {
+			r.RemoveAll(stage)
 			return unchanged(fmt.Errorf("cannot place %s %s at %s: %v", t.Binary, version, release.Tilde(target), err))
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(p.Link), 0o755); err != nil {
-		return fmt.Errorf("%s %s is at %s, but %v; the command still runs the version it ran", t.Binary, version, release.Tilde(target), err)
+	placed := fmt.Sprintf("%s %s is at %s but not linked: ", t.Binary, version, release.Tilde(target))
+	if err := r.MkdirAll(verifiedDir, 0o755); err != nil {
+		return errors.New(placed + err.Error())
 	}
-	if err := release.Activate(t.program(p, version), p.Link); err != nil {
-		return fmt.Errorf("%s %s is at %s, but cannot be linked from %s: %v; the command still runs the version it ran", t.Binary, version, release.Tilde(target), release.Tilde(p.Link), err)
+	if err := r.WriteFile(filepath.Join(verifiedDir, version), []byte(want+"\n"), 0o644); err != nil {
+		return errors.New(placed + err.Error())
+	}
+	if why := t.notOpened(p, r); why != "" {
+		return errors.New(placed + became(why))
+	}
+	if err := t.link(p, version); err != nil {
+		return errors.New(placed + err.Error())
 	}
 	return nil
 }
 
-// unpack writes the gzip tarball artifact into dir, an empty folder: only
-// folders and regular files, each named by a relative path with no `..`,
-// at most maxEntries of them and maxUnpacked bytes. A link (symbolic or
-// hard), a device, a name out of the folder or given twice is refused, and
-// so is a tarball with no bin/<binary>. A file keeps only its owner's
-// execute bit's meaning: 0755 or 0644.
-func (t Tool) unpack(artifact, dir string) error {
+// notOpened says why p.Dir is no longer the folder r opened: a link, not
+// a folder, or another folder; "" while it is.
+func (t Tool) notOpened(p Place, r *os.Root) string {
+	if why := t.shareNotOurs(p); why != "" {
+		return why
+	}
+	fi, err := os.Lstat(p.Dir)
+	if err != nil {
+		return release.Tilde(p.Dir) + " is gone"
+	}
+	open, err := r.Stat(".")
+	if err != nil || !os.SameFile(fi, open) {
+		return release.Tilde(p.Dir) + " is another folder"
+	}
+	return ""
+}
+
+// unpackTo unpacks artifact into dir, an empty folder, and returns its
+// tree's digest.
+func (t Tool) unpackTo(artifact, dir string) (string, error) {
+	r, err := os.OpenRoot(dir)
+	if err != nil {
+		return "", err
+	}
+	defer r.Close()
+	if err := t.unpack(artifact, r, "."); err != nil {
+		return "", err
+	}
+	return treeDigest(r.FS(), ".")
+}
+
+// unpack writes the gzip tarball artifact into dir, an empty folder under
+// r, through r: only folders and regular files, each named by a relative
+// path with no `..`, at most maxEntries of them and maxUnpacked bytes. A
+// link (symbolic or hard), a device, a name out of the folder or given
+// twice is refused, and so is a tarball with no bin/<binary>. A file keeps
+// only its owner's execute bit's meaning: 0755 or 0644.
+func (t Tool) unpack(artifact string, r *os.Root, dir string) error {
 	name := filepath.Base(artifact)
 	f, err := os.Open(artifact)
 	if err != nil {
@@ -444,7 +680,7 @@ func (t Tool) unpack(artifact, dir string) error {
 		switch h.Typeflag {
 		case tar.TypeDir:
 			if clean != "." {
-				if err := os.MkdirAll(to, 0o755); err != nil {
+				if err := r.MkdirAll(to, 0o755); err != nil {
 					return err
 				}
 			}
@@ -456,14 +692,14 @@ func (t Tool) unpack(artifact, dir string) error {
 			if total > maxUnpacked {
 				return fmt.Errorf("%s unpacks to more than %d bytes", name, maxUnpacked)
 			}
-			if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+			if err := r.MkdirAll(filepath.Dir(to), 0o755); err != nil {
 				return err
 			}
 			mode := os.FileMode(0o644)
 			if h.Mode&0o100 != 0 {
 				mode = 0o755
 			}
-			out, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+			out, err := r.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 			if errors.Is(err, os.ErrExist) {
 				return fmt.Errorf("%s holds %s twice", name, h.Name)
 			}
@@ -483,7 +719,7 @@ func (t Tool) unpack(artifact, dir string) error {
 			return fmt.Errorf("%s holds %s, neither a file nor a folder", name, h.Name)
 		}
 	}
-	if !release.IsFile(filepath.Join(dir, "bin", t.Binary)) {
+	if fi, err := r.Lstat(filepath.Join(dir, "bin", t.Binary)); err != nil || !fi.Mode().IsRegular() {
 		return fmt.Errorf("%s holds no bin/%s", name, t.Binary)
 	}
 	return nil
@@ -497,25 +733,35 @@ var (
 	ErrDevelopmentTool = errors.New("a development clone, left alone")
 )
 
+// ForeignError is a place jhon did not make, left alone: Note says why.
+type ForeignError struct{ Note string }
+
+func (e *ForeignError) Error() string { return e.Note }
+
 // RollbackTool links t's previous version at p again: of the versions kept,
-// the newest older than the active one. Nothing is removed.
+// the newest older than the active one, when its folder is still the one
+// jhon verified (VerifiedRecord). Nothing is removed.
 func RollbackTool(t Tool, p Place) (from, to string, err error) {
 	in := t.Installed(p)
 	switch {
 	case in.Dev:
 		return "", "", ErrDevelopmentTool
 	case in.Foreign != "":
-		return "", "", fmt.Errorf("%s is %s, not a link to a %s release jhon installed; nothing was changed", release.Tilde(p.Link), in.Foreign, t.Binary)
+		return "", "", &ForeignError{in.Foreign}
 	case in.Active == "":
 		return "", "", ErrNoOlderTool
 	}
 	for _, v := range slices.Backward(in.Kept) {
-		if semver.Compare("v"+v, "v"+in.Active) < 0 {
-			if err := release.Activate(t.program(p, v), p.Link); err != nil {
-				return in.Active, "", fmt.Errorf("cannot link %s to %s %s: %v; nothing was changed", release.Tilde(p.Link), t.Binary, v, err)
-			}
-			return in.Active, v, nil
+		if semver.Compare("v"+v, "v"+in.Active) >= 0 {
+			continue
 		}
+		if !t.verified(p, v) {
+			return in.Active, "", fmt.Errorf("%s is not the %s %s jhon installed (its files differ, or jhon did not install it); nothing was changed", release.Tilde(filepath.Join(p.Dir, v)), t.Binary, v)
+		}
+		if err := t.link(p, v); err != nil {
+			return in.Active, "", fmt.Errorf("cannot link %s to %s %s: %v; nothing was changed", release.Tilde(p.Link), t.Binary, v, err)
+		}
+		return in.Active, v, nil
 	}
 	return in.Active, "", ErrNoOlderTool
 }

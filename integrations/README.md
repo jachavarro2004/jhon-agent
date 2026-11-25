@@ -102,12 +102,21 @@ ten downloads; a pre-release only when the running jhon is itself a
 pre-release or a development build. They verify the sha256 and the
 signature before anything is unpacked, refuse a tarball holding an absolute
 or `..` path, a link or a device, unpack it into
-`~/.local/share/<binary>/<version>`, and link `~/.local/bin/<binary>` to its
-`bin/<binary>` atomically; the previous version stays, and `jhon update
---rollback` links it again. Every refusal says why and that nothing was
-changed. A git checkout at `~/.local/share/<binary>` is a development
-install, left alone; a `~/.local/bin/<binary>` that is not jhon's link to
-a version is never replaced. `jhon doctor` says which release is installed
+`~/.local/share/<binary>/<version>` (recording its digest in
+`~/.local/share/<binary>/.jhon-verified/<version>`), and link
+`~/.local/bin/<binary>` to its `bin/<binary>` atomically; the previous
+version stays, and `jhon update --rollback` links it again. A version
+folder is linked only while it has the digest jhon recorded (or, one
+already there, is the verified release); a missing active one is
+installed again. The program's `integration --json` is read with only
+`HOME` (a temporary folder) and `PATH` (its `bin`, its `env`
+interpreter's folder, the system's), up to 64 KiB, and every process it
+started is stopped when it returns. Every refusal says why and that
+nothing was changed. A git checkout at `~/.local/share/<binary>` is a
+development install, left alone; a `~/.local/bin/<binary>` that is not
+jhon's link to a version, or a `~/.local/share/<binary>` that is a link,
+is never replaced or written through, even when swapped in during the
+install: `jhon update` notes it and goes on. `jhon doctor` says which release is installed
 (or that it is a development install), and with `--remote` whether a newer
 release that supports this jhon is out. A `cli` program released elsewhere
 keeps its `setup.install` ways as before.

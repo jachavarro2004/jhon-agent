@@ -200,7 +200,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            reports; exit 0 up to date, updated, or no stable
                            release yet (--json status no-release), 1 failed;
                            a development build (0.0.0-dev, from jhon sync)
-                           installs nothing and says to run jhon sync: exit 2,
+                           installs nothing and says to run jhon sync,
+                           and, with jhon-studio on, that jhon setup
+                           installs it there: exit 2,
                            0 with --check or --json ("dev": true); after
                            jhon, it then updates jhon-studio, when it is
                            on, to its newest signed release that supports
@@ -208,7 +210,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            pre-release or development jhon), verified the
                            same way, the previous version kept; --check
                            only says whether one is out, --json lists it
-                           under tools; a development clone is left alone;
+                           under tools; a development clone, and a
+                           ~/.local/bin/jhon-studio or a
+                           ~/.local/share/jhon-studio jhon did not make, are
+                           noted once and left alone (exit 0); a version
+                           folder is linked only while it is the one jhon
+                           verified, and a missing one is installed again;
                            a jhon-studio that fails exits 1, nothing of it
                            changed
   jhon update --rollback   re-activate the previous release kept on disk; after

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/release"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/update"
 )
@@ -35,9 +36,17 @@ func toolHome(t *testing.T, text, v, active string, versions ...string) string {
 	t.Setenv("JHON_ROOT", t.TempDir())
 	jhonIs(t, v)
 	share := filepath.Join(home, ".local", "share", "jhon-studio")
+	m, _ := integrations.Get("studio")
+	tool, _ := update.ToolOf(m)
+	place := tool.PlaceIn(home)
 	for _, ver := range versions {
 		must(t, os.MkdirAll(filepath.Join(share, ver, "bin"), 0o755))
 		must(t, os.WriteFile(filepath.Join(share, ver, "bin", "jhon-studio"), []byte("#!/bin/sh\necho "+ver+"\n"), 0o755))
+		// As an install records it: its folder's digest (L18 A3).
+		d, err := update.TreeDigest(filepath.Join(share, ver))
+		must(t, err)
+		must(t, os.MkdirAll(filepath.Dir(update.VerifiedRecord(place, ver)), 0o755))
+		must(t, os.WriteFile(update.VerifiedRecord(place, ver), []byte(d+"\n"), 0o644))
 	}
 	if active != "" {
 		must(t, os.MkdirAll(filepath.Join(home, ".local", "bin"), 0o755))
@@ -145,9 +154,10 @@ func TestRollbackLinksAToolsPreviousVersion(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, ".local", "share", "jhon-studio", "0.2.0", "bin", "jhon-studio")); err != nil {
 		t.Errorf("the newer version is gone: %v", err)
 	}
-	// Nothing older left: the message and exit 1 of before.
+	// Nothing older left: the message and exit 1 of before, after the
+	// tool's own line.
 	code, out, errOut = captureAll(t, []string{"update", "--rollback"})
-	if code != 1 || out != "" || errOut != "jhon: no release older than jhon 0.5.0 is kept; nothing was changed\n" {
+	if code != 1 || out != "no jhon-studio release older than 0.1.0 is kept; it stays at 0.1.0\n" || errOut != "jhon: no release older than jhon 0.5.0 is kept; nothing was changed\n" {
 		t.Errorf("again: exit %d\nstdout %q\nstderr %q", code, out, errOut)
 	}
 }
@@ -208,5 +218,65 @@ func TestDoctorSaysWhereAToolCameFrom(t *testing.T) {
 	want = "\njhon-studio\n  jhon-studio is a development install: a git clone at ~/.local/share/jhon-studio, which jhon setup and jhon update leave alone\n" + fit
 	if got := doctorTool(t, true); got != want {
 		t.Errorf("a development clone:\n got %q\nwant %q", got, want)
+	}
+}
+
+// L18 A3: a ~/.local/bin/jhon-studio jhon did not link is said once and
+// skipped, as a development clone is: jhon's own update exits 0, nothing
+// asks the network for the tool, and the file stays. setup, asked for the
+// tool itself, refuses with the same words and the fix.
+func TestUpdateNotesAForeignLinkOnceAndExits0(t *testing.T) {
+	home := toolHome(t, studioOn, "0.5.0", "")
+	must(t, os.MkdirAll(filepath.Join(home, ".local", "bin"), 0o755))
+	must(t, os.WriteFile(filepath.Join(home, ".local", "bin", "jhon-studio"), []byte("mine"), 0o755))
+	releasesServed(t, http.StatusInternalServerError, "must not be asked")
+	const note = "~/.local/bin/jhon-studio is a file, not jhon's link to a jhon-studio release"
+	code, out, errOut := captureAll(t, []string{"update"})
+	if want := "no stable release is published yet; jhon 0.5.0 is installed\n" + note + ": jhon update leaves it alone\n"; code != 0 || out != want || errOut != "" {
+		t.Errorf("exit %d\nstdout %q\nwant   %q\nstderr %q", code, out, want, errOut)
+	}
+	code, out, _ = captureAll(t, []string{"update", "--json"})
+	if want := `{"current":"0.5.0","status":"no-release","tools":[{"name":"jhon-studio","status":"foreign"}]}` + "\n"; code != 0 || out != want {
+		t.Errorf("--json: exit %d\n got %q\nwant %q", code, out, want)
+	}
+	m, _ := integrations.Get("studio")
+	if err := installTool(m); err == nil || err.Error() != note+"; move it away for jhon to install jhon-studio there; nothing was changed" {
+		t.Errorf("setup's install: %v", err)
+	}
+	code, out, errOut = captureAll(t, []string{"update", "--rollback"})
+	if code != 1 || out != note+": left alone\n" || errOut != "jhon: no release older than jhon 0.5.0 is kept; nothing was changed\n" {
+		t.Errorf("--rollback: exit %d\nstdout %q\nstderr %q", code, out, errOut)
+	}
+	if b, _ := os.ReadFile(filepath.Join(home, ".local", "bin", "jhon-studio")); string(b) != "mine" {
+		t.Errorf("the file changed: %q", b)
+	}
+}
+
+// L18 A3: a development build's jhon update still installs nothing, and
+// with a tool on says that setup installs it there; with none on, its line
+// is what it was.
+func TestUpdateOnADevBuildSaysSetupInstallsTheTools(t *testing.T) {
+	toolHome(t, studioOn, "0.0.0-dev+abc1234", "")
+	const line = "jhon: this is a development build (0.0.0-dev+abc1234) installed by `jhon sync`; `jhon update` installs only published releases. Run `jhon sync` in the source checkout to update it."
+	code, out, errOut := captureAll(t, []string{"update"})
+	if want := line + " On a development build, `jhon setup` installs jhon-studio from its signed release.\n"; code != 2 || out != "" || errOut != want {
+		t.Errorf("exit %d\nstdout %q\nstderr %q\nwant   %q", code, out, errOut, want)
+	}
+	toolHome(t, "schema = 1\n", "0.0.0-dev+abc1234", "")
+	code, _, errOut = captureAll(t, []string{"update"})
+	if code != 2 || errOut != line+"\n" {
+		t.Errorf("studio off: exit %d\nstderr %q", code, errOut)
+	}
+}
+
+// L18 A3: doctor does not call a folder that is not the one jhon verified
+// a signed release.
+func TestDoctorWarnsOfAnUnverifiedReleaseFolder(t *testing.T) {
+	home := toolHome(t, studioOn, "0.5.0", "0.1.0", "0.1.0")
+	must(t, os.WriteFile(filepath.Join(home, ".local", "share", "jhon-studio", "0.1.0", "extra"), []byte("x"), 0o644))
+	want := "\njhon-studio\n  warn  jhon-studio 0.1.0 at ~/.local/share/jhon-studio/0.1.0 is not the release jhon installed (missing, changed, or installed by hand) — run 'jhon update'\n" +
+		"  ok    jhon-studio 0.1.0 requires jhon >=0.5.0; this is jhon 0.5.0\n  ok    node: node 22.11.0\n"
+	if got := doctorTool(t, false); got != want {
+		t.Errorf("\n got %q\nwant %q", got, want)
 	}
 }
