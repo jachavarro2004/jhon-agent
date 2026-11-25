@@ -169,12 +169,17 @@ func target(file, prefix string) (string, bool) {
 
 // commonOf is a git folder's common dir: where its commondir file leads (a
 // linked worktree's), or itself.
+//
+// The path is the file's as git reads it: only its trailing newline and
+// carriage returns are dropped, never other white space (L41), so the
+// folder judged is the one git uses, not a decoy beside it whose name lacks
+// the white space.
 func commonOf(gitdir string) string {
 	b, err := os.ReadFile(filepath.Join(gitdir, "commondir"))
 	if err != nil {
 		return gitdir
 	}
-	return Realish(Resolve(gitdir, strings.TrimSpace(string(b))))
+	return Realish(Resolve(gitdir, strings.TrimRight(string(b), "\r\n")))
 }
 
 // isGitDir is git's is_git_directory: a HEAD, and the objects and refs

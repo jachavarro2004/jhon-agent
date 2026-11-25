@@ -297,3 +297,28 @@ func TestRepoAtPinsTheTopAndReadsOnlyItsOwnGitEntry(t *testing.T) {
 		t.Errorf("RepoAt(home) = %+v, want no project", got)
 	}
 }
+
+// L41: a commondir file is read as git reads it, its trailing newline and
+// carriage returns dropped and nothing else, so the common dir is the folder
+// git uses even when its name ends in white space, never a decoy beside it.
+func TestCommonOfKeepsTheWhiteSpaceGitKeeps(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := filepath.Join(base, "admin")
+	for _, tail := range []string{" ", "\t", "\u00a0"} {
+		common := filepath.Join(base, "c"+tail)
+		for _, d := range []string{admin, common, filepath.Join(base, "c")} {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(admin, "commondir"), []byte(common+"\r\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := commonOf(admin); got != common {
+			t.Errorf("commondir %q: commonOf = %q, want %q", common, got, common)
+		}
+	}
+}

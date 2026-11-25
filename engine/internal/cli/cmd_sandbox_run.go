@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -130,15 +132,39 @@ func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string) strin
 			}
 			continue
 		}
-		names := strings.Split(strings.TrimSpace(gitDirs), "\n")
-		if len(names) != 2 {
-			return "git names no git folders in " + dir
+		names, why := gitFolderNames(gitDirs)
+		if why != "" {
+			return why + " in " + dir
 		}
 		if why := in.GitFolderProblem(names[0], names[1]); why != "" {
 			return why
 		}
 	}
 	return ""
+}
+
+// gitFolderNames are the git dir and the common dir `git rev-parse
+// --path-format=absolute --git-dir --git-common-dir` printed, exactly as git
+// uses them (L41): only the final newline is dropped, there are exactly two
+// lines, and each is absolute and has no white space around it (a space, a
+// tab, U+00A0). git keeps such white space in a path it reads from a file
+// (.git/commondir), so a trimmed name would be another folder, a decoy
+// beside the one git writes. why is the problem with them, "" when none.
+func gitFolderNames(out string) (names []string, why string) {
+	body, ok := strings.CutSuffix(out, "\n")
+	if !ok {
+		return nil, "git named its git folders on no full line"
+	}
+	names = strings.Split(body, "\n")
+	if len(names) != 2 {
+		return nil, "git named " + strconv.Itoa(len(names)) + " git folders, not the git dir and the common dir,"
+	}
+	for _, n := range names {
+		if n == "" || !filepath.IsAbs(n) || n != strings.TrimSpace(n) {
+			return nil, "git names a git folder " + strconv.Quote(n) + " that is empty, not absolute or has white space around it,"
+		}
+	}
+	return names, ""
 }
 
 // limitedBuffer keeps at most limit bytes of what is written to it, and

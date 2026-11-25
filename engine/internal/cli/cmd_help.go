@@ -836,10 +836,15 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            configuration git cannot list, runs the line with
                            the work profile; so does a line whose git
                            folders (the git dir and the common dir) lie
-                           outside the project, or hold a link or a file
-                           git writes that is hard-linked (objects aside),
-                           as git would write through it outside the
-                           sandbox. Such a line says why on stderr first.
+                           outside the project, or hold a link, a file git
+                           writes that is hard-linked (objects aside) or
+                           anything but a folder or a regular file (a FIFO
+                           git would wait on), as git would write through
+                           it outside the sandbox, and one whose git
+                           folder names, as git prints them, are not
+                           exactly two absolute paths with no white space
+                           around them. Such a line says why on stderr
+                           first.
                            A caller whose
                            stdout and stderr are one file (2>&1) gets the
                            program's output as one stream, in its order. In the
