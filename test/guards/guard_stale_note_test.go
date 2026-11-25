@@ -38,7 +38,7 @@ func newStaleHome(t *testing.T, start string) staleHome {
 	}
 	rel := filepath.Join(".claude", "projects", "-w", "s1.jsonl")
 	support.Write(t, h, map[string]string{
-		filepath.Join(".cache", "jhon", "install.json"): js(t, map[string]any{"installed_at": installedAt, "commit": "3eb2e0b0000000000000000000000000000000aa"}),
+		filepath.Join(".local", "state", "jhon", "install.json"): js(t, map[string]any{"installed_at": installedAt, "commit": "3eb2e0b0000000000000000000000000000000aa"}),
 		rel: lines,
 	})
 	return staleHome{h, filepath.Join(h, rel), realTemp(t)}

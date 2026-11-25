@@ -5,7 +5,7 @@
 //
 // Every source is a fixture built here under a temporary directory: a HOME
 // with `.claude/projects/<project>/<session>.jsonl` transcripts and
-// `.cache/jhon/install.json`, and a fake `claude` on PATH for
+// `.local/state/jhon/install.json`, and a fake `claude` on PATH for
 // `claude agents --json`. Nothing reads the real ~/.claude/projects.
 package release
 
@@ -42,7 +42,7 @@ func jsonOf(t *testing.T, v any) string {
 // install writes the install record into home.
 func install(t *testing.T, home, installedAt, commit string) {
 	t.Helper()
-	support.Write(t, home, map[string]string{".cache/jhon/install.json": jsonOf(t, map[string]string{"installed_at": installedAt, "commit": commit}) + "\n"})
+	support.Write(t, home, map[string]string{".local/state/jhon/install.json": jsonOf(t, map[string]string{"installed_at": installedAt, "commit": commit}) + "\n"})
 }
 
 // transcript is a transcript as Claude Code 2.1.280 writes it: bookkeeping

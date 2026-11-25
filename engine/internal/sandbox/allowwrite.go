@@ -115,23 +115,33 @@ func (in Input) whyNotCreate(f string, mounts []mount) (why string, writable boo
 	return "", false
 }
 
-// homed is f with the path to the home replaced by the home's real path
-// (in.Home), as the settings write a folder under ~/ with $HOME, which may
-// be reached through a link (/home -> /var/home): the shortest head of f
-// that leads to the home. Nothing below the home is resolved.
+// homed is f with the home's own way replaced by the home's real path
+// (in.Home): the settings write a folder under ~/ with $HOME, which may be
+// reached through a link (/home -> /var/home). Only the HOME variable as
+// written (in.Env) is that way, and only when it leads to the home; a link
+// elsewhere that leads to the home (a folder a command replaced with one)
+// is not (T249). Nothing below the home is resolved.
 func (in Input) homed(f string) string {
 	home := filepath.Clean(in.Home)
 	if !filepath.IsAbs(home) || project.Within(f, home) {
 		return f
 	}
-	parts := strings.Split(strings.TrimPrefix(f, string(filepath.Separator)), string(filepath.Separator))
-	for i := 1; i <= len(parts); i++ {
-		head := string(filepath.Separator) + filepath.Join(parts[:i]...)
-		if real, _, ok := in.Stat(head); ok && real == home {
-			return filepath.Join(append([]string{home}, parts[i:]...)...)
-		}
+	written := in.Env["HOME"]
+	if !filepath.IsAbs(written) {
+		return f
 	}
-	return f
+	written = filepath.Clean(written)
+	if written == home || !project.Within(f, written) {
+		return f
+	}
+	if real, _, ok := in.Stat(written); !ok || real != home {
+		return f
+	}
+	rel, err := filepath.Rel(written, f)
+	if err != nil {
+		return f
+	}
+	return filepath.Join(home, rel)
 }
 
 // kept is why f, a folder Jhon would make, lies in or holds a path the

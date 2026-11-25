@@ -76,10 +76,11 @@ func TestRootsSource(t *testing.T) {
 // record, is the source when the runtime is no checkout and JHON_SOURCE is
 // unset: ahead of the legacy ~/dev/jhon and ~/.agents/jhon, behind the two.
 func TestRootsRecordedSource(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "") // each home's own state folder
 	recorded := t.TempDir()
 	record := func(home, source string) {
 		t.Helper()
-		p := filepath.Join(home, ".cache", "jhon", "install.json")
+		p := filepath.Join(home, ".local", "state", "jhon", "install.json")
 		must(t, os.MkdirAll(filepath.Dir(p), 0o755))
 		must(t, os.WriteFile(p, []byte(`{"installed_at":"2026-11-16T10:00:00.000Z","commit":"abc","source":"`+source+`"}`+"\n"), 0o644))
 	}
@@ -103,6 +104,36 @@ func TestRootsRecordedSource(t *testing.T) {
 				t.Errorf("roots(%q, %q, %q).Source = %s; want %s", c.runtime, c.jhonSource, c.home, r.Source, c.want)
 			}
 		})
+	}
+}
+
+// T249: the source the legacy install record (~/.cache/jhon/install.json,
+// which any sandboxed command may write) names is never the source inside
+// the sandbox, nor once a record is in the state folder.
+func TestRootsNeverTrustALegacyRecordACommandCouldWrite(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "") // each home's own state folder
+	owner, planted := t.TempDir(), t.TempDir()
+	legacy := func(home, source string) {
+		t.Helper()
+		p := filepath.Join(home, ".cache", "jhon", "install.json")
+		must(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		must(t, os.WriteFile(p, []byte(`{"installed_at":"2026-11-16T10:00:00.000Z","commit":"abc","source":"`+source+`"}`+"\n"), 0o644))
+	}
+	inside := t.TempDir()
+	legacy(inside, planted)
+	t.Setenv("JHON_IN_SANDBOX", "1")
+	if r := roots("/release", "", inside); r.Source != inside+"/dev/jhon" {
+		t.Errorf("inside the sandbox the source is %s; want the fallback, not the legacy record's", r.Source)
+	}
+	t.Setenv("JHON_IN_SANDBOX", "")
+	home := t.TempDir()
+	legacy(home, owner)
+	if r := roots("/release", "", home); r.Source != owner {
+		t.Fatalf("the source is %s; want the legacy record moved once (%s)", r.Source, owner)
+	}
+	legacy(home, planted)
+	if r := roots("/release", "", home); r.Source != owner {
+		t.Errorf("a legacy record repointed after the move gives the source %s; want %s", r.Source, owner)
 	}
 }
 

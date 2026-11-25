@@ -132,6 +132,11 @@ const maxLinks = 40
 // writable.
 func mayChange(in Input, path string) bool {
 	mounts, _ := layout(in, false)
+	return changeable(mounts, path)
+}
+
+// changeable is mayChange with the mounts under any PATH given.
+func changeable(mounts []mount, path string) bool {
 	// open is whether a command may create, rename or remove an entry in
 	// folder dir: the innermost area that holds it is writable (/dev is).
 	open := func(dir string) bool {

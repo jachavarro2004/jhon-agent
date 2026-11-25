@@ -23,20 +23,84 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 )
 
-// InstallRecord is the install record, relative to HOME.
-var InstallRecord = filepath.Join(".cache", "jhon", "install.json")
+// InstallRecord is the install record, relative to HOME, with
+// XDG_STATE_HOME unset: in Jhon's state folder, beside the grants and the
+// modes, which the sandbox keeps read-only and `jhon sandbox run` refuses to
+// run with where a sandboxed command could change it (T249). InstallPath is
+// where it is.
+var InstallRecord = filepath.Join(".local", "state", "jhon", "install.json")
+
+// LegacyInstallRecord is where the install record was before T249, relative
+// to HOME: in the cache, which every sandboxed command may write, so a
+// command could name its own folder as Jhon's source checkout there. It is
+// read only to move a record to InstallPath, outside the sandbox, while
+// none is there (ReadInstall).
+var LegacyInstallRecord = filepath.Join(".cache", "jhon", "install.json")
+
+// InstallPath is the install record's path for home: in
+// $XDG_STATE_HOME/jhon when the variable names an absolute folder, as the
+// grants' folder is (grant.Dir), else ~/.local/state/jhon.
+func InstallPath(home string) string {
+	if state := os.Getenv("XDG_STATE_HOME"); filepath.IsAbs(state) {
+		return filepath.Join(state, "jhon", "install.json")
+	}
+	return filepath.Join(home, InstallRecord)
+}
+
+// InstallShown is InstallPath(home) as a note names it: under the home
+// with ~/.
+func InstallShown(home string) string {
+	p := InstallPath(home)
+	if rel, err := filepath.Rel(home, p); err == nil && home != "" && rel != "." && !strings.HasPrefix(rel, "..") {
+		return "~/" + filepath.ToSlash(rel)
+	}
+	return p
+}
 
 // Install is the install record: when the framework was last installed, its
 // commit, and the source checkout `jhon sync` installed from ("" when no
 // checkout was ever recorded).
 type Install struct{ InstalledAt, Commit, Source string }
 
-// ReadInstall reads the install record under home; ok is false when it is absent or malformed.
+// ReadInstall reads the install record under home (InstallPath); ok is
+// false when it is absent or malformed. With none there, a record at the
+// legacy path (LegacyInstallRecord) is moved: written to InstallPath and
+// read from there, only outside the sandbox (inside, the variable the
+// sandbox sets, JHON_IN_SANDBOX, says so) and only when the write succeeds.
+// Once a record is at InstallPath the legacy one is never read again.
 func ReadInstall(home string) (Install, bool) {
-	data, err := os.ReadFile(filepath.Join(home, InstallRecord))
+	data, err := os.ReadFile(InstallPath(home))
+	if errors.Is(err, fs.ErrNotExist) {
+		return migrateInstall(home)
+	}
 	if err != nil {
 		return Install{}, false
 	}
+	return parseInstall(data)
+}
+
+// migrateInstall moves the legacy install record of home to InstallPath
+// (ReadInstall), and is the record it wrote; ok is false inside the
+// sandbox, with no legacy record or a malformed one, and when the write
+// fails.
+func migrateInstall(home string) (Install, bool) {
+	if os.Getenv("JHON_IN_SANDBOX") == "1" || home == "" {
+		return Install{}, false
+	}
+	data, err := os.ReadFile(filepath.Join(home, LegacyInstallRecord))
+	if err != nil {
+		return Install{}, false
+	}
+	r, ok := parseInstall(data)
+	if !ok || WriteInstall(home, r) != nil {
+		return Install{}, false
+	}
+	return r, true
+}
+
+// parseInstall is the install record data holds; ok is false when it is
+// malformed.
+func parseInstall(data []byte) (Install, bool) {
 	var r map[string]any
 	if json.Unmarshal(data, &r) != nil {
 		return Install{}, false
@@ -50,10 +114,10 @@ func ReadInstall(home string) (Install, bool) {
 	return Install{InstalledAt: at, Commit: commit, Source: source}, true
 }
 
-// WriteInstall writes r as the install record under home: the one writer of
-// it, for the render's install and `jhon sync`'s source.
+// WriteInstall writes r as the install record under home (InstallPath): the
+// one writer of it, for the render's install and `jhon sync`'s source.
 func WriteInstall(home string, r Install) error {
-	p := filepath.Join(home, InstallRecord)
+	p := InstallPath(home)
 	if err := os.MkdirAll(filepath.Dir(p), 0o777); err != nil {
 		return err
 	}

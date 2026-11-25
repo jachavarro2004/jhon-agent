@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -62,6 +63,74 @@ func ownerCredentialHelpers() [][2]string {
 		out = append(out, sandbox.Helpers(string(listing))...)
 	}
 	return out
+}
+
+// gitListingLimit bounds the configuration projectGitConfig reads in one
+// folder: a longer listing runs the line in the sandbox.
+const gitListingLimit = 4 << 20
+
+// projectGitConfig are the entries an unsandboxed line started in cwd runs
+// git with for the keys of the repositories it works in that run a command
+// (sandbox.GitFolders, sandbox.ProjectGitConfig, T249 A2): each folder's
+// `git config --list --show-scope -z`, with this process's environment
+// without GIT_CONFIG_PARAMETERS (as the line runs) and at most 5 s and
+// gitListingLimit bytes each. ok is false when the line must run in the
+// sandbox instead: a listing that fails, times out or is too long, or a
+// repository that sets core.worktree. With no git on PATH the line can run
+// none, and needs none.
+func projectGitConfig(line, cwd string) (entries [][2]string, ok bool) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return nil, true
+	}
+	var env []string
+	for _, kv := range os.Environ() {
+		if k, _, _ := strings.Cut(kv, "="); k != "GIT_CONFIG_PARAMETERS" {
+			env = append(env, kv)
+		}
+	}
+	folders := sandbox.GitFolders(line, cwd)
+	if folders == nil {
+		return nil, false
+	}
+	for _, dir := range folders {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cmd := exec.CommandContext(ctx, git, "-C", dir, "config", "--list", "--show-scope", "-z")
+		cmd.Dir, cmd.Env = "/", env
+		out := &limitedBuffer{limit: gitListingLimit}
+		cmd.Stdout = out
+		err := cmd.Run()
+		cancel()
+		if err != nil || out.over {
+			return nil, false
+		}
+		more, refuse := sandbox.ProjectGitConfig(out.String())
+		if refuse != "" {
+			return nil, false
+		}
+		for _, e := range more {
+			if !slices.Contains(entries, e) {
+				entries = append(entries, e)
+			}
+		}
+	}
+	return entries, true
+}
+
+// limitedBuffer keeps at most limit bytes of what is written to it, and
+// whether more came.
+type limitedBuffer struct {
+	strings.Builder
+	limit int
+	over  bool
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if b.Len()+len(p) > b.limit {
+		b.over = true
+		return 0, errors.New("git config listing too long")
+	}
+	return b.Builder.Write(p)
 }
 
 // pipeGrace is how long, after the program exits, its output pipes may stay

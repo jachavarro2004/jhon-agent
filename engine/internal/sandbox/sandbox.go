@@ -212,10 +212,11 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 		}
 		mounts = append(mounts, m)
 	}
-	// area adds a writable area other than the project's: never one that is
-	// or passes through a link (L28, linkOn), which a command may have put
-	// there; the project's folders are read from the disk and each must point
-	// back at the others (project.ReadRepo).
+	// area adds a writable area: never one that is or passes through a link
+	// (L28, linkOn), which a command may have put there. The project's own
+	// folders are no exception (T249): <root>-worktrees is only a name next
+	// to the root, which a run in an enclosing project or in $TMPDIR may
+	// have made a link.
 	area := func(path string) {
 		if in.linkOn(path) == "" {
 			add(path, mount{kind: write})
@@ -224,9 +225,9 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 	config := in.xdg("XDG_CONFIG_HOME", ".config")
 
 	// Writable: the project, the caches, what the owner allows.
-	ours := slices.Concat(in.Roots, []string{in.CommonDir}, in.Worktrees)
+	ours := in.ownFolders()
 	for _, p := range ours {
-		add(p, mount{kind: write})
+		area(p)
 	}
 	for _, a := range in.areas() {
 		// A cache or store under the home that holds a PATH folder is not
@@ -390,10 +391,36 @@ func inWritable(path string, mounts []mount) bool {
 	return false
 }
 
+// ownFolders are the project's folders a run may write, as layout binds
+// them: the roots, the common dir and the listed worktrees that are no link
+// and pass through none (linkOn, T249), as any writable area.
+func (in Input) ownFolders() []string {
+	var out []string
+	for _, p := range slices.Concat(in.Roots, []string{in.CommonDir}, in.Worktrees) {
+		if p != "" && in.linkOn(p) == "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// ownRoots are in.Roots that are no link and pass through none (ownFolders):
+// a root a command made a link is not the project's.
+func (in Input) ownRoots() []string {
+	var out []string
+	for _, r := range in.Roots {
+		if r != "" && in.linkOn(r) == "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // linkOn is the first entry on path, from / down as written (in.lstat), that
-// is a link, and "" when none is: the home's own way is the owner's (a home
-// under /home -> /var/home), so a path under the home is read from the home's
-// real path (homed).
+// is a link, and "" when none is. Only the home's own way, the HOME
+// variable as written (a home under /home -> /var/home), is the owner's: a
+// path under it is read from the home's real path (homed). A link anywhere
+// else that leads to the home is a link like any other (T249).
 func (in Input) linkOn(path string) string {
 	if !filepath.IsAbs(path) {
 		return ""
@@ -456,7 +483,7 @@ func (in Input) holdsPATH(cache string) string {
 		return ""
 	}
 	var roots []string
-	for _, r := range in.Roots {
+	for _, r := range in.ownRoots() {
 		if filepath.IsAbs(r) {
 			roots = append(roots, filepath.Clean(r), realPath(r, in.Stat))
 		}

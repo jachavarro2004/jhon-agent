@@ -25,7 +25,7 @@ func renderIn(t testing.TB, home, root string, args ...string) support.Result {
 	t.Helper()
 	return support.Run(t, support.Cmd{
 		Args: append([]string{support.Bin(t), "render-engine"}, args...),
-		Env:  support.Env("HOME="+home, "JHON_ROOT="+root, support.RuntimesPath(t)),
+		Env:  support.Env("HOME="+home, "JHON_ROOT="+root, support.RuntimesPath(t), "XDG_STATE_HOME="+filepath.Join(home, ".local", "state")),
 	})
 }
 
@@ -2044,7 +2044,7 @@ func TestRenderSettings(t *testing.T) {
 		equal(t, support.Read(t, settingsPath(home)), text)
 		equal(t, exists(filepath.Join(home, ".claude", "agents", "jhon-orchestrator.md")), false, "an agent was projected")
 		equal(t, exists(filepath.Join(home, ".agents", "skills")), false, "a skill was projected")
-		equal(t, exists(filepath.Join(home, ".cache", "jhon", "install.json")), false, "the install was recorded")
+		equal(t, exists(filepath.Join(home, recordPath)), false, "the install was recorded")
 	})
 
 	t.Run("the install links no command into ~/.claude/commands, prunes every Jhon command link there, and keeps the user's", func(t *testing.T) {
@@ -2192,10 +2192,11 @@ func TestRenderPlugin(t *testing.T) {
 }
 
 // A write render records when the framework was installed and from which
-// commit, at ~/.cache/jhon/install.json, so `jhon doctor` and the guards can
+// commit, at ~/.local/state/jhon/install.json (T249: in the state folder,
+// which no sandboxed command may write), so `jhon doctor` and the guards can
 // tell a session that started before it (docket AI1).
 
-var recordPath = filepath.Join(".cache", "jhon", "install.json")
+var recordPath = filepath.Join(".local", "state", "jhon", "install.json")
 
 func readRecord(t testing.TB, home string) map[string]any {
 	t.Helper()
@@ -2221,7 +2222,7 @@ func TestRenderInstallRecord(t *testing.T) {
 			t.Errorf("installed_at %v is not the render's time (%v)", rec["installed_at"], err)
 		}
 		equal(t, rec["commit"], expectedCommit())
-		match(t, r.Out(), `install:\n\s+write\s+~/\.cache/jhon/install\.json`)
+		match(t, r.Out(), `install:\n\s+write\s+~/\.local/state/jhon/install\.json`)
 	})
 
 	t.Run("a render with nothing new keeps the recorded install time", func(t *testing.T) {
@@ -2232,7 +2233,7 @@ func TestRenderInstallRecord(t *testing.T) {
 		r := install(t, home, repoRoot)
 		wantCode(t, r, 0)
 		equal(t, readRecord(t, home), first)
-		match(t, r.Out(), `install:\n\s+ok\s+~/\.cache/jhon/install\.json`)
+		match(t, r.Out(), `install:\n\s+ok\s+~/\.local/state/jhon/install\.json`)
 	})
 
 	t.Run("a render from another commit moves the install time, even with no drift", func(t *testing.T) {

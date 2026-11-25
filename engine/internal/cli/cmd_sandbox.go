@@ -159,10 +159,16 @@ func sandboxRun(argv []string) (int, error) {
 	}
 	program := argv[i+1:]
 	if profile == sandbox.Unsandboxed {
-		// git runs with the repository's hooks, ssh command, helpers and
-		// transports overridden (sandbox.UnsandboxedEnv, L1306).
-		if sandbox.RunsOutside(sandbox.ThisHost(), sandboxInput(pinned), program) {
-			return sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), mergeGateEntries(pinned)...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil)
+		// git runs with the repository's hooks, ssh command, helpers,
+		// transports and every other key of its own that runs a command
+		// overridden (sandbox.UnsandboxedEnv, L1306, T249 A2), and the line
+		// with a PATH no sandboxed command may change (sandbox.OutsidePath,
+		// T249 A1): what this process runs from here on (git) too.
+		if in := sandboxInput(pinned); sandbox.RunsOutside(sandbox.ThisHost(), in, program) {
+			os.Setenv("PATH", sandbox.OutsidePath(in))
+			if project, ok := projectGitConfig(program[2], in.Cwd); ok {
+				return sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), project, mergeGateEntries(pinned)...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil)
+			}
 		}
 		profile = sandbox.Work
 	}

@@ -29,7 +29,7 @@ func installedFrom(t *testing.T, source string) box {
 	if err != nil {
 		t.Fatal(err)
 	}
-	support.Write(t, b.home, map[string]string{".cache/jhon/install.json": string(record) + "\n"})
+	support.Write(t, b.home, map[string]string{".local/state/jhon/install.json": string(record) + "\n"})
 	b.env = append(b.env, "JHON_ROOT="+current)
 	return b
 }

@@ -639,12 +639,14 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            hidden folder or one of Jhon's; any other value,
                            and one that is or passes through a link,
                            becomes /tmp for the program. No writable area
-                           but the project's own folders (a
-                           sandbox.allow_write folder, $TMPDIR, /tmp, a
-                           cache or store, Jhon's telemetry folder) is
-                           bound when it is or passes through a link (read
-                           with lstat from / down; the home's own way, as
-                           /home -> /var/home, is the owner's): name its
+                           (the project's folders, <root>-worktrees
+                           included, a sandbox.allow_write folder, $TMPDIR,
+                           /tmp, a cache or store, Jhon's telemetry folder)
+                           is bound when it is or passes through a link
+                           (read with lstat from / down; only the home's
+                           own way as $HOME is written, as /home ->
+                           /var/home, is the owner's; a link elsewhere
+                           that leads to the home is a link): name its
                            real path (/mnt/data, not ~/data); status,
                            doctor and the note on a refused write there say
                            so. A cache or store of the default list under
@@ -667,8 +669,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            leads), a jhon program and where it leads, the
                            source checkout or Jhon's protected files where
                            a command could rename a folder around them, or
-                           is or holds a PATH folder outside the project,
-                           run runs nothing and exits 126 with the fix:
+                           is or holds a PATH folder outside the project or
+                           the folder a link in one leads to (as
+                           ~/.local/bin/claude leads into
+                           ~/.local/share/claude), run runs nothing and
+                           exits 126 with the fix:
                            name a concrete subfolder such as
                            ~/.local/share/<app>. The project is
                            read from the disk and no git runs:
@@ -754,9 +759,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            gh, ssh, docker, docker-compose and each of
                            sandbox.deploy_tools are not files a sandboxed
                            command may write (the owner's environment kept:
-                           DOCKER_HOST, the docker context, AWS_PROFILE);
-                           anything else runs with the work
-                           profile. Its git runs with the repository's
+                           DOCKER_HOST, the docker context, AWS_PROFILE),
+                           but PATH: the line gets PATH without the
+                           project's folders and every folder a sandboxed
+                           command may change, so a program planted there
+                           is never what git, gh, docker or a deploy tool
+                           runs by its name; anything else runs with the
+                           work profile. Its git runs with the repository's
                            hooks, ssh command, fsmonitor and credential
                            helpers overridden (GIT_CONFIG_COUNT entries
                            after the owner's own: core.hooksPath=/dev/null,
@@ -766,13 +775,26 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            transports off, no submodule recursion, and
                            hook.<event>.enabled=false for every hook event,
                            which also stops hooks named in the
-                           configuration, hook.<name>.command), and
-                           GIT_CONFIG_PARAMETERS unset. A caller whose
+                           configuration, hook.<name>.command), every other
+                           key the repository's own configuration sets that
+                           runs a command given the owner's global value or
+                           one that runs nothing (a filter's clean, smudge
+                           and process, a merge driver (false: a conflict),
+                           a diff driver's command and textconv,
+                           diff.external, a remote's vcs, uploadpack and
+                           receivepack, the editors, the pager, askpass,
+                           core.alternateRefsCommand, the signing
+                           programs), git's proxy for git:// off
+                           (GIT_PROXY_COMMAND empty unless set), and
+                           GIT_CONFIG_PARAMETERS unset; a repository that
+                           sets core.worktree, or whose configuration git
+                           cannot list, runs the line with the work
+                           profile. A caller whose
                            stdout and stderr are one file (2>&1) gets the
                            program's output as one stream, in its order.
-                           url.*.insteadOf and
-                           include.* in the repository's configuration are
-                           not overridden: an accepted residual risk. In the
+                           url.*.insteadOf in the repository's
+                           configuration is not overridden: an accepted
+                           residual risk. In the
                            work profile uv's tools go to
                            $XDG_CACHE_HOME/jhon/sandbox/uv-tools (UV_TOOL_DIR
                            and UV_TOOL_BIN_DIR, unless already set);
@@ -1015,7 +1037,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            switch ~/.local/share/jhon/current to it, install the
                            runtime projections from it; it pushes nothing and
                            takes no argument. It records the checkout it ran
-                           from in ~/.cache/jhon/install.json: the installed
+                           from in ~/.local/state/jhon/install.json (in
+                           $XDG_STATE_HOME/jhon when set), which a sandboxed
+                           command cannot write: the installed
                            jhon works on that source outside a checkout unless
                            JHON_SOURCE names another. Only the runtimes on in
                            settings.runtimes (claude_code, pi) are installed and

@@ -1,6 +1,8 @@
 package sandbox
 
 import (
+	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 
@@ -37,13 +39,18 @@ func (u Unused) Line() string {
 // are or pass through a link, or are a cache or store under the home that
 // holds a PATH folder (L29), so the sandbox binds none of them: the caches,
 // the sandbox.allow_write folders, the toolchains' caches and stores, Jhon's
-// telemetry folder, the scratch roots and $TMPDIR, in that order.
+// telemetry folder, the scratch roots, $TMPDIR and the project's folders
+// (its roots, <root>-worktrees included, the common dir and the listed
+// worktrees, T249), in that order.
 func UnusedWriteAreas(in Input) []Unused {
 	sources := slices.Concat(in.areas(), []areaSource{{"Jhon's telemetry folder", in.Telemetry, false}})
 	for _, p := range in.Tmp {
 		sources = append(sources, areaSource{"the scratch root", p, false})
 	}
 	sources = append(sources, areaSource{"$TMPDIR", in.Env["TMPDIR"], false})
+	for _, p := range slices.Concat(in.Roots, []string{in.CommonDir}, in.Worktrees) {
+		sources = append(sources, areaSource{"the project's folder", p, false})
+	}
 	var out []Unused
 	seen := map[string]bool{}
 	for _, s := range sources {
@@ -87,7 +94,7 @@ const keptFix = "name a concrete subfolder in sandbox.allow_write, such as ~/.lo
 // "Rechazar el allow_write que las contenga"). nil when none does.
 func KeptProblem(in Input, kept []Kept) *Problem {
 	var roots []string
-	for _, r := range in.Roots {
+	for _, r := range in.ownRoots() {
 		if filepath.IsAbs(r) {
 			roots = append(roots, filepath.Clean(r), realPath(r, in.Stat))
 		}
@@ -130,5 +137,91 @@ func KeptProblem(in Input, kept []Kept) *Problem {
 			return &Problem{Reason: "sandbox.allow_write folder " + a + how + dir + ", where a sandboxed command could put a program run later outside the sandbox", Fix: keptFix}
 		}
 	}
+	// The folders a program PATH finds through a link leads to count as PATH
+	// folders (T249 A4): ~/.local/bin/claude leads into ~/.local/share/claude.
+	if len(in.AllowWrite) == 0 {
+		return nil
+	}
+	for _, l := range pathLinks(in.Path, roots) {
+		for _, folder := range l.folders {
+			if a := holder(folder); a != "" {
+				return &Problem{Reason: "sandbox.allow_write folder " + a + " holds " + folder + ", where the program " + l.link + " on PATH leads, so a sandboxed command could change a program run later outside the sandbox", Fix: keptFix}
+			}
+		}
+	}
 	return nil
+}
+
+// pathLink is a link in a PATH folder and the folders on its way: the
+// folder of each target it names in turn, as written and where it leads.
+type pathLink struct {
+	link    string
+	folders []string
+}
+
+// pathLinks are the links in the PATH folders of path outside roots (real
+// paths and as written), each with the folders its targets lie in, read
+// from the disk: os.ReadDir, os.Readlink and filepath.EvalSymlinks. A
+// target in the same folder as its link adds nothing, and a link whose
+// every hop stays there is not resolved further.
+func pathLinks(path, roots []string) []pathLink {
+	var out []pathLink
+	seen := map[string]bool{}
+	for _, dir := range path {
+		if !filepath.IsAbs(dir) || seen[filepath.Clean(dir)] {
+			continue
+		}
+		dir = filepath.Clean(dir)
+		seen[dir] = true
+		real, err := filepath.EvalSymlinks(dir)
+		if err != nil || within(dir, roots) || within(real, roots) || real != dir && seen[real] {
+			continue
+		}
+		// One folder read once: /bin -> usr/bin is /usr/bin.
+		seen[real] = true
+		// Read where the folder is: a relative target's .. goes up from there.
+		entries, err := os.ReadDir(real)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.Type()&fs.ModeSymlink == 0 {
+				continue
+			}
+			link := filepath.Join(dir, e.Name())
+			var folders []string
+			add := func(f string) {
+				if f != dir && f != real && !slices.Contains(folders, f) {
+					folders = append(folders, f)
+				}
+			}
+			cur := filepath.Join(real, e.Name())
+			for range maxLinks {
+				target, err := os.Readlink(cur)
+				if err != nil {
+					break
+				}
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(cur), target)
+				}
+				add(filepath.Dir(filepath.Clean(target)))
+				fi, err := os.Lstat(target)
+				if err != nil || fi.Mode()&fs.ModeSymlink == 0 {
+					break
+				}
+				cur = target
+			}
+			// A link whose every hop stays in its own folder (python ->
+			// python3.13) leads nowhere else; one that leaves it is read to
+			// its end, through any link on the way there.
+			if len(folders) == 0 {
+				continue
+			}
+			if end, err := filepath.EvalSymlinks(link); err == nil {
+				add(filepath.Dir(end))
+			}
+			out = append(out, pathLink{link: link, folders: folders})
+		}
+	}
+	return out
 }

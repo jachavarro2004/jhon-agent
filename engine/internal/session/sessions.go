@@ -277,10 +277,10 @@ func Sessions(src Sources) Report {
 			checkout = hasCheckout
 		}
 		if checkout() {
-			notes = append(notes, "no install record (~/.cache/jhon/install.json); run `jhon sync` to create it")
+			notes = append(notes, "no install record ("+InstallShown(home)+"); run `jhon sync` to create it")
 		} else {
 			// An install writes the record when it installs a runtime: none is.
-			notes = append(notes, "no install record (~/.cache/jhon/install.json): no runtime is installed yet; run `jhon setup` to choose one")
+			notes = append(notes, "no install record ("+InstallShown(home)+"): no runtime is installed yet; run `jhon setup` to choose one")
 		}
 	}
 	stale := []*Row{}
