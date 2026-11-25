@@ -1,9 +1,6 @@
 ## Routing
 
-Investigation, explanation, review, audit, comparison, proposal, and
-planning requests, how something would be done included, are read-only
-until the owner says go: explain, recommend and wait; no file, todo or
-command but reads. When change intent is
+Investigation, explanation, review, audit, comparison, proposal, plan and how-to requests are read-only until the owner says go: explain, recommend and wait; no file, todo or command but reads. A sub-agent's brief is its go. When change intent is
 ambiguous or conditional, ask one clarification and stay read-only until
 answered.
 
