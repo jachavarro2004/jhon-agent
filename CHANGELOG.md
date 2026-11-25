@@ -6,6 +6,13 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `jhon doctor`'s versions show a tool's whole version, its pre-release included (T8a, odd/tasks/studio-integration-v1.md L45): it showed `jhon-studio 0.1.0 (tested with 0.1.0)` for jhon-studio 0.1.0-rc.1, dropping `-rc.1`. Build metadata is still left out, and a pinned tool's pre-release (`engram 3.7.2-rc.1`) is no longer taken for its pin (`3.7.2`): it warns as any other version that differs. A `cli` tool that is on but off for this run (it needs a newer jhon, or speaks another contract) is no longer an ok row: `warn  jhon-studio 0.2.0 (tested with 0.1.0) is off for this run: see the jhon-studio section`.
+- `jhon start pi` on a release install, before a render wrote `~/.pi/jhon/settings.json`, names `jhon setup` (``run `jhon setup` and pick pi among its runtimes first``) instead of `jhon sync`, which needs the source checkout a release install does not have (T8b); from a source checkout it still names `jhon sync`.
+- A GitHub API answer refused under its rate limit (a 403 or 429 with `X-RateLimit-Remaining: 0`, or GitHub's documented rate-limit message) is said as such by `jhon update`, `jhon setup`'s tool install and `jhon doctor --remote`, for jhon's own releases and a tool's, with the reset time GitHub gives (`X-RateLimit-Reset`, else `Retry-After`) and, as jhon sends no GitHub token, to retry after the reset: `<url> refused: GitHub's API rate limit for this address is used up (403 Forbidden, X-RateLimit-Remaining: 0); it resets at 2026-11-18 11:06:40 UTC; jhon sends no GitHub token, so retry after the reset`, instead of `<url> answered 403 Forbidden` (T8c). Any other 403, and every other status, is said as before.
+- A tool release signed by its own release workflow at another tag or ref is refused naming the identity expected and the one found (T8c): `jhon-studio-0.2.0.tar.gz is signed by the release workflow at another ref, not at the release's tag: expected https://github.com/jachavarro2004/jhon-studio/.github/workflows/release.yml@refs/tags/v0.2.0, found …@refs/tags/v0.1.0`, instead of `… not by the release workflow`. Any other signer, and every refusal of jhon's own releases, reads as before.
+
 ## [0.5.0-rc.1] - 2026-11-25
 
 ### Added

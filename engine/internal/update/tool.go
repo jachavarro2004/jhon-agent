@@ -89,8 +89,8 @@ func (t Tool) Asset(version string) string { return t.Binary + "-" + version + "
 // SignerAt is who signs version: the repository's release workflow at the
 // tag v<version>, exactly, through GitHub's OIDC issuer.
 func (t Tool) SignerAt(version string) Signer {
-	return Signer{Issuer, `^https://github\.com/` + regexp.QuoteMeta(t.Owner) + `/` + regexp.QuoteMeta(t.Repo) +
-		`/\.github/workflows/release\.yml@refs/tags/v` + regexp.QuoteMeta(version) + `$`}
+	want := "https://github.com/" + t.Owner + "/" + t.Repo + "/.github/workflows/release.yml@refs/tags/v" + version
+	return Signer{Issuer: Issuer, Identity: "^" + regexp.QuoteMeta(want) + "$", Want: want}
 }
 
 // Place is where a tool lives: Dir holds a folder per version

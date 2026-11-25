@@ -170,4 +170,61 @@ func TestUpdateInstallsAToolFromItsSignedRelease(t *testing.T) {
 	sameSnapshot(t, snapshot(t, e.home), before)
 	equal(t, versions(), kept)
 	linksTo("0.1.0")
+
+	// T8c (L45): the studio's own workflow at another tag names the identity
+	// expected and the one found, and changes nothing.
+	rels.add(t, vs, srv.URL, "0.5.0", ">=0.5.0", studioAt("v0.4.0"))
+	r = e.run(t, jhon, []string{"update"}, env...)
+	wantCode(t, r, 1)
+	equal(t, r.Stderr, "jhon: jhon-studio: jhon-studio-0.5.0.tar.gz is signed by the release workflow at another ref, not at the release's tag: expected "+
+		studioAt("v0.5.0")+", found "+studioAt("v0.4.0")+"; nothing was changed\n")
+	sameSnapshot(t, snapshot(t, e.home), before)
+	equal(t, versions(), kept)
+	linksTo("0.1.0")
+}
+
+// T8c (L45): GitHub's API refusing under its rate limit, for jhon's own
+// release (JHON_RELEASES_URL) and for a tool's (JHON_TOOL_RELEASES_URL), is
+// said as such, with the reset GitHub gives, and changes nothing.
+func TestUpdateNamesGitHubsRateLimit(t *testing.T) {
+	limited := func(w http.ResponseWriter, code int, headers ...string) {
+		for i := 0; i+1 < len(headers); i += 2 {
+			w.Header().Set(headers[i], headers[i+1])
+		}
+		w.WriteHeader(code)
+		w.Write([]byte(`{"message":"API rate limit exceeded for 203.0.113.7.","documentation_url":"https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting"}`))
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/limited/repos/jachavarro2004/jhon-agent/releases/latest":
+			limited(w, http.StatusForbidden, "X-RateLimit-Remaining", "0", "X-RateLimit-Reset", "1795000000")
+		case "/repos/jachavarro2004/jhon-studio/releases":
+			limited(w, http.StatusTooManyRequests, "Retry-After", "60")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	e := scratch(t, []byte("{}"))
+	support.Write(t, e.home, map[string]string{"settings.toml": "schema = 1\n\n[integrations]\nstudio = true\n"})
+	jhon := cli(t, "0.5.0")
+	settings := "JHON_SETTINGS=" + filepath.Join(e.home, "settings.toml")
+
+	latest := srv.URL + "/limited/repos/jachavarro2004/jhon-agent/releases/latest"
+	r := e.run(t, jhon, []string{"update", "--check"}, "JHON_RELEASES_URL="+latest, "JHON_TOOL_RELEASES_URL="+srv.URL, settings)
+	wantCode(t, r, 1)
+	equal(t, r.Stderr, "jhon: update failed: "+latest+" refused: GitHub's API rate limit for this address is used up (403 Forbidden, X-RateLimit-Remaining: 0); "+
+		"it resets at 2026-11-18 11:06:40 UTC; jhon sends no GitHub token, so retry after the reset; nothing was changed\n")
+
+	for _, d := range []string{share(e.home), filepath.Join(e.home, ".local", "bin")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := snapshot(t, e.home)
+	r = e.run(t, jhon, []string{"update"}, "JHON_RELEASES_URL="+srv.URL+"/repos/jachavarro2004/jhon-agent/releases/latest", "JHON_TOOL_RELEASES_URL="+srv.URL, settings)
+	wantCode(t, r, 1)
+	equal(t, r.Stderr, "jhon: jhon-studio: "+srv.URL+"/repos/jachavarro2004/jhon-studio/releases?per_page=30 refused: GitHub's API rate limit for this address is used up (429 Too Many Requests); "+
+		"it resets in 60 s; jhon sends no GitHub token, so retry after the reset; nothing was changed\n")
+	sameSnapshot(t, snapshot(t, e.home), before)
 }

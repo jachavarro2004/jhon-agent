@@ -50,7 +50,24 @@ pre-release or a development build; a stable jhon takes stable releases
 only. Nothing unverified is installed: a missing or failing checksum or
 signature, a tarball with an absolute or `..` path, a link (symbolic or
 hard) or a device, or a program that answers another version stops the
-install with one message ending in `nothing was changed`. A
+install with one message ending in `nothing was changed`. A release signed
+by jhon-studio's own release workflow at another tag (or a branch) names the
+identity expected and the one found:
+
+```text
+jhon: jhon-studio: jhon-studio-0.2.0.tar.gz is signed by the release workflow at another ref, not at the release's tag: expected https://github.com/jachavarro2004/jhon-studio/.github/workflows/release.yml@refs/tags/v0.2.0, found https://github.com/jachavarro2004/jhon-studio/.github/workflows/release.yml@refs/tags/v0.1.0; nothing was changed
+```
+
+When GitHub's API refuses the request under its rate limit (a 403 or 429
+with `X-RateLimit-Remaining: 0`, or its documented rate-limit message),
+jhon says so, with the reset time GitHub gives; jhon sends no GitHub token,
+so the way on is to retry after the reset:
+
+```text
+jhon: jhon-studio: https://api.github.com/repos/jachavarro2004/jhon-studio/releases?per_page=30 refused: GitHub's API rate limit for this address is used up (403 Forbidden, X-RateLimit-Remaining: 0); it resets at 2026-11-18 11:06:40 UTC; jhon sends no GitHub token, so retry after the reset; nothing was changed
+```
+
+A
 `~/.local/bin/jhon-studio` that jhon did not link (a file, or a link
 elsewhere), or a `~/.local/share/jhon-studio` that is a link, is never
 replaced or written through: `jhon update` notes it once and leaves it
@@ -134,8 +151,11 @@ nothing is accepted, and doctor notes that it declares no minimum. A
 development build of jhon (`0.0.0-dev+<commit>`, from `jhon sync`) satisfies
 any minimum, and doctor says it was not checked. The version in
 `integrations/studio/manifest.yaml` is the one Jhon was tested with: doctor
-shows `jhon-studio <installed> (tested with <version>)`, never as a
-requirement.
+shows `jhon-studio <installed> (tested with <version>)`, the installed
+version whole with its pre-release (`0.1.0-rc.1`), never as a requirement;
+while jhon-studio is off for this run, that row is a warning,
+`jhon-studio <installed> (tested with <version>) is off for this run: see the
+jhon-studio section`, instead of an ok.
 
 ## While it is off, or not answering
 

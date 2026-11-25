@@ -194,12 +194,19 @@ func firstByteEnv(env []string) []string {
 // startPi runs pi on ~/.pi/jhon, Jhon's own agent directory, so the owner's
 // ~/.pi/agent never steers it. A cli integration that is on but does not
 // fit this jhon is off for the session, with its note (toolsOffEnv).
+// Before a render wrote the directory it names the fix: jhon sync from a
+// source checkout, jhon setup with pi among its runtimes on a release
+// install, which has no checkout to sync (T8b).
 func startPi(argv []string) (int, error) {
 	dir := os.Getenv("HOME") + "/.pi/jhon"
 	if !release.IsFile(dir + "/settings.json") {
 		// The message names dir in full, $HOME expanded, never as ~.
 		o := out()
-		fmt.Fprintf(o.E, "%sjhon:%s %s has no settings.json; run `jhon sync` with pi installed (~/.pi present) first\n", o.R, o.Z, dir)
+		fix := "run `jhon setup` and pick pi among its runtimes first"
+		if release.Locate().HasSource() {
+			fix = "run `jhon sync` with pi installed (~/.pi present) first"
+		}
+		fmt.Fprintf(o.E, "%sjhon:%s %s has no settings.json; %s\n", o.R, o.Z, dir, fix)
 		return 1, nil
 	}
 	env, notes := toolsOffEnv(withEnv(firstByteEnv(sandboxProjectEnv(os.Environ())), "PI_CODING_AGENT_DIR="+dir))

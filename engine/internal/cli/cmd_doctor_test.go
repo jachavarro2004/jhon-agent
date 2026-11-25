@@ -174,6 +174,61 @@ func TestDoctorWarnsWhenAnInstalledVersionDiffersFromItsPin(t *testing.T) {
 	}
 }
 
+// T8a (odd/tasks/studio-integration-v1.md L45): a tool's version is shown
+// whole, its pre-release included; build metadata and a path or word after
+// it are not part of it.
+func TestInstalledVersionKeepsThePreRelease(t *testing.T) {
+	for in, want := range map[string]string{"0.1.0-rc.1\n": "0.1.0-rc.1", "2.1.323 (Claude Code)\n": "2.1.323", "v3.7.2": "3.7.2",
+		"jhon-studio 0.1.0-rc.1 (tested)": "0.1.0-rc.1", "0.2.0-beta.2.x+abc": "0.2.0-beta.2.x", "1.6.2.": "1.6.2", "3.7.2-": "3.7.2"} {
+		if got := installedVersion(in); got != want {
+			t.Errorf("installedVersion(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// T8a PRESERVE: each tool doctor asks prints its version as before, and a
+// version as pinned stays (pinned); a pre-release of a pinned version is no
+// longer taken for the pin.
+func TestDoctorVersionRowOfEachToolKeepsItsShape(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("JHON_SETTINGS", filepath.Join(t.TempDir(), "settings.toml"))
+	for _, c := range []struct {
+		outs      map[string]string
+		want, bad []string
+	}{
+		{map[string]string{"claude": render.ClaudeCodeVersion + " (Claude Code)\n", "engram": "engram " + render.EngramVersion + "\n", "codegraph": render.CodeGraphVersion + "\n"},
+			[]string{"  ok    claude " + render.ClaudeCodeVersion + " (pinned)\n", "  ok    engram " + render.EngramVersion + " (pinned)\n", "  ok    codegraph " + render.CodeGraphVersion + " (pinned)\n"}, []string{"warn"}},
+		{map[string]string{"claude": "v" + render.ClaudeCodeVersion, "engram": "engram " + render.EngramVersion + "-rc.1\n", "codegraph": "codegraph " + render.CodeGraphVersion + "+build.7\n"},
+			[]string{"  ok    claude " + render.ClaudeCodeVersion + " (pinned)\n", "  warn  engram " + render.EngramVersion + "-rc.1 is installed; Jhon pins " + render.EngramVersion + "\n", "  ok    codegraph " + render.CodeGraphVersion + " (pinned)\n"}, nil},
+	} {
+		saved := probeVersion
+		probeVersion = func(command string) (string, error) {
+			if out, ok := c.outs[command]; ok {
+				return out, nil
+			}
+			return "", errNotInstalled
+		}
+		var b strings.Builder
+		o := &release.Out{W: &b, E: &b}
+		doctor{o: o}.versions()
+		probeVersion = saved
+		got := b.String()
+		for _, w := range c.want {
+			if !strings.Contains(got, w) {
+				t.Errorf("lacks %q:\n%s", w, got)
+			}
+		}
+		for _, w := range c.bad {
+			if strings.Contains(got, w) {
+				t.Errorf("says %q:\n%s", w, got)
+			}
+		}
+		if o.Failed != 0 {
+			t.Errorf("failed %d", o.Failed)
+		}
+	}
+}
+
 func TestInstalledVersionIsTheFirstVersionInTheOutput(t *testing.T) {
 	for out, want := range map[string]string{"2.1.310 (Claude Code)": "2.1.310", "engram 3.6.1\n": "3.6.1", "v1.6.2": "1.6.2", "none": ""} {
 		if got := installedVersion(out); got != want {

@@ -263,10 +263,15 @@ func TestAToolsReleasesAreItsSourcesSignedByItsReleaseWorkflowAtTheTag(t *testin
 	must(os.WriteFile(artifact, []byte("the release"), 0o644))
 	for _, c := range []struct{ name, signer, want string }{
 		{"the studio's release workflow at v0.1.0 verifies", studioWorkflow("v0.1.0"), ""},
-		{"its workflow at another tag is refused", studioWorkflow("v0.2.0"), "not by the release workflow"},
+		// T8c (L45): the same workflow at another tag or ref names the identity
+		// expected and the one found.
+		{"its workflow at another tag is refused", studioWorkflow("v0.2.0"), "jhon-studio-0.1.0.tar.gz is signed by the release workflow at another ref, not at the release's tag: expected " +
+			studioWorkflow("v0.1.0") + ", found " + studioWorkflow("v0.2.0")},
 		{"jhon-agent's release workflow is refused", "https://github.com/jachavarro2004/jhon-agent/.github/workflows/release.yml@refs/tags/v0.1.0", "not by the release workflow"},
 		{"a fork is refused", "https://github.com/someone/jhon-studio/.github/workflows/release.yml@refs/tags/v0.1.0", "not by the release workflow"},
-		{"a branch is refused", "https://github.com/jachavarro2004/jhon-studio/.github/workflows/release.yml@refs/heads/v0.1.0", "not by the release workflow"},
+		{"a branch is refused", "https://github.com/jachavarro2004/jhon-studio/.github/workflows/release.yml@refs/heads/v0.1.0", "jhon-studio-0.1.0.tar.gz is signed by the release workflow at another ref, not at the release's tag: expected " +
+			studioWorkflow("v0.1.0") + ", found https://github.com/jachavarro2004/jhon-studio/.github/workflows/release.yml@refs/heads/v0.1.0"},
+		{"another workflow of the repository is refused", "https://github.com/jachavarro2004/jhon-studio/.github/workflows/other.yml@refs/tags/v0.1.0", "not by the release workflow"},
 	} {
 		b := filepath.Join(dir, "b.sigstore.json")
 		must(os.WriteFile(b, signBundle(t, vs, c.signer, Issuer, []byte("the release")), 0o644))
@@ -742,7 +747,7 @@ func TestInstallToolRefusesWhatDoesNotVerify(t *testing.T) {
 		}, "^" + regexp.QuoteMeta(n) + " is signed by .*, not by the release workflow; nothing was changed$"},
 		{"the signature of an older tag", func() toolRelease {
 			return signedTool(t, vs, "0.2.0", studioTar(t, "0.2.0", ""), studioWorkflow("v0.1.0"))
-		}, "^" + regexp.QuoteMeta(n) + " is signed by .*v0\\.1\\.0 .*, not by the release workflow; nothing was changed$"},
+		}, "^" + regexp.QuoteMeta(n+" is signed by the release workflow at another ref, not at the release's tag: expected "+studioWorkflow("v0.2.0")+", found "+studioWorkflow("v0.1.0")) + "; nothing was changed$"},
 		{"an absolute path", func() toolRelease {
 			return withTar([]entry{script, {name: "/tmp/evil", body: "x"}})
 		}, "^" + regexp.QuoteMeta(n) + " holds /tmp/evil, a path out of its folder; nothing was changed$"},
