@@ -153,9 +153,6 @@ type mount struct {
 	// guarded is one of Jhon's own or the runtimes' paths, read-only: no
 	// scratch root is bound inside it.
 	guarded bool
-	// written are the paths a writable area was named by, before their
-	// links were followed (replaceable).
-	written []string
 }
 
 // under is rel under the home.
@@ -205,33 +202,40 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 			return
 		}
 		m.path, m.dir = r, dir
-		if m.kind == write {
-			m.written = []string{path}
-		}
 		for i, old := range mounts {
 			if old.path == r {
 				m.kind = max(old.kind, m.kind)
 				m.shown, m.sealed, m.guarded = old.shown || m.shown, old.sealed || m.sealed, old.guarded || m.guarded
-				m.written = append(old.written, m.written...)
 				mounts[i] = m
 				return
 			}
 		}
 		mounts = append(mounts, m)
 	}
+	// area adds a writable area other than the project's: never one that is
+	// or passes through a link (L28, linkOn), which a command may have put
+	// there; the project's folders are read from the disk and each must point
+	// back at the others (project.ReadRepo).
+	area := func(path string) {
+		if in.linkOn(path) == "" {
+			add(path, mount{kind: write})
+		}
+	}
 	config := in.xdg("XDG_CONFIG_HOME", ".config")
 
 	// Writable: the project, the caches, what the owner allows.
 	ours := slices.Concat(in.Roots, []string{in.CommonDir}, in.Worktrees)
-	for _, p := range slices.Concat(ours, []string{in.under(".cache"), in.xdg("XDG_CACHE_HOME", ".cache")}, in.AllowWrite) {
+	for _, p := range ours {
 		add(p, mount{kind: write})
 	}
-	for _, c := range toolCaches {
-		if v := in.Env[c.env]; c.env != "" && filepath.IsAbs(v) {
-			add(filepath.Join(v, c.sub), mount{kind: write})
-		} else if c.home != "" {
-			add(in.under(c.home), mount{kind: write})
+	for _, a := range in.areas() {
+		// A cache or store under the home that holds a PATH folder is not
+		// bound with PATH known (L29, holdsPATH); under any PATH (writable,
+		// mayChange) it still counts as writable.
+		if withPath && a.cache && in.holdsPATH(a.path) != "" {
+			continue
 		}
+		area(a.path)
 	}
 
 	// Read-only: Jhon's own files, and the runtimes'.
@@ -242,7 +246,7 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 	for _, rel := range slices.Concat(framework, runtimeHomes) {
 		add(in.under(rel), mount{kind: read, guarded: true})
 	}
-	add(in.Telemetry, mount{kind: write})
+	area(in.Telemetry)
 
 	// Read-only: PATH's folders outside the project, also inside a writable
 	// folder, where the inner mount decides: what the owner or a runtime
@@ -323,12 +327,12 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 	}
 	for _, p := range in.Tmp {
 		if scratch(p) {
-			add(p, mount{kind: write})
+			area(p)
 		}
 	}
-	scratchTMPDIR := scratch(in.Env["TMPDIR"])
+	scratchTMPDIR := scratch(in.Env["TMPDIR"]) && in.linkOn(in.Env["TMPDIR"]) == ""
 	if scratchTMPDIR {
-		add(in.Env["TMPDIR"], mount{kind: write})
+		area(in.Env["TMPDIR"])
 	}
 
 	// Nothing but what the sandbox shows (the container sockets) is mounted
@@ -346,20 +350,15 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 		}
 		return strings.Compare(a.path, b.path)
 	})
-	// A writable area named only by paths a sandboxed command could have
-	// replaced on the way (replaceable: an allow_write entry, a $TMPDIR or a
-	// cache a variable names, inside the project, /tmp or another writable
-	// area) takes no mount of its own (L26): where it is, it is writable
-	// already, and a link planted there would have it bound where the link
-	// leads (~/.bashrc). So every area bound writable is reached through
-	// folders no command can write: none can change it before bubblewrap
-	// mounts it either. One inside a folder the sandbox mounts read-only
-	// there (a PATH folder in a cache) keeps its mount.
+	// A writable area inside another one takes no mount of its own (L26): it
+	// is writable there already, and a command there could replace a folder
+	// on the way to it before the next run binds it. One inside a folder the
+	// sandbox mounts read-only there (a PATH folder in a cache) keeps its
+	// mount. With no link on any area's way (area), every area bound
+	// writable is reached only through folders no command can change.
 	all := slices.Clone(mounts)
-	mounts = slices.DeleteFunc(mounts, func(m mount) bool {
-		return m.kind == write && len(m.written) > 0 && !slices.ContainsFunc(m.written, func(p string) bool { return !in.replaceable(p, all) })
-	})
-	// $TMPDIR stays for the program while it is writable where it leads.
+	mounts = slices.DeleteFunc(mounts, func(m mount) bool { return m.kind == write && inWritable(m.path, all) })
+	// $TMPDIR stays for the program while it is writable.
 	if scratchTMPDIR {
 		r, _, _ := in.Stat(in.Env["TMPDIR"])
 		m := innermost(mounts, r)
@@ -368,14 +367,11 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 	return mounts, tmpdir
 }
 
-// replaceable is whether a sandboxed command of in could replace an entry
-// on the way to path, as the kernel walks it from / with each link followed
-// (in.Lstat): an entry in a folder the innermost of mounts (layout's,
-// parents first) leaves writable, /dev included, unless the sandbox mounts a
-// folder that is not writable there (a mount point, which the kernel keeps
-// where it is). A walk that ends on a missing entry is not: nothing is
-// bound there. One with too many links is.
-func (in Input) replaceable(path string, mounts []mount) bool {
+// inWritable is whether an entry on the way to path, a real path, sits in a
+// folder the innermost of mounts (layout's, parents first) leaves writable,
+// /dev included, unless the sandbox mounts a folder that is not writable
+// there (a mount point, which the kernel keeps where it is).
+func inWritable(path string, mounts []mount) bool {
 	open := func(dir string) bool {
 		if within(dir, []string{"/dev"}) {
 			return true
@@ -386,40 +382,98 @@ func (in Input) replaceable(path string, mounts []mount) bool {
 	pinned := func(p string) bool {
 		return slices.ContainsFunc(mounts, func(m mount) bool { return m.dir && m.kind != write && m.path == p })
 	}
-	sep := string(filepath.Separator)
-	todo := strings.Split(path, sep)
-	cur, links := sep, 0
-	for len(todo) > 0 {
-		part := todo[0]
-		todo = todo[1:]
-		switch part {
-		case "", ".":
-			continue
-		case "..":
-			cur = filepath.Dir(cur)
-			continue
-		}
-		next := filepath.Join(cur, part)
-		if open(cur) && !pinned(next) {
+	for e := filepath.Clean(path); filepath.Dir(e) != e; e = filepath.Dir(e) {
+		if open(filepath.Dir(e)) && !pinned(e) {
 			return true
 		}
-		target, isLink, ok := in.lstat(next)
-		if !ok {
-			return false
-		}
-		if !isLink {
-			cur = next
-			continue
-		}
-		if links++; links > maxLinks {
-			return true
-		}
-		if filepath.IsAbs(target) {
-			cur = sep
-		}
-		todo = append(strings.Split(target, sep), todo...)
 	}
 	return false
+}
+
+// linkOn is the first entry on path, from / down as written (in.lstat), that
+// is a link, and "" when none is: the home's own way is the owner's (a home
+// under /home -> /var/home), so a path under the home is read from the home's
+// real path (homed).
+func (in Input) linkOn(path string) string {
+	if !filepath.IsAbs(path) {
+		return ""
+	}
+	p := in.homed(filepath.Clean(path))
+	sep := string(filepath.Separator)
+	cur := sep
+	for _, part := range strings.Split(strings.TrimPrefix(p, sep), sep) {
+		if part == "" {
+			continue
+		}
+		cur = filepath.Join(cur, part)
+		if _, isLink, ok := in.lstat(cur); !ok {
+			return ""
+		} else if isLink {
+			return cur
+		}
+	}
+	return ""
+}
+
+// areaSource is a writable area other than the project's, scratch and
+// telemetry: what names it, its path as written, and whether it is a cache
+// or store (not the owner's sandbox.allow_write).
+type areaSource struct {
+	name, path string
+	cache      bool
+}
+
+// areas are the caches, the owner's sandbox.allow_write folders and the
+// toolchains' caches and stores, as written.
+func (in Input) areas() []areaSource {
+	out := []areaSource{{"the cache", in.under(".cache"), true}, {"$XDG_CACHE_HOME", in.xdg("XDG_CACHE_HOME", ".cache"), true}}
+	for _, p := range in.AllowWrite {
+		out = append(out, areaSource{"sandbox.allow_write folder", p, false})
+	}
+	for _, c := range toolCaches {
+		if v := in.Env[c.env]; c.env != "" && filepath.IsAbs(v) {
+			out = append(out, areaSource{"$" + c.env, filepath.Join(v, c.sub), true})
+		} else if c.home != "" {
+			out = append(out, areaSource{"the tool folder", in.under(c.home), true})
+		}
+	}
+	return out
+}
+
+// holdsPATH is the first PATH folder outside the project that cache, a
+// cache or store whose real path lies under the home (not the home itself),
+// holds at any depth, as written or where its existing part leads; "" when
+// it holds none, or lies outside the home (/tmp, $TMPDIR and a cache a
+// variable moves there are not judged, L29). A command could rename a
+// folder around such a PATH folder and put its own program there.
+func (in Input) holdsPATH(cache string) string {
+	if !filepath.IsAbs(cache) {
+		return ""
+	}
+	home := filepath.Clean(in.Home)
+	real := realPath(cache, in.Stat)
+	if real == home || !project.Within(real, home) {
+		return ""
+	}
+	var roots []string
+	for _, r := range in.Roots {
+		if filepath.IsAbs(r) {
+			roots = append(roots, filepath.Clean(r), realPath(r, in.Stat))
+		}
+	}
+	for _, dir := range in.Path {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		d, r := filepath.Clean(dir), realPath(dir, in.Stat)
+		if within(d, roots) || within(r, roots) {
+			continue
+		}
+		if project.Within(d, filepath.Clean(cache)) || project.Within(r, real) {
+			return dir
+		}
+	}
+	return ""
 }
 
 // lstat is in.Lstat, or with none what in.Stat says: a path whose real path

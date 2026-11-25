@@ -371,7 +371,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            link, and neither in nor around a path the
                            sandbox hides or keeps read-only, nor on PATH,
                            and so does each folder made on the way; jhon
-                           sandbox status names any other with why;
+                           sandbox status names any other with why; a
+                           folder that is or passes through a link is not
+                           used (name its real path); one that is or holds
+                           Jhon's release, the jhon program, the source
+                           checkout, Jhon's protected files or a PATH
+                           folder stops every sandboxed command (name a
+                           concrete subfolder such as ~/.local/share/<app>);
                            sandbox.deploy_tools is the owner's deploy tools
                            (empty by default; for example aws,cdk,sam),
                            program names separated by commas, each bare (no
@@ -631,19 +637,40 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            is bound only under /tmp, /var/tmp, the home or a
                            sandbox.allow_write folder, and not inside a
                            hidden folder or one of Jhon's; any other value,
-                           and one not writable where its links lead,
-                           becomes /tmp for the program. A writable area
-                           (a sandbox.allow_write folder, $TMPDIR, a cache
-                           a variable names) reached through a folder a
-                           sandboxed command may write (inside the
-                           project, /tmp or another writable area) takes no
-                           mount of its own: it is writable there already,
-                           and a link a command put in its place is not
-                           bound where it leads (~/.bashrc); one reached
-                           only through folders no command can write is
-                           bound where its links lead (~/data -> /mnt/data),
-                           and so is one inside a folder the sandbox keeps
-                           read-only there (a PATH folder in a cache). The project is
+                           and one that is or passes through a link,
+                           becomes /tmp for the program. No writable area
+                           but the project's own folders (a
+                           sandbox.allow_write folder, $TMPDIR, /tmp, a
+                           cache or store, Jhon's telemetry folder) is
+                           bound when it is or passes through a link (read
+                           with lstat from / down; the home's own way, as
+                           /home -> /var/home, is the owner's): name its
+                           real path (/mnt/data, not ~/data); status,
+                           doctor and the note on a refused write there say
+                           so. A cache or store of the default list under
+                           the home (~/.cache, ~/.gradle, ~/go/pkg and the
+                           others above, and one a variable names under the
+                           home) that holds a PATH folder outside the
+                           project, at any depth, is not bound writable
+                           either: a command could rename a folder around
+                           the PATH folder and put its own program there;
+                           status and doctor name it with the fix (move the
+                           tool's bin out of the cache, or take it off
+                           PATH). /tmp and $TMPDIR are not judged so. A
+                           writable area inside another one (the
+                           project, /tmp, another writable area) takes no
+                           mount of its own: it is writable there already;
+                           one inside a folder the sandbox keeps read-only
+                           there (a PATH folder in a cache) keeps it. While
+                           a sandbox.allow_write folder holds Jhon's
+                           release (~/.local/share/jhon and where current
+                           leads), a jhon program and where it leads, the
+                           source checkout or Jhon's protected files where
+                           a command could rename a folder around them, or
+                           is or holds a PATH folder outside the project,
+                           run runs nothing and exits 126 with the fix:
+                           name a concrete subfolder such as
+                           ~/.local/share/<app>. The project is
                            read from the disk and no git runs:
                            core.worktree, config includes and GIT_*
                            variables are not followed, and a .git file or a
@@ -822,7 +849,16 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            and why Jhon will not, which the line also says,
                            as when run itself would run nothing here (its
                            reason and fix) (jhon doctor warns of each it
-                           will not create);
+                           will not create); unused_write_areas: each
+                           writable area not used as it is or passes
+                           through a link (name, path, link, real, the path
+                           to name instead) or, a home cache or store,
+                           holds a PATH folder (path_folder), which the
+                           line also says;
+                           run_refused: why run runs nothing here for
+                           Jhon's own files, with the fix, which the line
+                           also says (jhon doctor: a problem with the mode
+                           on, else a warning);
                            --project as for run; exit 0, 2 on a
                            usage error. Run inside Jhon's sandbox
                            (JHON_IN_SANDBOX=1), where another cannot
