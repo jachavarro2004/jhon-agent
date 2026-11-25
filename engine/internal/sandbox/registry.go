@@ -19,19 +19,40 @@ import (
 // a line that runs outside the sandbox reads what a sandboxed command may
 // write (the repository's git configuration, a program in the project), so
 // it does not run while a sandboxed command that can write its project
-// runs, and no such sandboxed command starts while it runs. Each run of
+// runs; and while an outside line that runs git (or gh, which runs git in
+// the project) runs, no such sandboxed command starts (L35, "Solo durante
+// git de afuera": a deploy tool or another outside line, which runs the
+// project's code by design, holds no sandboxed command). Each run of
 // `jhon sandbox run` records itself in a folder of Jhon's state (read-only
 // inside the sandbox) before it starts and removes its record when it ends;
 // a record whose process is gone is stale, ignored and removed. Checking
 // and recording happen under one lock, so two runs never both pass.
 
-// Run kinds: a sandboxed run, and a line that runs outside the sandbox.
+// Run kinds: a sandboxed run, a line that runs outside the sandbox and runs
+// git or gh, and any other line that runs outside it.
 const (
-	KindSandboxed = "sandboxed"
-	KindOutside   = "outside"
+	KindSandboxed  = "sandboxed"
+	KindOutsideGit = "outside-git"
+	KindOutside    = "outside"
 )
 
-// RegistryWait is how long a run waits for a run of the other kind that
+// holds is whether a live run of kind other keeps a run of kind self from
+// starting: every outside line waits for a sandboxed run, a sandboxed run
+// waits only for an outside git line, and a record of no known kind (one
+// that cannot be read) keeps every run waiting.
+func holds(other, self string) bool {
+	switch other {
+	case KindSandboxed:
+		return self != KindSandboxed
+	case KindOutsideGit:
+		return self == KindSandboxed
+	case KindOutside:
+		return false
+	}
+	return true
+}
+
+// RegistryWait is how long a run waits for a run that holds it (holds) and
 // shares its areas to end before it is refused.
 const RegistryWait = 3 * time.Second
 
@@ -50,18 +71,18 @@ type RunRecord struct {
 // Registry is the folder the running runs are recorded in.
 type Registry struct{ Dir string }
 
-// ErrBusy is Enter's error when a run of the other kind that shares the
-// areas still runs after the wait.
+// ErrBusy is Enter's error when a run that holds this one (holds) and
+// shares its areas still runs after the wait.
 type ErrBusy struct{ Run RunRecord }
 
 func (e ErrBusy) Error() string { return "run " + strconv.Itoa(e.Run.PID) + " is running" }
 
 // Enter records this process as a run of kind with areas, once no live run
-// of the other kind shares one of them (shares: one is the other or holds
-// it), waiting up to wait and checking every 100 ms; leave removes the
+// that holds it (holds) shares one of them (shares: one is the other or
+// holds it), waiting up to wait and checking every 100 ms; leave removes the
 // record. It fails closed: a folder, lock or record that cannot be read or
 // written is an error, never a pass, and a record that cannot be read
-// counts as a live run of either kind sharing every area while its process
+// counts as a live run of any kind sharing every area while its process
 // lives. err is ErrBusy for a run that still runs.
 func (r Registry) Enter(kind string, areas []string, wait time.Duration) (leave func(), err error) {
 	if r.Dir == "" || !filepath.IsAbs(r.Dir) {
@@ -93,8 +114,8 @@ func (r Registry) file(pid int) string {
 	return filepath.Join(r.Dir, strconv.Itoa(pid)+".json")
 }
 
-// tryEnter records self unless a live run of the other kind shares one of
-// its areas, which it gives; under the registry's lock.
+// tryEnter records self unless a live run that holds it shares one of its
+// areas, which it gives; under the registry's lock.
 func (r Registry) tryEnter(self RunRecord) (*RunRecord, error) {
 	lock, err := os.OpenFile(filepath.Join(r.Dir, ".lock"), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
@@ -136,7 +157,7 @@ func (r Registry) tryEnter(self RunRecord) (*RunRecord, error) {
 			os.Remove(file)
 			continue
 		}
-		if rec.Kind != self.Kind && shares(rec.Areas, self.Areas) {
+		if holds(rec.Kind, self.Kind) && shares(rec.Areas, self.Areas) {
 			return &rec, nil
 		}
 	}

@@ -249,9 +249,12 @@ command runs in a PID namespace of its own, so when it ends every process it
 started ends too, one it detached (`setsid`, `nohup`, a double fork)
 included. While a sandboxed command that can write a project runs, a line of
 that project that would run outside the sandbox (git, gh, docker, a deploy
-tool) waits up to 3 seconds and is then refused with a note, and the other
-way round: such a command could otherwise change what the outside line reads
-(the repository's git configuration) while it reads it. A long-running
+tool) waits up to 3 seconds and is then refused with a note: such a command
+could otherwise change what the outside line reads (the repository's git
+configuration) while it reads it. While an outside git or gh line runs, a
+sandboxed command that can write its project waits and is refused the same
+way; a deploy tool or another outside line, which runs the project's code by
+design, holds no sandboxed command. A long-running
 sandboxed command (a dev server in the background) therefore holds the
 project's `git push` until it ends. With
 `sandbox.mode = "on"` set and a sandbox that cannot run (no bubblewrap,

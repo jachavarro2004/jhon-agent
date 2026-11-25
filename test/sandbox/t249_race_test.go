@@ -127,36 +127,64 @@ func TestAConfigSwappedDuringAnUnsandboxedPullRunsNoFilterOutside(t *testing.T) 
 	}
 }
 
-// The other way round: a sandboxed command of the project that starts while
-// a line of it runs outside the sandbox waits, then is refused with the
-// note; one of another project runs.
-func TestASandboxedCommandWaitsForAnOutsideLineOfItsProject(t *testing.T) {
-	b := newBox(t)
-	bin, began := filepath.Join(b.base, "deploy-bin"), filepath.Join(b.base, "deploy-began")
-	script(t, filepath.Join(bin, "mydeploy"), "#!/bin/sh\ntouch "+began+"\nsleep 8\n")
-	prependPath(&b, bin)
-	b.settings(t, "schema = 1\n\n[sandbox]\ndeploy_tools = [\"mydeploy\"]\n")
-	deploy := exec.Command(support.Bin(t), "sandbox", "run", "--project", b.proj, "--profile", "unsandboxed", "--", realShell(t, "sh"), "-c", "mydeploy up")
-	deploy.Dir, deploy.Env = b.proj, b.env
-	if err := deploy.Start(); err != nil {
+// startOutside starts line in the project with the unsandboxed profile, as
+// the runtimes do, and waits for began, which the line's program touches
+// once it runs outside the sandbox.
+func startOutside(t *testing.T, b box, line, began string) {
+	t.Helper()
+	cmd := exec.Command(support.Bin(t), "sandbox", "run", "--project", b.proj, "--profile", "unsandboxed", "--", realShell(t, "sh"), "-c", line)
+	cmd.Dir, cmd.Env = b.proj, b.env
+	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { deploy.Process.Kill(); deploy.Wait() })
+	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
 	for i := 0; i < 100 && !exists(began); i++ {
 		time.Sleep(50 * time.Millisecond)
 	}
 	if !exists(began) {
-		t.Fatal("the deploy line did not start outside the sandbox")
+		t.Fatalf("%q did not start outside the sandbox", line)
 	}
+}
+
+// The other way round, for git only (L35, "Solo durante git de afuera"): a
+// sandboxed command of the project that starts while a git line of it runs
+// outside the sandbox (here a fetch whose ssh is slow) waits, then is
+// refused with the note; one of another project runs.
+func TestASandboxedCommandWaitsForAnOutsideGitLineOfItsProject(t *testing.T) {
+	b := newBox(t)
+	bin, began := filepath.Join(b.base, "slow-bin"), filepath.Join(b.base, "ssh-began")
+	script(t, filepath.Join(bin, "ssh"), "#!/bin/sh\ntouch "+began+"\nsleep 8\nexit 1\n")
+	prependPath(&b, bin)
+	support.Git(t, b.proj, "remote", "add", "origin", "ssh://example.invalid/remote.git")
+	startOutside(t, b, "git fetch origin", began)
 	r := b.sh(t, b.proj, "", "echo ran")
 	if r.Code != 126 || r.Stdout != "" || !strings.HasPrefix(r.Stderr, insideWhileOutside) {
-		t.Errorf("a sandboxed command during the deploy: exit %d, stdout %q, stderr %q; want 126 and the note", r.Code, r.Stdout, r.Stderr)
+		t.Errorf("a sandboxed command during the outside fetch: exit %d, stdout %q, stderr %q; want 126 and the note", r.Code, r.Stdout, r.Stderr)
 	}
 	other := filepath.Join(b.home, "other")
 	mkdirs(t, other)
 	support.GitRepo(t, other)
 	if r := b.sh(t, other, "", "echo ran"); r.Code != 0 || r.Stdout != "ran\n" {
-		t.Errorf("a sandboxed command of another project during the deploy: exit %d, stdout %q, stderr %q; want it run", r.Code, r.Stdout, r.Stderr)
+		t.Errorf("a sandboxed command of another project during the fetch: exit %d, stdout %q, stderr %q; want it run", r.Code, r.Stdout, r.Stderr)
+	}
+}
+
+// L35: while an outside line that runs no git runs (a deploy tool, which
+// runs the project's code by design), sandboxed commands of the project are
+// not held.
+func TestASandboxedCommandRunsDuringAnOutsideDeployLine(t *testing.T) {
+	b := newBox(t)
+	bin, began, done := filepath.Join(b.base, "deploy-bin"), filepath.Join(b.base, "deploy-began"), filepath.Join(b.base, "deploy-done")
+	script(t, filepath.Join(bin, "mydeploy"), "#!/bin/sh\ntouch "+began+"\nsleep 8\ntouch "+done+"\n")
+	prependPath(&b, bin)
+	b.settings(t, "schema = 1\n\n[sandbox]\ndeploy_tools = [\"mydeploy\"]\n")
+	startOutside(t, b, "mydeploy up", began)
+	r := b.sh(t, b.proj, "", "echo ran")
+	if r.Code != 0 || r.Stdout != "ran\n" || r.Stderr != "" {
+		t.Errorf("a sandboxed command during the deploy: exit %d, stdout %q, stderr %q; want it run", r.Code, r.Stdout, r.Stderr)
+	}
+	if exists(done) {
+		t.Error("the deploy had ended before the sandboxed command ran")
 	}
 }
 

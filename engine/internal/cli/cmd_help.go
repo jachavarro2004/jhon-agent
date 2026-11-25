@@ -717,9 +717,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            the sandbox (git, gh, docker,
                            sandbox.deploy_tools) waits up to 3 s, then
                            runs nothing and exits 126 with a note; while
-                           such a line runs, a sandboxed command that can
-                           write what it reads waits the same, then is
-                           refused the same way. Each run is recorded under
+                           such a line that runs git or gh runs, a
+                           sandboxed command that can write what it reads
+                           waits the same, then is refused the same way (a
+                           deploy tool or another outside line, which runs
+                           the project's code by design, holds no sandboxed
+                           command). Each run is recorded under
                            Jhon's state folder (sandbox-runs, read-only in
                            the sandbox) until it ends; a record that cannot
                            be read or written refuses the run.

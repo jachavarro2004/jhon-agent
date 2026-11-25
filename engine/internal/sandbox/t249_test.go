@@ -106,3 +106,30 @@ func TestGitFoldersAreWhereTheLineAndEachGitWork(t *testing.T) {
 		t.Errorf("a relative working folder: %q", got)
 	}
 }
+
+// L35 ("Solo durante git de afuera"): every outside line waits for a
+// sandboxed run; a sandboxed run waits only for an outside git (or gh)
+// line; a record of no known kind holds every run.
+func TestWhichRunHoldsWhich(t *testing.T) {
+	for _, c := range []struct {
+		other, self string
+		want        bool
+	}{
+		{KindSandboxed, KindOutsideGit, true}, {KindSandboxed, KindOutside, true}, {KindSandboxed, KindSandboxed, false},
+		{KindOutsideGit, KindSandboxed, true}, {KindOutsideGit, KindOutside, false}, {KindOutsideGit, KindOutsideGit, false},
+		{KindOutside, KindSandboxed, false}, {KindOutside, KindOutside, false}, {KindOutside, KindOutsideGit, false},
+		{"", KindSandboxed, true}, {"", KindOutside, true}, {"", KindOutsideGit, true},
+	} {
+		if got := holds(c.other, c.self); got != c.want {
+			t.Errorf("holds(%q, %q) = %v, want %v", c.other, c.self, got, c.want)
+		}
+	}
+	for line, want := range map[string]bool{
+		"git pull --ff-only": true, "cd /p && git -C x fetch origin": true, "gh pr list": true,
+		"aws s3 sync dist s3://x": false, "cdk deploy": false, "docker compose up -d": false,
+	} {
+		if got := RunsGit(line); got != want {
+			t.Errorf("RunsGit(%q) = %v, want %v", line, got, want)
+		}
+	}
+}
