@@ -164,9 +164,10 @@ func sandboxRun(argv []string) (int, error) {
 	_, err := os.Stat(runRegistry().Dir)
 	registryThere := err == nil
 	if profile == sandbox.Unsandboxed {
-		// git runs with the repository's hooks, ssh command, helpers,
-		// transports and every other key of its own that runs a command
-		// overridden (sandbox.UnsandboxedEnv, L1306, T249 A2), and the line
+		// git runs with the repository's hooks, ssh command, helpers and
+		// transports overridden (sandbox.UnsandboxedEnv, L1306), only for a
+		// repository whose configuration is on the allowlist
+		// (repositoryGitConfigSafe, T249 A2, L39), and the line
 		// with a PATH no sandboxed command may change (sandbox.OutsidePath,
 		// T249 A1): what this process runs from here on (git) too.
 		// It runs only while no sandboxed command that can write what it
@@ -181,8 +182,9 @@ func sandboxRun(argv []string) (int, error) {
 			}
 			path := os.Getenv("PATH")
 			os.Setenv("PATH", sandbox.OutsidePath(in))
-			if project, ok := projectGitConfig(program[2], in.Cwd); ok {
-				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), project, mergeGateEntries(pinned)...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil)
+			gate := mergeGateEntries(pinned)
+			if repositoryGitConfigSafe(program[2], in.Cwd, gate) {
+				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), gate...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil)
 				leave()
 				return code, err
 			}

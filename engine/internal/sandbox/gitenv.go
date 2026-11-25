@@ -16,12 +16,11 @@ import (
 // drops every helper read so far; the owner's are added back after it), no
 // ext::, fd:: or local-path transport, no submodule recursion, and no
 // automatic gc or maintenance in the background, which would outlive the
-// line and its record in the registry (L36). The
-// repository's other keys that run a command (ProjectGitConfig, T249 A2)
-// follow them, and git's proxy for git:// is off (GIT_PROXY_COMMAND, empty,
-// unless the owner's environment names one). url.*.insteadOf in the
-// repository's configuration is not neutralized: an accepted residual risk;
-// what include.* brings in is read as the repository's own.
+// line and its record in the registry (L36). They hold against what the
+// repository holds besides its configuration (.git/hooks) and against the
+// owner's own configuration; the repository's configuration itself is
+// judged by an allowlist (RepositoryGitConfig, L39): a line whose
+// repository sets any other key runs in the sandbox.
 var gitOverrides = [][2]string{
 	{"core.hooksPath", "/dev/null"},
 	{"core.sshCommand", "ssh"},
@@ -62,10 +61,7 @@ var hookEvents = []string{
 // hook the repository names for reference-transaction disabled, the gate's
 // own values forced): they replace the switch that turns the event off, so
 // git runs the gate alone for it.
-//
-// project are the entries ProjectGitConfig gives for the repository's own
-// keys that run a command; they follow gitOverrides.
-func UnsandboxedEnv(env []string, helpers, project [][2]string, gate ...[2]string) []string {
+func UnsandboxedEnv(env []string, helpers [][2]string, gate ...[2]string) []string {
 	n := 0
 	for _, kv := range env {
 		if v, ok := strings.CutPrefix(kv, "GIT_CONFIG_COUNT="); ok {
@@ -75,7 +71,6 @@ func UnsandboxedEnv(env []string, helpers, project [][2]string, gate ...[2]strin
 		}
 	}
 	var out []string
-	proxy := false
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
 		if k == "GIT_CONFIG_PARAMETERS" || k == "GIT_CONFIG_COUNT" || k == "CDPATH" {
@@ -84,14 +79,7 @@ func UnsandboxedEnv(env []string, helpers, project [][2]string, gate ...[2]strin
 		if i, ok := configIndex(k); ok && i >= n {
 			continue
 		}
-		proxy = proxy || k == "GIT_PROXY_COMMAND"
 		out = append(out, kv)
-	}
-	// git reads core.gitProxy only when the variable is unset; empty, it
-	// runs no proxy (the repository's would win over a later entry: git
-	// takes its first matching value).
-	if !proxy {
-		out = append(out, "GIT_PROXY_COMMAND=")
 	}
 	var entries [][2]string
 	for _, o := range gitOverrides {
@@ -100,7 +88,6 @@ func UnsandboxedEnv(env []string, helpers, project [][2]string, gate ...[2]strin
 			entries = append(entries, helpers...)
 		}
 	}
-	entries = append(entries, project...)
 	for _, event := range hookEvents {
 		if event == "reference-transaction" && len(gate) > 0 {
 			entries = append(entries, gate...)
@@ -114,98 +101,99 @@ func UnsandboxedEnv(env []string, helpers, project [][2]string, gate ...[2]strin
 	return append(out, "GIT_CONFIG_COUNT="+strconv.Itoa(n+len(entries)))
 }
 
-// ProjectGitConfig is what an unsandboxed line takes from the configuration
-// `git config --list --show-scope -z` lists in a folder it works in (T249
-// A2; GitFolders): an entry for each key the repository's own configuration
-// (the local and worktree scopes, with what their include.* bring in; any
-// scope but system, global and command) sets that runs a command, in the
-// listing's order: the owner's last value for it (system, global or
-// command), else a value that runs nothing the repository chose
-// (neutralGit). The keys gitOverrides sets already (core.hooksPath,
-// core.sshCommand, core.fsmonitor, the credential helpers, protocol.*,
-// hook.*) and core.gitProxy (UnsandboxedEnv's GIT_PROXY_COMMAND) take
-// none. refuse is why the line may not run outside the sandbox at all: the
-// repository's core.worktree, which moves the files git writes (a pull's
-// checkout) outside the project; "" when nothing stands in the way.
-func ProjectGitConfig(listing string) (entries [][2]string, refuse string) {
-	type entry struct{ scope, key, value string }
-	var all []entry
+// RepositoryGitConfig is why an unsandboxed line may not run outside the
+// sandbox given the configuration `git config --list --show-scope -z`
+// lists in a folder it works in (T249 A2, L39; GitFolders), "" when it may:
+// every key the repository's own configuration sets (the local and worktree
+// scopes, and what their include.* bring in; any scope but system, global
+// and command) must be on the allowlist (safeRepositoryKey), with its
+// value, or be one of forced, the entries the line runs with anyway (the
+// merge gate's, hook.MergeGateUnsandboxed) with the same value. Any other
+// key (http.cookieFile, http.proxy, url.*.insteadOf, lfs.*, include.path, a
+// filter, a key git adds tomorrow) keeps the line in the sandbox: a
+// denylist of the keys that run a command or write a file missed some twice
+// (L33, L39), so none is kept. The owner's keys (system, global, command)
+// are not judged.
+func RepositoryGitConfig(listing string, forced [][2]string) string {
 	fields := strings.Split(listing, "\x00")
 	for i := 0; i+1 < len(fields); i += 2 {
+		scope := fields[i]
 		key, value, _ := strings.Cut(fields[i+1], "\n")
-		all = append(all, entry{fields[i], key, value})
-	}
-	owner := map[string]string{}
-	var keys []string
-	for _, e := range all {
-		switch e.scope {
+		switch scope {
 		case "system", "global", "command":
-			owner[e.key] = e.value
 			continue
 		}
-		if e.key == "core.worktree" {
-			refuse = "the repository's configuration sets core.worktree, which would move the files git writes outside the project"
+		if key == "core.worktree" {
+			return "the repository's configuration sets core.worktree, which would move the files git writes outside the project"
 		}
-		if _, ok := neutralGit(e.key); ok && !slices.Contains(keys, e.key) {
-			keys = append(keys, e.key)
+		if safeRepositoryKey(key, value) || slices.ContainsFunc(forced, func(e [2]string) bool { return strings.EqualFold(e[0], key) && e[1] == value }) {
+			continue
 		}
+		return "the repository's configuration sets " + key + ", which is not among the keys a git line runs outside the sandbox with"
 	}
-	for _, k := range keys {
-		v, mine := owner[k]
-		if !mine {
-			v, _ = neutralGit(k)
-		}
-		entries = append(entries, [2]string{k, v})
-	}
-	return entries, refuse
+	return ""
 }
 
-// neutralGit is the value for key, a key as git lists it (section and name
-// in lower case), that runs nothing the repository chose, and whether key
-// is one ProjectGitConfig overrides: a filter's clean, smudge and process
-// and a diff driver's command and textconv run nothing; a merge driver runs
-// false, so the merge stops with a conflict; a remote's vcs names no
-// helper, so its fetch fails; the editors are :, the pager none, a
-// pager.<command> off; the signing programs git's defaults and
-// gpg.ssh.defaultKeyCommand false. A remote's uploadpack and receivepack
-// get none: git takes the repository's first value, so a later one changes
-// nothing (and git warns of it), and they run on the remote's host, over
-// ssh, the local transports being off (gitOverrides).
-func neutralGit(key string) (string, bool) {
+// safeRepositoryKey is whether key, as git lists it (section and name in
+// lower case), may be set by the repository on a line that runs outside the
+// sandbox, with value. None names a program, a file git writes or a place
+// it connects to but the remote itself:
+//   - core's format keys, which only say how the repository is laid out;
+//     core.hooksPath, which gitOverrides sets to /dev/null after it;
+//   - extensions.* of the format (objectformat, worktreeconfig,
+//     refstorage, noop, preciousobjects); partialclone is out (it fetches
+//     from a promisor remote with keys of its own);
+//   - a remote's url and pushurl (not a <transport>:: helper, not an
+//     option), fetch and push refspecs (refs inside the repository),
+//     tagopt (--tags or --no-tags) and prune; a branch's remote, merge,
+//     rebase (not interactive, which opens an editor) and pushremote;
+//   - user.name and user.email; the signing switches and format
+//     (commit.gpgsign, tag.gpgsign, gpg.format) and user.signingkey, which
+//     picks one of the owner's keys (an accepted choice: the programs,
+//     gpg.program and gpg.<format>.program and gpg.ssh.defaultKeyCommand,
+//     stay out); gpg.ssh.allowedSignersFile, a file only read to verify;
+//   - init.defaultBranch, pull.rebase (not interactive) and pull.ff,
+//     push.default and push.autoSetupRemote, fetch.prune.
+//
+// submodule.* is out (submodules are off on such a line anyway).
+func safeRepositoryKey(key, value string) bool {
 	section, rest, _ := strings.Cut(key, ".")
 	sub, name := "", rest
 	if i := strings.LastIndex(rest, "."); i >= 0 {
 		sub, name = rest[:i], rest[i+1:]
 	}
+	notInteractive := func(v string) bool {
+		switch strings.ToLower(v) {
+		case "", "true", "false", "merges", "yes", "no", "on", "off", "1", "0":
+			return true
+		}
+		return false
+	}
 	switch key {
-	case "core.askpass", "core.pager", "core.alternaterefscommand", "diff.external":
-		return "", true
-	case "core.editor", "sequence.editor":
-		return ":", true
-	case "gpg.program", "gpg.openpgp.program":
-		return "gpg", true
-	case "gpg.x509.program":
-		return "gpgsm", true
-	case "gpg.ssh.program":
-		return "ssh-keygen", true
-	case "gpg.ssh.defaultkeycommand":
-		return "false", true
+	case "core.repositoryformatversion", "core.filemode", "core.bare", "core.logallrefupdates", "core.ignorecase",
+		"core.precomposeunicode", "core.symlinks", "core.hookspath",
+		"extensions.objectformat", "extensions.worktreeconfig", "extensions.refstorage", "extensions.noop", "extensions.preciousobjects",
+		"user.name", "user.email", "user.signingkey", "commit.gpgsign", "tag.gpgsign", "gpg.ssh.allowedsignersfile",
+		"init.defaultbranch", "pull.ff", "push.default", "push.autosetupremote", "fetch.prune":
+		return true
+	case "gpg.format":
+		return slices.Contains([]string{"openpgp", "x509", "ssh"}, strings.ToLower(value))
+	case "pull.rebase":
+		return notInteractive(value)
 	}
 	switch {
-	case section == "pager" && sub == "":
-		return "false", true
-	case section == "filter" && sub != "" && slices.Contains([]string{"clean", "smudge", "process"}, name):
-		return "", true
-	case section == "merge" && sub != "" && name == "driver":
-		return "false", true
-	case section == "diff" && sub != "" && (name == "command" || name == "textconv"):
-		return "", true
-	case section == "remote" && sub != "" && name == "vcs":
-		return "", true
-	case section == "gpg" && sub != "" && name == "program":
-		return "false", true
+	case section == "remote" && sub != "" && (name == "url" || name == "pushurl"):
+		return !strings.Contains(value, "::") && !strings.HasPrefix(value, "-")
+	case section == "remote" && sub != "" && (name == "fetch" || name == "push" || name == "prune"):
+		return true
+	case section == "remote" && sub != "" && name == "tagopt":
+		return value == "--tags" || value == "--no-tags"
+	case section == "branch" && sub != "" && (name == "remote" || name == "merge" || name == "pushremote"):
+		return true
+	case section == "branch" && sub != "" && name == "rebase":
+		return notInteractive(value)
 	}
-	return "", false
+	return false
 }
 
 // configIndex is the n of GIT_CONFIG_KEY_<n> or GIT_CONFIG_VALUE_<n>.

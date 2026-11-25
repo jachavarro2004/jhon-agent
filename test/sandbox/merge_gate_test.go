@@ -25,9 +25,6 @@ func TestTheMergeGateAloneRunsOnAnUnsandboxedLine(t *testing.T) {
 	if r := support.Jhon(t, b.proj, b.env, "hook", "merge-gate", "--install"); r.Code != 0 {
 		t.Fatalf("merge-gate --install: exit %d %s", r.Code, r.Out())
 	}
-	planted := filepath.Join(b.base, "planted-ran")
-	support.Git(t, b.proj, "config", "hook.planted.event", "reference-transaction")
-	support.Git(t, b.proj, "config", "hook.planted.command", "touch "+planted)
 	before := strings.TrimSpace(support.Git(t, b.proj, "rev-parse", "main"))
 	r := b.unsandboxed(t, b.env, "git pull -q --no-rebase origin x")
 	if got := strings.TrimSpace(support.Git(t, b.proj, "rev-parse", "main")); got != before || !strings.Contains(r.Stderr, "jhon merge gate: ") {
@@ -36,6 +33,13 @@ func TestTheMergeGateAloneRunsOnAnUnsandboxedLine(t *testing.T) {
 	if r := b.unsandboxed(t, b.env, "git fetch -q origin"); r.Code != 0 {
 		t.Errorf("git fetch origin unsandboxed: exit %d %q", r.Code, r.Stderr)
 	}
+	// A hook the repository's configuration plants for the event keeps the
+	// line in the sandbox (L39), where it cannot write outside.
+	planted := filepath.Join(b.base, "planted-ran")
+	support.Git(t, b.proj, "config", "hook.planted.event", "reference-transaction")
+	support.Git(t, b.proj, "config", "hook.planted.command", "touch "+planted)
+	b.unsandboxed(t, b.env, "git fetch -q origin")
+	b.unsandboxed(t, b.env, "git pull -q --no-rebase origin x")
 	if exists(planted) {
 		t.Errorf("the planted reference-transaction hook ran on an unsandboxed line")
 	}

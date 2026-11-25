@@ -704,7 +704,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            names it, are private empty folders (mode 0700),
                            so the session bus, the keyring, the desktop's
                            sockets and docker's and podman's (unless
-                           sandbox.docker is true) are not there; nor are
+                           sandbox.docker is true) are not there, nor is any
+                           other docker or podman socket: /run/docker.sock,
+                           /var/run/docker.sock, /run/podman,
+                           /run/containerd, ~/.docker/desktop and
+                           ~/.docker/run, and every unix socket DOCKER_HOST,
+                           CONTAINER_HOST or a docker context names; nor are
                            tmux's, X11's, ICE's and the pi harness's
                            (gentle-pi) socket folders under /tmp, the
                            sockets of a pane manager under ~/.config whose
@@ -806,28 +811,29 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            maintenance.autoDetach false), and
                            hook.<event>.enabled=false for every hook event,
                            which also stops hooks named in the
-                           configuration, hook.<name>.command), every other
-                           key the repository's own configuration sets that
-                           runs a command given the owner's global value or
-                           one that runs nothing (a filter's clean, smudge
-                           and process, a merge driver (false: a conflict),
-                           a diff driver's command and textconv,
-                           diff.external, a remote's vcs, the editors, the
-                           pager, askpass, core.alternateRefsCommand, the
-                           signing programs), git's proxy for git:// off
-                           (GIT_PROXY_COMMAND empty unless set), and
-                           GIT_CONFIG_PARAMETERS unset; a repository that
-                           sets core.worktree, or whose configuration git
-                           cannot list, runs the line with the work
-                           profile. A caller whose
+                           configuration, hook.<name>.command), and
+                           GIT_CONFIG_PARAMETERS unset. It runs outside only
+                           while every key the repository's own
+                           configuration sets (its config and config.worktree
+                           and what they include) is on an allowlist: the
+                           format keys of core and extensions, core.hooksPath
+                           (overridden), a remote's url and pushurl (no
+                           <transport>:: helper), fetch, push, tagopt and
+                           prune, a branch's remote, merge, rebase and
+                           pushremote, user.name, user.email and
+                           user.signingKey, commit.gpgSign, tag.gpgSign,
+                           gpg.format, gpg.ssh.allowedSignersFile,
+                           init.defaultBranch, pull.rebase and pull.ff (not
+                           interactive), push.default,
+                           push.autoSetupRemote, fetch.prune, and Jhon's
+                           merge gate with its own values; a repository that
+                           sets any other key (http.cookieFile, http.proxy,
+                           url.*.insteadOf, include.path, a filter, core.
+                           worktree, a key git adds later), or whose
+                           configuration git cannot list, runs the line with
+                           the work profile. A caller whose
                            stdout and stderr are one file (2>&1) gets the
-                           program's output as one stream, in its order.
-                           url.*.insteadOf and a remote's uploadpack and
-                           receivepack in the repository's configuration
-                           are not overridden (git takes the repository's
-                           first uploadpack and receivepack, which run on
-                           the remote's host over ssh, the local transports
-                           being off): an accepted residual risk. In the
+                           program's output as one stream, in its order. In the
                            work profile uv's tools go to
                            $XDG_CACHE_HOME/jhon/sandbox/uv-tools (UV_TOOL_DIR
                            and UV_TOOL_BIN_DIR, unless already set);

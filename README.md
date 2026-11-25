@@ -197,19 +197,16 @@ AWS_REGION=…; aws … | tail -1`). The agent's always-on text says the same
 before it runs anything: a failure inside the sandbox is fixed by running the
 program alone, not by turning the sandbox off. That git
 runs with the repository's hooks (configured hooks included), ssh command,
-fsmonitor and credential helpers overridden, and so is every other key the
-repository's own configuration (with what its `include.*` brings in) sets
-that runs a command: filters, merge and diff drivers, `diff.external`, a
-remote's `vcs`, the editors, the pager,
-`core.askPass`, `core.alternateRefsCommand` and the signing programs take
-your global value or one that runs nothing (a merge driver becomes `false`,
-a conflict), and `core.gitProxy` runs no proxy; a repository that sets
-`core.worktree` keeps the line in the sandbox, as it would move what a pull
-checks out outside the project. `url.*.insteadOf` and a remote's
-`uploadpack` and `receivepack` in the repository's configuration are not
-overridden (git takes the repository's first `uploadpack` and `receivepack`,
-which run on the remote's host over ssh, the local transports being off), an
-accepted residual risk. uv's tools go to a
+fsmonitor and credential helpers overridden, and it runs outside only while
+every key the repository's own configuration sets (with its worktree
+configuration and what they include) is on a short allowlist: the format
+keys, a remote's url, refspecs, tag option and prune, a branch's remote,
+merge and rebase, your name, email and signing switches and key, the pull,
+push and fetch defaults, and Jhon's merge gate. A repository that sets any
+other key (`http.cookieFile`, `http.proxy`, `url.*.insteadOf`,
+`include.path`, a filter, `core.worktree`, a key git adds later) keeps the
+line in the sandbox: a sandboxed command could have written it, and a list of
+the keys that run a command or write a file was broken twice. uv's tools go to a
 sandbox-only folder under the cache, and uv's own tool folder in the home stays
 read-only. A `sandbox.allow_write` folder that does not exist yet is
 created before the next sandboxed command starts, outside the sandbox, so
@@ -261,7 +258,10 @@ project's sandboxed commands. Docker's and podman's sockets are hidden inside
 the sandbox: through one a container can write anywhere you can and outlive
 the command. `jhon settings set sandbox.docker true` shows them again, and
 `jhon sandbox status` and `jhon doctor` then name it as an escape you
-accepted. herdr's sockets (its API runs commands in its panes), the system
+accepted; with it off no docker or podman socket is there at all, the
+system's (`/run/docker.sock`, `/run/podman`), Docker Desktop's under
+~/.docker and any unix socket `DOCKER_HOST`, `CONTAINER_HOST` or a docker
+context names. herdr's sockets (its API runs commands in its panes), the system
 bus, sshd's local socket and the pi harness's socket folder are hidden too.
 With
 `sandbox.mode = "on"` set and a sandbox that cannot run (no bubblewrap,

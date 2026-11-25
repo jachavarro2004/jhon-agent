@@ -123,7 +123,15 @@ func TestAConfigSwappedDuringAnUnsandboxedPullRunsNoFilterOutside(t *testing.T) 
 	// The racer is killed with its jhon: its registry entry is stale, its
 	// processes gone with its PID namespace; the config it left is restored.
 	stop()
-	support.Write(t, b.proj, map[string]string{".git/config": clean})
+	// bubblewrap ends its namespace a moment after its jhon is killed: the
+	// config is restored until the racer's last swap is past.
+	for i := 0; i < 50; i++ {
+		support.Write(t, b.proj, map[string]string{".git/config": clean})
+		time.Sleep(100 * time.Millisecond)
+		if support.Read(t, filepath.Join(b.proj, ".git", "config")) == clean {
+			break
+		}
+	}
 	r := b.unsandboxed(t, b.env, "git pull -q --ff-only")
 	if r.Code != 0 || r.Stderr != "" || exists(ran) || support.Read(t, filepath.Join(b.proj, "a.txt")) != "content\n" {
 		t.Errorf("a pull after the racer ended: exit %d, stderr %q, filter ran %v; want it done", r.Code, r.Stderr, exists(ran))

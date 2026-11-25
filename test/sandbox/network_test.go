@@ -302,6 +302,9 @@ func TestEveryRunRecordsItsProfileAndExitCode(t *testing.T) {
 // (hook.<name>.command with hook.<name>.event), which core.hooksPath does
 // not turn off. One planted in the project's .git/config for every event a
 // network command fires runs on no unsandboxed pull, fetch, push or clone.
+// Since L39 such a key keeps the line in the sandbox altogether
+// (sandbox.RepositoryGitConfig): the hook's note lies outside every folder
+// a sandboxed command may write, so it exists only if the hook ran outside.
 func TestAConfigHookDoesNotRunInAnUnsandboxedPull(t *testing.T) {
 	b := newBox(t)
 	ssh := filepath.Join(b.base, "ssh-ran")
@@ -310,7 +313,7 @@ func TestAConfigHookDoesNotRunInAnUnsandboxedPull(t *testing.T) {
 	support.Git(t, b.proj, "commit", "-q", "--allow-empty", "-m", "ahead")
 	support.Git(t, b.proj, "push", "-q", remote, "HEAD:refs/heads/main")
 	support.Git(t, b.proj, "update-ref", "refs/heads/main", "HEAD~1")
-	ran := filepath.Join(b.proj, "ran")
+	ran := filepath.Join(b.base, "ran")
 	hook := "[hook \"x\"]\n\tcommand = echo \"$0 $*\" >> " + ran + "\n"
 	for _, event := range []string{"pre-push", "post-merge", "post-checkout", "post-rewrite", "reference-transaction", "pre-auto-gc", "pre-rebase", "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-index-change"} {
 		hook += "\tevent = " + event + "\n"
@@ -324,21 +327,15 @@ func TestAConfigHookDoesNotRunInAnUnsandboxedPull(t *testing.T) {
 	}
 	f.Close()
 	for _, line := range []string{"git pull -q --ff-only", "git fetch -q origin", "git push -q origin HEAD:refs/heads/other", "git clone -q ssh://example.invalid" + remote + " cloned"} {
-		if r := b.unsandboxed(t, b.env, line); r.Code != 0 {
-			t.Errorf("unsandboxed %q: exit %d, stderr %q; want 0", line, r.Code, r.Stderr)
-		}
+		b.unsandboxed(t, b.env, line)
 	}
 	if got, err := os.ReadFile(ran); err == nil {
 		t.Errorf("a configured hook ran outside the sandbox:\n%s", got)
 	}
-	if got, want := support.Git(t, b.proj, "rev-parse", "HEAD"), support.Git(t, b.proj, "--git-dir", remote, "rev-parse", "main"); got != want {
-		t.Errorf("the pull did not fast-forward: HEAD %s, the remote's main %s", got, want)
-	}
-	// The same pull in the work profile runs the hook: the plant is live.
-	support.Git(t, b.proj, "update-ref", "refs/heads/main", "HEAD~1")
-	support.Git(t, b.proj, "reset", "-q", "--hard")
-	if r := b.sh(t, b.proj, "work", "git -c core.sshCommand=ssh pull -q --ff-only"); !exists(ran) {
-		t.Errorf("the planted hook does not run in a work pull (exit %d, stderr %q): the test proves nothing", r.Code, r.Stderr)
+	// The plant is live: the owner's own git runs it.
+	support.Git(t, b.proj, "commit", "-q", "--allow-empty", "-m", "live")
+	if !exists(ran) {
+		t.Error("the planted hook does not run for the owner's own git: the test proves nothing")
 	}
 }
 
@@ -391,8 +388,6 @@ func TestTheRepositorysHooksAndSshCommandDoNotRunUnsandboxed(t *testing.T) {
 	support.Git(t, b.proj, "push", "-q", remote, "HEAD:refs/heads/main")
 	support.Git(t, b.proj, "update-ref", "refs/heads/main", "HEAD~1")
 	ran := filepath.Join(b.proj, "ran")
-	support.Git(t, b.proj, "config", "core.sshCommand", "echo sshCommand >> "+ran+"; false")
-	support.Git(t, b.proj, "config", "core.fsmonitor", "echo fsmonitor >> "+ran+"; false")
 	for _, hook := range []string{"pre-push", "reference-transaction", "post-merge"} {
 		p := filepath.Join(b.proj, ".git", "hooks", hook)
 		support.Write(t, filepath.Dir(p), map[string]string{hook: "#!/bin/sh\necho " + hook + " >> " + ran + "\n"})
@@ -413,6 +408,18 @@ func TestTheRepositorysHooksAndSshCommandDoNotRunUnsandboxed(t *testing.T) {
 	}
 	if got, want := support.Git(t, b.proj, "--git-dir", remote, "rev-parse", "other"), support.Git(t, b.proj, "rev-parse", "HEAD"); got != want {
 		t.Errorf("the pull and the push: the remote's other is %s, HEAD %s", got, want)
+	}
+	// A core.sshCommand or core.fsmonitor in .git/config keeps the line in
+	// the sandbox (L39): its note, outside every writable folder, stays
+	// unwritten.
+	outside := filepath.Join(b.base, "config-ran")
+	support.Git(t, b.proj, "config", "core.sshCommand", "echo sshCommand >> "+outside+"; false")
+	support.Git(t, b.proj, "config", "core.fsmonitor", "echo fsmonitor >> "+outside+"; false")
+	for _, line := range []string{"git pull -q --ff-only", "git fetch -q origin", "git ls-remote origin"} {
+		b.unsandboxed(t, b.env, line)
+	}
+	if got, err := os.ReadFile(outside); err == nil {
+		t.Errorf("the repository's ssh command or fsmonitor ran outside the sandbox: %q", got)
 	}
 }
 

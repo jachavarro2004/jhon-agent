@@ -809,7 +809,7 @@ func TestRunsOutsideTakesABraceWordAndARelativeCdOnlyOutsideZsh(t *testing.T) {
 			t.Errorf("RunsOutside(%s -c %q) = %v, want %v", c.shell, c.line, got, c.want)
 		}
 	}
-	env := UnsandboxedEnv([]string{"CDPATH=/home/u", "PATH=/usr/bin"}, nil, nil)
+	env := UnsandboxedEnv([]string{"CDPATH=/home/u", "PATH=/usr/bin"}, nil)
 	if !slices.Contains(env, "PATH=/usr/bin") {
 		t.Errorf("an unsandboxed line loses PATH: %q", env)
 	}
