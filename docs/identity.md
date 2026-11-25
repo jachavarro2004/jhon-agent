@@ -125,6 +125,32 @@ Files that are identical across repos are byte-identical copies of
 jhon-agent's. The README's footer heading is `## License` everywhere (never
 "Licences").
 
+## README order
+
+Every repo's README follows one order, so a reader finds the same thing in the
+same place:
+
+1. The banner GIF, then the line under it: Jhon's tagline block, or the
+   product's own line (jhon-studio).
+2. The badge row.
+3. `## See it`: media GitHub plays or shows. A film is a GitHub
+   user-attachments URL alone on its line (the Spanish one inside
+   `<details><summary>With Spanish subtitles</summary>`), or a release-asset
+   link behind a GIF, WebP or PNG preview. Never a relative `<video>` tag:
+   GitHub does not play it. Screenshots and contact sheets go here too.
+4. `## What it is`, `## Install`, `## Use`.
+5. `## How it works`, with a diagram GitHub renders (an SVG in the repo or a
+   mermaid block).
+6. `## Docs`, then anything a repo's own tests pin (jhon-studio's
+   `## Releases` and `## Development`).
+7. `## Support <name>`, then `## License`.
+
+A repo leaves out a part it has nothing for (the landing has no Install; the
+profile has no diagram) but never changes the order. jhon-agent's README is
+the long one: its presentation film is its See it, `## Why Jhon` its What it
+is, `## Get started` its Install, and its LDD, Guards and Agents sections its
+How it works, each with its diagram.
+
 ## Checking a repo against the kit
 
 - The banner is the 61818-byte GIF and opens the README; the tagline block
@@ -134,6 +160,8 @@ jhon-agent's. The README's footer heading is `## License` everywhere (never
   the profile) is verbatim and sits right before `## License`.
 - No `$` amount or tier appears in any README, SUPPORT.md or sponsor text.
 - Every relative link and image points to a file that exists.
+- The sections follow the README order above, and no README has a relative
+  `<video>` tag.
 
 In jhon-agent, `go test ./test/hygiene/...` checks the README, SUPPORT.md
 and this file, and `node --test dashboard/test/` checks `app.css`'s colours
