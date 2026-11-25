@@ -59,8 +59,10 @@ func RefusedWrite(output string) (path string, said bool) {
 	return "", false
 }
 
-// RefusalNote is the note for a write the sandbox refused to path, or to the
-// path the output names when the line named none.
+// RefusalNote is the note for a write refused to path, or to the path the
+// output names when the line named none: what a run ends with when it has
+// no sandbox to explain the path by (--profile unsandboxed) or no path;
+// a work run's note is Refusal's (T239).
 func RefusalNote(path string) string {
 	if path == "" {
 		path = "the path the output names"

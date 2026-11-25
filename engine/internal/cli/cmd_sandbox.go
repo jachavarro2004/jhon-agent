@@ -161,14 +161,31 @@ func sandboxRun(argv []string) (int, error) {
 		// git runs with the repository's hooks, ssh command, helpers and
 		// transports overridden (sandbox.UnsandboxedEnv, L1306).
 		if sandbox.RunsOutside(sandbox.ThisHost(), sandboxInput(pinned), program) {
-			return sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), mergeGateEntries(pinned)...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "")
+			return sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), mergeGateEntries(pinned)...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil)
 		}
 		profile = sandbox.Work
 	}
 	in := sandboxInput(pinned)
-	bwrap, p := sandbox.Check(sandbox.ThisHost(), in)
+	check := func() (string, *sandbox.Problem) {
+		bwrap, p := sandbox.Check(sandbox.ThisHost(), in)
+		if p == nil {
+			p = ownFilesProblem(in)
+		}
+		return bwrap, p
+	}
+	bwrap, p := check()
+	// A sandbox.allow_write folder that does not exist yet is made here,
+	// outside the sandbox, where that is safe (sandbox.CreateAllowWrite,
+	// T239), only once nothing else stops the run: settings a sandboxed
+	// command could have written make no folder. The sandbox is then read
+	// and checked again with the new folders there.
+	var missing []sandbox.MissingFolder
 	if p == nil {
-		p = ownFilesProblem(in)
+		var created []string
+		if created, missing = sandbox.CreateAllowWrite(in); len(created) > 0 {
+			in = sandboxInput(pinned)
+			bwrap, p = check()
+		}
 	}
 	if p != nil {
 		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
@@ -176,7 +193,8 @@ func sandboxRun(argv []string) (int, error) {
 	}
 	// What runs here runs for an agent (T219 S9): git's merge gate judges it.
 	env := append(append(os.Environ(), sandbox.UVToolEnv(in)...), hook.AgentVariable+"=1")
-	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools))
+	refusal := func(path string) string { return sandbox.Refusal(in, path, missing) }
+	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal)
 }
 
 // ownFilesProblem is why the sandbox of in runs nothing while a sandboxed
@@ -287,6 +305,10 @@ type sandboxState struct {
 	TimedOut bool `json:"timed_out"`
 	// BashRules is set with the mode on only: with it off the rules apply.
 	BashRules *claudeBashRules `json:"claude_bash_rules,omitempty"`
+	// MissingAllowWrite are the sandbox.allow_write folders that do not
+	// exist and no writable area holds: whether the next sandboxed command
+	// makes each, or why Jhon will not (sandbox.MissingAllowWrite, T239).
+	MissingAllowWrite []sandbox.MissingFolder `json:"missing_allow_write,omitempty"`
 }
 
 // claudeBashRules are the Bash deny and ask rules in Claude Code's settings
@@ -408,13 +430,14 @@ func sandboxNow(pinned string) sandboxState {
 	if pinned == "" {
 		s.Project = sandboxProject()
 	}
+	in := sandboxInput(pinned)
+	s.MissingAllowWrite = sandbox.MissingAllowWrite(in)
 	if sandbox.Inside() {
 		s.Inside, s.Mode, s.ModeSource = true, "on", sandbox.ModeDefault
 		if mode, ok := sandbox.OwnerMode(); ok {
 			s.Mode, s.ModeSource = mode, sandbox.ModeSettings
 		}
 	} else {
-		in := sandboxInput(pinned)
 		e := sandbox.Mode(sandboxHost(), func() sandbox.Input { return in })
 		s.Mode, s.ModeSource = e.Mode, e.Source
 		if e.Mode == "off" && e.Problem != nil {
@@ -451,8 +474,20 @@ func sandboxStatus(asJSON bool, pinned string) (int, error) {
 	if w := s.BashRules.warning(); w != "" {
 		where += "; warning: " + w
 	}
+	for _, m := range s.MissingAllowWrite {
+		where += "; " + missingAllowWriteLine(m)
+	}
 	fmt.Println(s.line() + where)
 	return 0, nil
+}
+
+// missingAllowWriteLine is what status and doctor say of a
+// sandbox.allow_write folder that does not exist (T239).
+func missingAllowWriteLine(m sandbox.MissingFolder) string {
+	if m.Create {
+		return "sandbox.allow_write folder " + m.Folder + " does not exist: the next sandboxed command creates it"
+	}
+	return "sandbox.allow_write folder " + m.Folder + " does not exist, and Jhon will not create it: " + m.Why
 }
 
 // sandbox is doctor's sandbox section: the mode and whether the sandbox
@@ -482,6 +517,11 @@ func (d doctor) sandbox() {
 	}
 	if w := s.BashRules.warning(); w != "" {
 		d.o.Warn(w)
+	}
+	for _, m := range s.MissingAllowWrite {
+		if !m.Create {
+			d.o.Warn(missingAllowWriteLine(m))
+		}
 	}
 }
 
