@@ -36,8 +36,14 @@ func TestAMissingAllowWriteFolderIsMadeAndWritable(t *testing.T) {
 	}
 }
 
+// homeNote is the note on a refused write to path, which does not exist,
+// directly in the home: no setting is suggested (L26 A4).
+func homeNote(path string) string {
+	return "the sandbox refused a write to " + path + ", which does not exist; no folder the sandbox opens for writing holds it, and no setting should open it: it lies directly in the home folder; whether to write it is the owner's decision; that is a stop: tell the owner the path and why, never write it elsewhere\n"
+}
+
 // outsideNote is the note on a refused write to path, which does not exist,
-// outside every writable area.
+// outside every writable area, in a folder under the home.
 func outsideNote(path string) string {
 	return "the sandbox refused a write to " + path + ", which does not exist; no folder the sandbox opens for writing holds it: sandbox.allow_write opens it, or a folder that holds it, from the next command (jhon settings set sandbox.allow_write <folder>,…); that is a stop: tell the owner the path and why, never write it elsewhere\n"
 }
@@ -149,6 +155,23 @@ func TestSettingsACommandCouldWriteMakeNoFolder(t *testing.T) {
 	}
 	if exists(filepath.Join(b.home, "planted")) {
 		t.Error("a folder was made from settings a sandboxed command could write")
+	}
+}
+
+// L26 A2: status says the next sandboxed command creates a folder only when
+// that command runs: with JHON_SETTINGS where a command could write it, the
+// run is refused, and status says so with the run's own reason.
+func TestStatusSaysNoFolderIsMadeWhenTheRunWillBeRefused(t *testing.T) {
+	b := newBox(t)
+	file := filepath.Join(b.tmp, "settings.toml")
+	if err := os.WriteFile(file, []byte("schema = 1\n\n[sandbox]\nallow_write = [\"~/later/out\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := filepath.Join(b.home, "later", "out")
+	r := support.Jhon(t, b.proj, append(b.env, "JHON_SETTINGS="+file), "sandbox", "status")
+	want := "; sandbox.allow_write folder " + later + " does not exist, and Jhon will not create it: Jhon creates it only for a sandboxed command that runs, and none runs here: the settings file JHON_SETTINGS names (" + file + ") is in a folder a sandboxed command may write"
+	if r.Code != 0 || !strings.Contains(r.Stdout, want) || strings.Contains(r.Stdout, "the next sandboxed command creates it") {
+		t.Errorf("status: exit %d, stdout %q; want it to hold %q", r.Code, r.Stdout, want)
 	}
 }
 

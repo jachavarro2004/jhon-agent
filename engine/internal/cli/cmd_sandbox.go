@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -166,14 +167,7 @@ func sandboxRun(argv []string) (int, error) {
 		profile = sandbox.Work
 	}
 	in := sandboxInput(pinned)
-	check := func() (string, *sandbox.Problem) {
-		bwrap, p := sandbox.Check(sandbox.ThisHost(), in)
-		if p == nil {
-			p = ownFilesProblem(in)
-		}
-		return bwrap, p
-	}
-	bwrap, p := check()
+	bwrap, p := runProblem(in)
 	// A sandbox.allow_write folder that does not exist yet is made here,
 	// outside the sandbox, where that is safe (sandbox.CreateAllowWrite,
 	// T239), only once nothing else stops the run: settings a sandboxed
@@ -184,7 +178,7 @@ func sandboxRun(argv []string) (int, error) {
 		var created []string
 		if created, missing = sandbox.CreateAllowWrite(in); len(created) > 0 {
 			in = sandboxInput(pinned)
-			bwrap, p = check()
+			bwrap, p = runProblem(in)
 		}
 	}
 	if p != nil {
@@ -195,6 +189,20 @@ func sandboxRun(argv []string) (int, error) {
 	env := append(append(os.Environ(), sandbox.UVToolEnv(in)...), hook.AgentVariable+"=1")
 	refusal := func(path string) string { return sandbox.Refusal(in, path, missing) }
 	return sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal)
+}
+
+// runProblem is what `jhon sandbox run` checks before it runs anything in
+// the sandbox of in: a bubblewrap it may trust (sandbox.Check), then Jhon's
+// own files (ownFilesProblem). It gives that bubblewrap, and why nothing
+// runs, nil when nothing stands in the way. Status asks it too, so it says
+// a missing sandbox.allow_write folder is created only when a run would
+// create it (L26 A2).
+func runProblem(in sandbox.Input) (string, *sandbox.Problem) {
+	bwrap, p := sandbox.Check(sandbox.ThisHost(), in)
+	if p == nil {
+		p = ownFilesProblem(in)
+	}
+	return bwrap, p
 }
 
 // ownFilesProblem is why the sandbox of in runs nothing while a sandboxed
@@ -432,6 +440,16 @@ func sandboxNow(pinned string) sandboxState {
 	}
 	in := sandboxInput(pinned)
 	s.MissingAllowWrite = sandbox.MissingAllowWrite(in)
+	if slices.ContainsFunc(s.MissingAllowWrite, func(m sandbox.MissingFolder) bool { return m.Create }) {
+		if _, p := runProblem(in); p != nil {
+			for i, m := range s.MissingAllowWrite {
+				if m.Create {
+					s.MissingAllowWrite[i].Create = false
+					s.MissingAllowWrite[i].Why = "Jhon creates it only for a sandboxed command that runs, and none runs here: " + p.Reason + "; fix: " + p.Fix
+				}
+			}
+		}
+	}
 	if sandbox.Inside() {
 		s.Inside, s.Mode, s.ModeSource = true, "on", sandbox.ModeDefault
 		if mode, ok := sandbox.OwnerMode(); ok {

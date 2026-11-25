@@ -2,9 +2,11 @@ package sandbox
 
 import (
 	"bytes"
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // The note on a write the sandbox refused (T128g, L1302, L1303 G3): an agent
@@ -67,7 +69,32 @@ func RefusalNote(path string) string {
 	if path == "" {
 		path = "the path the output names"
 	}
-	return "the sandbox refused a write to " + path + "; that is a stop: tell the owner the path (jhon settings sandbox.allow_write), never write it elsewhere"
+	return escapeControls("the sandbox refused a write to " + path + "; that is a stop: tell the owner the path (jhon settings sandbox.allow_write), never write it elsewhere")
+}
+
+// escapeControls is note with every character that could move, rewrite or
+// hide what a terminal or a transcript shows escaped as text (L26 A3): the
+// C0 and C1 controls and DEL as \xHH (\r, ESC, NEL), the line and paragraph
+// separators, the bidirectional and zero-width controls and the byte order
+// mark as \uHHHH, and a byte that is not UTF-8 as \xHH. The path a refused
+// write names comes from a command's output, which a command chooses.
+func escapeControls(note string) string {
+	var b strings.Builder
+	for i := 0; i < len(note); {
+		r, size := utf8.DecodeRuneInString(note[i:])
+		switch {
+		case r == utf8.RuneError && size <= 1:
+			fmt.Fprintf(&b, `\x%02x`, note[i])
+		case r < 0x20 || r >= 0x7f && r <= 0x9f:
+			fmt.Fprintf(&b, `\x%02x`, r)
+		case r >= 0x200b && r <= 0x200f || r >= 0x2028 && r <= 0x202e || r >= 0x2060 && r <= 0x2069 || r == 0xfeff:
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteString(note[i : i+size])
+		}
+		i += size
+	}
+	return b.String()
 }
 
 // watchLine is the longest line Watch keeps: a longer one is cut there.

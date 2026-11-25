@@ -46,8 +46,9 @@ type Input struct {
 	CommonDir string
 	// Worktrees are the repository's other listed worktrees.
 	Worktrees []string
-	// Tmp are the scratch roots (project.TmpRoots): /tmp and $TMPDIR. Each
-	// is bound only where a scratch root may be (layout).
+	// Tmp are the scratch roots: /tmp and $TMPDIR, as written, not where
+	// their links lead (L26). Each is bound only where a scratch root may be
+	// (layout).
 	Tmp  []string
 	Home string
 	// Env is the environment the program gets: the XDG folders, the tool
@@ -76,6 +77,10 @@ type Input struct {
 	// Stat is what path is on disk, through symlinks: its real path and
 	// whether it is a directory; ok is false when it does not exist.
 	Stat func(path string) (real string, dir, ok bool)
+	// Lstat is what path itself is, a link not followed: whether it exists,
+	// and for a link its text. nil takes Stat's answer: a path whose real
+	// path is another is a link to that one (replaceable).
+	Lstat func(path string) (link string, isLink, ok bool)
 }
 
 // toolCaches are the caches and stores the common toolchains write outside
@@ -148,6 +153,9 @@ type mount struct {
 	// guarded is one of Jhon's own or the runtimes' paths, read-only: no
 	// scratch root is bound inside it.
 	guarded bool
+	// written are the paths a writable area was named by, before their
+	// links were followed (replaceable).
+	written []string
 }
 
 // under is rel under the home.
@@ -197,10 +205,14 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 			return
 		}
 		m.path, m.dir = r, dir
+		if m.kind == write {
+			m.written = []string{path}
+		}
 		for i, old := range mounts {
 			if old.path == r {
 				m.kind = max(old.kind, m.kind)
 				m.shown, m.sealed, m.guarded = old.shown || m.shown, old.sealed || m.sealed, old.guarded || m.guarded
+				m.written = append(old.written, m.written...)
 				mounts[i] = m
 				return
 			}
@@ -314,7 +326,8 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 			add(p, mount{kind: write})
 		}
 	}
-	if tmpdir = scratch(in.Env["TMPDIR"]); tmpdir {
+	scratchTMPDIR := scratch(in.Env["TMPDIR"])
+	if scratchTMPDIR {
 		add(in.Env["TMPDIR"], mount{kind: write})
 	}
 
@@ -333,7 +346,98 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 		}
 		return strings.Compare(a.path, b.path)
 	})
+	// A writable area named only by paths a sandboxed command could have
+	// replaced on the way (replaceable: an allow_write entry, a $TMPDIR or a
+	// cache a variable names, inside the project, /tmp or another writable
+	// area) takes no mount of its own (L26): where it is, it is writable
+	// already, and a link planted there would have it bound where the link
+	// leads (~/.bashrc). So every area bound writable is reached through
+	// folders no command can write: none can change it before bubblewrap
+	// mounts it either. One inside a folder the sandbox mounts read-only
+	// there (a PATH folder in a cache) keeps its mount.
+	all := slices.Clone(mounts)
+	mounts = slices.DeleteFunc(mounts, func(m mount) bool {
+		return m.kind == write && len(m.written) > 0 && !slices.ContainsFunc(m.written, func(p string) bool { return !in.replaceable(p, all) })
+	})
+	// $TMPDIR stays for the program while it is writable where it leads.
+	if scratchTMPDIR {
+		r, _, _ := in.Stat(in.Env["TMPDIR"])
+		m := innermost(mounts, r)
+		tmpdir = m != nil && m.kind == write
+	}
 	return mounts, tmpdir
+}
+
+// replaceable is whether a sandboxed command of in could replace an entry
+// on the way to path, as the kernel walks it from / with each link followed
+// (in.Lstat): an entry in a folder the innermost of mounts (layout's,
+// parents first) leaves writable, /dev included, unless the sandbox mounts a
+// folder that is not writable there (a mount point, which the kernel keeps
+// where it is). A walk that ends on a missing entry is not: nothing is
+// bound there. One with too many links is.
+func (in Input) replaceable(path string, mounts []mount) bool {
+	open := func(dir string) bool {
+		if within(dir, []string{"/dev"}) {
+			return true
+		}
+		m := innermost(mounts, dir)
+		return m != nil && m.kind == write
+	}
+	pinned := func(p string) bool {
+		return slices.ContainsFunc(mounts, func(m mount) bool { return m.dir && m.kind != write && m.path == p })
+	}
+	sep := string(filepath.Separator)
+	todo := strings.Split(path, sep)
+	cur, links := sep, 0
+	for len(todo) > 0 {
+		part := todo[0]
+		todo = todo[1:]
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			cur = filepath.Dir(cur)
+			continue
+		}
+		next := filepath.Join(cur, part)
+		if open(cur) && !pinned(next) {
+			return true
+		}
+		target, isLink, ok := in.lstat(next)
+		if !ok {
+			return false
+		}
+		if !isLink {
+			cur = next
+			continue
+		}
+		if links++; links > maxLinks {
+			return true
+		}
+		if filepath.IsAbs(target) {
+			cur = sep
+		}
+		todo = append(strings.Split(target, sep), todo...)
+	}
+	return false
+}
+
+// lstat is in.Lstat, or with none what in.Stat says: a path whose real path
+// is another is a link to it, and one Stat does not find a plain entry (a
+// fake disk may name a folder without its parents; the walk ends on a
+// missing area all the same, as layout binds none).
+func (in Input) lstat(p string) (link string, isLink, ok bool) {
+	if in.Lstat != nil {
+		return in.Lstat(p)
+	}
+	real, _, ok := in.Stat(p)
+	if !ok {
+		return "", false, true
+	}
+	if real != p {
+		return real, true, true
+	}
+	return "", false, true
 }
 
 // writable are the real paths of what a sandboxed command may write outside
@@ -357,7 +461,9 @@ func writable(in Input) []string {
 // /dev/shm writable); no PID or network namespace is made, so /proc and
 // /sys are the machine's, read-only. Then every area (layout), each only
 // when it exists and at its real path: bubblewrap fails on a missing source,
-// and a symlinked path is bound where it leads. The areas are mounted
+// and a symlinked path is bound where it leads, but a writable area reached
+// through a folder a sandboxed command may write takes no mount of its own
+// (layout, L26). The areas are mounted
 // parents first, so where they nest the inner one decides: the telemetry
 // folder is writable inside the read-only share, Jhon's settings and a PATH
 // folder stay read-only inside a writable folder, a credential path stays
@@ -459,6 +565,23 @@ func ProjectFolder(folder string) (real string, ok bool) {
 	return real, true
 }
 
+// DiskLstat is Input.Lstat on this machine's disk.
+func DiskLstat(path string) (link string, isLink, ok bool) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return "", false, false
+	}
+	if fi.Mode()&os.ModeSymlink == 0 {
+		return "", false, true
+	}
+	link, err = os.Readlink(path)
+	if err != nil {
+		// A link that cannot be read is taken as one that leads anywhere.
+		return "/", true, true
+	}
+	return link, true, true
+}
+
 // Disk is Input.Stat on this machine's disk.
 func Disk(path string) (real string, dir, ok bool) {
 	real, err := filepath.EvalSymlinks(path)
@@ -509,15 +632,27 @@ func Current(cwd, pinned string) Input {
 	uid := strconv.Itoa(os.Getuid())
 	in := Input{
 		Cwd: cwd, Roots: append(repo.Roots(), workspace.DiskRoots(repo)...), CommonDir: repo.Common, Worktrees: repo.Worktrees(),
-		Tmp: project.TmpRoots(), Home: project.Realish(project.Home()), Env: map[string]string{},
+		Tmp: scratchRoots(), Home: project.Realish(project.Home()), Env: map[string]string{},
 		Path:          filepath.SplitList(os.Getenv("PATH")),
 		RuntimeDir:    "/run/user/" + uid,
 		SocketFolders: []string{"/tmp/tmux-" + uid, "/tmp/.X11-unix", "/tmp/.ICE-unix"},
 		Stat:          remembered(Disk),
+		Lstat:         DiskLstat,
 	}
 	for _, kv := range os.Environ() {
 		k, v, _ := strings.Cut(kv, "=")
 		in.Env[k] = v
 	}
 	return in
+}
+
+// scratchRoots are /tmp and $TMPDIR as written (absolute), not where their
+// links lead (L26): project.TmpRoots resolves them, and a $TMPDIR a command
+// replaced with a link would be bound where the link leads.
+func scratchRoots() []string {
+	out := []string{"/tmp"}
+	if t := os.Getenv("TMPDIR"); filepath.IsAbs(t) && filepath.Clean(t) != "/tmp" {
+		out = append(out, t)
+	}
+	return out
 }

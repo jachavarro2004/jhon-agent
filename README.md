@@ -202,13 +202,18 @@ created before the next sandboxed command starts, outside the sandbox, so
 you need not make it by hand: only under the home, with no link followed,
 never in or around a path the sandbox hides or keeps read-only (the
 credentials, Jhon's settings, state and releases, the runtimes' folders)
-and never a PATH folder or one that holds one; its parents stay read-only.
+and never a PATH folder or one that holds one, nor through a parent that
+breaks those rules; its parents stay read-only. A writable area named
+inside another one (an `allow_write` folder in the project or `/tmp`, a
+`$TMPDIR` or a cache a variable names under `/tmp`) gets no mount of its
+own, so a link a command left in its place never opens where it leads.
 `jhon sandbox status` says which ones the next command creates and why
 Jhon will not create any other. A command that fails on a read-only
 path ends with a note telling the agent to stop and name the path: whether
 it exists and why it is read-only, with the setting that opens it
 (`sandbox.allow_write`) or that none does (a PATH folder, Jhon's own files,
-a hidden path), and each run records a `jhon.sandbox`
+a hidden path, a file directly in the home, a path outside it), control
+characters in the path escaped, and each run records a `jhon.sandbox`
 telemetry event. Everything inside the sandbox sees `JHON_IN_SANDBOX=1`:
 `jhon sandbox status` run there, where no other sandbox can start, says it
 runs inside and that the status outside it gives the real state (`inside` and

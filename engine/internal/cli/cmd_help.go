@@ -369,8 +369,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            next sandboxed command, before the sandbox
                            starts, when it lies under the home, through no
                            link, and neither in nor around a path the
-                           sandbox hides or keeps read-only, nor on PATH;
-                           jhon sandbox status names any other with why;
+                           sandbox hides or keeps read-only, nor on PATH,
+                           and so does each folder made on the way; jhon
+                           sandbox status names any other with why;
                            sandbox.deploy_tools is the owner's deploy tools
                            (empty by default; for example aws,cdk,sam),
                            program names separated by commas, each bare (no
@@ -629,8 +630,20 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            /proc. $TMPDIR
                            is bound only under /tmp, /var/tmp, the home or a
                            sandbox.allow_write folder, and not inside a
-                           hidden folder or one of Jhon's; any other value
-                           becomes /tmp for the program. The project is
+                           hidden folder or one of Jhon's; any other value,
+                           and one not writable where its links lead,
+                           becomes /tmp for the program. A writable area
+                           (a sandbox.allow_write folder, $TMPDIR, a cache
+                           a variable names) reached through a folder a
+                           sandboxed command may write (inside the
+                           project, /tmp or another writable area) takes no
+                           mount of its own: it is writable there already,
+                           and a link a command put in its place is not
+                           bound where it leads (~/.bashrc); one reached
+                           only through folders no command can write is
+                           bound where its links lead (~/data -> /mnt/data),
+                           and so is one inside a folder the sandbox keeps
+                           read-only there (a PATH folder in a cache). The project is
                            read from the disk and no git runs:
                            core.worktree, config includes and GIT_*
                            variables are not followed, and a .git file or a
@@ -682,7 +695,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            them), a path the sandbox hides (no setting
                            opens it; whether it exists is not said), or a
                            folder the sandbox opens for writing (the file
-                           system itself refused it), and that is a stop:
+                           system itself refused it); a file directly in
+                           the home (~/.bashrc), the home itself and a path
+                           outside it get no setting: no setting should
+                           open them, and the owner decides; control
+                           characters in the path are written as \xHH or
+                           \uHHHH; and that is a stop:
                            tell the owner the path and why, never write it
                            elsewhere; a failure of a line that holds git
                            with a network subcommand or gh ends with one
@@ -801,8 +819,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            sandbox.allow_write folder does not exist and
                            no writable folder holds it: each folder,
                            create (the next sandboxed command creates it)
-                           and why Jhon will not, which the line also says
-                           (jhon doctor warns of each it will not create);
+                           and why Jhon will not, which the line also says,
+                           as when run itself would run nothing here (its
+                           reason and fix) (jhon doctor warns of each it
+                           will not create);
                            --project as for run; exit 0, 2 on a
                            usage error. Run inside Jhon's sandbox
                            (JHON_IN_SANDBOX=1), where another cannot
