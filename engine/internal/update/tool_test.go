@@ -802,3 +802,44 @@ func TestNewToolsIsHTTPSOnlyUnlessOverridden(t *testing.T) {
 		t.Fatalf("overridden: %q, https only %v", c.URL, c.HTTPSOnly)
 	}
 }
+
+// Focused re-verify probes (studio-integration-v1 L21, S5/A1): a link or a
+// folder swapped in during the install is left as it is.
+func TestHostileProgramSwapsTheLinkForALinkElsewhere(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	r, c, p := installed01(t, vs)
+	elsewhere := filepath.Join(t.TempDir(), "theirs")
+	os.WriteFile(elsewhere, []byte("theirs"), 0o755)
+	r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", hostile(t, "0.2.0", "rm -f '"+p.Link+"' && ln -s '"+elsewhere+"' '"+p.Link+"'"), "")}, r.releases...)
+	_, err := c.InstallTool(context.Background(), tool, p, "0.5.0", false)
+	if want := p.Link + " became a link to " + elsewhere + ", not jhon's link to a jhon-studio release, during the install; it was left as it is; nothing was changed"; err == nil || err.Error() != want {
+		t.Errorf("err = %v", err)
+	}
+	if l, _ := os.Readlink(p.Link); l != elsewhere {
+		t.Errorf("link %q", l)
+	}
+	if b, _ := os.ReadFile(elsewhere); string(b) != "theirs" {
+		t.Errorf("written through: %q", b)
+	}
+}
+
+func TestTheLinkSwappedForAFolderIsSwappedBack(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	r, c, p := installed01(t, vs)
+	r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", studioTar(t, "0.2.0", ""), "")}, r.releases...)
+	hookBeforeLink = func() {
+		os.Remove(p.Link)
+		os.Mkdir(p.Link, 0o755)
+		os.WriteFile(filepath.Join(p.Link, "keep"), []byte("k"), 0o644)
+	}
+	t.Cleanup(func() { hookBeforeLink = nil })
+	if _, err := c.InstallTool(context.Background(), tool, p, "0.5.0", false); err == nil || !strings.HasSuffix(err.Error(), "during the install; it was left as it is") {
+		t.Errorf("err = %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(p.Link, "keep")); string(b) != "k" {
+		t.Error("folder content lost")
+	}
+	if got := names(t, filepath.Dir(p.Link)); got != "jhon-studio" {
+		t.Errorf("bin: %s", got)
+	}
+}
