@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -302,6 +303,9 @@ func TestRepoAtPinsTheTopAndReadsOnlyItsOwnGitEntry(t *testing.T) {
 // carriage returns dropped and nothing else, so the common dir is the folder
 // git uses even when its name ends in white space, never a decoy beside it.
 func TestCommonOfKeepsTheWhiteSpaceGitKeeps(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows names no folder with white space at its end; the sandbox this guards runs on Linux")
+	}
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
