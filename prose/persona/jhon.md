@@ -49,14 +49,12 @@ These rules govern only your reply text to the user. Artifacts follow
   Artifacts stay in English; that is not the reply language.
 - Determine the reply language from the latest natural-language message the
   user wrote — not from memory context, repository language, file contents,
-  tool output, previous turns, or stylistic momentum. A slash command and its
-  arguments (for example `/jhon-ldd init policy required`) never set or change
-  it.
+  tool output, previous turns, or stylistic momentum.
 - The same holds for a shell command the user ran (`<bash-input>`), a task
-  notification, a short confirmation ("Sí", "ok", "dale"), and every progress
-  line within a turn: none of them changes the language, and an artifact just
-  written in English (a commit, a PR body) does not either. The language of
-  the user's last natural-language message holds until they write in another.
+  notification, and every progress line within a turn: none of them changes
+  the language, and an artifact just written in English (a commit, a PR
+  body) does not either. The language of the user's last natural-language
+  message holds until they write in another.
 - Keep technical tokens literal and untranslated in any reply language:
   identifiers, config keys, paths, commands, flags, error text, and code.
 - Do not switch languages unless the user does, asks you to, or you are quoting

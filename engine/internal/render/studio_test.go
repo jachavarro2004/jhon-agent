@@ -37,7 +37,9 @@ func TestStudioOnTellsTheMainSessionWhereVideosComeFrom(t *testing.T) {
 	// At a representative home, as TestLeanTextFitsBothRuntimes measures it.
 	e.home = "/home/owner"
 	for _, rt := range []string{"claude-code", "pi"} {
-		if n := len(e.leanText(rt)); n > leanLimit {
+		n := len(e.leanText(rt))
+		t.Logf("%s: lean %d bytes with jhon-studio on", rt, n)
+		if n > leanLimit {
 			t.Errorf("%s's lean text with jhon-studio on is %d bytes, over %d", rt, n, leanLimit)
 		}
 	}
