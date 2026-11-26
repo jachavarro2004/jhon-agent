@@ -6,6 +6,10 @@ All notable changes to Jhon are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The orchestrator keeps a live task list for multi-step work instead of calling it optional, so it agrees with `routing.md`, which already asked for one
+
 ### Added
 
 - `jhon executions forget <project> [--root <project>]` drops a uv-run pytest project's pytest-testmon record, and the worktree's own from before the shared one, so the next affected run builds it again, every test once (T255, odd/tasks/t255.md L1725). The whole record, not only its failed marks: a test that failed because a service was down recorded only the code it ran before failing, and trusting it as passing would select less.
