@@ -339,7 +339,11 @@ func (in Input) foldersProblem(folders []lineFolder) *Problem {
 		if p := in.dotDotProblem(f.written, f.strict); p != nil {
 			return changedFolder(f, p.Reason)
 		}
-		fd, err := openWritten(in.homedWritten(f.written))
+		open := openWritten
+		if f.clone {
+			open = openDeepest
+		}
+		fd, err := open(in.homedWritten(f.written))
 		if p := openat2Problem(err); p != nil {
 			return p
 		}
@@ -412,6 +416,44 @@ func (in Input) folderInRoot(f lineFolder, fd int, here syscall.Stat_t, roots ma
 	}
 	syscall.Close(cur)
 	return changedFolder(f, "it is not inside "+f.root+" on the disk")
+}
+
+// openDeepest opens the deepest leading part of path, absolute and as
+// written, that exists now: part by part from /, each opened as written
+// with no link followed (openWritten), stopping at the first that does not
+// exist (L1732 C2: a clone creates its missing folders under the last one
+// that exists, so that is the folder it writes in). A link on the way is
+// ELOOP, as any other error, never a stop.
+func openDeepest(path string) (int, error) {
+	parts := strings.Split(path, "/")
+	last := -1
+	for i := 1; i <= len(parts); i++ {
+		if i > 1 && parts[i-1] == "" {
+			continue
+		}
+		prefix := strings.Join(parts[:i], "/")
+		if prefix == "" {
+			prefix = "/"
+		}
+		fd, err := openWritten(prefix)
+		if errors.Is(err, syscall.ENOENT) {
+			break
+		}
+		if err != nil {
+			if last >= 0 {
+				syscall.Close(last)
+			}
+			return -1, err
+		}
+		if last >= 0 {
+			syscall.Close(last)
+		}
+		last = fd
+	}
+	if last < 0 {
+		return -1, syscall.ENOENT
+	}
+	return last, nil
 }
 
 // openWritten opens path, absolute, as the kernel reaches it as written

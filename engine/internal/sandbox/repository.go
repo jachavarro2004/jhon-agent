@@ -79,6 +79,13 @@ func (in Input) placeOf(command string, roots []string, zsh bool) (string, *Prob
 			if p := in.dotDotProblem(written, false); p != nil {
 				return "", p
 			}
+			// A link on the way stays a link once the line is in the
+			// registry, where every folder is opened with no link followed
+			// (LineFoldersProblem): say so here, where the profile is asked,
+			// with the real path (L1732 N2).
+			if p := in.linkedProblem(dir); p != nil {
+				return "", p
+			}
 			if top != "" {
 				return "", mixed(top, name)
 			}
@@ -102,7 +109,12 @@ func (in Input) placeOf(command string, roots []string, zsh bool) (string, *Prob
 		top = t
 		return t, nil
 	}
+	// The folder the process works in is a real path (getcwd), as the run
+	// reads it; a caller's link to it (Claude Code's cwd) is read the same.
 	cwd := in.Cwd
+	if filepath.IsAbs(cwd) {
+		cwd = realPath(cwd, in.Stat)
+	}
 	if dir, ok := leadingCd(command); ok {
 		if zsh && !filepath.IsAbs(dir) {
 			return "", &Problem{Reason: "zsh may take the relative folder " + dir + " of the leading cd from a cdpath", Fix: "name the folder by its absolute path, as in cd /path/to/repository && git fetch origin"}
@@ -127,6 +139,23 @@ func (in Input) placeOf(command string, roots []string, zsh bool) (string, *Prob
 		}
 		args := p.Argv[1:]
 		written, k := gitFolderWritten(args, cwd)
+		// Every -C of the chain is opened once the line is in the registry
+		// (LineFoldersProblem), the ones a later absolute -C leaves behind
+		// too: a link or a `..` after one there keeps the line inside now
+		// (L1732 N2), so profile and run agree.
+		chain := gitFolderChain(args, cwd)
+		for i, c := range chain {
+			if i == len(chain)-1 {
+				break // the folder git works in: enter judges it, with its own note
+			}
+			strict := !inProject(filepath.Clean(c)) && in.repositoryTop(filepath.Clean(c)) != ""
+			if p := in.dotDotProblem(c, strict); p != nil {
+				return "", p
+			}
+			if p := in.linkedProblem(filepath.Clean(c)); p != nil {
+				return "", p
+			}
+		}
 		root, problem := enter(written)
 		if problem != nil {
 			return "", problem
@@ -156,8 +185,62 @@ func (in Input) placeOf(command string, roots []string, zsh bool) (string, *Prob
 		if p := in.dotDotProblem(target, root != ""); p != nil {
 			return "", p
 		}
+		if p := in.linkedProblem(filepath.Clean(target)); p != nil {
+			return "", p
+		}
 	}
 	return top, nil
+}
+
+// gitFolderChain are the folders each -C of git's arguments names in turn,
+// started in cwd, as written (gitFolderWritten's steps).
+func gitFolderChain(args []string, cwd string) []string {
+	var out []string
+	dir := cwd
+	for k := 0; k < len(args) && strings.HasPrefix(args[k], "-"); k++ {
+		if args[k] == "-C" && k+1 < len(args) {
+			k++
+			if filepath.IsAbs(args[k]) {
+				dir = args[k]
+			} else {
+				dir = dir + "/" + args[k]
+			}
+			out = append(out, dir)
+		}
+	}
+	return out
+}
+
+// linkedProblem is why dir, a folder a line names (clean, as written), keeps
+// it in the sandbox for a link on its way (linkOn), nil when it has none:
+// the line runs outside only by paths with no link, and the fix names the
+// real path where a line naming it runs outside (realFix, L1732 N2).
+func (in Input) linkedProblem(dir string) *Problem {
+	p := in.homed(dir)
+	l := in.linkOn(p)
+	if l == "" {
+		return nil
+	}
+	return &Problem{Reason: dir + " is or passes through the link " + l + ", and a line outside the sandbox works in a folder only by a path with no link", Fix: in.realFix(realPath(p, in.Stat), "name its real path")}
+}
+
+// realFix is the fix of a line kept inside for a path that is not real:
+// lead (name its real path) with real, where a line naming real runs
+// outside (in the project, or in a repository repositoryAt counts), else to
+// run the line in a terminal, as no spelling of it runs outside (L1731).
+func (in Input) realFix(real, lead string) string {
+	roots := in.ownRoots()
+	var rr []string
+	for _, r := range roots {
+		rr = append(rr, realPath(r, in.Stat))
+	}
+	if within(realPath(real, in.Stat), rr) {
+		return lead + " (" + real + ") instead"
+	}
+	if _, p := in.repositoryAt(real, roots); p == nil {
+		return lead + " (" + real + ") instead"
+	}
+	return "it leads to " + real + ", which is neither in the project nor in a git repository a line outside the sandbox may work in, so run the line yourself in a terminal"
 }
 
 // gitFolderWritten is gitFolder with the folder as the shell and git reach
@@ -192,21 +275,7 @@ func (in Input) dotDotProblem(written string, strict bool) *Problem {
 	}
 	// The fix names the real path only where a line naming it runs outside
 	// (L1731).
-	fix := func(lead string) string {
-		real := in.physical(written)
-		roots := in.ownRoots()
-		var rr []string
-		for _, r := range roots {
-			rr = append(rr, realPath(r, in.Stat))
-		}
-		if within(realPath(real, in.Stat), rr) {
-			return lead + " (" + real + ") instead"
-		}
-		if _, p := in.repositoryAt(real, roots); p == nil {
-			return lead + " (" + real + ") instead"
-		}
-		return "it leads to " + real + ", which is neither in the project nor in a git repository a line outside the sandbox may work in, so run the line yourself in a terminal"
-	}
+	fix := func(lead string) string { return in.realFix(in.physical(written), lead) }
 	if strict {
 		return &Problem{Reason: written + " goes up with `..`, and a line outside the sandbox works in a repository only by a path with no `..` (git goes up from where a link on the way leads, not from the path as written)", Fix: fix("name its real path")}
 	}
@@ -302,7 +371,7 @@ func (in Input) repositoryAt(dir string, roots []string) (string, *Problem) {
 		return "set sandbox.allow_write to the real folder (" + real + ") instead of " + a + " (jhon settings set sandbox.allow_write <folders>,…)"
 	}
 	linked := func() *Problem {
-		return &Problem{Reason: dir + " is or passes through the link " + in.linkOn(p) + ", and a line outside the sandbox reaches a repository only by a path with no link", Fix: "name its real path (" + realPath(p, in.Stat) + ") instead"}
+		return &Problem{Reason: dir + " is or passes through the link " + in.linkOn(p) + ", and a line outside the sandbox reaches a repository only by a path with no link", Fix: in.realFix(realPath(p, in.Stat), "name its real path")}
 	}
 	allow, written := in.allowedFolder(p)
 	if allow == "" {

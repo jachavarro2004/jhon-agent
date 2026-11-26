@@ -202,6 +202,10 @@ func sandboxRun(argv []string) (int, error) {
 				fmt.Fprintln(os.Stderr, refused)
 				return sandboxRefused, nil
 			}
+			// From here on nothing reads a fact remembered before the
+			// registry (Input.Fresh, L1732): a sandboxed command could still
+			// change the disk then.
+			in = in.Fresh()
 			path := os.Getenv("PATH")
 			os.Setenv("PATH", sandbox.OutsidePath(in))
 			// Every folder the line writes or works in, which the checks

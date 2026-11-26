@@ -63,7 +63,7 @@ func TestT251YEveryFolderOfTheLineIsAnchored(t *testing.T) {
 	if err := os.Symlink(base, filepath.Join(b, "sub")); err != nil {
 		t.Fatal(err)
 	}
-	if p := run(proj, "git -C "+b+" clone https://h/o/r sub/newc", b); p == nil || !strings.HasPrefix(p.Reason, "the folder "+b+"/sub, where git clone writes, changed after Jhon read it: it is or passes through a link now") {
+	if p := run(proj, "git -C "+b+" clone https://h/o/r sub/newc", b); p == nil || !strings.HasPrefix(p.Reason, "the folder git clone writes "+b+"/sub/newc in changed after Jhon read it: it is or passes through a link now") {
 		t.Errorf("a clone's folder swapped for a link: %v", p)
 	}
 	// A -C that does not exist is git's to refuse.

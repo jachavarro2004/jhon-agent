@@ -54,3 +54,30 @@ func TestT251YRepositoryGitProblemGivesTheFixOfItsReason(t *testing.T) {
 		t.Errorf("a planted link: %+v", p)
 	}
 }
+
+// L1732: repositoryGitProblem runs after the registry, so it never asks the
+// Stat or Lstat its caller built before it (a remembered Disk): it takes
+// its Input through Fresh.
+func TestT251ZRepositoryGitProblemReadsTheDiskAnew(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("skipped: no git")
+	}
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	proj := filepath.Join(base, "project")
+	if out, err := exec.Command("git", "init", "-q", proj).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	in := sandbox.Current(proj, proj)
+	asked := 0
+	in.Stat = func(string) (string, bool, bool) { asked++; return "", false, false }
+	in.Lstat = func(string) (string, bool, bool) { asked++; return "", false, false }
+	if p := repositoryGitProblem(in, "git fetch origin", nil, ""); p != nil {
+		t.Errorf("a clean project: %+v", p)
+	}
+	if asked != 0 {
+		t.Errorf("repositoryGitProblem asked its caller's Stat or Lstat %d times; want none (Fresh)", asked)
+	}
+}
