@@ -422,7 +422,11 @@ func TestAskUnpackedSaysWhatItSaidBefore(t *testing.T) {
 		}
 	}
 	out := filepath.Join(t.TempDir(), "o")
-	program, home := unpackedAt(t, "#!/bin/sh\ntr '\\0' '\\n' < /proc/$$/environ > '"+out+"_vars'\n"+
+	// The answer pipe is read first, in a child (the shell's own stdout is
+	// untouched there): dash keeps the stdout a redirection replaces at fd
+	// 10 or above, which is that same pipe, not one handed down.
+	program, home := unpackedAt(t, "#!/bin/sh\ns=$(readlink /proc/$$/fd/1)\necho \"$s\" > '"+out+"_stdout'\n"+
+		"tr '\\0' '\\n' < /proc/$$/environ > '"+out+"_vars'\n"+
 		"ls -l /proc/$$/fd > '"+out+"_fds'\necho '"+answer+"'\n", 0o755)
 	if _, err := AskUnpacked(cliFixture, program, home); err != nil {
 		t.Fatal(err)
@@ -431,11 +435,12 @@ func TestAskUnpackedSaysWhatItSaidBefore(t *testing.T) {
 		t.Errorf("the helper's marker reached the program: %q", e)
 	}
 	fds, _ := os.ReadFile(out + "_fds")
+	stdout, _ := os.ReadFile(out + "_stdout")
 	// ls (a child; the shell's own descriptors are as the program got
 	// them) lists "... <fd> -> <target>": a pipe only at stdout.
 	for _, l := range strings.Split(strings.TrimSpace(string(fds)), "\n") {
 		f := strings.Fields(l)
-		if len(f) > 2 && f[len(f)-2] == "->" && strings.HasPrefix(f[len(f)-1], "pipe:") && f[len(f)-3] != "1" {
+		if len(f) > 2 && f[len(f)-2] == "->" && strings.HasPrefix(f[len(f)-1], "pipe:") && f[len(f)-3] != "1" && f[len(f)-1] != strings.TrimSpace(string(stdout)) {
 			t.Errorf("the program holds a pipe at fd %s: %q", f[len(f)-3], fds)
 		}
 	}
