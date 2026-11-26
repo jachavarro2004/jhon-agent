@@ -154,12 +154,12 @@ func sshRunsCommands(w []string) ([]*Command, error) {
 }
 
 // ForwardCommand is whether v, a command an ssh transport runs on this
-// machine, is one plain forward to the host it connects to (T228 L12): a
-// single simple command (no `;`, `&&`, `||`, `|`, `&`, subshell,
-// substitution, assignment or redirection but to /dev/null or a
-// descriptor) that names %h or %p; ssh or autossh only as a forward with no
-// command of its own run on the far side (-W, -J, or a remote command that
-// is exactly nc, ncat or socat to %h and %p).
+// machine, is one plain forward to the host it connects to (T228 L12, L14):
+// a single simple command (no `;`, `&&`, `||`, `|`, `&`, subshell,
+// substitution, expansion, assignment or redirection but to /dev/null or a
+// descriptor) that names %h or %p and is one of a named list of forwarders,
+// each with only its forwarding options (forwarder). Any other program is
+// no forward and keeps its ordinary judgement.
 func ForwardCommand(v string) bool {
 	if !strings.Contains(v, "%h") && !strings.Contains(v, "%p") {
 		return false
@@ -190,20 +190,55 @@ func ForwardCommand(v string) bool {
 	if !plain || err != nil || len(cmds) != 1 {
 		return false
 	}
-	w := cmds[0].Words
-	switch Base(w[0]) {
-	case "ssh", "autossh":
-		return sshForward(w)
-	}
-	return true
+	return forwarder(cmds[0].Words, true)
 }
 
+// forwarder is whether w is one of the named forwarders, with only its
+// forwarding options: ssh or autossh with -W (sshForward); nc or ncat to
+// exactly %h and %p (ncForward); socat between standard input and
+// TCP:%h:%p or PROXY:…:%h:%p (socatForward); cloudflared access ssh,
+// corkscrew, connect-proxy and proxytunnel; and aws ssm start-session with
+// no document or an SSH or port-forwarding one (SSMConnection). local is
+// set for a command run on this machine; ssh's remote command is not one.
+func forwarder(w []string, local bool) bool {
+	switch Base(w[0]) {
+	case "ssh", "autossh":
+		return local && sshForward(w)
+	case "nc", "ncat", "netcat":
+		return ncForward(w)
+	case "socat":
+		return socatForward(w)
+	case "cloudflared":
+		return local && at(w, 1) == "access" && at(w, 2) == "ssh"
+	case "corkscrew", "connect-proxy", "proxytunnel":
+		return local
+	case "aws":
+		return local && at(w, 1) == "ssm" && at(w, 2) == "start-session" && SSMConnection(w[3:])
+	}
+	return false
+}
+
+// sshForwardFlags are ssh's options a forward may carry: none of them
+// tunnels, listens, forwards the agent or X, reads a config file, takes a
+// terminal or runs a command (-R -L -D -A -F -t -X -Y are not here).
+const sshForwardFlags = "piloqv46CTNWJM"
+
+// sshForwardDenied are the -o keys a forward may not carry: a command, a
+// tunnel or a forward, the agent, X, the environment, a provider library.
+var sshForwardDenied = set("proxycommand", "localcommand", "knownhostscommand", "permitlocalcommand", "remotecommand",
+	"remoteforward", "localforward", "dynamicforward", "forwardagent", "forwardx11", "forwardx11trusted", "forwardx11timeout",
+	"sendenv", "setenv", "tunnel", "tunneldevice", "pkcs11provider", "securitykeyprovider", "xauthlocation", "identityagent",
+	"addkeystoagent", "requesttty", "sessiontype", "stdinnull", "forkafterauthentication", "exitonforwardfailure",
+	"clearallforwardings", "gatewayports", "streamlocalbindunlink", "streamlocalbindmask", "permitremoteopen", "include", "match")
+
 // sshForward is whether w, an ssh or autossh command line, only forwards:
-// -W to %h or %p, or -J with no remote command, or a remote command that
-// is exactly nc, ncat or socat naming %h and %p.
+// -W to %h or %p (with -J for a jump host), only sshForwardFlags and -o keys
+// outside sshForwardDenied, and no remote command but exactly nc, ncat or
+// socat to %h and %p (with no -W, no -J).
 func sshForward(w []string) bool {
 	spec := sshGetopt["ssh"]
-	if Base(w[0]) == "autossh" {
+	autossh := Base(w[0]) == "autossh"
+	if autossh {
 		spec = "M:" + strings.Replace(spec, "M", "", 1)
 	}
 	takes := func(c byte) bool {
@@ -229,7 +264,11 @@ func sshForward(w []string) bool {
 			break
 		}
 		for i := 1; i < len(a); i++ {
-			if !takes(a[i]) {
+			c := a[i]
+			if !strings.ContainsRune(sshForwardFlags, rune(c)) || c == 'M' && !autossh {
+				return false
+			}
+			if !takes(c) {
 				continue
 			}
 			v := a[i+1:]
@@ -237,26 +276,127 @@ func sshForward(w []string) bool {
 				k++
 				v = at(w, k)
 			}
-			switch a[i] {
+			switch c {
 			case 'W':
 				forwardW = strings.Contains(v, "%h") || strings.Contains(v, "%p")
+				if !forwardW {
+					return false
+				}
 			case 'J':
 				jump = true
+			case 'o':
+				key, _ := sshKeyword(v)
+				if sshForwardDenied[key] {
+					return false
+				}
+				jump = jump || key == "proxyjump"
 			}
 			break
 		}
 	}
 	command := operands[min(1, len(operands)):]
 	switch {
-	case len(command) == 0:
-		return forwardW || jump
 	case forwardW:
+		return len(command) == 0
+	case jump || len(command) == 0:
 		return false
 	}
-	name := Base(command[0])
-	if name != "nc" && name != "ncat" && name != "socat" {
+	return forwarder(command, false)
+}
+
+// ncForward is whether w, nc or ncat, connects to exactly %h and %p with
+// only proxy and timeout options (-w -X -x -G -q, ncat's --proxy and
+// --proxy-type, -4 -6 -n -v): never -e, -c, --exec, --sh-exec,
+// --lua-exec, a listener or -k.
+func ncForward(w []string) bool {
+	valued := set("-w", "-X", "-x", "-G", "-q", "--proxy", "--proxy-type", "--proxy-auth", "--wait")
+	flags := set("-4", "-6", "-n", "-v", "-vv")
+	var operands []string
+	for k := 1; k < len(w); k++ {
+		a := w[k]
+		n, _, eq := strings.Cut(a, "=")
+		switch {
+		case valued[n] && strings.HasPrefix(n, "--") && eq:
+		case valued[a]:
+			k++
+		case len(a) > 2 && a[0] == '-' && a[1] != '-' && valued[a[:2]]:
+		case flags[a]:
+		case strings.HasPrefix(a, "-"):
+			return false
+		default:
+			operands = append(operands, a)
+		}
+	}
+	return len(operands) == 2 && (operands[0] == "%h" && operands[1] == "%p" || operands[0] == "%p" && operands[1] == "%h")
+}
+
+// socatForward is whether w is socat between standard input (`-`, STDIO,
+// STDIN) and TCP:%h:%p, TCP4:, TCP6: or PROXY:<proxy>:%h:%p with proxy
+// options only: never EXEC:, SYSTEM:, exec=, a listener, pty or fork.
+func socatForward(w []string) bool {
+	var addrs []string
+	for _, a := range w[1:] {
+		switch {
+		case a == "-d" || a == "-dd" || a == "-ddd" || a == "-v" || a == "-u" || a == "-U":
+		case strings.HasPrefix(a, "-") && a != "-":
+			return false
+		default:
+			addrs = append(addrs, a)
+		}
+	}
+	if len(addrs) != 2 {
 		return false
 	}
-	text := strings.Join(command[1:], " ")
-	return strings.Contains(text, "%h") && strings.Contains(text, "%p")
+	stdio := func(a string) bool {
+		u := strings.ToUpper(a)
+		return a == "-" || u == "STDIO" || u == "STDIN" || u == "STDOUT"
+	}
+	tcp := func(a string) bool {
+		head, opts, _ := strings.Cut(a, ",")
+		u := strings.ToUpper(head)
+		target := ""
+		switch {
+		case strings.HasPrefix(u, "TCP:") || strings.HasPrefix(u, "TCP4:") || strings.HasPrefix(u, "TCP6:"):
+			target = head[strings.IndexByte(head, ':')+1:]
+			if opts != "" {
+				return false
+			}
+		case strings.HasPrefix(u, "PROXY:"):
+			parts := strings.Split(head, ":")
+			if len(parts) != 4 {
+				return false
+			}
+			target = parts[2] + ":" + parts[3]
+			for _, o := range strings.Split(opts, ",") {
+				if n, _, _ := strings.Cut(o, "="); o != "" && n != "proxyport" && n != "proxyauth" && n != "resolve" {
+					return false
+				}
+			}
+		default:
+			return false
+		}
+		return target == "%h:%p"
+	}
+	return stdio(addrs[0]) && tcp(addrs[1]) || tcp(addrs[0]) && stdio(addrs[1])
+}
+
+// ssmConnectionDocuments are the SSM session documents that only connect:
+// a shell-less SSH session and the port forwards.
+var ssmConnectionDocuments = set("AWS-StartSSHSession", "AWS-StartPortForwardingSession", "AWS-StartPortForwardingSessionToRemoteHost")
+
+// SSMConnection is whether aws ssm start-session's arguments args name no
+// document, or one of ssmConnectionDocuments (T228 L14): a session that
+// only connects, as ssh does. Any other document (AWS-StartInteractiveCommand,
+// AWS-StartNonInteractiveCommand, one that runs a shell script, a custom
+// one) runs a command.
+func SSMConnection(args []string) bool {
+	for k, a := range args {
+		switch {
+		case a == "--document-name":
+			return ssmConnectionDocuments[at(args, k+1)]
+		case strings.HasPrefix(a, "--document-name="):
+			return ssmConnectionDocuments[a[len("--document-name="):]]
+		}
+	}
+	return true
 }

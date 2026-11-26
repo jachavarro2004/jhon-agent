@@ -35,7 +35,7 @@ func TestT228L12TransportIsOnlyAForward(t *testing.T) {
 	for _, c := range []string{
 		`GIT_SSH_COMMAND='ssh -o ProxyCommand="ssh -W %h:%p bastion"' git fetch`,
 		`GIT_SSH_COMMAND="ssh -o ProxyCommand='aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p'" git fetch`,
-		`GIT_SSH_COMMAND='ssh -o ProxyCommand="ssh -J jump %h"' git fetch`,
+		`GIT_SSH_COMMAND='ssh -o ProxyCommand="ssh -J jump -W %h:%p bastion"' git fetch`,
 		`GIT_SSH_COMMAND='ssh -o ProxyCommand="ssh bastion nc %h %p"' git fetch`,
 		`GIT_SSH_COMMAND='ssh -o ProxyCommand="autossh -M 0 -W %h:%p bastion"' git fetch`,
 		`GIT_SSH_COMMAND='ssh -o ProxyCommand="ssh -W %h:%p bastion 2>/dev/null"' git fetch`,

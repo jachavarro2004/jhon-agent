@@ -1719,3 +1719,28 @@ verifiers.tsv:441	safety-guard	allow	ask	hole T228 L12 (found in review of the t
 verifiers.tsv:442	safety-guard	allow	ask	hole T228 L12 (found in review of the transport rule): an ssh ProxyCommand that runs a command on the far side is no forward
 verifiers.tsv:443	safety-guard	allow	ask	hole T228 L12 (found in review of the transport rule): a chained deploy before the forward
 verifiers.tsv:444	safety-guard	allow	ask	hole T228 L12 (found in review of the transport rule): a chained request after the forward
+verifiers.tsv:448	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F1: a forward that also tunnels back is no forward
+verifiers.tsv:449	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F1: a forward that also listens is no forward
+verifiers.tsv:450	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F1: a forward that also opens a SOCKS listener is no forward
+verifiers.tsv:451	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F1: a forward that forwards the agent is no forward
+verifiers.tsv:452	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F1: a forward that reads a config file is no forward
+verifiers.tsv:453	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F1: a forward that takes a terminal is no forward
+verifiers.tsv:454	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F1: a forward that runs a LocalCommand is no forward
+verifiers.tsv:455	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F1: a forward that sends the environment is no forward
+verifiers.tsv:456	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F1: -J with no -W is a session, no forward
+verifiers.tsv:457	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F1: autossh is ssh; a tunnel back is no forward
+verifiers.tsv:458	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F2: nc -e on the far side executes
+verifiers.tsv:459	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F2: ncat --sh-exec on the far side executes
+verifiers.tsv:460	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F2: socat EXEC: on the far side executes
+verifiers.tsv:461	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F3: curl naming %h is no forward
+verifiers.tsv:462	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F3: rsync naming %h is no forward
+verifiers.tsv:463	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F3: scp naming %h is no forward
+verifiers.tsv:464	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F3: wget naming %h is no forward
+verifiers.tsv:465	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F3: telnet is no named forwarder
+verifiers.tsv:466	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F4: an SSM session that runs a command is a deploy
+verifiers.tsv:467	safety-guard	allow	ask	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 F4: a custom SSM document is a deploy
+verifiers.tsv:470	safety-guard	allow	refuse	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 blocker: socat EXEC: runs its command
+verifiers.tsv:471	safety-guard	allow	refuse	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 blocker: socat SYSTEM: runs its command
+verifiers.tsv:472	safety-guard	allow	refuse	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 blocker: socat EXEC: with options runs its command
+verifiers.tsv:473	safety-guard	allow	refuse	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 blocker: nc -c runs its command
+verifiers.tsv:474	safety-guard	allow	refuse	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 blocker: ncat --sh-exec runs its command

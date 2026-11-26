@@ -29,7 +29,7 @@ func TestForwardMarks(t *testing.T) {
 		`GIT_SSH_COMMAND='ssh -o ProxyCommand="ssh -W %h:%p b"' git fetch`:                    "ssh",
 		`git -c core.sshCommand='ssh -o ProxyCommand="nc %h %p"' fetch`:                       "nc",
 		`GIT_SSH_COMMAND='ssh -o ProxyCommand="ssh b nc %h %p"' git fetch`:                    "ssh",
-		`GIT_SSH_COMMAND='ssh -o ProxyCommand="ssh -J j %h"' git fetch`:                       "ssh",
+		`GIT_SSH_COMMAND='ssh -o ProxyCommand="ssh -J j -W %h:%p b"' git fetch`:               "ssh",
 		`GIT_SSH_COMMAND='ssh -o ProxyCommand="aws ssm start-session --target %h"' git fetch`: "aws",
 	} {
 		if got := marked(src); len(got) != 1 || got[0] != want {
@@ -43,7 +43,7 @@ func TestForwardMarks(t *testing.T) {
 		}
 	}
 	for v, want := range map[string]bool{
-		"ssh -W %h:%p bastion": true, "ssh -W %h:%p bastion 2>/dev/null": true, "autossh -M 0 -W %h:%p b": true, "ssh -qJ j %h": true,
+		"ssh -W %h:%p bastion": true, "ssh -W %h:%p bastion 2>/dev/null": true, "autossh -M 0 -W %h:%p b": true, "ssh -qJ j -W %h:%p b": true, "ssh -qJ j %h": false,
 		"ssh b ncat %h %p": true, "cloudflared access ssh --hostname %h": true, "nc %h %p": true,
 		"ssh b": false, "ssh b uptime %h": false, "ssh -W %h:%p b; x": false, "ssh -W %h:%p b > log": false, "ssh -W %h:%p $(b)": false,
 		"ssh -W %h:%p b &": false, "a %h | b": false, "ssh -W %h:%p b nc %h %p": false, "ssh b nc %h": false, "X=1 nc %h %p": false,
