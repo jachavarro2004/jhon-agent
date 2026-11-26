@@ -115,6 +115,17 @@ func UnsandboxedEnv(env []string, helpers [][2]string, gate ...[2]string) []stri
 // (L33, L39), so none is kept. The owner's keys (system, global, command)
 // are not judged.
 func RepositoryGitConfig(listing string, forced [][2]string) string {
+	if p := RepositoryGitConfigKept(listing, forced); p != nil {
+		return p.Reason
+	}
+	return ""
+}
+
+// RepositoryGitConfigKept is RepositoryGitConfig as the problem a kept
+// line's note gives, its fix chosen by the key (L1731 N1): a submodule's
+// core.worktree is run where it belongs; any other key may have been put
+// there by a sandboxed command.
+func RepositoryGitConfigKept(listing string, forced [][2]string) *Problem {
 	fields := strings.Split(listing, "\x00")
 	for i := 0; i+1 < len(fields); i += 2 {
 		scope := fields[i]
@@ -124,14 +135,14 @@ func RepositoryGitConfig(listing string, forced [][2]string) string {
 			continue
 		}
 		if key == "core.worktree" {
-			return "the repository's configuration sets core.worktree (as a submodule's does), which may put the files git writes outside the repository"
+			return &Problem{Reason: "the repository's configuration sets core.worktree (as a submodule's does), which may put the files git writes outside the repository", Fix: "run the line in the repository that holds it (a submodule's superproject), or yourself in a terminal"}
 		}
 		if safeRepositoryKey(key, value) || slices.ContainsFunc(forced, func(e [2]string) bool { return strings.EqualFold(e[0], key) && e[1] == value }) {
 			continue
 		}
-		return "the repository's configuration sets " + key + ", which is not among the keys a git line runs outside the sandbox with"
+		return &Problem{Reason: "the repository's configuration sets " + key + ", which is not among the keys a git line runs outside the sandbox with", Fix: plantedFix}
 	}
-	return ""
+	return nil
 }
 
 // safeRepositoryKey is whether key, as git lists it (section and name in

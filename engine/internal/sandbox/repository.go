@@ -9,7 +9,7 @@ package sandbox
 // so such a repository counts as a project for them: the line runs outside
 // with every check the project's lines get (the repository's git keys and
 // the walk of its git folders, the clean PATH, the registry's reverse rule)
-// and the path anchors of T248 (RepositoryProblem, CwdProblem). Nothing
+// and the path anchors of T248 (LineFoldersProblem). Nothing
 // beyond what the owner already made writable runs outside: the repository
 // must lie in a sandbox.allow_write folder the sandbox opens for writing,
 // named with no link and no `..` on the way (L1729 B1: git follows a link
@@ -190,8 +190,25 @@ func (in Input) dotDotProblem(written string, strict bool) *Problem {
 	if !hasDotDot(parts) {
 		return nil
 	}
+	// The fix names the real path only where a line naming it runs outside
+	// (L1731).
+	fix := func(lead string) string {
+		real := in.physical(written)
+		roots := in.ownRoots()
+		var rr []string
+		for _, r := range roots {
+			rr = append(rr, realPath(r, in.Stat))
+		}
+		if within(realPath(real, in.Stat), rr) {
+			return lead + " (" + real + ") instead"
+		}
+		if _, p := in.repositoryAt(real, roots); p == nil {
+			return lead + " (" + real + ") instead"
+		}
+		return "it leads to " + real + ", which is neither in the project nor in a git repository a line outside the sandbox may work in, so run the line yourself in a terminal"
+	}
 	if strict {
-		return &Problem{Reason: written + " goes up with `..`, and a line outside the sandbox works in a repository only by a path with no `..` (git goes up from where a link on the way leads, not from the path as written)", Fix: "name its real path (" + in.physical(written) + ") instead"}
+		return &Problem{Reason: written + " goes up with `..`, and a line outside the sandbox works in a repository only by a path with no `..` (git goes up from where a link on the way leads, not from the path as written)", Fix: fix("name its real path")}
 	}
 	cur, link := "/", ""
 	for _, part := range parts {
@@ -200,8 +217,7 @@ func (in Input) dotDotProblem(written string, strict bool) *Problem {
 			continue
 		case "..":
 			if link != "" {
-				real := in.physical(written)
-				return &Problem{Reason: written + " goes up with `..` after the link " + link + ", so git would work in " + real + ", not where the path says", Fix: "name the real path (" + real + ") instead"}
+				return &Problem{Reason: written + " goes up with `..` after the link " + link + ", so git would work in " + in.physical(written) + ", not where the path says", Fix: fix("name the real path")}
 			}
 			cur = filepath.Dir(cur)
 			continue
@@ -308,9 +324,15 @@ func (in Input) repositoryAt(dir string, roots []string) (string, *Problem) {
 		if len(roots) > 0 {
 			where = "the project (" + roots[0] + ")"
 		}
+		fix := "run the line in a session of that repository (jhon start there), add a folder that holds the repository to sandbox.allow_write (jhon settings set sandbox.allow_write <folder>,…) if sandboxed commands may write it, or run the line yourself in a terminal"
+		// Settings that cannot be read ("~" alone in sandbox.allow_write)
+		// give no allowed folder at all, and say so (L1731).
+		if in.SettingsProblem != "" {
+			fix += "; sandbox.allow_write counts for nothing now, as the settings cannot be read: " + in.SettingsProblem
+		}
 		return "", &Problem{
 			Reason: dir + " is neither in " + where + " nor in a git repository inside a sandbox.allow_write folder",
-			Fix:    "run the line in a session of that repository (jhon start there), add a folder that holds the repository to sandbox.allow_write (jhon settings set sandbox.allow_write <folder>,…) if sandboxed commands may write it, or run the line yourself in a terminal",
+			Fix:    fix,
 		}
 	}
 	if l := in.linkOn(allow); l != "" {
@@ -352,8 +374,68 @@ func (in Input) allowedFolder(p string) (allow, written string) {
 // has its git folders inside top, walked as the project's are; any other
 // dir is judged against the project's own folders.
 func (in Input) LineGitFolderProblem(top, dir, gitDir, commonDir string) string {
-	if top != "" && project.Within(in.homed(filepath.Clean(dir)), top) {
-		return gitFolderWalk(gitDir, commonDir, []string{top}, "the repository "+top)
+	if p := in.LineGitFolderKept(top, dir, gitDir, commonDir); p != nil {
+		return p.Reason
 	}
-	return in.GitFolderProblem(gitDir, commonDir)
+	return ""
+}
+
+// Fixes of a kept line's note, chosen by the problem's identity (L1731 N1).
+const (
+	plantedFix   = "remove that from the repository (a sandboxed command may have put it there), or run the line yourself in a terminal"
+	elsewhereFix = "if it is a worktree or a submodule of a repository elsewhere, run the line in that repository's own session; otherwise remove the .git file that points there (a sandboxed command may have put it there); or run the line yourself in a terminal"
+	terminalFix  = "run the line yourself in a terminal"
+)
+
+// LineGitFolderKept is LineGitFolderProblem as the problem a kept line's
+// note gives, its fix chosen by what the walk found (L1731 N1): what a
+// sandboxed command may have planted is removed; a git folder outside the
+// folder's repository is a worktree's or a submodule's elsewhere, unless
+// dir itself lies outside both the project and top, which is said as
+// repositoryAt says it (neither the project nor in an allowed repository,
+// or a repository of sandbox.allow_write that is not the one the line's
+// git works in); a walk past its limit or a folder that cannot be read is
+// the owner's to run.
+func (in Input) LineGitFolderKept(top, dir, gitDir, commonDir string) *Problem {
+	d := in.homed(filepath.Clean(dir))
+	inTop := top != "" && project.Within(d, top)
+	var why string
+	var kind int
+	if inTop {
+		why, kind = gitFolderWalk(gitDir, commonDir, []string{top}, "the repository "+top)
+	} else {
+		var own []string
+		for _, p := range in.ownFolders() {
+			own = append(own, realPath(p, in.Stat))
+		}
+		why, kind = gitFolderWalk(gitDir, commonDir, own, "the project")
+	}
+	switch kind {
+	case walkFine:
+		return nil
+	case walkPlanted:
+		return &Problem{Reason: why, Fix: plantedFix}
+	case walkElsewhere:
+		roots := in.ownRoots()
+		var real []string
+		for _, r := range roots {
+			real = append(real, realPath(r, in.Stat))
+		}
+		if inTop || within(realPath(d, in.Stat), real) {
+			return &Problem{Reason: why, Fix: elsewhereFix}
+		}
+		t, p := in.repositoryAt(d, roots)
+		if p != nil {
+			return p
+		}
+		name := "the project"
+		if len(roots) > 0 {
+			name = "the project (" + roots[0] + ")"
+		}
+		if top != "" {
+			name = "the repository " + top
+		}
+		return &Problem{Reason: "the line runs in " + dir + ", in the repository " + t + " of sandbox.allow_write, while its git works in " + name + ", and a line runs outside the sandbox in one repository only", Fix: "run the line from the folder its git works in, or name one repository on it"}
+	}
+	return &Problem{Reason: why, Fix: terminalFix}
 }

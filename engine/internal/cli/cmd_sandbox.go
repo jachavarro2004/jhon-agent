@@ -185,7 +185,7 @@ func sandboxRun(argv []string) (int, error) {
 		// A git repository inside a sandbox.allow_write folder counts as the
 		// project (sandbox.Outside, T251, L1722): its line runs outside with
 		// the same checks, its anchors once in the registry
-		// (Input.RepositoryProblem), and its own merge gate.
+		// (Input.LineFoldersProblem), and its own merge gate.
 		in := sandboxInput(pinned)
 		in.ProjectFrom = "."
 		if pinned != "" {
@@ -204,21 +204,17 @@ func sandboxRun(argv []string) (int, error) {
 			}
 			path := os.Getenv("PATH")
 			os.Setenv("PATH", sandbox.OutsidePath(in))
-			kept = in.RepositoryProblem(top, program[2])
-			if kept == nil {
-				// The folder the line runs in, which the checks read by its
-				// path (L1729 B2), for the project's lines too.
-				kept = in.CwdProblem(top)
-			}
+			// Every folder the line writes or works in, which the checks
+			// read by its path, is anchored now that nothing moves it
+			// (L1729 B2, L1731), for the project's lines too.
+			kept = in.LineFoldersProblem(program[2], top)
 			var gate [][2]string
 			if kept == nil {
 				gate = mergeGateEntries(pinned)
 				if top != "" {
 					gate = mergeGateEntries(top)
 				}
-				if why := repositoryGitProblem(in, program[2], gate, top); why != "" {
-					kept = &sandbox.Problem{Reason: why, Fix: repositoryGitFix(why)}
-				}
+				kept = repositoryGitProblem(in, program[2], gate, top)
 			}
 			if kept == nil {
 				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), gate...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil, nil, nil)
@@ -302,7 +298,7 @@ func sandboxRun(argv []string) (int, error) {
 		}
 		defer started.Close()
 	}
-	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), bound.Command(program)...), env, profile, sandbox.DeliveryNoteAt(sandbox.ThisHost(), in, program, kept), sandbox.DeployNote(program, in.DeployTools), refusal, bound, started)
+	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), bound.Command(program)...), env, profile, sandbox.DeliveryNoteAt(sandbox.ThisHost(), in, program, kept), sandbox.DeployNoteAt(sandbox.ThisHost(), in, program, kept), refusal, bound, started)
 	bound.Close()
 	leave()
 	return code, err
@@ -439,6 +435,11 @@ func sandboxInput(pinned string) sandbox.Input {
 func sandboxInputAt(dir, pinned string) sandbox.Input {
 	in := sandbox.Current(dir, pinned)
 	in.AllowWrite = settings.Paths("sandbox.allow_write")
+	// Settings that cannot be read give no folder: a kept line's note says
+	// why (L1731).
+	if _, err := settings.Load(settings.Path(), os.LookupEnv); err != nil {
+		in.SettingsProblem = err.Error()
+	}
 	in.DeployTools = settings.Names("sandbox.deploy_tools")
 	in.Protected = []string{settings.Path(), filepath.Dir(grant.Dir())}
 	if os.Getenv("JHON_SETTINGS") == "" {

@@ -1,24 +1,56 @@
 package cli
 
-import "testing"
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
 
-// L1729: the fix of a line repositoryGitProblem kept inside says a
-// sandboxed command may have put the problem there only where one could
-// have: not for a worktree's or submodule's git folder elsewhere, a
-// submodule's core.worktree, or a walk past its limit.
-func TestT251XRepositoryGitFixFitsTheReason(t *testing.T) {
-	planted := "remove that from the repository (a sandboxed command may have put it there), or run the line yourself in a terminal"
-	for why, want := range map[string]string{
-		"/r/.git/FETCH_HEAD in the repository's git folder is a link, which git would write through":                                           planted,
-		"the repository's configuration sets http.cookiefile, which is not among the keys a git line runs outside the sandbox with":            planted,
-		"the repository's git folders hold more than 200000 entries":                                                                           "run the line yourself in a terminal",
-		"the repository's git folder /r/main/.git/worktrees/w is not in the repository /r/w":                                                   "if it is a worktree or a submodule of a repository elsewhere, run the line in that repository's own session; otherwise remove the .git file that points there (a sandboxed command may have put it there); or run the line yourself in a terminal",
-		"the repository's git folder /p/.git/modules/s is not in the project":                                                                  "if it is a worktree or a submodule of a repository elsewhere, run the line in that repository's own session; otherwise remove the .git file that points there (a sandboxed command may have put it there); or run the line yourself in a terminal",
-		"the repository's configuration sets core.worktree (as a submodule's does), which may put the files git writes outside the repository": "run the line in the repository that holds it (a submodule's superproject), or yourself in a terminal",
-		"git cannot list the configuration in /r (exit status 128)":                                                                            "run the line yourself in a terminal",
-	} {
-		if got := repositoryGitFix(why); got != want {
-			t.Errorf("repositoryGitFix(%q) = %q, want %q", why, got, want)
+	"github.com/jachavarro2004/jhon-agent/engine/internal/sandbox"
+)
+
+// L1731 N1: a line kept inside because the folder it runs in is a
+// repository outside every allowed folder gets the reason repositoryAt
+// gives, with its fix, never the fix for a .git entry a sandboxed command
+// planted; one run from the second repository while its git works in the
+// project says so. A planted link keeps the planted fix.
+func TestT251YRepositoryGitProblemGivesTheFixOfItsReason(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("skipped: no git")
+	}
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	proj, other, work := filepath.Join(base, "project"), filepath.Join(base, "other"), filepath.Join(base, "work")
+	b := filepath.Join(work, "b")
+	for _, d := range []string{proj, other, b} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
 		}
+		if out, err := exec.Command("git", "init", "-q", d).CombinedOutput(); err != nil {
+			t.Fatalf("git init %s: %v %s", d, err, out)
+		}
+	}
+	in := func(cwd string) sandbox.Input {
+		i := sandbox.Current(cwd, proj)
+		i.AllowWrite = []string{work}
+		return i
+	}
+	p := repositoryGitProblem(in(other), "gh pr list", nil, "")
+	if p == nil || p.Reason != other+" is neither in the project ("+proj+") nor in a git repository inside a sandbox.allow_write folder" || strings.Contains(p.Fix, ".git") {
+		t.Errorf("gh pr list in a repository outside every allowed folder: %+v", p)
+	}
+	p = repositoryGitProblem(in(b), "git -C "+proj+" fetch origin", nil, "")
+	if want := "the line runs in " + b + ", in the repository " + b + " of sandbox.allow_write, while its git works in the project (" + proj + "), and a line runs outside the sandbox in one repository only"; p == nil || p.Reason != want || strings.Contains(p.Fix, ".git") {
+		t.Errorf("git -C <project> fetch run in b: %+v; want %q", p, want)
+	}
+	if err := os.Symlink(filepath.Join(base, "victim"), filepath.Join(proj, ".git", "FETCH_HEAD")); err != nil {
+		t.Fatal(err)
+	}
+	p = repositoryGitProblem(in(proj), "git fetch origin", nil, "")
+	if p == nil || !strings.HasSuffix(p.Reason, "FETCH_HEAD in the repository's git folder is a link, which git would write through") || p.Fix != "remove that from the repository (a sandboxed command may have put it there), or run the line yourself in a terminal" {
+		t.Errorf("a planted link: %+v", p)
 	}
 }

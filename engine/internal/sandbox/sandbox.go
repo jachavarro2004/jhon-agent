@@ -77,6 +77,10 @@ type Input struct {
 	SocketFolders []string
 	// AllowWrite is sandbox.allow_write, each folder absolute.
 	AllowWrite []string
+	// SettingsProblem is why the settings file cannot be read, so
+	// AllowWrite holds nothing the owner wrote ("" when it can): a kept
+	// line's note names it (T251, L1731).
+	SettingsProblem string
 	// DeployTools is sandbox.deploy_tools: the programs, by bare name, a
 	// line runs outside the sandbox as it runs docker (ProfileAt).
 	DeployTools []string

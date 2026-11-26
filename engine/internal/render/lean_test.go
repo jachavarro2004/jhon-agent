@@ -106,7 +106,7 @@ func TestLeanTextSaysWhatRunsOutsideTheSandbox(t *testing.T) {
 		lean := flatText(e.leanText(rt))
 		for _, w := range []string{
 			"With Jhon's sandbox on, git over SSH, `gh` and `sandbox.deploy_tools` run outside, with the owner's credentials, alone on their line, by name:",
-			"no pipes, `;`, `&&` (but a leading `cd <absolute project dir> &&`), `$(…)`, `$VAR`, `~` or `VAR=value` in front.",
+			"no pipes, `;`, `&&` (but a leading `cd <absolute dir> &&`), `$(…)`, `$VAR`, `~` or `VAR=value` in front.",
 			"git and `gh` also run outside in a git repository in `sandbox.allow_write`, by its real path with no `..`.",
 			"One kept inside says why: follow that fix, never turn the sandbox off.",
 		} {

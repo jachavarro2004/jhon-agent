@@ -203,9 +203,12 @@ the way and is, with no link followed, the folder Jhon judged; gh run in
 the repository is its line too. A line that works in two repositories, or
 in one the sandbox does not open for writing, stays inside, and so does a
 project line whose folder goes up with `..` after a link (git goes up from
-where the link leads). Any line that runs outside runs only in the folder
-Jhon checked: if the folder it runs in was moved and another put at its
-path after Jhon read it, it stays inside. An `allow_write` folder that is a
+where the link leads). Any line that runs outside runs only in the folders
+Jhon checked: once no sandboxed command can change them, every folder it
+runs in, names with `-C` or `cd`, or clones into is opened again as git
+reaches it, with no link followed, and must still lie in the project or the
+repository; one moved, or made a link, after Jhon read the line keeps it
+inside. An `allow_write` folder that is a
 link counts for nothing; the note says to set the real folder. A line kept
 inside for any reason but its shape ends, when it fails (git's exit 255 on
 a read-only folder included), with that reason and what you can do, and

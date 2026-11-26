@@ -949,10 +949,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            it outside the sandbox, and one whose git
                            folder names, as git prints them, are not
                            exactly two absolute paths with no white space
-                           around them, and one whose working folder is not,
-                           by device and inode, the folder its path names,
-                           inside its root (moved after Jhon read it). Such
-                           a line says why on stderr first.
+                           around them, and one with a folder (its working
+                           folder, the repository, a cd or -C folder, the
+                           one a clone writes in) that, opened as git reaches
+                           it with no link followed, is not the folder Jhon
+                           judged inside its root (moved or made a link
+                           after Jhon read it). Such a line says why on
+                           stderr first.
                            A caller whose
                            stdout and stderr are one file (2>&1) gets the
                            program's output as one stream, in its order. In the

@@ -36,17 +36,16 @@ func (b *Bound) openSelf() *Problem {
 	return &Problem{Reason: errNotLinux.Error(), Fix: "none on this system: it needs Linux and bubblewrap"}
 }
 
-// RepositoryProblem keeps a line of another repository inside off Linux,
-// where its anchors cannot be checked (T251).
-func (in Input) RepositoryProblem(top, line string) *Problem {
-	if top == "" {
-		return nil
+// foldersProblem keeps a line of another repository inside off Linux, where
+// its folders cannot be anchored (T251), and checks nothing for a project's.
+func (in Input) foldersProblem(folders []lineFolder) *Problem {
+	for _, f := range folders {
+		if f.strict {
+			return &Problem{Reason: errNotLinux.Error(), Fix: "none on this system: it needs Linux and bubblewrap"}
+		}
 	}
-	return &Problem{Reason: errNotLinux.Error(), Fix: "none on this system: it needs Linux and bubblewrap"}
+	return nil
 }
-
-// CwdProblem checks nothing off Linux, where the sandbox does not run.
-func (in Input) CwdProblem(top string) *Problem { return nil }
 
 // pinnedAs checks nothing off Linux, where the sandbox does not run.
 func pinnedAs(in Input, real, written string) bool { return true }

@@ -108,11 +108,15 @@ const gitListingLimit = 4 << 20
 // check. top is the git repository inside a sandbox.allow_write folder the
 // line works in (sandbox.Outside, T251), "" for the project's line: the git
 // folders of a folder inside it lie in it
-// (Input.LineGitFolderProblem).
-func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top string) string {
+// (Input.LineGitFolderKept). The problem carries the fix its note gives,
+// chosen where the problem is found, by what it is (L1731 N1).
+func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top string) *sandbox.Problem {
 	git, err := exec.LookPath("git")
 	if err != nil {
-		return ""
+		return nil
+	}
+	owner := func(why string) *sandbox.Problem {
+		return &sandbox.Problem{Reason: why, Fix: "run the line yourself in a terminal"}
 	}
 	var env []string
 	for _, kv := range os.Environ() {
@@ -122,7 +126,7 @@ func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top s
 	}
 	folders := sandbox.GitFolders(line, in.Cwd)
 	if folders == nil {
-		return "the line cannot be read for the folders its git works in"
+		return owner("the line cannot be read for the folders its git works in")
 	}
 	run := func(args ...string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -140,45 +144,27 @@ func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top s
 	for _, dir := range folders {
 		listing, err := run("-C", dir, "config", "--list", "--show-scope", "-z")
 		if err != nil {
-			return "git cannot list the configuration in " + dir + " (" + err.Error() + ")"
+			return owner("git cannot list the configuration in " + dir + " (" + err.Error() + ")")
 		}
-		if why := sandbox.RepositoryGitConfig(listing, gate); why != "" {
-			return why
+		if p := sandbox.RepositoryGitConfigKept(listing, gate); p != nil {
+			return p
 		}
 		gitDirs, err := run("-C", dir, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
 		if err != nil {
 			if strings.Contains(listing, "local\x00") || strings.Contains(listing, "worktree\x00") {
-				return "git cannot name the git folders in " + dir + " (" + err.Error() + ")"
+				return owner("git cannot name the git folders in " + dir + " (" + err.Error() + ")")
 			}
 			continue
 		}
 		names, why := gitFolderNames(gitDirs)
 		if why != "" {
-			return why + " in " + dir
+			return owner(why + " in " + dir)
 		}
-		if why := in.LineGitFolderProblem(top, dir, names[0], names[1]); why != "" {
-			return why
+		if p := in.LineGitFolderKept(top, dir, names[0], names[1]); p != nil {
+			return p
 		}
 	}
-	return ""
-}
-
-// repositoryGitFix is the fix the note of a line repositoryGitProblem kept
-// in the sandbox for why gives (sandbox.DeliveryNoteAt, T251): what a
-// sandboxed command may have planted (a link, a hard link, a FIFO, a key)
-// is removed; a git folder in another repository (a worktree's or a
-// submodule's, legitimately) or a walk past its limit, which nothing
-// planted, is run where it belongs or by the owner (L1729).
-func repositoryGitFix(why string) string {
-	switch {
-	case strings.Contains(why, "is not in the project") || strings.Contains(why, "is not in the repository"):
-		return "if it is a worktree or a submodule of a repository elsewhere, run the line in that repository's own session; otherwise remove the .git file that points there (a sandboxed command may have put it there); or run the line yourself in a terminal"
-	case strings.Contains(why, "core.worktree"):
-		return "run the line in the repository that holds it (a submodule's superproject), or yourself in a terminal"
-	case strings.Contains(why, " entries"), strings.Contains(why, "git cannot "), strings.Contains(why, "git named"), strings.Contains(why, "git names"), strings.Contains(why, "cannot be read"):
-		return "run the line yourself in a terminal"
-	}
-	return "remove that from the repository (a sandboxed command may have put it there), or run the line yourself in a terminal"
+	return nil
 }
 
 // gitFolderNames are the git dir and the common dir `git rev-parse
@@ -244,7 +230,7 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 //     exit gets no note either; git's own fatal errors exit 128, and 255
 //     on a read-only FETCH_HEAD, and keep it;
 //   - any exit, a success too, not a signal's, ends with runNote after
-//     those, on a line of its own, when it is not "": sandbox.DeployNote
+//     those, on a line of its own, when it is not "": sandbox.DeployNoteAt
 //     for a work line that holds one of sandbox.deploy_tools (T217);
 //   - a jhon.sandbox event records the profile, the exit code and the
 //     refused path, through telemetry when it is on (G4);

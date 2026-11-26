@@ -192,7 +192,7 @@ func RunsOutside(h Host, in Input, argv []string) bool {
 // outside the sandbox (T251, L1722): ok when it runs outside, with top the
 // git repository inside a sandbox.allow_write folder its git works in, ""
 // for the project (placeOf; the run then checks that repository as it
-// checks the project: its anchors, RepositoryProblem, its git keys and
+// checks the project: its folders, LineFoldersProblem, its git keys and
 // folders, LineGitFolderProblem, and the registry, OutsideAreas). Not ok,
 // kept is the reason a delivery line's note names: where its git works
 // (placeOf) or a program a sandboxed command may have written; nil for a
@@ -203,8 +203,13 @@ func Outside(h Host, in Input, argv []string) (top string, kept *Problem, ok boo
 		return "", nil, false
 	}
 	zsh := filepath.Base(argv[0]) == "zsh"
-	if classify(argv[2], zsh, in.DeployTools) != Unsandboxed || !filepath.IsAbs(in.Cwd) {
+	if classify(argv[2], zsh, in.DeployTools) != Unsandboxed {
 		return "", nil, false
+	}
+	if !filepath.IsAbs(in.Cwd) {
+		// A folder removed under the process has no name (getcwd fails):
+		// say so, not that the line holds something (L1731).
+		return "", &Problem{Reason: "the folder this line runs in cannot be named (it was removed, or is not an absolute path)", Fix: "run the line from a folder that exists"}, false
 	}
 	top, p := in.placeOf(argv[2], in.ownRoots(), zsh)
 	if p == nil {
@@ -884,13 +889,7 @@ const keptNote = "git over SSH and gh ran in the sandbox, not outside it: "
 // and gives the first as the example of a line of its own. "" when it holds
 // none, or tools is empty.
 func DeployNote(argv, tools []string) string {
-	var found []string
-	programs := linePrograms(argv)
-	for _, tool := range tools {
-		if slices.ContainsFunc(programs, func(p sh.Program) bool { return len(p.Argv) > 0 && filepath.Base(p.Argv[0]) == tool }) {
-			found = append(found, tool)
-		}
-	}
+	found := deployFound(argv, tools)
 	const rule = " outside the sandbox (sandbox.deploy_tools) only on a line of "
 	const rest = ", with no pipes, ;, $(…), ~, $VAR or VAR=value in front, or other commands: "
 	const options = " <arguments>, and pass settings as options (--region, --profile), not variables"
@@ -902,6 +901,53 @@ func DeployNote(argv, tools []string) string {
 	}
 	names := strings.Join(found[:len(found)-1], ", ") + " and " + found[len(found)-1]
 	return names + " run" + rule + "their own, called by their names" + rest + "run each alone, as in " + found[0] + options
+}
+
+// deployFound are the programs of tools argv holds, in the order of
+// tools, each matched by its base name (DeployNote).
+func deployFound(argv, tools []string) []string {
+	var found []string
+	programs := linePrograms(argv)
+	for _, tool := range tools {
+		if slices.ContainsFunc(programs, func(p sh.Program) bool { return len(p.Argv) > 0 && filepath.Base(p.Argv[0]) == tool }) {
+			found = append(found, tool)
+		}
+	}
+	return found
+}
+
+// DeployNoteAt is DeployNote for a run of argv in in that names the real
+// reason its line ran in the sandbox, as DeliveryNoteAt does (L1731): kept,
+// else the reason Outside gives for its line (cdk run in a repository of
+// sandbox.allow_write, where only git and gh run outside); DeployNote's
+// "run it alone" only for a line kept inside for its shape.
+func DeployNoteAt(h Host, in Input, argv []string, kept *Problem) string {
+	note := DeployNote(argv, in.DeployTools)
+	if note == "" {
+		return ""
+	}
+	p := kept
+	if p == nil && len(argv) >= 3 && argv[1] == "-c" {
+		lines := []string{argv[2]}
+		if len(argv) > 4 {
+			lines = append(lines, argv[4:]...)
+		}
+		for _, line := range lines {
+			if _, q, _ := Outside(h, in, []string{argv[0], "-c", line}); q != nil {
+				p = q
+				break
+			}
+		}
+	}
+	if p == nil {
+		return note
+	}
+	found := deployFound(argv, in.DeployTools)
+	names := found[0]
+	if len(found) > 1 {
+		names = strings.Join(found[:len(found)-1], ", ") + " and " + found[len(found)-1]
+	}
+	return names + " ran in the sandbox, not outside it: " + p.Line()
 }
 
 // linePrograms are the programs of argv, as the notes read it: argv itself,
