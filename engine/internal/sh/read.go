@@ -491,9 +491,19 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 	if name == "command" && (at(w, 1) == "-v" || at(w, 1) == "-V") {
 		return []Program{self}, nil
 	}
+	// zsh's precommand modifiers and repeat run the command after them: it is read as it is read bare (T228).
+	if rest, ok := precommand(name, w); ok {
+		return Programs(rest, sub(name), env, inner)
+	}
+	// External runners, and builtins that run a string later (T228 L2).
+	if ps, ok, err := runnerPrograms(name, w, self, sub, env, inner); ok {
+		return ps, err
+	}
 	if values, ok := Wrappers[name]; ok {
 		k := 1
 		var chdir *string
+		// later is what env's assignments run later (codeOf): a prompt's substitutions, PROMPT_COMMAND.
+		var later []Program
 		for k < len(w) && (strings.HasPrefix(w[k], "-") || (name == "env" && Assignment.MatchString(w[k]))) {
 			a := w[k]
 			if name == "env" && (a == "-S" || a == "--split-string" || (len(a) > 2 && strings.HasPrefix(a, "-S")) || strings.HasPrefix(a, "--split-string=")) {
@@ -512,6 +522,17 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 				n, v, _ := strings.Cut(a, "=")
 				env = append(slices.Clone(env), n)
 				envv[n] = v
+				cmds, err := codeOf(n, "", v)
+				if err != nil {
+					return nil, err
+				}
+				for _, c := range cmds {
+					ps, err := CommandPrograms(c, sub(name), env, inner)
+					if err != nil {
+						return nil, err
+					}
+					later = append(later, ps...)
+				}
 				k++
 				continue
 			}
@@ -535,6 +556,7 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 			rest = w[k:]
 		}
 		ps, err := Programs(rest, sub(name), env, inner)
+		ps = append(later, ps...)
 		if err != nil || chdir == nil {
 			return ps, err
 		}
@@ -582,7 +604,12 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 				// resolves a script it runs or sources by them (L294).
 				in := inner
 				in.Envv = Positional(envv, w[min(k+2, len(w)):])
-				return JudgeString(at(w, k+1), sub(name+" -c"), env, in)
+				ps, err := JudgeString(at(w, k+1), sub(name+" -c"), env, in)
+				// zsh started with GLOB_SUBST on (T228 L2).
+				if l := GlobSubstOn(name, w[1:k+1]); l != "" {
+					ps = append([]Program{{Argv: []string{GlobSubst, l}, Via: route, Env: env, Envv: envv, Name: GlobSubst}}, ps...)
+				}
+				return ps, err
 			}
 		}
 	}
@@ -716,7 +743,13 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 		// one that runs them as commands is unreadable (L486).
 		if RunsCode(cmd) {
 			self.StdinOpaque = "input it does not show (an argument file or a pipe)"
-			return []Program{self}, nil
+			// A wrapper's or a shell's own words are still read, without the
+			// operands it does not show (`xargs nohup rm -rf`, T228 L2).
+			if len(cmd) == 0 {
+				return []Program{self}, nil
+			}
+			ps, err := Programs(cmd, sub(XargsUnseen), env, Opts{Envv: envv})
+			return append([]Program{self}, ps...), err
 		}
 		ps, err := Programs(append(slices.Clone(cmd), "<xargs input>"), sub(XargsUnseen), env, Opts{Envv: envv})
 		return append(out, ps...), err

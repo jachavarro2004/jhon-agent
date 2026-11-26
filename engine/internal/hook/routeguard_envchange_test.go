@@ -30,3 +30,32 @@ func TestEnvChangeReadsWhatTheLineRuns(t *testing.T) {
 		}
 	}
 }
+
+// T228 L2: zsh's precommand modifiers, repeat, external runners and the
+// strings a builtin runs later are read through the shared reader (sh.Unwrap),
+// so env -i, env -u and unset behind them are found as bare.
+func TestEnvChangeReadsBehindWrappersAndRunners(t *testing.T) {
+	for _, line := range []string{
+		"noglob env -i git status", "- env -u JHON_AGENT git status", "nocorrect unset JHON_AGENT", "repeat 1 env -i git status",
+		"repeat 2 { unset JHON_AGENT }", "builtin command env -i git status", "builtin - env -i git status", "setsid -f env -i git status",
+		"chrt -f 1 env -i git status", "taskset -c 0 env -i git status", "ionice -c3 env -i git status", "strace -f -o x env -i git status",
+		"watch -n1 'env -i git status'", "watch -x env -i git status", "nice -n 5 env -i git status", "timeout 5 env -i git status",
+		"stdbuf -o0 env -i git status", "unshare -r env -i git status", "systemd-run --user env -i git status", "gosu u env -i git status",
+		"sg wheel -c 'env -i git status'", "trap 'unset JHON_AGENT' EXIT", "sched +1 unset JHON_AGENT", "alias g='env -i git'",
+		"zsh -c 'noglob unset JHON_AGENT'", "eval 'repeat 1 unset JHON_AGENT'", "setsid chrt 1 noglob env -i git status",
+		"strace --no-such-option env -i git status",
+	} {
+		if envChange(line) == "" {
+			t.Errorf("%s: not found", line)
+		}
+	}
+	for _, line := range []string{
+		"noglob git status", "- git status", "repeat 3 echo hi", "setsid -f git status", "watch -n1 'git status'", "timeout 5 git status",
+		"chrt 1 printenv JHON_AGENT", "trap 'echo done' EXIT", "nice ls", "strace --no-such-option ls", "taskset -p 1234",
+		"setsid env FOO=1 git status", "noglob export PATH=$PATH:/x",
+	} {
+		if why := envChange(line); why != "" {
+			t.Errorf("%s: refused: %s", line, why)
+		}
+	}
+}

@@ -57,6 +57,13 @@ func TestTargetsPlaceEachProgramWhereItActs(t *testing.T) {
 		"bash -c 'cd ../other' && git commit -m x": {UnknownRoot},
 		"cd /nowhere-at-all && git commit -m x":    {UnknownRoot},
 		"D=../other; cd $D && git commit -m x":     {other},
+		// T228: zsh's precommand modifiers run cd in the shell itself; repeat may run it more than once.
+		"- cd ../other && git commit -m x":         {other},
+		"noglob cd ../other && git commit -m x":    {other},
+		"nocorrect cd ../other && git commit -m x": {other},
+		"builtin cd ../other && git commit -m x":   {other},
+		"repeat 2 cd ../other && git commit -m x":  {UnknownRoot},
+		"noglob git -C ../other commit -m x":       {other},
 	} {
 		got := commitRoot(command)
 		if len(got) != len(want) || (len(got) > 0 && got[0] != want[0]) {
