@@ -1,7 +1,9 @@
 package execution
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -156,10 +158,11 @@ func adopt(old, data string) {
 	if !project.Exists(old) || os.MkdirAll(filepath.Dir(data), 0o777) != nil {
 		return
 	}
-	tmp, err := privateCopy(old, data, "adopt")
+	tmp, lock, err := privateCopy(old, data, "adopt")
 	if err != nil {
 		return
 	}
+	defer let(lock, tmp)
 	defer drop(tmp)
 	merge(tmp)
 	shareable(tmp)
@@ -170,21 +173,35 @@ func adopt(old, data string) {
 	}
 }
 
-// privateCopy is a new file beside data, `<data>.<pid>-<n>.<kind>`, holding a
-// copy of the record src and of the write-ahead log beside it. With no
-// record at src the file is not there: the run makes it. The pid in its name
-// lets a later run sweep it when this process was killed (sweep).
-func privateCopy(src, data, kind string) (string, error) {
-	f, err := os.CreateTemp(filepath.Dir(data), filepath.Base(data)+"."+strconv.Itoa(os.Getpid())+"-*."+kind)
-	if err != nil {
-		return "", err
+// privateCopy is a new file beside data, `<data>.<pid>-<n>.<kind>` (n a
+// random number, so two runs with one pid, each pid 2 in its own sandbox,
+// never share it), holding a copy of the record src and of the write-ahead
+// log beside it, and the lock this process holds on it until let goes of it
+// (hold), which tells a later run's sweep it is a live run's. With no record
+// at src the file is not there: the run makes it.
+func privateCopy(src, data, kind string) (name string, lock *os.File, err error) {
+	var f *os.File
+	for range 100 {
+		name = filepath.Join(filepath.Dir(data), filepath.Base(data)+"."+strconv.Itoa(os.Getpid())+"-"+runNumber()+"."+kind)
+		if lock, err = hold(name); err != nil {
+			return "", nil, err
+		}
+		if f, err = os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600); err == nil {
+			break
+		}
+		let(lock, name)
+		if !errors.Is(err, os.ErrExist) {
+			return "", nil, err
+		}
 	}
-	name := f.Name()
+	if f == nil {
+		return "", nil, err
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		f.Close()
 		os.Remove(name)
-		return name, nil
+		return name, lock, nil
 	}
 	defer in.Close()
 	_, err = io.Copy(f, in)
@@ -196,9 +213,65 @@ func privateCopy(src, data, kind string) (string, error) {
 	}
 	if err != nil {
 		drop(name)
-		return "", err
+		let(lock, name)
+		return "", nil, err
 	}
-	return name, nil
+	return name, lock, nil
+}
+
+// runNumber is a random number, the part of a run's file name that makes it
+// the run's own.
+func runNumber() string {
+	var b [4]byte
+	_, _ = rand.Read(b[:])
+	return strconv.FormatUint(uint64(binary.BigEndian.Uint32(b[:])), 10)
+}
+
+// lockFile is the lock beside a run's file: `<file>.lock`.
+func lockFile(file string) string { return file + ".lock" }
+
+// hold makes and takes the lock beside a run's file, which this process
+// holds while the file is its (T256, L1728): the kernel lets it go when the
+// process ends, killed or not, and a process in another pid namespace (a
+// sandboxed jhon is pid 2 and sees no host process) sees it held exactly as
+// a host process does. Taken before the file is made, so a sweep never
+// meets the file of a live run without its lock held; a lock a sweep removed
+// between its making and its taking is made again.
+func hold(file string) (*os.File, error) {
+	for range 100 {
+		f, err := os.OpenFile(lockFile(file), os.O_CREATE|os.O_RDWR, 0o644)
+		if err != nil {
+			return nil, err
+		}
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+			f.Close()
+			return nil, err
+		}
+		if same(f, lockFile(file)) {
+			return f, nil
+		}
+		f.Close()
+	}
+	return nil, errors.New("could not hold the lock of " + file)
+}
+
+// same is whether the open file f is still the one at path.
+func same(f *os.File, path string) bool {
+	a, err1 := f.Stat()
+	b, err2 := os.Stat(path)
+	return err1 == nil && err2 == nil && os.SameFile(a, b)
+}
+
+// let lets go of the lock hold took on file's, and removes it: the file is
+// gone or published.
+func let(lock *os.File, file string) {
+	if lock == nil {
+		return
+	}
+	if same(lock, lockFile(file)) {
+		os.Remove(lockFile(file))
+	}
+	lock.Close()
 }
 
 // copyWAL copies the write-ahead log beside src, when it holds any, beside dst.
@@ -269,51 +342,79 @@ func drop(file string) {
 	}
 }
 
-// staleAge is how old a run's file beside a record (runFile) must be to be
-// stale although a process with its pid is alive: the pid was reused, as
-// a jhon killed long ago frees it.
+// staleAge is how old a run's file with no lock beside it must be to be
+// swept: a jhon from before locks (T255, T256's first cut) made it, and
+// nothing tells whether it still runs; the pid in its name does not, since a
+// run in the sandbox sees no host process and every sandboxed jhon is pid 2.
 const staleAge = 24 * time.Hour
 
-// maxPid bounds the pids a run's file can name (Linux's PID_MAX_LIMIT): a
-// larger number is no process (T255 named a private copy with a random one).
-const maxPid = 1 << 22
-
 // runFile is a run's file beside a record and what sqlite keeps beside it:
-// a first run's `<record>.<pid>.building`, a private copy
-// `<record>.<pid>-<n>.run` or `.adopt`, or T255's `<record>.<n>.run`.
-var runFile = lazyre.New(`^([0-9a-f]{16}\.db\.([0-9]+)(?:-[0-9]+)?\.(?:building|run|adopt))(?:-wal|-shm|-journal)?$`)
+// a first run's `<record>.<pid>-<n>.building`, a private copy
+// `<record>.<pid>-<n>.run` or `.adopt`, and those of a jhon from before:
+// `<record>.<pid>.building`, T255's `<record>.<n>.run`. Its lock is
+// `<file>.lock` (lockOf).
+var (
+	runFile = lazyre.New(`^([0-9a-f]{16}\.db\.[0-9]+(?:-[0-9]+)?\.(?:building|run|adopt))(?:-wal|-shm|-journal)?$`)
+	lockOf  = lazyre.New(`^([0-9a-f]{16}\.db\.[0-9]+-[0-9]+\.(?:building|run|adopt))\.lock$`)
+)
 
 // sweep removes from dir, the records' folder, the files a jhon killed while
-// it ran (SIGKILL, a closed terminal) left beside a record (T256): a run's
-// file (runFile) whose process is gone, or that is older than staleAge. A
-// live run's own files, the records and their cut markers stay.
+// it ran (SIGKILL, a closed terminal) left beside a record (T256, L1728): a
+// run's file (runFile) whose lock (hold) nobody holds, with that lock, and a
+// lock with no file that nobody holds. A file whose lock is held is a live
+// run's, whatever its age and the pid in its name, here or in another pid
+// namespace. A file with no lock, a jhon's from before locks, goes only
+// once it is older than staleAge. The records, their logs and cut markers
+// stay.
 func sweep(dir string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
 	old := time.Now().Add(-staleAge)
+	files := map[string]bool{}
 	for _, e := range entries {
-		m := runFile.FindStringSubmatch(e.Name())
-		if m == nil || e.IsDir() {
+		if e.IsDir() {
 			continue
 		}
-		file := filepath.Join(dir, m[1])
-		if pid, err := strconv.Atoi(m[2]); err == nil && alive(pid) && !before(file, old) {
-			continue
+		if m := runFile.FindStringSubmatch(e.Name()); m != nil {
+			files[filepath.Join(dir, m[1])] = true
+		} else if m := lockOf.FindStringSubmatch(e.Name()); m != nil {
+			files[filepath.Join(dir, m[1])] = true
 		}
-		drop(file)
+	}
+	for file := range files {
+		switch lock, held := takeOver(file); {
+		case held:
+		case lock != nil:
+			drop(file)
+			let(lock, file)
+		case before(file, old):
+			drop(file)
+		}
 	}
 }
 
-// alive is whether a process with pid runs (signal 0 reaches it, or it is
-// another user's).
-func alive(pid int) bool {
-	if pid <= 0 || pid > maxPid {
-		return false
+// takeOver takes the lock of a run's file when nobody holds it, the run that
+// held it being gone: lock is then this process's, to let go once the file
+// is removed. held is whether a live run holds it; with neither, the file
+// has no lock.
+func takeOver(file string) (lock *os.File, held bool) {
+	f, err := os.OpenFile(lockFile(file), os.O_RDWR, 0)
+	if err != nil {
+		return nil, false
 	}
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		return nil, true
+	}
+	if !same(f, lockFile(file)) {
+		// Another sweep removed it meanwhile, and a run may have made it
+		// again: left to the next sweep.
+		f.Close()
+		return nil, true
+	}
+	return f, false
 }
 
 // before is whether file and what sqlite keeps beside it were all last
@@ -337,6 +438,8 @@ func ranToEnd(code *int) bool { return code != nil && (*code == 0 || *code == 1)
 // never write one file, and a run cut short leaves it as it was.
 type Private struct {
 	data, file string
+	// lock is the lock this process holds on file (hold).
+	lock *os.File
 	// had is whether the copy started from a record, of size and mtime.
 	had  bool
 	size int64
@@ -351,11 +454,11 @@ func CheckOut(data string) (*Private, error) {
 		return nil, err
 	}
 	sweep(filepath.Dir(data))
-	file, err := privateCopy(data, data, "run")
+	file, lock, err := privateCopy(data, data, "run")
 	if err != nil {
 		return nil, err
 	}
-	p := &Private{data: data, file: file}
+	p := &Private{data: data, file: file, lock: lock}
 	if st, err := os.Stat(file); err == nil {
 		p.had, p.size, p.mod = true, st.Size(), st.ModTime()
 	}
@@ -391,6 +494,7 @@ func (p *Private) changed() bool {
 // and the shared record left as it was. The last run to finish wins: a
 // record of other code only makes pytest-testmon select more, never less.
 func (p *Private) Finish(code *int, w *Watch) (published bool, refused string) {
+	defer let(p.lock, p.file)
 	defer drop(p.file)
 	if !ranToEnd(code) {
 		return false, ""

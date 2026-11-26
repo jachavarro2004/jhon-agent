@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 )
@@ -70,19 +71,44 @@ func Collect(command, top, projectPath string, cov bool) (string, bool) {
 	return underTestmon(command, top, BuildFile(TestmonPath(top, projectPath)), "--testmon-noselect", cov), true
 }
 
-// BuildFile is where this process's first run (Collect) writes the record
-// data will be: `<data>.<pid>.building`.
-func BuildFile(data string) string { return data + "." + strconv.Itoa(os.Getpid()) + ".building" }
+// BuildFile is where this run's first run (Collect) writes the record data
+// will be: `<data>.<pid>-<n>.building`, n a number of this process's own,
+// so two runs with one pid (each pid 2 in its own sandbox) never write one
+// file (T256, L1728).
+func BuildFile(data string) string {
+	return data + "." + strconv.Itoa(os.Getpid()) + "-" + processNumber() + ".building"
+}
+
+// processNumber is this process's runNumber, drawn once.
+var processNumber = sync.OnceValue(runNumber)
+
+// builds are the locks this process holds on its first runs' files (hold),
+// by file.
+var builds sync.Map
 
 // sqliteBeside are the files sqlite keeps beside a database in WAL mode,
 // which pytest-testmon's is.
 var sqliteBeside = []string{"-wal", "-shm"}
 
 // StartBuild removes what an earlier first run of this process left at
-// data's BuildFile, and what a killed run left beside the records (sweep).
+// data's BuildFile, and what a killed run left beside the records (sweep),
+// and holds the lock of the file the first run writes (hold) until
+// FinishBuild.
 func StartBuild(data string) {
-	drop(BuildFile(data))
+	endBuild(data)
 	sweep(filepath.Dir(data))
+	if lock, err := hold(BuildFile(data)); err == nil {
+		builds.Store(BuildFile(data), lock)
+	}
+}
+
+// endBuild removes data's BuildFile and lets go of its lock.
+func endBuild(data string) {
+	file := BuildFile(data)
+	drop(file)
+	if lock, ok := builds.LoadAndDelete(file); ok {
+		let(lock.(*os.File), file)
+	}
 }
 
 // FinishBuild ends a first run whose command exited with code, nil when it
@@ -95,7 +121,7 @@ func StartBuild(data string) {
 // clears FirstRunCut.
 func FinishBuild(data string, code *int, w *Watch) (kept bool, refused string) {
 	tmp := BuildFile(data)
-	defer StartBuild(data)
+	defer endBuild(data)
 	if !ranToEnd(code) || !project.Exists(tmp) {
 		return false, ""
 	}

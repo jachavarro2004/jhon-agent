@@ -4,10 +4,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -204,11 +206,16 @@ func TestConcurrentRunsNeverCorruptTheSharedRecord(t *testing.T) {
 
 // T255 (2): a first run's file is private to its process, so two first runs
 // of one record at once (two worktrees) never write or remove each other's.
+// T256 (L1728): and to its run, not only its pid: every sandboxed jhon is
+// pid 2, so two sandboxed lanes would write one `<record>.2.building`.
 func TestAFirstRunsFileIsPrivateToItsProcess(t *testing.T) {
 	data := filepath.Join(tempDir(t), "x.db")
 	b := BuildFile(data)
-	if !strings.HasPrefix(b, data+".") || !strings.Contains(b, "."+strconv.Itoa(os.Getpid())+".") || !strings.HasSuffix(b, ".building") {
-		t.Errorf("a first run's file is not its own: %s", b)
+	if !regexp.MustCompile(`^` + regexp.QuoteMeta(data) + `\.` + strconv.Itoa(os.Getpid()) + `-[0-9]+\.building$`).MatchString(b) {
+		t.Errorf("a first run's file is not its run's own: %s", b)
+	}
+	if BuildFile(data) != b {
+		t.Error("a run names its first run's file once")
 	}
 }
 
@@ -433,45 +440,90 @@ func TestForgetDropsTheRecord(t *testing.T) {
 	}
 }
 
-// deadPid is the pid of a process that has ended.
-func deadPid(t *testing.T) int {
+// unheld is a run's lock beside file as a killed run leaves it: there, and
+// held by nobody, since the kernel drops a dead process's lock.
+func unheld(t *testing.T, file string) {
 	t.Helper()
-	c := exec.Command("true")
-	if err := c.Run(); err != nil {
-		t.Skip("no true to end:", err)
-	}
-	return c.Process.Pid
+	write(t, file+".lock", "")
 }
 
-// T256 (L1726): a jhon killed while it ran (SIGKILL, a closed terminal)
-// leaves its first run's `<record>.<pid>.building` and its private copy
-// `<record>.<pid>-<n>.run` behind; the next run sweeps them when their
-// process is gone, or, a pid being reused, when they are older than
-// staleAge. A live run's files, another record and a cut marker stay.
+// heldBy is a run's lock beside file, held as a live run holds it, from
+// another open file than the sweep's: in another process or pid namespace
+// the lock reads the same.
+func heldBy(t *testing.T, file string) {
+	t.Helper()
+	f, err := os.OpenFile(file+".lock", os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.Close() })
+}
+
+// age makes files older than staleAge.
+func age(t *testing.T, files ...string) {
+	t.Helper()
+	old := time.Now().Add(-2 * staleAge)
+	for _, f := range files {
+		if err := os.Chtimes(f, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// T256 (L1726, L1728 B1): a jhon killed while it ran (SIGKILL, a closed
+// terminal) leaves its first run's `<record>.<pid>-<n>.building` and its
+// private copy `<record>.<pid>-<n>.run` behind, each with the lock it held
+// on `<file>.lock`; the next run sweeps a file whose lock nobody holds. A
+// file whose lock is held is a live run's, whatever its age or the pid in
+// its name: a run in the sandbox (another pid namespace, where jhon is pid
+// 2) sees no host process, but sees its lock. A file with no lock, a jhon's
+// from before locks, is swept only past staleAge: nothing tells a dead one
+// from a live one (T255's `<record>.<n>.run`, the pid a random number).
 func TestStaleFilesOfAKilledRunAreSwept(t *testing.T) {
 	dir := tempDir(t)
 	data := filepath.Join(dir, "0123456789abcdef.db")
 	other := filepath.Join(dir, "fedcba9876543210.db")
 	write(t, data, "shared")
 	write(t, other, "another record")
-	dead, live := strconv.Itoa(deadPid(t)), strconv.Itoa(os.Getppid())
-	gone := []string{
-		data + "." + dead + ".building", data + "." + dead + ".building-wal",
-		data + "." + dead + "-42.run", data + "." + dead + "-42.run-shm",
-		other + "." + dead + "-7.run",
-		// T255's private copies carried no pid: the number is CreateTemp's.
-		data + ".3999999999.run",
-		data + "." + live + "-9.run",
+	write(t, data+"-wal", "the record's log")
+	killed := []string{data + ".2-11.building", data + ".2-12.run", data + ".7-13.adopt", other + ".2-14.run"}
+	gone := []string{data + ".2-11.building-wal", data + ".2-12.run-shm", data + ".7-13.adopt-wal"}
+	for _, f := range killed {
+		write(t, f, "x")
+		unheld(t, f)
+		gone = append(gone, f, f+".lock")
 	}
-	kept := []string{data + "." + live + ".building", data + "." + live + "-8.run", cutFile(data), filepath.Join(dir, "notes.txt")}
-	for _, f := range append(slices.Clone(gone), kept...) {
+	for _, f := range []string{data + ".2-11.building-wal", data + ".2-12.run-shm", data + ".7-13.adopt-wal"} {
 		write(t, f, "x")
 	}
-	// The live process's old copy: its pid reused, or a run that died
-	// without its pid ever being freed.
-	old := time.Now().Add(-2 * staleAge)
-	if err := os.Chtimes(data+"."+live+"-9.run", old, old); err != nil {
-		t.Fatal(err)
+	// A lock left with no file: the run was killed before it made it.
+	unheld(t, data+".2-15.run")
+	gone = append(gone, data+".2-15.run.lock")
+	// Before locks: swept once old.
+	legacyOld := []string{data + ".3999999999.run", data + ".3999999999.run-wal", data + ".41.building"}
+	for _, f := range legacyOld {
+		write(t, f, "x")
+	}
+	age(t, legacyOld...)
+	gone = append(gone, legacyOld...)
+
+	live := []string{data + ".2-21.run", data + ".2-22.building", data + ".1-23.run"}
+	kept := []string{data + "-wal", cutFile(data), filepath.Join(dir, "notes.txt"),
+		// Before locks and recent: a still-running older jhon's (L1728),
+		// the pid in its name dead, 1 (EPERM) or no pid at all.
+		data + ".3021520256.run", data + ".41-5.run", data + ".1.building"}
+	for _, f := range live {
+		write(t, f, "x")
+		write(t, f+"-wal", "fresh")
+		heldBy(t, f)
+		age(t, f, f+"-wal", f+".lock") // held: age says nothing
+		kept = append(kept, f, f+"-wal", f+".lock")
+	}
+	for _, f := range kept[1:6] {
+		write(t, f, "x")
 	}
 	p, err := CheckOut(data)
 	if err != nil {
@@ -489,10 +541,47 @@ func TestStaleFilesOfAKilledRunAreSwept(t *testing.T) {
 		}
 	}
 	// A first run's start sweeps too.
-	write(t, data+"."+dead+".building", "x")
+	write(t, data+".2-31.building", "x")
+	unheld(t, data+".2-31.building")
 	StartBuild(data)
-	if exists(data + "." + dead + ".building") {
+	defer FinishBuild(data, nil, nil)
+	if exists(data+".2-31.building") || exists(data+".2-31.building.lock") {
 		t.Error("a first run's start did not sweep")
+	}
+}
+
+// T256 (L1728 B1): a run holds the lock of its own files while it runs, so
+// another run, here or in the sandbox, never sweeps them, and lets it go
+// with them at its end.
+func TestARunHoldsTheLockOfItsOwnFiles(t *testing.T) {
+	dir := tempDir(t)
+	data := filepath.Join(dir, "0123456789abcdef.db")
+	write(t, data, "shared")
+	p, err := CheckOut(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	StartBuild(data)
+	build := BuildFile(data)
+	write(t, build, "building")
+	age(t, p.File(), p.File()+".lock", build, build+".lock")
+	q, err := CheckOut(data) // a second run sweeps
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{p.File(), p.File() + ".lock", build, build + ".lock"} {
+		if !exists(f) {
+			t.Errorf("a live run's %s was swept", filepath.Base(f))
+		}
+	}
+	write(t, p.File(), "run")
+	if published, _ := p.Finish(ptr(0), nil); !published {
+		t.Error("not published")
+	}
+	q.Finish(nil, nil)
+	FinishBuild(data, ptr(3), nil)
+	if left := beside(t, data); len(left) != 0 {
+		t.Errorf("left %v", left)
 	}
 }
 

@@ -21,9 +21,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jachavarro2004/jhon-agent/test/support"
 )
@@ -214,23 +216,30 @@ func (p *pytestProject) untouched(t *testing.T) []string {
 	return append(snapshot(t, filepath.Dir(filepath.Dir(filepath.Dir(p.data))), true), support.Git(t, p.root, "status", "--porcelain", "--untracked-files=all"))
 }
 
-// T256 (L1726): what a killed jhon left beside the records (a first run's
-// file, a private copy) is swept by the next run when its process is gone,
-// and the record the run publishes is 0644, readable by every worktree.
+// T256 (L1726, L1728): what a killed jhon left beside the records (a
+// private copy, a first run's file) is swept by the next run, its lock being
+// held by no one, and the record the run publishes is 0644, readable by
+// every worktree.
 func TestExecutionsSweepsWhatAKilledRunLeftAndPublishesTheRecord0644(t *testing.T) {
 	t.Parallel()
 	p := newPytestProject(t)
 	equal(t, p.jhon(t, nil, "executions", "prime").Code, 0)
-	c := exec.Command("true")
-	if err := c.Run(); err != nil {
+	// A run killed (SIGKILL) while pytest runs leaves its private copy and
+	// its lock, which the kernel let go.
+	killed := exec.Command(support.Bin(t), "executions", "run", "c1", "--affected", "base", "--json")
+	killed.Dir, killed.Env = p.root, support.Env(append(append([]string{}, p.env...), "FAKE_UV_SLEEP=3")...)
+	if err := killed.Start(); err != nil {
 		t.Fatal(err)
 	}
-	dead := strconv.Itoa(c.Process.Pid)
-	left := map[string]string{}
-	for _, f := range []string{".building", ".building-wal", "-3.run", "-3.run-shm"} {
-		left[filepath.Base(p.data)+"."+dead+f] = "left by a killed run"
+	for end := time.Now().Add(30 * time.Second); !slices.ContainsFunc(leftBeside(t, p), func(n string) bool { return strings.HasSuffix(n, ".run") }); {
+		if time.Now().After(end) {
+			t.Fatal("the run made no private copy")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
-	support.Write(t, filepath.Dir(p.data), left)
+	killed.Process.Kill()
+	killed.Wait()
+	match(t, strings.Join(leftBeside(t, p), " "), `^\S+\.db\.[0-9]+-[0-9]+\.run \S+\.db\.[0-9]+-[0-9]+\.run\.lock$`, "what the killed run left")
 	r := p.jhon(t, nil, "executions", "run", "c1", "--affected", "base", "--json")
 	equal(t, r.Code, 0, r.Out())
 	equal(t, leftBeside(t, p), []string(nil), "the killed run's files are swept")

@@ -498,9 +498,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            changed file's whole path or import path, or a
                            changed document, and their dependents (every
                            project, with the reason, when that cannot be
-                           told; a changed project that brings in two or more
-                           dependents is said, with the slice's base when the
-                           run measured from further back); with no base it is
+                           told; a changed project that brings two or more
+                           projects in only as its dependents is said, with
+                           the slice's base when the run measured from
+                           further back); with no base it is
                            a unit's run, the default for every intermediate
                            pass: what changed since the change's last passing
                            run, else since its base; that base is the commit
@@ -517,7 +518,8 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            its failures are not the test environment's: every
                            test failing, a service refusing the connection in
                            the failures or with no test passing; a copy or
-                           first-run file a killed run left is swept),
+                           first-run file whose lock no live run holds is
+                           swept),
                            and one with no record runs whole once to build it,
                            named with its tests' count (a first run its
                            deadline cut is left to jhon executions prime); a

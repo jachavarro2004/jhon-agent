@@ -84,9 +84,11 @@ passing run, else since the commit the slice in progress started from
 (T253). The slice base, `--affected <base-ref>`, the commit the slice
 started from and never the default branch, is only for the RED record and
 the slice's closing run, which a slice commit and delivery require (a
-unit's run closes no slice). A changed project that brings two or more
-dependents into the selection is named in a note, with the slice's base
-when the run measured from further back. In a wide selection a project with
+unit's run closes no slice). A unit's run whose last pass is older than
+the slice's start says so, with the slice's base as the narrower run. A
+changed project that brings two or more projects into the selection only
+as its dependents is named in a note, with the slice's base when the run
+measured from further back, never a wider one. In a wide selection a project with
 a usable pytest-testmon record runs the test modules the change touched
 narrowed by it, and a test of another project selects it only by naming a
 changed file's whole path or import path (`jhon executions --help`).

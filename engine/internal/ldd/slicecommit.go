@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -72,12 +73,22 @@ func (g gitReads) sliceLines(top, change string, r Route) SliceLines {
 // the change's base (ChangeBase) before the first. ok is false when HEAD is
 // not a commit.
 func (g gitReads) sliceBase(top, change string) (string, bool) {
+	return g.sliceBaseIn(top, top, change)
+}
+
+// sliceBaseIn is sliceBase of the change of the project at root, a folder of
+// the repository whose top level is top: its tasks.md is where the
+// project's own layout keeps it, under root.
+func (g gitReads) sliceBaseIn(top, root, change string) (string, bool) {
 	base, _, ok := g.baseOf(top, nil)
 	if !ok {
 		return "", false
 	}
-	lay := layout.For(top)
+	lay := layout.For(root)
 	rel := lay.Artifact(change, lay.Tasks())
+	if under, err := filepath.Rel(top, root); err == nil && under != "." && !strings.HasPrefix(under, "..") {
+		rel = path.Join(filepath.ToSlash(under), rel)
+	}
 	log, _ := g.git(top, "log", "--format=%H", base+"..HEAD", "--", rel)
 	for _, c := range nonEmpty(log) {
 		after, _ := g.git(top, "show", c+":"+rel)
@@ -89,14 +100,23 @@ func (g gitReads) sliceBase(top, change string) (string, bool) {
 	return base, true
 }
 
-// SliceBase is the commit the slice in progress of change is measured from
-// (sliceBase): the last commit on HEAD's branch that closed a slice of it in
-// its tasks.md, the change's base (ChangeBase) before the first. A unit's
-// test run with no passing run on record measures from it, so a slice's run
-// never reaches back to what earlier slices changed (T253,
+// SliceBase is the commit the slice in progress of change, of the project
+// at root, is measured from (sliceBase): the last commit on HEAD's branch
+// that closed a slice of it in its tasks.md, read where the project's own
+// layout keeps it (a project in a folder of its repository included,
+// L1728), the change's base (ChangeBase) before the first. A unit's test run
+// with no passing run on record measures from it, so a slice's run never
+// reaches back to what earlier slices changed (T253,
 // odd/tasks/v0-1-release.md L1721). ok is false when HEAD is not a commit.
-func SliceBase(top, change string) (commit string, ok bool) {
-	return gitReads(nil).sliceBase(top, change)
+func SliceBase(root, change string) (commit string, ok bool) {
+	top := vcs.GitTopLevel(root)
+	if top == "" {
+		return "", false
+	}
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	return gitReads(nil).sliceBaseIn(top, root, change)
 }
 
 // ClosedSliceLines are the sizes of the slices a commit in the repository
