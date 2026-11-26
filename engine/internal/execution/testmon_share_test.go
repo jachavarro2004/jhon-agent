@@ -764,3 +764,15 @@ os._exit(0)`
 		}
 	}
 }
+
+// T256 verify (L1730): a first run on a machine whose records' folder does
+// not exist yet (the command's `mkdir -p` makes it) holds the lock of its
+// file too, so a killed one is swept at once and a live one never is.
+func TestAFirstRunOnAFreshCacheHoldsItsLock(t *testing.T) {
+	data := filepath.Join(tempDir(t), "jhon", "testmon", "0123456789abcdef.db")
+	StartBuild(data)
+	defer FinishBuild(data, nil, nil)
+	if _, err := os.Stat(lockFile(BuildFile(data))); err != nil {
+		t.Fatal("a first run on a fresh cache holds no lock on its file")
+	}
+}
