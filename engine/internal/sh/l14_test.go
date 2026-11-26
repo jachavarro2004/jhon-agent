@@ -82,8 +82,9 @@ func TestSocatAndNcRuns(t *testing.T) {
 		"socat - TCP:h:1":                        nil,
 		"socat -d -d STDIO OPENSSL:h:1,verify=0": nil,
 	} {
-		if got := socatRuns(splitWords(line)).Strings; !slices.Equal(got, want) {
-			t.Errorf("socatRuns(%q) = %q, want %q", line, got, want)
+		if in, err := socatRuns(splitWords(line)); err != nil || !slices.Equal(in.Strings, want) {
+			got := in.Strings
+			t.Errorf("socatRuns(%q) = %q, %v, want %q", line, got, err, want)
 		}
 	}
 	for line, want := range map[string]Inner{

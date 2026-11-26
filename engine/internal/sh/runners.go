@@ -301,7 +301,11 @@ func runs(name string, w []string) (in Inner, ok bool, err error) {
 	case "socat":
 		// socat glues the command an address runs, and the file it writes,
 		// to it (T228 L14, L15).
-		if in := socatRuns(w); len(in.Strings)+len(in.Words) > 0 {
+		in, err := socatRuns(w)
+		if err != nil {
+			return Inner{}, true, err
+		}
+		if len(in.Strings)+len(in.Words) > 0 {
 			in.Self = true
 			return in, true, nil
 		}

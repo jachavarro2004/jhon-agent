@@ -556,3 +556,31 @@ safety-guard	Bash	"socat -u 'OPEN:.git/config,trunc' /dev/null"	refuse	none	T228
 safety-guard	Bash	"socat -U - 'OPEN:.git/HEAD,o-trunc'"	refuse	none	T228	-	verify: same, -U
 safety-guard	Bash	"socat - /dev/ttyUSB0,b115200,raw,echo=0"	allow	none	T228	-	verify: a serial line stays allowed
 safety-guard	Bash	"socat -u OPEN:.git/config STDOUT"	allow	none	T228	-	verify: reading the VCS directory stays allowed
+# T228 L16 re-verify (5a7fa93): socat deletes through unlink options, links and socket paths, and writes through PIPE
+safety-guard	Bash	"socat -u 'OPEN:.git/config,unlink-close' /dev/null"	refuse	none	T228	-	verify: unlink-close deletes the file, even on the read side
+safety-guard	Bash	"socat -u 'OPEN:.git/config,unlink-early' /dev/null"	refuse	none	T228	-	verify: unlink-early deletes the file before opening it
+safety-guard	Bash	"socat -u 'OPEN:~/.bashrc,unlink-close' /dev/null"	ask	none	T228	-	verify: a removal in the home folder, as rm ~/.bashrc
+safety-guard	Bash	"socat PTY,link=.git/config /dev/null"	refuse	none	T228	-	verify: link= replaces the file at its path
+safety-guard	Bash	"socat 'UNIX-LISTEN:.git/config,unlink-early' /dev/null"	refuse	none	T228	-	verify: a listener's unlink-early deletes the file at its path
+safety-guard	Bash	"socat -u - 'PIPE:.git/config'"	refuse	none	T228	-	verify: PIPE writes into an existing file
+safety-guard	Bash	"socat -u - 'PIPE:/dev/sda'"	refuse	none	T228	-	verify: PIPE to a disk
+safety-guard	Bash	"socat UNIX-LISTEN:/tmp/dbg.sock,fork,unlink-early TCP:localhost:9229"	allow	none	T228	-	verify: a scratch socket's unlink stays allowed
+safety-guard	Bash	"socat -d -d PTY,link=./ttyV0,raw,echo=0 PTY,link=./ttyV1,raw,echo=0"	allow	none	T228	-	verify: a pty link in the project stays allowed
+# T228 L17: socat by class: every path an address names is a write (tee), a removal (rm) or, with an option outside the harmless list, unreadable
+safety-guard	Bash	"socat -u 'OPEN:.git/config,unlink-late' /dev/null"	refuse	none	T228	-	L17 W2: unlink-late deletes the file
+safety-guard	Bash	"socat 'UNIX-L:.git/config' /dev/null"	refuse	none	T228	-	L17 W3: UNIX-L is UNIX-LISTEN by another name and binds its path
+safety-guard	Bash	"socat 'UNIX-RECVFROM:.git/HEAD' -"	refuse	none	T228	-	L17 W3: a unix receiver binds its path
+safety-guard	Bash	"socat - 'UNIX-CONNECT:/tmp/s,bind=.git/config'"	refuse	none	T228	-	L17 W3: a unix client's bind= binds a path
+safety-guard	Bash	"socat 'EXEC:cat,pty,link=.git/config' -"	refuse	none	T228	-	L17 W3: link= anywhere replaces its path
+safety-guard	Bash	"socat 'READLINE,history=.git/config' -"	refuse	none	T228	-	L17: history= writes its file
+safety-guard	Bash	"socat 'PTY,lockfile=.git/config' -"	refuse	none	T228	-	L17: lockfile= writes its file
+safety-guard	Bash	"socat - FIFO:.git/config"	refuse	none	T228	-	L17 W4: FIFO is PIPE by another name
+safety-guard	Bash	"socat -U 'PIPE:/dev/nvme0n1' -"	refuse	none	T228	-	L17 W4: PIPE writes on either side
+safety-guard	Bash	"socat -u 'OPEN:notes.txt,perm=0777' -"	ask	none	T228	-	L17: an option outside the harmless list leaves the address unreadable
+safety-guard	Bash	"socat 'PTY,link=./ttyV0,mode=777' -"	ask	none	T228	-	L17: same, on a link
+safety-guard	Bash	"socat UNIX-LISTEN:./app.sock,fork,unlink-early TCP:localhost:3000"	allow	none	T228	-	L17 preserve: a project socket's unlink
+safety-guard	Bash	"socat - UNIX-CONNECT:/var/run/docker.sock"	allow	none	T228	-	L17 preserve: a unix client names a path it only connects to
+safety-guard	Bash	"socat /dev/ttyS0,b9600,cs8,parenb=0,cstopb=0,clocal=1,crtscts=0,raw -"	allow	none	T228	-	L17 preserve: a serial line's options are harmless
+safety-guard	Bash	"socat READLINE,history=./.socat_history TCP:h:1"	allow	none	T228	-	L17 preserve: a history file in the project
+safety-guard	Bash	"socat -r in.dump -R out.dump - TCP:h:1"	allow	none	T228	-	L17 preserve: capture dumps in the project
+safety-guard	Bash	"socat OPENSSL-LISTEN:4443,cert=server.pem,verify=0,fork TCP:localhost:80"	allow	none	T228	-	L17 preserve: a network address's options are not the path reader's
