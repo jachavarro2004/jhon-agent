@@ -523,3 +523,36 @@ safety-guard	Bash	"ncat --out=.git/hooks/pre-commit h 1"	refuse	none	T228	-	L15 
 safety-guard	Bash	"socat -u OPEN:.git/config STDOUT"	allow	none	T228	-	L15 preserve: an address socat -u only reads
 safety-guard	Bash	"socat - /dev/ttyUSB0,raw,echo=0"	allow	none	T228	-	L15 preserve: a serial line opened with no trunc
 safety-guard	Bash	"ncat -o notes.txt h 1"	allow	none	T228	-	L15 preserve: a dump file in the project
+# T228 L16: every socat address that writes a file is judged as tee; a serial character device is not a socat write
+safety-guard	Bash	"socat -u - OPEN:.git/config"	refuse	none	T228	-	L16 W1: OPEN with no option overwrites on the side socat writes
+safety-guard	Bash	"socat - .git/config"	refuse	none	T228	-	L16 W1: a bare path appends; with no -u or -U both sides are written
+safety-guard	Bash	"socat - GOPEN:.git/config"	refuse	none	T228	-	L16 W1: GOPEN appends on the side socat writes
+safety-guard	Bash	"socat -u - /dev/sda"	refuse	none	T228	-	L16 W1: a block device on the side socat writes
+safety-guard	Bash	"socat -u - OPEN:~/.aws/credentials"	refuse	none	T228	-	L16 W1: a credentials file on the side socat writes
+safety-guard	Bash	"socat -u 'OPEN:.git/config,trunc' /dev/null"	refuse	none	T228	-	L16 W1: trunc truncates on the side -u leaves read-only
+safety-guard	Bash	"socat -U - 'OPEN:.git/HEAD,o-trunc'"	refuse	none	T228	-	L16 W1: o-trunc truncates on the side -U leaves read-only
+safety-guard	Bash	"socat -u 'OPEN:.git/config,ftruncate=0' -"	refuse	none	T228	-	L16 W1: ftruncate with any value truncates
+safety-guard	Bash	"socat -u 'GOPEN:.git/hooks/pre-commit,creat=0' -"	refuse	none	T228	-	L16 W1: creat with any value is a write
+safety-guard	Bash	"socat - /dev/nvme0n1"	refuse	none	T228	-	L16 W1: every device but a serial one stays judged
+safety-guard	Bash	"socat - /dev/ttyUSB0/../sda"	refuse	none	T228	-	L16 W1: the device's shape is read once the path is cleaned
+safety-guard	Bash	"socat - /dev/ttyUSB0,b115200,raw,echo=0"	allow	none	T228	-	L16 preserve: a serial line
+safety-guard	Bash	"socat - /dev/serial/by-id/usb-FTDI_x-if00-port0,raw"	allow	none	T228	-	L16 preserve: a serial line by id
+safety-guard	Bash	"socat - /dev/pts/3"	allow	none	T228	-	L16 preserve: a pseudo-terminal
+safety-guard	Bash	"socat PTY,link=/tmp/ttyV0,raw PTY,link=/tmp/ttyV1,raw"	allow	none	T228	-	L16 preserve: a PTY pair
+safety-guard	Bash	"socat -u - 'OPEN:out.txt,creat'"	allow	none	T228	-	L16 preserve: a project file socat creates
+safety-guard	Bash	"socat -U - OPEN:.git/config"	allow	none	T228	-	L16 preserve: the side -U leaves read-only, with no option that writes
+safety-guard	Bash	"socat -u OPEN:.git/config STDOUT"	allow	none	T228	-	L16 preserve: the side -u leaves read-only, with no option that writes
+safety-guard	Bash	"socat - /dev/null"	allow	none	T228	-	L16 preserve: /dev/null is written as tee writes it
+safety-guard	Bash	"socat - FILE:.git/config"	refuse	none	T228	-	L16 W1: FILE is OPEN by another name
+safety-guard	Bash	"socat -u 'file:.git/config,trunc' -"	refuse	none	T228	-	L16 W1: same, truncating on the read-only side
+# T228 L15 re-verify (96411a7): socat writes without creat/trunc, on the read side, and by other option spellings
+safety-guard	Bash	"socat -u - OPEN:.git/config"	refuse	none	T228	-	verify: OPEN writes over an existing file with no option
+safety-guard	Bash	"socat - .git/config"	refuse	none	T228	-	verify: a bare path is GOPEN, which appends
+safety-guard	Bash	"socat -u - /dev/sda"	refuse	none	T228	-	verify: a disk written through a bare path
+safety-guard	Bash	"socat -u - OPEN:/dev/sda"	refuse	none	T228	-	verify: same through OPEN
+safety-guard	Bash	"socat -u - OPEN:~/.aws/credentials"	refuse	none	T228	-	verify: a credentials file written with no option
+safety-guard	Bash	"socat -u - 'OPEN:.git/config,ftruncate=0'"	refuse	none	T228	-	verify: ftruncate truncates
+safety-guard	Bash	"socat -u 'OPEN:.git/config,trunc' /dev/null"	refuse	none	T228	-	verify: O_TRUNC on the read-only side truncates
+safety-guard	Bash	"socat -U - 'OPEN:.git/HEAD,o-trunc'"	refuse	none	T228	-	verify: same, -U
+safety-guard	Bash	"socat - /dev/ttyUSB0,b115200,raw,echo=0"	allow	none	T228	-	verify: a serial line stays allowed
+safety-guard	Bash	"socat -u OPEN:.git/config STDOUT"	allow	none	T228	-	verify: reading the VCS directory stays allowed

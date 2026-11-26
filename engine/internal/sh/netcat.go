@@ -1,6 +1,9 @@
 package sh
 
-import "strings"
+import (
+	"path"
+	"strings"
+)
 
 // socat and the netcat family run commands and write files their own
 // grammar names (T228 L14, L15): socat glues a command or a file to an
@@ -14,10 +17,25 @@ import "strings"
 // runs). An option of the same name is read the same way.
 var socatCommandAddresses = set("exec", "system", "shell")
 
-// socatWriteOptions are the socat options that make an OPEN or GOPEN
-// address (or a bare path, which is GOPEN) create, truncate or append to
-// its file.
-var socatWriteOptions = set("creat", "o-creat", "o_creat", "trunc", "o-trunc", "o_trunc", "append", "o-append", "o_append")
+// socatFileAddresses are socat's address types that open a file by its
+// path (FILE is OPEN's other name, CREAT CREATE's); a bare path is GOPEN.
+var socatFileAddresses = set("open", "file", "gopen", "create", "creat")
+
+// socatTruncating are the socat options that create or truncate a file
+// address's file when it is opened, whichever way the data then flows: any
+// value, `creat=0` and `ftruncate=0` included (T228 L16).
+var socatTruncating = set("creat", "o-creat", "o_creat", "trunc", "o-trunc", "o_trunc", "ftruncate")
+
+// socatSerial is whether p, by its shape once cleaned (the machine is not
+// looked at), is a serial character device: /dev/tty*, /dev/pts/*,
+// /dev/serial/* (T228 L16, the owner's serial work). socat reading and
+// writing one is not judged as a write; a block device and every other
+// device are.
+func socatSerial(p string) bool {
+	c := path.Clean(p)
+	rest, tty := strings.CutPrefix(c, "/dev/tty")
+	return tty && !strings.Contains(rest, "/") || strings.HasPrefix(c, "/dev/pts/") || strings.HasPrefix(c, "/dev/serial/")
+}
 
 // socatValued are socat's options that take the next word as their value;
 // socatFileOptions of them name a file socat writes (the log, the sniff
@@ -38,10 +56,13 @@ type socatAddress struct {
 // socatRuns is what socat runs and writes (T228 L14, L15): the command of
 // each EXEC:, SYSTEM: or SHELL: address (either side of a `!!` pair) and of
 // any exec=, system= or shell= option, as a string the shell runs; and
-// tee writing the file of each CREATE: address, of each OPEN: or GOPEN:
-// address (or bare path) that creates, truncates or appends, and of the
-// -lf, -L, -W, -r and -R options. With -u the first address is only read,
-// with -U the second.
+// tee writing the file of each address that writes one (T228 L16): on the
+// side socat writes (both sides with no -u or -U; with -u the second, with
+// -U the first) every OPEN:, FILE:, GOPEN:, CREATE: or CREAT: address or bare
+// path; on either side a CREATE: or CREAT: address and a file address with
+// a creating or truncating option (socatTruncating); but not a serial
+// device (socatSerial). And tee writing the file of the -lf, -L, -W, -r
+// and -R options.
 func socatRuns(w []string) Inner {
 	var in Inner
 	var addrs []string
@@ -66,29 +87,23 @@ func socatRuns(w []string) Inner {
 		}
 	}
 	for i, word := range addrs {
-		readOnly := oneway == "-u" && i == 0 || oneway == "-U" && i == 1
+		written := oneway == "" || oneway == "-u" && i == 1 || oneway == "-U" && i == 0
 		for _, ad := range socatAddresses(word) {
 			if socatCommandAddresses[ad.kind] {
 				in.Strings = append(in.Strings, ad.param)
 			}
-			write, appends := ad.kind == "create" || ad.kind == "creat", false
+			file := socatFileAddresses[ad.kind]
+			write := file && written || ad.kind == "create" || ad.kind == "creat"
 			for _, o := range ad.options {
 				n, v, ok := strings.Cut(o, "=")
 				n = strings.ToLower(n)
 				if ok && socatCommandAddresses[n] {
 					in.Strings = append(in.Strings, v)
 				}
-				if socatWriteOptions[n] && (ad.kind == "open" || ad.kind == "gopen") {
-					write = true
-					appends = appends || strings.Contains(n, "append")
-				}
+				write = write || file && socatTruncating[n]
 			}
-			if write && !readOnly && ad.param != "" {
-				words := []string{"tee", ad.param}
-				if appends {
-					words = []string{"tee", "-a", ad.param}
-				}
-				in.Words = append(in.Words, words)
+			if write && ad.param != "" && !socatSerial(ad.param) {
+				in.Words = append(in.Words, []string{"tee", ad.param})
 			}
 		}
 	}

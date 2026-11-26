@@ -1770,3 +1770,24 @@ verifiers.tsv:519	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of
 verifiers.tsv:520	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 item 4: socat -lf writes its log
 verifiers.tsv:521	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 item 4: ncat -x writes its hex dump
 verifiers.tsv:522	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 item 4: ncat --output by prefix
+verifiers.tsv:527	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: OPEN with no option overwrites on the side socat writes
+verifiers.tsv:528	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: a bare path appends; with no -u or -U both sides are written
+verifiers.tsv:529	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: GOPEN appends on the side socat writes
+verifiers.tsv:530	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: a block device on the side socat writes
+verifiers.tsv:531	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: a credentials file on the side socat writes
+verifiers.tsv:532	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: trunc truncates on the side -u leaves read-only
+verifiers.tsv:533	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: o-trunc truncates on the side -U leaves read-only
+verifiers.tsv:534	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: ftruncate with any value truncates
+verifiers.tsv:535	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: creat with any value is a write
+verifiers.tsv:536	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: every device but a serial one stays judged
+verifiers.tsv:537	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: the device's shape is read once the path is cleaned
+verifiers.tsv:546	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: FILE is OPEN by another name
+verifiers.tsv:547	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7): L16 W1: same, truncating on the read-only side
+verifiers.tsv:549	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7, its rows): OPEN writes over an existing file with no option
+verifiers.tsv:550	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7, its rows): a bare path is GOPEN, which appends
+verifiers.tsv:551	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7, its rows): a disk written through a bare path
+verifiers.tsv:552	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7, its rows): same through OPEN
+verifiers.tsv:553	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7, its rows): a credentials file written with no option
+verifiers.tsv:554	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7, its rows): ftruncate truncates
+verifiers.tsv:555	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7, its rows): O_TRUNC on the read-only side truncates
+verifiers.tsv:556	safety-guard	allow	refuse	hole T228 L16 (re-verify mwxck6ec of 96411a7, its rows): same, -U
