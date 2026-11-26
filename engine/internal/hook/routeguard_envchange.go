@@ -91,10 +91,10 @@ func guardedWord(w string) string {
 // variables it sets. A shell's -c string and eval's words are read the same
 // way. A line the parser cannot read is judged by its text.
 func envChange(command string) string {
-	return envChangeIn(command, 0)
+	return envChangeIn(command, 0, sh.DefinedNames(command))
 }
 
-func envChangeIn(src string, depth int) string {
+func envChangeIn(src string, depth int, defined map[string]bool) string {
 	cmds, err := sh.Parse(src)
 	if err != nil {
 		if markerWord.MatchString(src) || configEnv.MatchString(src) {
@@ -103,7 +103,7 @@ func envChangeIn(src string, depth int) string {
 		return ""
 	}
 	for _, c := range cmds {
-		if why := envCommand(c.Words, depth); why != "" {
+		if why := envCommand(c.Words, depth, defined); why != "" {
 			return why
 		}
 	}
@@ -121,7 +121,7 @@ func assignment(w string) (string, bool) {
 }
 
 // envCommand judges one simple command's words.
-func envCommand(words []string, depth int) string {
+func envCommand(words []string, depth int, defined map[string]bool) string {
 	k := 0
 	for ; k < len(words); k++ {
 		if !sh.Assignment.MatchString(words[k]) {
@@ -143,7 +143,7 @@ func envCommand(words []string, depth int) string {
 		for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 			args = args[1:]
 		}
-		return envCommand(args, depth)
+		return envCommand(args, depth, defined)
 	case "exec":
 		for len(args) > 0 && strings.HasPrefix(args[0], "-") && args[0] != "--" {
 			if strings.Contains(args[0], "c") {
@@ -157,9 +157,9 @@ func envCommand(words []string, depth int) string {
 		if len(args) > 0 && args[0] == "--" {
 			args = args[1:]
 		}
-		return envCommand(args, depth)
+		return envCommand(args, depth, defined)
 	case "env":
-		return envArgs(args, depth)
+		return envArgs(args, depth, defined)
 	case "unset":
 		// zsh's unset -m unsets every variable a pattern matches (T228 L5).
 		patterns := false
@@ -227,7 +227,7 @@ func envCommand(words []string, depth int) string {
 		}
 	case "eval":
 		if depth < 4 {
-			return envChangeIn(strings.Join(args, " "), depth+1)
+			return envChangeIn(strings.Join(args, " "), depth+1, defined)
 		}
 	default:
 		if sh.Shells[prog] && depth < 4 {
@@ -242,14 +242,14 @@ func envCommand(words []string, depth int) string {
 						}
 						s++
 					}
-					return envChangeIn(args[s], depth+1)
+					return envChangeIn(args[s], depth+1, defined)
 				}
 			}
 		}
-		if why := envUnwrapped(words[k:], depth); why != "" {
+		if why := envUnwrapped(words[k:], depth, defined); why != "" {
 			return why
 		}
-		return envClass(words[k:], depth)
+		return envClass(words[k:], depth, defined)
 	}
 	return ""
 }
@@ -260,21 +260,23 @@ func envCommand(words []string, depth int) string {
 // its words an env command, or a string that holds one, or exec, unset or
 // export, read as a shell line (`nix-shell --run 'unset JHON_AGENT'`, `conda
 // run env -i …`), may run it: found.
-func envClass(words []string, depth int) string {
+func envClass(words []string, depth int, defined map[string]bool) string {
 	name := sh.Base(words[0])
-	if sh.NeverRuns(name) && !strings.Contains(words[0], "/") || name == "git" || name == "gh" || name == "jhon" || depth >= 4 {
+	// A no-run name is trusted only bare and not defined on the line as a
+	// function or an alias, as the safety guard's class rule trusts it (T257).
+	if sh.NeverRuns(name) && !strings.Contains(words[0], "/") && !defined[name] || name == "git" || name == "gh" || name == "jhon" || depth >= 4 {
 		return ""
 	}
 	args := words[1:]
 	for i, a := range args {
 		// env is the one of these a runner can execute; the builtins run only in a shell's string.
 		if sh.Base(a) == "env" {
-			if why := envCommand(args[i:], depth+1); why != "" {
+			if why := envCommand(args[i:], depth+1, defined); why != "" {
 				return name + " may run its words: " + why
 			}
 		}
 		if strings.ContainsAny(a, " \t;&|$`") {
-			if why := envChangeIn(a, depth+1); why != "" {
+			if why := envChangeIn(a, depth+1, defined); why != "" {
 				return name + " may run its words: " + why
 			}
 		}
@@ -291,7 +293,7 @@ func envClass(words []string, depth int) string {
 // cannot read, so that the command it runs cannot be told, is judged by its
 // words: one that is env, exec, unset or an export, or changes a guarded
 // variable, is found.
-func envUnwrapped(words []string, depth int) string {
+func envUnwrapped(words []string, depth int, defined map[string]bool) string {
 	in, ok, err := sh.Unwrap(words)
 	if !ok {
 		return ""
@@ -309,14 +311,14 @@ func envUnwrapped(words []string, depth int) string {
 	}
 	for _, s := range append(append([]string{}, in.Strings...), in.Transport...) {
 		if depth < 4 {
-			if why := envChangeIn(s, depth+1); why != "" {
+			if why := envChangeIn(s, depth+1, defined); why != "" {
 				return why
 			}
 		}
 	}
 	// Words are fewer at each step: no bound is needed.
 	for _, w := range in.Words {
-		if why := envCommand(w, depth); why != "" {
+		if why := envCommand(w, depth, defined); why != "" {
 			return why
 		}
 	}
@@ -325,7 +327,7 @@ func envUnwrapped(words []string, depth int) string {
 
 // envArgs judges env's arguments: its options, the variables it sets, and
 // the program it runs.
-func envArgs(args []string, depth int) string {
+func envArgs(args []string, depth int, defined map[string]bool) string {
 	cleared := "env " + "starts the program with an empty environment, without " + AgentVariable
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -333,7 +335,7 @@ func envArgs(args []string, depth int) string {
 		case a == "-" || a == "-i":
 			return cleared
 		case a == "--":
-			return envCommand(args[i+1:], depth)
+			return envCommand(args[i+1:], depth, defined)
 		case strings.HasPrefix(a, "--"):
 			name, value, attached := strings.Cut(a, "=")
 			switch {
@@ -380,7 +382,7 @@ func envArgs(args []string, depth int) string {
 				}
 				continue
 			}
-			return envCommand(args[i:], depth)
+			return envCommand(args[i:], depth, defined)
 		}
 	}
 	return ""

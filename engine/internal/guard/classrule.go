@@ -85,8 +85,10 @@ func containsFunc(xs []string, f func(string) bool) bool {
 // app -rf ~`); each argument read as a shell line (T228 L8: its quotes,
 // escapes and substitutions as the shell reads them, `rm "-rf" "$HOME"`),
 // and the arguments joined as one (keys a terminal is sent one by one);
-// and, for text that is not a shell line (awk's, vim's), each piece of an
-// argument cut at classSeparators.
+// for text that is not a shell line (awk's, vim's), each piece of an
+// argument cut at classSeparators; and an argument's quoted strings in a
+// row as one argv, as an editor's or a language's list gives a program
+// (`system(["rm", "-rf", "~"])`, T257).
 func classLines(args []string) [][]string {
 	lines := [][]string{args}
 	shell := func(s string) {
@@ -117,8 +119,33 @@ func classLines(args []string) [][]string {
 				lines = append(lines, f)
 			}
 		}
+		if strs := sh.CodeStrings(a); len(strs) > 1 {
+			lines = append(lines, strs)
+		}
 	}
 	return lines
+}
+
+// classText is the word lists and the code a program's arguments and the
+// text it reads hold (Program.Input: its standard input, a `<(…)` file),
+// labelled for the class rule's question: "they" for the arguments, the
+// input for what it reads (T257).
+type classText struct {
+	label string
+	texts []string
+	lines [][]string
+}
+
+func classTexts(args, input []string) []classText {
+	out := []classText{{"they hold", args, classLines(args)}}
+	if len(input) > 0 {
+		var lines [][]string
+		for _, in := range input {
+			lines = append(lines, classLines([]string{in})[1:]...)
+		}
+		out = append(out, classText{"the text it reads (its input or a <(…) file) holds", input, lines})
+	}
+	return out
 }
 
 // classFinding is the unreadable question of a program the guard has no
@@ -135,27 +162,76 @@ func classFinding(p sh.Program, name string, args []string, ctx *Ctx, vars map[s
 		u := unreadableAsk(&sh.Unreadable{Why: "rg runs the program its --pre, --hostname-bin or config file names, which the guard does not read"})
 		return &u
 	}
+	texts := classTexts(args, ownInput(p, name, ctx))
 	if modelled(p, name, args, ctx) {
-		return nil
+		// A program read exactly still reads its input as its own (gdb's
+		// commands, expect's script): only that is judged (T257).
+		if len(texts) == 1 {
+			return nil
+		}
+		texts = texts[1:]
 	}
 	inner := *ctx
 	inner.noClass, inner.targets = true, nil
-	for _, l := range classLines(args) {
-		for j := range l {
-			// A program the guard judges, or an interpreter given its code inline (T228 L8).
-			if !classCandidate.MatchString(l[j]) || !classRuns(l[j:]) && sh.InlineCode(sh.Base(l[j]), l[j:]) == nil {
-				continue
-			}
-			cst := &State{Dir: st.Dir, Lost: st.Lost, Links: st.Links.clone()}
-			for _, f := range judgeProgramWords(l[j:], nil, &inner, vars, cst, depth+1, append(append([]string(nil), p.Via...), name), p.Envv) {
-				if f.Level == "deny" || f.Level == "ask" && f.Cls != unreadable {
-					end := min(j+4, len(l))
-					u := unreadableAsk(&sh.Unreadable{Why: name + " is not a program the guard knows never runs its arguments, and they hold `" +
-						strings.Join(l[j:end], " ") + "`, which it would " + map[string]string{"deny": "refuse", "ask": "ask"}[f.Level]})
-					return &u
+	for _, t := range texts {
+		for _, l := range t.lines {
+			for j := range l {
+				// A program the guard judges, or an interpreter given its code inline (T228 L8).
+				if !classCandidate.MatchString(l[j]) || !classRuns(l[j:]) && sh.InlineCode(sh.Base(l[j]), l[j:]) == nil {
+					continue
 				}
+				cst := &State{Dir: st.Dir, Lost: st.Lost, Links: st.Links.clone()}
+				for _, f := range judgeProgramWords(l[j:], nil, &inner, vars, cst, depth+1, append(append([]string(nil), p.Via...), name), p.Envv) {
+					if f.Level == "deny" || f.Level == "ask" && f.Cls != unreadable {
+						end := min(j+4, len(l))
+						return classAsk(name, t.label, "`"+strings.Join(l[j:end], " ")+"`, which it would "+map[string]string{"deny": "refuse", "ask": "ask"}[f.Level])
+					}
+				}
+			}
+		}
+		// What an editor or a language deletes or writes through its own
+		// API (vim's delete(), nvim's os.remove, emacs's
+		// delete-directory), read as an interpreter's code is (T257).
+		code := strings.Join(t.texts, "\n")
+		q := p
+		q.Name, q.Code = name, &code
+		for _, f := range judgeCode(q, name, &inner, vars, st.Dir, st.Lost, depth+1) {
+			if f.Level == "deny" {
+				return classAsk(name, t.label, strings.TrimSpace("code "+strings.TrimPrefix(strings.TrimPrefix(f.What, name+" code"), " "))+": "+f.Why+", which it would refuse")
 			}
 		}
 	}
 	return nil
+}
+
+// inputData are programs whose input is data they filter, pack or show,
+// never commands: their own commands are their arguments (awk's, sed's) or
+// keys typed at a terminal (less's).
+var inputData = set("sed", "awk", "gawk", "mawk", "nawk", "sort", "tar", "less", "more", "most", "gzip", "gunzip", "zcat", "xz",
+	"unxz", "zstd", "bzip2", "bunzip2", "iconv", "envsubst", "patch", "yq", "column", "fmt", "pr", "expand", "unexpand", "sponge")
+
+// ownInput is the text p is given to read (Program.Input) when p may read
+// it as commands of its own (T257): not when the reader already read it as
+// p's program (a shell's or an interpreter's script, make's, crontab's,
+// at's), when p never runs anything by a name the guard trusts, when it is
+// data p filters or writes (inputData, the removal and writing programs,
+// git, gh, jhon), xargs's or parallel's operands, or the input a wrapper
+// hands the program it runs, which is judged with it.
+func ownInput(p sh.Program, name string, ctx *Ctx) []string {
+	if len(p.Input) == 0 || p.Code != nil || sh.StdinRole(name, p.Argv) != "" || sh.Shells[name] || sh.NeverRuns(name) && trusted(p, ctx) ||
+		inputData[name] || rmLike[name] || disk[name] || xargsDestroy[name] || name == "git" || name == "gh" || name == "jhon" ||
+		name == "find" || name == "xargs" || name == "parallel" || name == "at" || name == "batch" || name == "crontab" {
+		return nil
+	}
+	if in, ok, _ := sh.Unwrap(p.Argv); ok && len(in.Words) > 0 {
+		return nil
+	}
+	return p.Input
+}
+
+// classAsk is the class rule's question: name is no program the guard
+// knows never runs its arguments, and what label names holds what.
+func classAsk(name, label, what string) *Finding {
+	u := unreadableAsk(&sh.Unreadable{Why: name + " is not a program the guard knows never runs its arguments, and " + label + " " + what})
+	return &u
 }

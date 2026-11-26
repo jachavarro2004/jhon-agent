@@ -116,7 +116,7 @@ var t228L7Allow = []string{
 // L7b's regression lines outside L8's scope (computed or written scripts, interpreter code the bare line allows): pinned as they are.
 var t228L7Known = []string{
 	"conda run node -e 'require(\"child_process\").execSync(\"rm -rf \" + require(\"os\").homedir())'",
-	"sh <(echo 'rm -rf ~')",
+	// `sh <(echo 'rm -rf ~')` was one; T257 reads a <(…) file a shell runs (t257_test.go).
 	"echo 'rm -rf ~' > x.sh && sh x.sh",
 	"echo cm0gLXJmIH4K | base64 -d | sh",
 }

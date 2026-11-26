@@ -1,6 +1,9 @@
 package guard
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
@@ -57,6 +60,72 @@ func judgeGitConfigEnv(args []string, env map[string]string, ctx *Ctx, vars map[
 				f = transportFindings(f)
 			}
 			out = append(out, f...)
+		}
+	}
+	return out
+}
+
+// gitConfigFileVars name a configuration file git reads besides the
+// repository's own.
+var gitConfigFileVars = []string{"GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM"}
+
+// gitIncludeKey is a key that makes git read another file: include.path,
+// includeIf.<condition>.path.
+var gitIncludeKey = regexp.MustCompile(`(?i)^include(?:if\..+)?\.path$`)
+
+// judgeGitConfigFiles is the findings of the configuration files a git
+// command line is pointed at (T257): GIT_CONFIG_GLOBAL or GIT_CONFIG_SYSTEM
+// (set on the line or exported), and a -c or --config-env include.path or
+// includeIf.<condition>.path. Each file is read as git reads it, its
+// includes too, and every setting in it is read as -c's is
+// (sh.GitSetting: an alias, a command key). A file the line writes, or one
+// the guard cannot read, is judged by the line's visible words alone, as a
+// script file is (L1311); /dev/null holds none.
+func judgeGitConfigFiles(args []string, env map[string]string, ctx *Ctx, vars map[string]string, st *State, depth int, route []string, envv map[string]string) []Finding {
+	g := sh.GitParts(args)
+	rest := append([]string{g.Sub}, g.Rest...)
+	var files []string
+	for _, n := range gitConfigFileVars {
+		if v := env[n]; v != "" {
+			files = append(files, v)
+		}
+	}
+	for _, c := range g.Configs {
+		if k, v, ok := strings.Cut(c, "="); ok && gitIncludeKey.MatchString(k) {
+			files = append(files, v)
+		}
+	}
+	for i := 0; i+1 < len(g.Globals); i++ {
+		if k, name, ok := strings.Cut(g.Globals[i+1], "="); g.Globals[i] == "--config-env" && ok && gitIncludeKey.MatchString(k) && env[name] != "" {
+			files = append(files, env[name])
+		}
+	}
+	var out []Finding
+	for _, f := range files {
+		path := pathOf(f, st.Dir, ctx, vars)
+		if path == "" || path == os.DevNull || st.wrote(f, ctx, vars) {
+			continue
+		}
+		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() || info.Size() > scriptMaxBytes {
+			continue
+		}
+		listed, ok := readGit(filepath.Dir(path), "config", "--file", path, "--includes", "--null", "--list")
+		if !ok {
+			continue
+		}
+		for _, kv := range strings.Split(listed, "\x00") {
+			key, value, _ := strings.Cut(kv, "\n")
+			strs, transport, err := sh.GitSetting(key+"="+value, rest)
+			if err != nil {
+				return append(out, unreadableAsk(err))
+			}
+			for _, s := range strs {
+				found := judgeScript(s, ctx, vars, st, depth, route, envv)
+				if transport && sh.ForwardCommand(s) {
+					found = transportFindings(found)
+				}
+				out = append(out, found...)
+			}
 		}
 	}
 	return out
