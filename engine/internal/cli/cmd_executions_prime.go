@@ -22,9 +22,12 @@ const executionsPrimeUsage = "usage: jhon executions prime [--timeout <minutes>]
 // another, the whole test command of each uv-run pytest project whose record
 // is missing or holds no fingerprints, collecting it (execution.Collect), a
 // first run its deadline cut included, which `jhon executions run` does not
-// try again. It belongs to no change and writes no execution record. Exit 0
-// when every missing record was built or none was missing, 1 otherwise, 2 on
-// a usage error, 128 + the signal when interrupted.
+// try again. Its deadline is the first-run deadline (execution.FirstRunMinutes)
+// unless --timeout names another (T255, L1725). A run whose failures are the
+// test environment's (execution.Watch.Refusal) keeps no record. It belongs to
+// no change and writes no execution record. Exit 0 when every missing record
+// was built or none was missing, 1 otherwise, 2 on a usage error, 128 + the
+// signal when interrupted.
 func runExecutionsPrime(argv []string) (int, error) {
 	var rootArg, timeoutArg *string
 	for i := 0; i < len(argv); i++ {
@@ -44,6 +47,9 @@ func runExecutionsPrime(argv []string) (int, error) {
 	minutes, ok := timeoutMinutes(timeoutArg, executionsPrimeUsage)
 	if !ok {
 		return 2, nil
+	}
+	if timeoutArg == nil {
+		minutes = execution.FirstRunMinutes
 	}
 	root := discover.FindRoot(cwd())
 	if rootArg != nil {
@@ -81,6 +87,7 @@ func runExecutionsPrime(argv []string) (int, error) {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
 	built, timedOut := 0, false
+	fmt.Printf("jhon executions prime: each first run's deadline is %s min (--timeout sets another)\n", js.NumberString(minutes))
 	for _, b := range builds {
 		// A project's exclusive groups hold against a run of its tests too.
 		release, ok := execution.LockGroups(root, groups[b.project], nil, func(g string) {
@@ -91,8 +98,9 @@ func runExecutionsPrime(argv []string) (int, error) {
 		}
 		fmt.Printf("==> %s: %s\n", b.project, b.command)
 		execution.StartBuild(b.data)
-		r := execution.RunOne(b.command, filepath.Join(root, b.project), execution.Run{Stdout: os.Stdout, Deadline: execution.Deadline(minutes), Signals: sigs})
-		why := firstRunEnd(b.data, r, minutes)
+		watch := execution.NewWatch()
+		r := execution.RunOne(b.command, filepath.Join(root, b.project), execution.Run{Stdout: os.Stdout, Deadline: execution.Deadline(minutes), Signals: sigs, Capture: watch})
+		why, refused := firstRunEnd(b.data, r, minutes, watch)
 		release()
 		switch {
 		case r.Interrupted != nil:
@@ -104,7 +112,13 @@ func runExecutionsPrime(argv []string) (int, error) {
 			return 2, nil
 		case r.Code == nil:
 			timedOut = true
-			fmt.Printf("<== %s: timeout after %s min; its process group was killed and no record was kept\n", b.project, js.NumberString(minutes))
+			got := ""
+			if progress := watch.Progress(); progress != "" {
+				got = "; " + progress
+			}
+			fmt.Printf("<== %s: timeout after %s min; its process group was killed and no record was kept%s\n", b.project, js.NumberString(minutes), got)
+		case refused != "":
+			fmt.Printf("<== %s: exit %d; no record was kept: %s, which points at the test environment, not the change: are the test services (a database, a cache) up?\n", b.project, *r.Code, refused)
 		case why == "" && (*r.Code == 0 || *r.Code == 1):
 			built++
 			fmt.Printf("<== %s: exit %d; its pytest-testmon record is kept\n", b.project, *r.Code)

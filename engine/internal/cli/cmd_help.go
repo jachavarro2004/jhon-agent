@@ -501,11 +501,21 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            slice base (--affected <base-ref>, or a full run) is
                            for the RED record and the slice's closing run only;
                            a uv-run pytest project is narrowed by
-                           pytest-testmon, and one with no record runs whole
-                           once to build it (a first run its deadline cut is
-                           left to jhon executions prime); a wide one runs only
-                           the test modules the change touched, those its
-                           record holds narrowed by it;
+                           pytest-testmon, whose record every worktree of the
+                           repository shares (one per project; each run writes
+                           a private copy, kept when pytest ran to its end and
+                           its failures are not the test environment's: every
+                           test failing, a service refusing the connection),
+                           and one with no record runs whole once to build it,
+                           named with its tests' count (a first run its
+                           deadline cut is left to jhon executions prime); a
+                           first run, and one that runs again the tests the
+                           record marks failed, get 180 min unless --timeout
+                           is given; a cut run says how far pytest got; a
+                           record that marks most tests failed is named with
+                           jhon executions forget; a wide one runs only the
+                           test modules the change touched, those its record
+                           holds narrowed by it;
                            projects run in parallel, --jobs at a time
                            (executions_jobs in openspec/config.yaml, else the
                            CPUs, at most 4); the projects of one
@@ -522,9 +532,19 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
   jhon executions prime [--timeout <minutes>]
                            build the pytest-testmon record of each uv-run
                            pytest project that has none: its whole test
-                           command once, under the deadline, kept when pytest
-                           ran to its end; writes no execution record; exit 0
+                           command once, under the deadline (180 min unless
+                           --timeout is given), kept when pytest ran to its
+                           end and its failures are not the test
+                           environment's; writes no execution record; exit 0
                            when none is missing any more, 1 otherwise
+  jhon executions forget <project> [--root <project>]
+                           drop a uv-run pytest project's pytest-testmon
+                           record (one a run while the test services were down
+                           left, marking its tests failed), so the next
+                           affected run builds it again, every test once; the
+                           whole record, since a test that failed early
+                           recorded too little of the code it covers; exit 2
+                           for a name that is no such project
   jhon executions verify <change> --verdict pass|fail [--note <text>] [--json]
                            record a light verify (jhon-checker's, when a
                            slice of a code change closes) in the change's

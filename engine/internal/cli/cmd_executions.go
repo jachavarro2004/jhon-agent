@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
+	"io"
 	"math"
 	"os"
 	"os/signal"
@@ -115,6 +116,9 @@ type planned struct {
 	Cwd     string `json:"cwd"`
 	// Reused is a command the run would not run: it passed on this working tree.
 	Reused bool `json:"reused,omitempty"`
+	// TimeoutMinutes is the command's own deadline, when it is not the
+	// run's: the first-run deadline (execution.FirstRunMinutes).
+	TimeoutMinutes float64 `json:"timeout_minutes,omitempty"`
 }
 
 type dryRun struct {
@@ -151,6 +155,27 @@ type projectPlan struct {
 	LastSeconds float64  `json:"last_seconds,omitempty"`
 	Checks      []string `json:"checks"`
 	Reused      bool     `json:"reused,omitempty"`
+	// FirstRun is a project with no usable pytest-testmon record, whose
+	// tests all run once to build it (T255).
+	FirstRun *firstRunJSON `json:"first_run,omitempty"`
+	// FailedMarks is how many of its record's tests pytest-testmon marks
+	// failed, which it runs again whatever changed.
+	FailedMarks *failedMarksJSON `json:"failed_marks,omitempty"`
+}
+
+type firstRunJSON struct {
+	// Record is the record's state: none or unusable.
+	Record string `json:"record"`
+	// Tests and Modules are the test functions its test modules define.
+	Tests   int `json:"tests"`
+	Modules int `json:"modules"`
+	// DeadlineMinutes is the first run's deadline.
+	DeadlineMinutes float64 `json:"deadline_minutes"`
+}
+
+type failedMarksJSON struct {
+	Failed int `json:"failed"`
+	Total  int `json:"total"`
 }
 
 type reachJSON struct {
@@ -208,6 +233,9 @@ func runExecutions(argv []string) (int, error) {
 	}
 	if len(argv) > 0 && argv[0] == "prime" {
 		return runExecutionsPrime(argv[1:])
+	}
+	if len(argv) > 0 && argv[0] == "forget" {
+		return runExecutionsForget(argv[1:])
 	}
 	// unit is `--affected` with no base: the last argument, or before an option.
 	json, dry, force, unit := false, false, false, false
@@ -344,8 +372,17 @@ func runExecutions(argv []string) (int, error) {
 	// A project runs its test command when it is testable, then its code
 	// checks (contracts/ldd.md, "Code checks"); one with neither is
 	// not a candidate.
-	// build is the pytest-testmon record a first run's command builds, or "".
-	type step struct{ kind, command, build string }
+	// build is the pytest-testmon record a first run's command builds, or
+	// "", and data the record a pytest-testmon command narrows with, which
+	// it runs on a private copy of (execution.CheckOut). long is a run that
+	// has to end once for the record to narrow (a first run, or one that
+	// runs again the tests the record marks failed): with no --timeout, its
+	// deadline is execution.FirstRunMinutes. notes are said before it starts.
+	type step struct {
+		kind, command, build, data string
+		long                       bool
+		notes                      []string
+	}
 	var testable, all []string
 	steps := map[string][]step{}
 	for _, p := range resolved.Projects {
@@ -440,8 +477,15 @@ func runExecutions(argv []string) (int, error) {
 	estimates := map[string]execution.Reach{}
 	// How each project's tests are narrowed, and an own run's module count.
 	narrowed, modules := map[string]string{}, map[string]int{}
-	// Each pytest project's record state, read once.
+	// Each pytest project's record state, read once, and what a usable one
+	// says the change reaches (execution.TestmonReach).
 	states := map[string]string{}
+	reaches := map[string]execution.Reach{}
+	// firstRuns are the first runs' notes and their test counts.
+	firstRuns := map[string]firstRunJSON{}
+	firstNotes := map[string]string{}
+	// explicit is a run that names its deadline: it binds every command.
+	explicit := timeoutArg != nil
 	// wide is why the run of p is wide, "" when it is not; byReach is whether
 	// its usable record says so, and so can still narrow the touched modules.
 	wide := func(p string) (why string, byReach bool) {
@@ -454,16 +498,31 @@ func runExecutions(argv []string) (int, error) {
 		if untracked != "" {
 			return untracked + " changed, and pytest-testmon tracks Python files only", false
 		}
-		switch states[p] {
-		case execution.RecordUsable:
-			if r, ok := execution.TestmonReach(data, changedPy); ok && r.Total > 0 {
-				if r.Wide() {
-					return "the change reaches " + r.String(), true
-				}
-				estimates[p] = r
+		if r, ok := reaches[p]; ok && r.Total > 0 {
+			if r.Wide() {
+				return "the change reaches " + r.String(), true
 			}
+			estimates[p] = r
 		}
 		return "", false
+	}
+	// failedOnly makes step i of p, a pytest-testmon run of the record at
+	// data, one that runs again the tests the record marks failed when they
+	// are all or most of what it selects: it gets the first-run deadline,
+	// since pytest-testmon writes its record only at a run's end (T255, L1725).
+	failedOnly := func(p string, i int) {
+		r := reaches[p]
+		if explicit || !r.OnlyFailed() && !r.MostlyFailed() {
+			return
+		}
+		which := "every test pytest-testmon selects is one"
+		if !r.OnlyFailed() {
+			which = "most tests pytest-testmon selects are ones"
+		}
+		n := fmt.Sprintf("%s: %s its record marks failed (%d), so it runs under the first-run deadline of %d min: once it ends, the record narrows again", p, which, r.Failed, execution.FirstRunMinutes)
+		steps[p][i].long = true
+		steps[p][i].notes = append(steps[p][i].notes, n)
+		scopeReasons = append(scopeReasons, n)
 	}
 	for _, p := range testable {
 		if !slices.ContainsFunc(selection, func(s execution.Selected) bool { return s.Project == p }) {
@@ -493,11 +552,28 @@ func runExecutions(argv []string) (int, error) {
 			}
 			data := execution.TestmonData(top, p)
 			states[p] = execution.TestmonRecord(data)
+			steps[p][i].data = data
+			if states[p] == execution.RecordUsable {
+				if r, ok := execution.TestmonReach(data, changedPy); ok {
+					reaches[p] = r
+					// A record that marks most tests failed runs them all,
+					// whatever changed (T255, L1725): said, with its cause and
+					// the command that drops it.
+					if r.MostlyFailed() {
+						n := mostlyFailedNote(p, r)
+						steps[p][i].notes = append(steps[p][i].notes, n)
+						scopeReasons = append(scopeReasons, n)
+					}
+				}
+			}
 			// Narrowing starts with a record: with none, or one that holds no
 			// fingerprints, the whole command runs once, collecting it.
 			if _, cut := execution.FirstRunCut(data); needsFirstRun(states[p]) && !cut {
 				steps[p][i].command, _ = execution.Collect(s.command, top, p, cov)
-				steps[p][i].build = data
+				steps[p][i].build, steps[p][i].data = data, ""
+				steps[p][i].long = !explicit
+				firstRuns[p], firstNotes[p] = firstRunOf(root, p, states[p], !explicit)
+				steps[p][i].notes = append(steps[p][i].notes, firstNotes[p])
 				precise = append(precise, p)
 				continue
 			}
@@ -561,6 +637,7 @@ func runExecutions(argv []string) (int, error) {
 						ran = "no test module of it changed, so pytest-testmon runs what its record holds stale"
 						narrowed[p], modules[p] = "testmon", 0
 						precise = append(precise, p)
+						failedOnly(p, i)
 					}
 				}
 				scopeReasons = append(scopeReasons, fmt.Sprintf("%s: %s; %s, and the rest is left to the PR's CI, whose green checks test the delivery", p, why, ran))
@@ -574,6 +651,7 @@ func runExecutions(argv []string) (int, error) {
 			steps[p][i].command = c
 			narrowed[p] = "testmon"
 			precise = append(precise, p)
+			failedOnly(p, i)
 		}
 		steps[p] = slices.DeleteFunc(steps[p], func(s step) bool { return s.command == "" })
 		if len(steps[p]) == 0 {
@@ -610,7 +688,7 @@ func runExecutions(argv []string) (int, error) {
 		notes = append(notes, "tests narrowed by vitest --related, inside each project nx affected selects, to those whose imports reach a changed file or its component: "+strings.Join(vitest, ", "))
 	}
 	if len(precise) > 0 {
-		notes = append(notes, testmonNotes(states, precise)...)
+		notes = append(notes, testmonNotes(states, precise, firstNotes)...)
 	}
 	for _, p := range precise {
 		if r, ok := estimates[p]; ok {
@@ -642,6 +720,14 @@ func runExecutions(argv []string) (int, error) {
 	if affected {
 		affectedSince = " (affected since " + sinceShown + ")"
 	}
+	// deadlineOf is a command's deadline: the first-run deadline for one that
+	// has to end once (step.long), unless the run names its own.
+	deadlineOf := func(long bool) float64 {
+		if long && !explicit {
+			return execution.FirstRunMinutes
+		}
+		return minutes
+	}
 
 	if dry {
 		if json {
@@ -649,7 +735,11 @@ func runExecutions(argv []string) (int, error) {
 			for _, p := range plan {
 				pp := projectPlan{Project: p, Checks: []string{}, Reused: true}
 				for _, s := range steps[p] {
-					out.Plan = append(out.Plan, planned{p, s.kind, s.command, p, reusable(p, s)})
+					step := planned{p, s.kind, s.command, p, reusable(p, s), 0}
+					if m := deadlineOf(s.long); m != minutes {
+						step.TimeoutMinutes = m
+					}
+					out.Plan = append(out.Plan, step)
 					pp.Reused = pp.Reused && reusable(p, s)
 					if s.kind != "" {
 						pp.Checks = append(pp.Checks, s.kind)
@@ -662,6 +752,12 @@ func runExecutions(argv []string) (int, error) {
 					}
 					if ms, ok := execution.LastTestRun(root, p); ok {
 						pp.LastSeconds = float64(ms) / 1000
+					}
+					if f, ok := firstRuns[p]; ok {
+						pp.FirstRun = &f
+					}
+					if r, ok := reaches[p]; ok && r.Failed > 0 {
+						pp.FailedMarks = &failedMarksJSON{r.Failed, r.Total}
 					}
 				}
 				if pp.Tests == "" && narrowed[p] == "own" {
@@ -689,7 +785,11 @@ func runExecutions(argv []string) (int, error) {
 				if reusable(p, s) {
 					verb = "would reuse"
 				}
-				lines = append(lines, fmt.Sprintf("%s  %s: sh -c '%s'  (cwd %s; %s)", verb, label(p, s), s.command, filepath.Join(root, p), reason))
+				deadline := ""
+				if m := deadlineOf(s.long); m != minutes {
+					deadline = "; deadline " + js.NumberString(m) + " min"
+				}
+				lines = append(lines, fmt.Sprintf("%s  %s: sh -c '%s'  (cwd %s; %s%s)", verb, label(p, s), s.command, filepath.Join(root, p), reason, deadline))
 			}
 		}
 		lines = append(lines, "would write  "+recordPath)
@@ -758,6 +858,9 @@ func runExecutions(argv []string) (int, error) {
 		return execution.WriteRecord(abs, record)
 	}
 	var writeErr error
+	// runNotes are what the run learned while it ran: a record it did not
+	// keep, a run its deadline cut.
+	var runNotes []string
 	runProject := func(i int, p string) {
 		out, held := stdout, (*os.File)(nil)
 		if jobs > 1 {
@@ -816,8 +919,12 @@ func runExecutions(argv []string) (int, error) {
 				mu.Unlock()
 				continue
 			}
+			for _, n := range s.notes {
+				show("... " + n)
+			}
 			show(fmt.Sprintf("==> %s: %s", label(p, s), s.command))
 			started := time.Now()
+			stepMinutes := deadlineOf(s.long)
 			sig := make(chan os.Signal, 1)
 			finished := make(chan struct{})
 			go func() {
@@ -828,16 +935,43 @@ func runExecutions(argv []string) (int, error) {
 				}
 			}()
 			tail := &execution.Tail{}
+			watch := execution.NewWatch()
 			if s.build != "" {
 				execution.StartBuild(s.build)
 			}
-			r := execution.RunOne(s.command, filepath.Join(root, p), execution.Run{Stdout: out, Stderr: errOut, Deadline: execution.Deadline(minutes), Signals: sig, Capture: tail})
+			// A pytest-testmon run writes a private copy of the shared record,
+			// which replaces it only when pytest ran to its end (T255).
+			command := s.command
+			var private *execution.Private
+			if s.data != "" && strings.Contains(command, "TESTMON_DATAFILE=") {
+				if c, err := execution.CheckOut(s.data); err == nil {
+					private, command = c, c.Command(command)
+				}
+			}
+			r := execution.RunOne(command, filepath.Join(root, p), execution.Run{Stdout: out, Stderr: errOut, Deadline: execution.Deadline(stepMinutes), Signals: sig, Capture: io.MultiWriter(tail, watch)})
 			close(finished)
+			refused := ""
+			if private != nil {
+				code := r.Code
+				if r.Interrupted != nil || r.StartError != "" {
+					code = nil
+				}
+				_, refused = private.Finish(code, watch)
+			}
 			// A first run's file is the record only when pytest ran to its end.
 			if s.build != "" {
-				if why := firstRunEnd(s.build, r, minutes); why != "" {
+				why, notKept := firstRunEnd(s.build, r, stepMinutes, watch)
+				refused = notKept
+				if why != "" {
 					show(fmt.Sprintf("... %s: the first run under pytest-testmon %s, so no record was kept and later runs run only the test modules the change touched; `jhon executions prime --timeout <minutes>` builds it with a longer deadline", p, why))
 				}
+			}
+			if refused != "" {
+				n := refusedNote(p, refused)
+				show("... " + n)
+				mu.Lock()
+				runNotes = append(runNotes, n)
+				mu.Unlock()
 			}
 			if r.Interrupted != nil {
 				return
@@ -851,7 +985,22 @@ func runExecutions(argv []string) (int, error) {
 			status := execution.Timeout
 			switch {
 			case r.Code == nil:
-				show(fmt.Sprintf("<== %s: timeout after %s min; its process group was killed", label(p, s), js.NumberString(minutes)))
+				got := ""
+				if progress := watch.Progress(); progress != "" {
+					got = "; " + progress
+				}
+				show(fmt.Sprintf("<== %s: timeout after %s min; its process group was killed%s", label(p, s), js.NumberString(stepMinutes), got))
+				// pytest-testmon writes its record at a run's end: a run cut
+				// every time never narrows the next one (T255, L1725).
+				if private != nil {
+					after := ""
+					if progress := watch.Progress(); progress != "" {
+						after = " after " + progress
+					}
+					mu.Lock()
+					runNotes = append(runNotes, fmt.Sprintf("%s: cut at its %s min deadline%s: pytest-testmon writes its record only at a run's end, so the next run selects the same tests again; give it a longer --timeout <minutes>", p, js.NumberString(stepMinutes), after))
+					mu.Unlock()
+				}
 			case *r.Code == 0:
 				status = execution.Pass
 			default:
@@ -918,6 +1067,7 @@ func runExecutions(argv []string) (int, error) {
 		}()
 	}
 	wg.Wait()
+	notes = append(notes, runNotes...)
 	if writeErr != nil {
 		return 1, writeErr
 	}
@@ -1013,17 +1163,21 @@ func needsFirstRun(state string) bool {
 }
 
 // firstRunEnd ends the first run of the record at data, which ended as r
-// under a deadline of minutes (execution.FinishBuild), and is why it built no
-// record that later runs should not try again here: "" when it built one,
-// and when it was stopped or failed before pytest's end, which the next run
-// tries again.
-func firstRunEnd(data string, r execution.Outcome, minutes float64) string {
+// under a deadline of minutes and whose output w watched
+// (execution.FinishBuild), and is why it built no record that later runs
+// should not try again here: "" when it built one, and when it was stopped
+// or failed before pytest's end, which the next run tries again. refused is
+// why the record it wrote is not kept, its failures being the test
+// environment's (execution.Watch.Refusal): the next run tries again too.
+func firstRunEnd(data string, r execution.Outcome, minutes float64, w *execution.Watch) (why, refused string) {
 	if r.Interrupted != nil || r.StartError != "" {
-		execution.FinishBuild(data, nil)
-		return ""
+		execution.FinishBuild(data, nil, nil)
+		return "", ""
 	}
-	kept := execution.FinishBuild(data, r.Code)
-	why := ""
+	kept, refused := execution.FinishBuild(data, r.Code, w)
+	if refused != "" {
+		return "", refused
+	}
 	switch {
 	case r.Code == nil:
 		why = "hit its " + js.NumberString(minutes) + " min deadline"
@@ -1033,7 +1187,7 @@ func firstRunEnd(data string, r execution.Outcome, minutes float64) string {
 	if why != "" {
 		execution.MarkFirstRunCut(data, why)
 	}
-	return why
+	return why, ""
 }
 
 // timeoutMinutes is --timeout's minutes, the default when arg is nil; ok is
@@ -1106,9 +1260,10 @@ func unitSince(root, top, change, workingTree string) (m measured, note string) 
 }
 
 // testmonNotes say, for the projects pytest-testmon narrows, whose record is
-// in states, which have a record that narrows this run and which run every
-// test because they have none, or one a crashed run left without fingerprints.
-func testmonNotes(states map[string]string, projects []string) []string {
+// in states, which have a record that narrows this run, and, one by one with
+// first's note (firstRunOf), which run all their tests because they have
+// none, or one a crashed run left without fingerprints.
+func testmonNotes(states map[string]string, projects []string, first map[string]string) []string {
 	by := map[string][]string{}
 	for _, p := range projects {
 		by[states[p]] = append(by[states[p]], p)
@@ -1116,15 +1271,136 @@ func testmonNotes(states map[string]string, projects []string) []string {
 	var out []string
 	for _, n := range []struct{ state, note string }{
 		{execution.RecordUsable, "tests narrowed by pytest-testmon to those whose executed code changed: "},
-		{execution.RecordNone, "pytest-testmon has no record yet, so every test runs once and becomes it; later runs are narrowed: "},
-		{execution.RecordUnusable, "pytest-testmon's record holds no file fingerprints (a run crashed while writing it), so every test runs once and repairs it; later runs are narrowed: "},
+		{execution.RecordNone, ""},
+		{execution.RecordUnusable, ""},
 		{execution.RecordUnknown, "pytest-testmon's record could not be read (python3 is needed), so how far it narrows is unknown: "},
 	} {
+		if n.note == "" {
+			for _, p := range by[n.state] {
+				if first[p] != "" {
+					out = append(out, first[p])
+				}
+			}
+			continue
+		}
 		if len(by[n.state]) > 0 {
 			out = append(out, n.note+strings.Join(by[n.state], ", "))
 		}
 	}
 	return out
+}
+
+// firstRunOf is the first run of the project at projectPath under root,
+// whose pytest-testmon record is in state (none or unusable): every test of
+// it runs once (T255, L1723), and the note that says so, with how many test
+// functions its test modules define (execution.CountTests) and, when long,
+// its deadline.
+func firstRunOf(root, projectPath, state string, long bool) (firstRunJSON, string) {
+	tests, modules := execution.CountTests(root, projectPath)
+	f := firstRunJSON{Record: state, Tests: tests, Modules: modules}
+	count, deadline := "", ""
+	if tests > 0 {
+		count = fmt.Sprintf(" (%s in %s)", plural(tests, "test function"), plural(modules, "module"))
+	}
+	if long {
+		f.DeadlineMinutes = execution.FirstRunMinutes
+		deadline = fmt.Sprintf(", under the first-run deadline of %d min", execution.FirstRunMinutes)
+	}
+	if state == execution.RecordUnusable {
+		return f, projectPath + ": pytest-testmon's record of it holds no file fingerprints (a run crashed while writing it), so all its tests run once" + count + " and repair it" + deadline + "; later runs are narrowed"
+	}
+	return f, projectPath + ": pytest-testmon has no record of it yet, so all its tests run once" + count + " and become its record" + deadline + "; later runs are narrowed"
+}
+
+// plural is n things.
+func plural(n int, thing string) string {
+	if n == 1 {
+		return "1 " + thing
+	}
+	return strconv.Itoa(n) + " " + thing + "s"
+}
+
+// mostlyFailedNote says a project's pytest-testmon record marks most of its
+// tests failed (execution.Reach.MostlyFailed), why, and how to drop it.
+func mostlyFailedNote(p string, r execution.Reach) string {
+	return fmt.Sprintf("%s: pytest-testmon's record marks %d of its %d tests failed, and pytest-testmon runs every failed test again whatever changed: a run while the test services were down (connection refused) leaves such a record; with them up, a run that ends repairs it, or `jhon executions forget %s` drops it and the next run builds it again", p, r.Failed, r.Total, p)
+}
+
+// refusedNote says a project's run kept no pytest-testmon record, why being
+// its failures the test environment's (execution.Watch.Refusal).
+func refusedNote(p, why string) string {
+	return p + ": the record pytest-testmon wrote in this run is not kept: " + why + ", which points at the test environment, not the change: are the test services (a database, a cache) up? The record stays as it was"
+}
+
+const executionsForgetUsage = "usage: jhon executions forget <project> [--root <project>]"
+
+// runExecutionsForget drops a uv-run pytest project's pytest-testmon record
+// (T255, L1725): `jhon executions forget <project> [--root <project>]`. The
+// next affected run builds it again, every test once. The whole record, not
+// only its failed marks: a test that failed because a service was down
+// recorded only the code it ran before failing, so trusting it as passing
+// would let a change it reaches select it no more, and a record must only
+// ever make pytest-testmon select more, never less (L1724). The worktree's
+// own record from before the shared one goes too, or it would be adopted
+// again. Exit 0, or 2 on a usage error or a name that is no such project.
+func runExecutionsForget(argv []string) (int, error) {
+	var rootArg *string
+	var names []string
+	for i := 0; i < len(argv); i++ {
+		if argv[i] == "--root" {
+			if i+1 >= len(argv) || strings.HasPrefix(argv[i+1], "-") {
+				fmt.Fprintln(os.Stderr, executionsForgetUsage)
+				return 2, nil
+			}
+			i++
+			rootArg = &argv[i]
+			continue
+		}
+		names = append(names, argv[i])
+	}
+	if len(names) != 1 || strings.HasPrefix(names[0], "-") {
+		fmt.Fprintln(os.Stderr, executionsForgetUsage)
+		return 2, nil
+	}
+	name := strings.TrimSuffix(names[0], "/")
+	root := discover.FindRoot(cwd())
+	if rootArg != nil {
+		root = project.Resolve(cwd(), *rootArg)
+	}
+	resolved, err := discover.ProjectsFor(root)
+	if err != nil {
+		return 1, err
+	}
+	top := vcs.GitTopLevel(root)
+	var pytest []string
+	for _, p := range resolved.Projects {
+		if p.Command == nil {
+			continue
+		}
+		if _, ok := execution.Precise(*p.Command, top, p.Path, false); ok {
+			pytest = append(pytest, p.Path)
+		}
+	}
+	if !slices.Contains(pytest, name) {
+		known := "none"
+		if len(pytest) > 0 {
+			known = strings.Join(pytest, ", ")
+		}
+		fmt.Fprintf(os.Stderr, "jhon executions forget: %s is not a uv-run pytest project here: %s\n", name, known)
+		return 2, nil
+	}
+	data := execution.TestmonData(top, name)
+	legacy := execution.LegacyTestmonData(top, name)
+	dropped := execution.Forget(data)
+	if legacy != "" && execution.Forget(legacy) {
+		dropped = true
+	}
+	if !dropped {
+		fmt.Printf("jhon executions forget: %s has no pytest-testmon record; nothing to drop\n", name)
+		return 0, nil
+	}
+	fmt.Printf("jhon executions forget: %s's pytest-testmon record is dropped (%s); the next affected run builds it again, every test once\n", name, data)
+	return 0, nil
 }
 
 // lastRuns is how long each planned project's tests took the last time an
