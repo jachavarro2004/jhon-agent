@@ -368,20 +368,24 @@ func SaveState(top string, s ChangeState) string {
 
 // queueNote queues s in top's queue and says so; where the queue cannot be
 // written, the note says why the state was not saved: why Engram failed,
-// or inside the sandbox that it keeps Engram's folder read-only.
+// or inside the sandbox that it keeps Engram's folder read-only, then the
+// queue's path and why it could not be written, both quoted.
 func queueNote(top string, s ChangeState, note func(string) string, why string) string {
 	queue, err := queueState(top, s)
 	if err == nil {
 		return "jhon: the state of " + s.Change + " was queued for Engram; Jhon saves it outside the sandbox"
 	}
-	where := "the queue " + queue
+	// The queue's path and the error are quoted: a linked worktree's common
+	// dir is a path a sandboxed command wrote (T227).
+	where := fmt.Sprintf("the queue %q", queue)
 	if queue == "" {
 		where = "no queue"
 	}
+	failed := fmt.Sprintf(" could not be written: %q; fix: run jhon doctor", err.Error())
 	if why == "" {
-		return note("Jhon's sandbox keeps Engram's folder " + engramFolder() + " read-only, and " + where + " could not be written: " + err.Error() + "; fix: run jhon doctor")
+		return note("Jhon's sandbox keeps Engram's folder " + engramFolder() + " read-only, and " + where + failed)
 	}
-	return note(why + "; " + where + " could not be written: " + err.Error() + "; fix: run jhon doctor")
+	return note(why + "; " + where + failed)
 }
 
 // ClosingChanges are the active changes of top's branch a commit there

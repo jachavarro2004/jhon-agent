@@ -19,8 +19,21 @@ var (
 	queueErr  io.Writer = os.Stderr
 )
 
-// kernelFix is the fix for a kernel with no openat2 (ldd.ErrNoOpenat2).
-const kernelFix = "a Linux kernel 5.6 or newer"
+// kernelFix is the fix for a kernel with no openat2 (ldd.ErrNoOpenat2);
+// seccompFix for a seccomp filter that refuses it (ldd.ErrOpenat2Refused),
+// where the queue is not at fault and removing it would discard records.
+const (
+	kernelFix  = "a Linux kernel 5.6 or newer"
+	seccompFix = "allow openat2 in the seccomp filter jhon runs under (a container's profile), or run jhon outside it"
+)
+
+// closedFix is the fix for why, the queue failing closed (FlushReport.Closed).
+func closedFix(why string) string {
+	if why == ldd.ErrOpenat2Refused.Error() {
+		return seccompFix
+	}
+	return kernelFix
+}
 
 // flushEngramQueue saves the state records Jhon queued inside its sandbox
 // (T222 S1b, ldd.FlushEngramQueue) before a jhon command run outside it:
@@ -30,8 +43,10 @@ const kernelFix = "a Linux kernel 5.6 or newer"
 // guards from anywhere), else "" for the working directory. It costs one
 // walk up to the repository and one open where nothing is queued, and does
 // nothing inside the sandbox or with Engram off. A refused entry, and once
-// the records Engram did not take, are lines on stderr, never on stdout,
-// which a hook answers on; a name a sandboxed command chose is quoted.
+// the records it kept (counting records only), are lines on stderr, never
+// on stdout, which a hook answers on; the kept line says Engram did not
+// take them only where Engram was asked; a name a sandboxed command chose
+// is quoted.
 func flushEngramQueue(dir string) {
 	if sandbox.Inside() {
 		return
@@ -55,26 +70,36 @@ func flushEngramQueue(dir string) {
 	}
 	lastFlush = ldd.FlushEngramQueue(top)
 	if lastFlush.Closed != "" {
-		fmt.Fprintf(queueErr, "jhon: the Engram queue was not read: %s; fix: %s\n", lastFlush.Closed, kernelFix)
+		fmt.Fprintf(queueErr, "jhon: the Engram queue was not read: %s; fix: %s\n", lastFlush.Closed, closedFix(lastFlush.Closed))
 	}
 	for _, r := range lastFlush.Refused {
 		fmt.Fprintf(queueErr, "jhon: the Engram queue refused %q: %s; it was never saved\n", r.Name, r.Why)
 	}
-	switch {
-	case lastFlush.Failed == "":
-	case lastFlush.Left == 1:
-		fmt.Fprintf(queueErr, "jhon: the Engram queue kept 1 record for the next jhon command: Engram did not take it (%q)\n", lastFlush.Failed)
-	default:
-		fmt.Fprintf(queueErr, "jhon: the Engram queue kept %d records for the next jhon command: Engram did not take them (%q)\n", lastFlush.Left, lastFlush.Failed)
+	if lastFlush.Failed == "" || lastFlush.Left == 0 {
+		return
 	}
+	kept := fmt.Sprintf("%d records", lastFlush.Left)
+	why := "Engram was not asked"
+	switch {
+	case lastFlush.EngramAsked && lastFlush.Left == 1:
+		why = "Engram did not take it"
+	case lastFlush.EngramAsked:
+		why = "Engram did not take them"
+	}
+	if lastFlush.Left == 1 {
+		kept = "1 record"
+	}
+	fmt.Fprintf(queueErr, "jhon: the Engram queue kept %s for the next jhon command: %s (%q)\n", kept, why, lastFlush.Failed)
 }
 
 // engramQueue is doctor's word on the Engram queue of the project here,
 // under the sandbox section, once this command's flush ran: why Engram did
-// not take the queued records, how many wait and how many entries were
-// refused, or that the queue cannot be read; nothing where there is no
-// queue folder. Every path is quoted: a linked worktree's common dir is a
-// path a sandboxed command wrote.
+// not take the queued records (or was not asked to), how many wait and how
+// many entries were refused, or that the queue cannot be read; nothing
+// where there is no queue folder. Every path is quoted: a linked
+// worktree's common dir is a path a sandboxed command wrote. Only a queue
+// that cannot be read for itself gets the fix to remove it: never one
+// openat2 cannot open, which holds records still to save.
 func (d doctor) engramQueue() {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -90,15 +115,19 @@ func (d doctor) engramQueue() {
 	}
 	queued, refused, err := ldd.EngramQueueCounts(top)
 	switch {
-	case errors.Is(err, ldd.ErrNoOpenat2):
-		d.o.Warn(fmt.Sprintf("Engram queue %q was not read: %s; fix: %s", queue, err, kernelFix))
+	case errors.Is(err, ldd.ErrNoOpenat2), errors.Is(err, ldd.ErrOpenat2Refused):
+		d.o.Warn(fmt.Sprintf("Engram queue %q was not read: %s; fix: %s", queue, err, closedFix(err.Error())))
 		return
 	case err != nil:
 		d.o.Warn(fmt.Sprintf("Engram queue %q cannot be read: %q; nothing in it is saved; fix: remove it, and Jhon makes it again", queue, err.Error()))
 		return
 	}
-	if lastFlush.Failed != "" {
+	switch {
+	case lastFlush.Failed == "":
+	case lastFlush.EngramAsked:
 		d.o.Warn(fmt.Sprintf("Engram queue: Engram did not take the queued records (%q); the next jhon command outside the sandbox tries again", lastFlush.Failed))
+	default:
+		d.o.Warn(fmt.Sprintf("Engram queue: Engram was not asked to save the queued records (%q); the next jhon command outside the sandbox tries again", lastFlush.Failed))
 	}
 	if queued == 0 && refused == 0 {
 		d.o.OK(fmt.Sprintf("Engram queue: empty (%q)", queue))

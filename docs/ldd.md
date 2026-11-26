@@ -312,7 +312,10 @@ in a folder a record names). Anything else (another title, topic or
 project, a link, a folder, a file too large) is moved to
 `engram-queue/refused/`, which keeps the newest 100, reported on stderr
 with its name quoted, and never saved; a write left half-done for a minute
-is removed. No link is followed anywhere on the way: the git common dir
+is removed. A flush takes the entries named as a record first, oldest
+first, and the others after, and refuses at most 32 entries, leaving the
+rest for the next flush, so nothing sorted before a record keeps it from
+being saved. No link is followed anywhere on the way: the git common dir
 is opened with `openat2` and `RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS`, so
 the kernel refuses a link in any component of its path (a linked
 worktree's common dir is a path its `.git` file names, which a sandboxed
@@ -324,12 +327,26 @@ same way and entered through that open folder. So a sandboxed command that
 swaps any folder on the way for a link reaches nothing outside it. On a
 kernel without `openat2` (before Linux 5.6) the queue fails closed:
 nothing is read, written or saved, the next jhon says so once on stderr,
-and `jhon doctor` warns with the fix, a Linux kernel 5.6 or newer. One
-flush takes at most 5 s, its listing and removals included, and leaves
-what it did not reach for the next one. When Engram does not take a
-record, it waits, and the next jhon says so once on stderr. `jhon doctor`
-says why Engram did not take them, how many records wait, how many entries
+and `jhon doctor` warns with the fix, a Linux kernel 5.6 or newer. Where a
+seccomp filter refuses `openat2` (`EPERM`, as an older container profile
+answers a syscall it does not know) the queue fails closed the same way,
+said as `openat2 is refused here (operation not permitted: a seccomp
+filter, as a container's, blocks it)`, with the fix `allow openat2 in the
+seccomp filter jhon runs under (a container's profile), or run jhon
+outside it`: never as a link, and never with doctor's fix to remove the
+queue, which would discard the records it holds. One flush takes at most
+5 s, its listing, the ages of `refused/`'s entries and its removals
+included, and leaves what it did not reach for the next one. When a flush
+keeps records, the next jhon says so once on stderr, counting records
+only: `jhon: the Engram queue kept <n> records for the next jhon command:
+Engram did not take them ("<why>")` where Engram was asked, `Engram was
+not asked ("<why>")` where the flush stopped before asking it (no time
+left, the main worktree not opened). `jhon doctor` says why Engram did
+not take them, or was not asked, how many records wait, how many entries
 were refused, and a queue it cannot read, with the fix, every path quoted.
+A queue that cannot be written leaves the note `jhon: the state of
+<change> was not saved to Engram (…, and the queue "<path>" could not be
+written: "<error>"; fix: run jhon doctor)`, its path and error quoted.
 A search inside the sandbox fails the same way: `decisions_note` names the
 folder the sandbox keeps read-only and says to search with the MCP memory
 tool (`mem_search`). Accepted residuals: a sandboxed command can queue a
