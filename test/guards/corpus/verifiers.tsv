@@ -612,3 +612,21 @@ safety-guard	Bash	"socat 'SYSTEM:make,chdir=build' -"	allow	none	T228	-	L18 pres
 safety-guard	Bash	"socat UNIX-LISTEN:.git/x.sock -"	allow	none	T228	-	L18 item 2: a listener with no unlink option creates only its own socket
 safety-guard	Bash	"socat - TCP:h:1,nodelay,keepalive,connect-timeout=5"	allow	none	T228	-	L18 preserve: network settings
 safety-guard	Bash	"socat - 'SYSTEM:echo \"a,b\"'"	allow	none	T228	-	L18 preserve: a comma inside socat's quotes is the command's
+# T228 L18 re-verify (21d3d02): network-family tuning options touch no file
+safety-guard	Bash	"socat UDP4-RECVFROM:5353,ip-add-membership=224.0.0.251:0.0.0.0,fork -"	allow	none	T228	-	verify: an mDNS listener's multicast membership
+safety-guard	Bash	"socat - TCP:h:80,so-rcvbuf=65536"	allow	none	T228	-	verify: a socket buffer size
+safety-guard	Bash	"socat - OPENSSL:h:443,openssl-min-proto-version=TLS1.2"	allow	none	T228	-	verify: a TLS version floor
+safety-guard	Bash	"socat UDP4-DATAGRAM:239.0.0.1:5000,ttl=4 -"	allow	none	T228	-	verify: a multicast ttl
+safety-guard	Bash	"socat TCP6-LISTEN:8080,ipv6only=1,fork TCP:localhost:3000"	allow	none	T228	-	verify: an IPv6-only listener
+safety-guard	Bash	"socat - TCP:h:80,chdir=.git"	ask	none	T228	-	verify: chdir on a network address still asks
+safety-guard	Bash	"socat - 'TCP:h:1,lockfile=.git/x'"	refuse	none	T228	-	verify: a path option on a network address is still read
+# T228 L19: socat's network-group options (from socat -hhh) are harmless on a network-family address
+safety-guard	Bash	"socat - TCP:h:80,rcvbuf=65536,sndbuf=65536,keepidle=60,keepintvl=10,keepcnt=3,linger=5,tos=16,mss=1400"	allow	none	T228	-	L19 preserve: TCP tuning
+safety-guard	Bash	"socat UDP4-DATAGRAM:239.0.0.1:5000,ip-multicast-ttl=4,ip-multicast-loop=0,broadcast -"	allow	none	T228	-	L19 preserve: multicast settings
+safety-guard	Bash	"socat - OPENSSL:h:443,cipher=HIGH,cafile=ca.pem,cert=c.pem,key=k.pem"	allow	none	T228	-	L19 preserve: TLS settings and the files TLS only reads
+safety-guard	Bash	"socat TCP-LISTEN:9,fork,ipv6only=0,accept-timeout=5,max-children=4 -"	allow	none	T228	-	L19 preserve: listener settings
+safety-guard	Bash	"socat 'PTY,rcvbuf=65536' -"	ask	none	T228	-	L19: a network option on an address that is not a network one keeps asking
+safety-guard	Bash	"socat - SOCKET-CONNECT:2:6:x,rcvbuf=65536"	ask	none	T228	-	L19: same on a generic socket
+safety-guard	Bash	"socat - 'PROXY:p:h:80,proxy-authorization-file=secret.txt'"	ask	none	T228	-	L19: a file read and sent to the proxy is not taken as harmless
+safety-guard	Bash	"socat - OPENSSL:h:443,alpn=h2"	ask	none	T228	-	L19: socat 1.8.1.3 has no alpn option; an unknown name keeps asking
+safety-guard	Bash	"socat - 'UDP:h:1,waitlock=.git/x'"	refuse	none	T228	-	L19: a path option on a network address is still read

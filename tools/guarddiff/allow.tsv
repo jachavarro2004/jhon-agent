@@ -1822,3 +1822,10 @@ verifiers.tsv:604	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of
 verifiers.tsv:605	safety-guard	allow	ask	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: an option the table does not read as safe on a command asks
 verifiers.tsv:606	safety-guard	allow	ask	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: same on PTY
 verifiers.tsv:607	safety-guard	allow	ask	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: an option the table does not know asks on a network address too
+verifiers.tsv:621	safety-guard	allow	ask	hole T228 L19 (re-verify mwxi192d of 21d3d02): chdir on a network address still asks
+verifiers.tsv:622	safety-guard	allow	refuse	hole T228 L19 (re-verify mwxi192d of 21d3d02): a path option on a network address is still read
+verifiers.tsv:628	safety-guard	allow	ask	hole T228 L19 (re-verify mwxi192d of 21d3d02): L19: a network option on an address that is not a network one keeps asking
+verifiers.tsv:629	safety-guard	allow	ask	hole T228 L19 (re-verify mwxi192d of 21d3d02): L19: same on a generic socket
+verifiers.tsv:630	safety-guard	allow	ask	hole T228 L19 (re-verify mwxi192d of 21d3d02): L19: a file read and sent to the proxy is not taken as harmless
+verifiers.tsv:631	safety-guard	allow	ask	hole T228 L19 (re-verify mwxi192d of 21d3d02): L19: socat 1.8.1.3 has no alpn option; an unknown name keeps asking
+verifiers.tsv:632	safety-guard	allow	refuse	hole T228 L19 (re-verify mwxi192d of 21d3d02): L19: a path option on a network address is still read
