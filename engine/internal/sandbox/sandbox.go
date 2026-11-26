@@ -5,7 +5,9 @@
 // read-only.
 //
 // Args is pure: what it is given decides the arguments, and the disk is read
-// only through Input.Stat. Current gathers an Input for a working directory
+// only through Input.Stat. A run starts bubblewrap with Open's arguments,
+// Args's with each bind opened with no link followed and passed as a
+// descriptor (T248). Current gathers an Input for a working directory
 // from the project code that knows the roots, the worktrees and the scratch
 // roots, reading the repository from the disk. The start runs no program but
 // bubblewrap itself, and trusts nothing a sandboxed command may have written
@@ -714,7 +716,25 @@ func writable(in Input) []string {
 // Then the environment: the credential variables that are set are unset
 // (F4), a $TMPDIR that is not bound becomes /tmp (F7), and InsideVariable
 // marks what runs inside (T217).
+//
+// Args is the readable form, each bind by its path (--bind, --ro-bind), as
+// status, the tests and a reader take it. A run starts bubblewrap with Open's
+// form instead, each bind through a descriptor opened with no link followed
+// (T248).
 func Args(in Input) []string {
+	args, _ := build(in, func(m mount) ([]string, *Problem) {
+		if m.kind == write {
+			return []string{"--bind", m.path, m.path}, nil
+		}
+		return []string{"--ro-bind", m.path, m.path}, nil
+	})
+	return args
+}
+
+// build is Args with each bind, writable or read-only, given by bind: the
+// path itself (Args) or a descriptor (Open). It stops at the first problem
+// bind gives.
+func build(in Input, bind func(m mount) ([]string, *Problem)) ([]string, *Problem) {
 	mounts, tmpdir := layout(in, true)
 	args := []string{"--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc"}
 	var folders []string
@@ -733,10 +753,12 @@ func Args(in Input) []string {
 		}
 		kept = append(kept, m)
 		switch {
-		case m.kind == write:
-			args = append(args, "--bind", m.path, m.path)
-		case m.kind == read:
-			args = append(args, "--ro-bind", m.path, m.path)
+		case m.kind == write || m.kind == read:
+			b, p := bind(m)
+			if p != nil {
+				return nil, p
+			}
+			args = append(args, b...)
 		case m.kind == private:
 			args = append(args, "--perms", "0700", "--tmpfs", m.path)
 		case m.dir:
@@ -764,7 +786,7 @@ func Args(in Input) []string {
 	if in.Cwd != "" {
 		args = append(args, "--chdir", in.Cwd)
 	}
-	return args
+	return args, nil
 }
 
 // InsideVariable is the variable every sandbox sets to 1 for what runs in
@@ -779,14 +801,18 @@ const InsideVariable = "JHON_IN_SANDBOX"
 func Inside() bool { return os.Getenv(InsideVariable) == "1" }
 
 // probeArgs are the arguments of the empty sandbox Probe starts: one of
-// every option Args may give bubblewrap, on paths every Linux has, so a
-// bubblewrap that cannot take one of them fails the probe as it would fail
-// a run.
-var probeArgs = []string{
-	"--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc",
-	"--bind", "/tmp", "/tmp", "--perms", "0700", "--tmpfs", "/tmp", "--remount-ro", "/tmp",
-	"--unsetenv", "SSH_AUTH_SOCK", "--setenv", "TMPDIR", "/tmp",
-	"--unshare-pid", "--die-with-parent", "--chdir", "/",
+// every option a run (Open) may give bubblewrap, on paths every Linux has,
+// so a bubblewrap that cannot take one of them fails the probe as it would
+// fail a run. bind and ro are descriptors of /tmp's real path, opened as a
+// run opens its binds (T248).
+func probeArgs(bind, ro int, tmp string) []string {
+	return []string{
+		"--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc",
+		"--bind-fd", strconv.Itoa(bind), tmp, "--ro-bind-fd", strconv.Itoa(ro), tmp,
+		"--perms", "0700", "--tmpfs", tmp, "--remount-ro", tmp,
+		"--unsetenv", "SSH_AUTH_SOCK", "--setenv", "TMPDIR", "/tmp",
+		"--unshare-pid", "--die-with-parent", "--chdir", "/",
+	}
 }
 
 // ProjectFolder is the real path of a folder the caller pins as the project

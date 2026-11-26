@@ -186,7 +186,7 @@ func sandboxRun(argv []string) (int, error) {
 			gate := mergeGateEntries(pinned)
 			why := repositoryGitProblem(in, program[2], gate)
 			if why == "" {
-				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), gate...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil)
+				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), gate...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil, nil)
 				leave()
 				return code, err
 			}
@@ -228,7 +228,18 @@ func sandboxRun(argv []string) (int, error) {
 	// What runs here runs for an agent (T219 S9): git's merge gate judges it.
 	env := append(append(os.Environ(), sandbox.UVToolEnv(in)...), hook.AgentVariable+"=1")
 	refusal := func(path string) string { return sandbox.Refusal(in, path, missing) }
-	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, sandbox.Args(in)...), argv[i:]...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal)
+	// Each bind is opened here, last, with no link followed, and bubblewrap
+	// mounts the descriptor (sandbox.Open, T248): a folder swapped for a
+	// link after the checks is not followed, and one swapped before refuses
+	// the run, as does a kernel or seccomp filter without openat2.
+	bound, p := sandbox.Open(in)
+	if p != nil {
+		leave()
+		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
+		return sandboxRefused, nil
+	}
+	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), argv[i:]...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal, bound)
+	bound.Close()
 	leave()
 	return code, err
 }

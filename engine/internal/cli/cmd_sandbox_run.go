@@ -26,14 +26,27 @@ import (
 // a failure ends with failNote when it is not "", any exit but a signal's
 // with runNote. refusal is the note on a refused write to a path
 // (sandbox.Refusal for the work profile); nil gives sandbox.RefusalNote.
-func sandboxProgram(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string) (int, error) {
+// bound are the descriptors of bubblewrap's binds (sandbox.Open, T248),
+// nil for a program with none: they reach the program at the numbers its
+// arguments name, and no other descriptor of jhon's does.
+func sandboxProgram(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string, bound *sandbox.Bound) (int, error) {
 	if isTerminal(os.Stdout) || isTerminal(os.Stderr) {
+		if bound != nil {
+			if err := bound.Inherit(); err != nil {
+				fmt.Fprintf(os.Stderr, "jhon: exec: %s: cannot pass the sandbox's folders: %v\n", argv[0], err)
+				return 126, nil
+			}
+		}
 		return execProgram(path, argv[1:], env)
 	}
 	if refusal == nil {
 		refusal = sandbox.RefusalNote
 	}
-	return sandboxSupervised(path, argv, env, profile, failNote, runNote, refusal)
+	var extra []*os.File
+	if bound != nil {
+		extra = bound.ExtraFiles()
+	}
+	return sandboxSupervised(path, argv, env, profile, failNote, runNote, refusal, extra)
 }
 
 // ownerCredentialHelpers are the owner's credential helpers, the system's
@@ -212,11 +225,14 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 //     refused path, through telemetry when it is on (G4);
 //   - its exit code is the program's, and a program killed by a signal
 //     kills this process with the same signal.
-func sandboxSupervised(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string) (int, error) {
+//
+// extra are the files the program gets besides the standard three
+// (exec.Cmd.ExtraFiles): bubblewrap's bind descriptors.
+func sandboxSupervised(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string, extra []*os.File) (int, error) {
 	watch := &sandbox.Watch{}
 	errOut := &lastByte{w: os.Stderr}
 	cmd := &exec.Cmd{Path: path, Args: argv, Env: env, Stdin: os.Stdin,
-		Stdout: io.MultiWriter(os.Stdout, watch), Stderr: io.MultiWriter(errOut, watch), WaitDelay: pipeGrace}
+		Stdout: io.MultiWriter(os.Stdout, watch), Stderr: io.MultiWriter(errOut, watch), WaitDelay: pipeGrace, ExtraFiles: extra}
 	// A caller that gave stdout and stderr one file (2>&1) reads one stream
 	// in the order it was written: the program gets one pipe for both, as
 	// it got the caller's one descriptor before (L1318 c). exec.Cmd gives
