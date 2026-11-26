@@ -50,9 +50,13 @@ var (
 	xargsValues = set("-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s", "--arg-file", "--delimiter", "--max-args", "--max-lines", "--max-procs", "--max-chars", "--eof")
 	// Wrappers run their operand; each option's count is the values it takes.
 	Wrappers = map[string]map[string]int{
-		"env": {"-u": 1, "--unset": 1, "-C": 1, "--chdir": 1}, "exec": {"-a": 1}, "nohup": {}, "time": {}, "nice": {"-n": 1},
-		"timeout": {"-s": 1, "--signal": 1, "-k": 1, "--kill-after": 1}, "stdbuf": {"-i": 1, "-o": 1, "-e": 1},
-		"sudo": {"-u": 1, "-g": 1, "-C": 1, "-D": 1, "-h": 1, "-p": 1, "-r": 1, "-t": 1, "-U": 1}, "doas": {"-u": 1, "-C": 1}, "command": {},
+		// T228 L5: the long options with a separate value, env's -a, GNU time's -o and -f.
+		"env": {"-u": 1, "--unset": 1, "-C": 1, "--chdir": 1, "-a": 1, "--argv0": 1, "-S": 1, "--split-string": 1}, "exec": {"-a": 1},
+		"nohup": {}, "time": {"-o": 1, "-f": 1, "--output": 1, "--format": 1}, "nice": {"-n": 1, "--adjustment": 1},
+		"timeout": {"-s": 1, "--signal": 1, "-k": 1, "--kill-after": 1}, "stdbuf": {"-i": 1, "-o": 1, "-e": 1, "--input": 1, "--output": 1, "--error": 1},
+		"sudo": {"-u": 1, "-g": 1, "-C": 1, "-D": 1, "-h": 1, "-p": 1, "-r": 1, "-t": 1, "-U": 1, "-R": 1, "-T": 1, "--user": 1, "--group": 1,
+			"--chdir": 1, "--prompt": 1, "--role": 1, "--type": 1, "--host": 1, "--other-user": 1, "--chroot": 1, "--command-timeout": 1},
+		"doas": {"-u": 1, "-C": 1}, "command": {},
 	}
 )
 
@@ -186,6 +190,20 @@ func StdinRole(name string, w []string) string {
 		}
 		return ""
 	}
+	// crontab - (or with no file) installs the table on its input, whose
+	// commands cron runs later (T228 L5).
+	if name == "crontab" {
+		for i := 0; i < len(args); i++ {
+			a := args[i]
+			switch {
+			case a == "-u":
+				i++
+			case a == "-l" || a == "-r" || a == "-e" || a != "-" && !strings.HasPrefix(a, "-"):
+				return ""
+			}
+		}
+		return "cron"
+	}
 	// at and batch run the commands on their input later, as a shell would (L479).
 	if (name == "at" || name == "batch") && !slices.ContainsFunc(args, func(a string) bool { return a == "-f" || strings.HasPrefix(a, "-f") && len(a) > 2 }) {
 		return "shell"
@@ -250,6 +268,37 @@ var (
 	makeInline = lazyre.New(`^[^\t#=]*[^:=]:[^=;]*;(.*)$`)
 	recipeLead = lazyre.New(`^[@+\-\s]+`)
 )
+
+// CronCommands is the shell commands a crontab runs: each entry's command,
+// after its five time fields or its @keyword, up to an unescaped %, whose
+// rest is the command's input (T228 L5). Comments and assignments run none.
+func CronCommands(text string) string {
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
+		f := strings.Fields(line)
+		if len(f) == 0 || strings.HasPrefix(f[0], "#") || Assignment.MatchString(f[0]) {
+			continue
+		}
+		n := 5
+		if strings.HasPrefix(f[0], "@") {
+			n = 1
+		}
+		if len(f) <= n {
+			continue
+		}
+		cmd := strings.Join(f[n:], " ")
+		for i := 0; i < len(cmd); i++ {
+			if cmd[i] == '\\' {
+				i++
+			} else if cmd[i] == '%' {
+				cmd = cmd[:i]
+				break
+			}
+		}
+		out = append(out, cmd)
+	}
+	return strings.Join(out, "\n")
+}
 
 // MakeRecipes is the shell commands a makefile runs: its recipe lines and its $(shell …) calls.
 func MakeRecipes(text string) string {
@@ -493,81 +542,48 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 	}
 	// zsh's precommand modifiers and repeat run the command after them: it is read as it is read bare (T228).
 	if rest, ok := precommand(name, w); ok {
+		if strings.HasPrefix(w[0], "{") {
+			// A brace group or list is its words, on no route of its own.
+			return Programs(rest, route, env, inner)
+		}
 		return Programs(rest, sub(name), env, inner)
 	}
 	// External runners, and builtins that run a string later (T228 L2).
 	if ps, ok, err := runnerPrograms(name, w, self, sub, env, inner); ok {
 		return ps, err
 	}
-	if values, ok := Wrappers[name]; ok {
-		k := 1
-		var chdir *string
+	if _, ok := Wrappers[name]; ok {
+		wr := wrapped(name, w)
+		if wr.split != nil {
+			return JudgeString(*wr.split, sub(name), env, inner)
+		}
 		// later is what env's assignments run later (codeOf): a prompt's substitutions, PROMPT_COMMAND.
 		var later []Program
-		for k < len(w) && (strings.HasPrefix(w[k], "-") || (name == "env" && Assignment.MatchString(w[k]))) {
-			a := w[k]
-			if name == "env" && (a == "-S" || a == "--split-string" || (len(a) > 2 && strings.HasPrefix(a, "-S")) || strings.HasPrefix(a, "--split-string=")) {
-				s := ""
-				switch {
-				case a == "-S" || a == "--split-string":
-					s = at(w, k+1)
-				case strings.HasPrefix(a, "-S"):
-					s = a[2:]
-				default:
-					s = a[15:]
-				}
-				return JudgeString(s, sub(name), env, inner)
+		for _, a := range wr.assigns {
+			n, v, _ := strings.Cut(a, "=")
+			env = append(slices.Clone(env), n)
+			envv[n] = v
+			cmds, err := codeOf(n, "", v)
+			if err != nil {
+				return nil, err
 			}
-			if name == "env" && Assignment.MatchString(a) {
-				n, v, _ := strings.Cut(a, "=")
-				env = append(slices.Clone(env), n)
-				envv[n] = v
-				cmds, err := codeOf(n, "", v)
+			for _, c := range cmds {
+				ps, err := CommandPrograms(c, sub(name), env, inner)
 				if err != nil {
 					return nil, err
 				}
-				for _, c := range cmds {
-					ps, err := CommandPrograms(c, sub(name), env, inner)
-					if err != nil {
-						return nil, err
-					}
-					later = append(later, ps...)
-				}
-				k++
-				continue
+				later = append(later, ps...)
 			}
-			switch {
-			case (name == "env" && (a == "-C" || a == "--chdir")) || (name == "sudo" && (a == "-D" || a == "--chdir")):
-				chdir = str(at(w, k+1))
-			case (name == "env" || name == "sudo") && strings.HasPrefix(a, "--chdir="):
-				chdir = str(a[8:])
-			case name == "env" && len(a) > 2 && strings.HasPrefix(a, "-C"):
-				chdir = str(a[2:])
-			case name == "sudo" && len(a) > 2 && strings.HasPrefix(a, "-D"):
-				chdir = str(a[2:])
-			}
-			k += 1 + values[a]
 		}
-		if name == "timeout" && k < len(w) {
-			k++ // the duration
-		}
-		var rest []string
-		if k < len(w) {
-			rest = w[k:]
-		}
-		ps, err := Programs(rest, sub(name), env, inner)
+		ps, err := Programs(wr.rest, sub(name), env, inner)
 		ps = append(later, ps...)
-		if err != nil || chdir == nil {
+		if err != nil || wr.chdir == nil {
 			return ps, err
 		}
-		return with(ps, func(p *Program) { p.Chdir = append([]string{*chdir}, p.Chdir...) }), nil
+		return with(ps, func(p *Program) { p.Chdir = append([]string{*wr.chdir}, p.Chdir...) }), nil
 	}
 	if name == "eval" {
 		return JudgeString(strings.Join(w[1:], " "), sub("eval"), env, inner)
-	}
-	// busybox runs its applet as the program it names (L477).
-	if name == "busybox" && len(w) > 1 && !strings.HasPrefix(w[1], "-") {
-		return Programs(w[1:], sub("busybox"), env, inner)
 	}
 	// at -f reads its commands from a file the reader does not show (L486).
 	if (name == "at" || name == "batch") && slices.ContainsFunc(w[1:], func(a string) bool { return a == "-f" || strings.HasPrefix(a, "-f") && len(a) > 2 }) {
@@ -792,6 +808,9 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 			if role == "make" {
 				t = MakeRecipes(t)
 			}
+			if role == "cron" {
+				t = CronCommands(t)
+			}
 			ps, err := JudgeString(t, sub(name+" <stdin>"), env, Opts{Envv: envv})
 			if err != nil {
 				return nil, err
@@ -875,8 +894,8 @@ func JudgeString(s string, via, env []string, opts Opts) ([]Program, error) {
 	return out, nil
 }
 
-// Runners that run their operand later or elsewhere (L479): flock's
-// command and parallel's jobs. Each is read as the program itself and what it runs; ok is
+// Runners that run their operand later or elsewhere (L479): parallel's
+// jobs (flock's command is read with the other runners, runs). Each is read as the program itself and what it runs; ok is
 // false for any other program.
 func runners(name string, w []string, self Program, sub func(string) []string, env []string, inner Opts) ([]Program, bool, error) {
 	judge := func(s, how string) ([]Program, bool, error) {
@@ -888,25 +907,6 @@ func runners(name string, w []string, self Program, sub func(string) []string, e
 		return append([]Program{self}, ps...), true, err
 	}
 	switch name {
-	case "flock":
-		valued := set("-w", "--wait", "--timeout", "-E", "--conflict-exit-code")
-		k, file := 1, false
-		for ; k < len(w); k++ {
-			a := w[k]
-			switch {
-			case a == "-c" || a == "--command":
-				return judge(at(w, k+1), "flock -c")
-			case strings.HasPrefix(a, "--command="):
-				return judge(a[len("--command="):], "flock -c")
-			case valued[a]:
-				k++
-			case strings.HasPrefix(a, "-"):
-			case !file:
-				file = true
-			default:
-				return run(w[k:], "flock")
-			}
-		}
 	case "parallel":
 		return parallelPrograms(w, self, judge, run, inner)
 	}

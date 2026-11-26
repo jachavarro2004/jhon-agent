@@ -1557,7 +1557,7 @@ var t152Visible = []string{
 	// A git alias or configuration given on the command line.
 	"git ship",
 	"git -c alias.st=status st",
-	"git -c alias.x='!rm -rf /' x",
+	// T228 L5: an alias given with -c, run as the subcommand, is read (t228_l5_test.go), so `git -c alias.x='!<a removal>' x` is not here.
 	"git --config-env=alias.x=Y x",
 	"git -c core.hooksPath=/dev/null commit -m x",
 	"git -c core.sshCommand='sh -c x' fetch",

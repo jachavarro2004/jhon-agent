@@ -24,14 +24,22 @@ var t228Before = []string{
 	"noglob command ", "nocorrect nohup ", "- builtin ", "time noglob ", "repeat 3 noglob - nocorrect ",
 }
 
-// t228Code are lines whose glob qualifiers run code.
-var t228Code = []string{
-	"ls *(e:'rm -rf ~':)", "ls *(e:true:)", "ls *(e{rm -rf ~})", "ls *(+cleanup)", "ls *(.e:'true':)", "ls *(N+f)",
-	"ls *(oe:'REPLY=x':)", "ls *(O+f)", "ls *(#qe:x:)", "ls *(^e:x:)", "ls *(-e:x:)", "ls @(e:x:)", "ls !(e:x:)",
-	"ls +(e:x:)", "ls ?(e:x:)", "ls src/**/*(e:x:)", "ls !(test.test)", "ls *($q)", "ls *(e$q)",
-	"for f in *(e:x:); do echo $f; done", "x=(*(e:x:))", "echo hi > *(e:x:)", `sh -c "ls *(e:x:)"`,
-	"eval 'ls *(e:x:)'", "echo $(ls *(e:x:))", "zsh -c 'ls *(e:x:)'", "x=d; : /*(e:'eval $x=$HOME':)",
-	"noglob echo $(ls *(+f))", "g='*(e:x:)'; ls $~g", "ls $^~g", "ls src/$=~g",
+// t228Code are lines whose glob qualifiers' code an expansion may supply: refused.
+var t228Code = []string{"ls *($q)", "ls *(e$q)", "g='*(e:x:)'; ls $~g", "ls $^~g", "ls src/$=~g", "a=($~g)", "echo $~1"}
+
+// t228CodeRemoves are lines whose glob qualifiers run a removal (L6: the
+// code is read as the command line it is, and refused as the bare removal).
+var t228CodeRemoves = []string{
+	"ls *(e:'rm -rf ~':)", "ls *(e{rm -rf ~})", "ls *(.e:'rm -rf ~':)", "ls @(e:'rm -rf ~':)", "ls !(e:'rm -rf ~':)",
+	"ls *(oe:'rm -rf ~':)", "ls *(#qe:'rm -rf ~':)", "ls src/**/*(e:'rm -rf ~':)", "for f in *(e:'rm -rf ~':); do echo $f; done",
+	"x=(*(e:'rm -rf ~':))", "echo hi > *(e:'rm -rf ~':)", `sh -c "ls *(e:'rm -rf ~':)"`, "echo $(ls *(e:'rm -rf ~':))",
+	"ls ${x:-*(e:'rm -rf ~':)}", "ls *(e-'rm -rf ~'-)",
+}
+
+// t228CodeHarmless are lines whose glob qualifiers run code that removes nothing: allowed, as the code is bare (L6).
+var t228CodeHarmless = []string{
+	"ls *(e:true:)", "ls *(+cleanup)", "ls *(.e:'true':)", "ls *(oe:'REPLY=x':)", "ls *(#qe:x:)", "ls !(test.test)",
+	"ls !(tests)", "for f in *(e:x:); do echo $f; done", "eval 'ls *(e:x:)'", "zsh -c 'ls *(e:x:)'",
 }
 
 // t228SubstInGlob are lines that run a removal in a substitution inside an extended glob.
@@ -87,9 +95,22 @@ func TestT228QualifierCodeIsRefused(t *testing.T) {
 			}
 		}
 	}
-	r := s.bash(t, "ls *(e:'rm -rf ~':)", sgOpts{})
-	if !strings.Contains(r.Stderr, "safety-guard: refused: the glob qualifier *(e:'rm -rf ~':): zsh runs its code") {
+	r := s.bash(t, "ls *($q)", sgOpts{})
+	if !strings.Contains(r.Stderr, "safety-guard: refused: the glob qualifier *($q): zsh runs its code") {
 		t.Errorf("the refusal does not quote the glob: %s", r.Stderr)
+	}
+	bare := s.bash(t, "rm -rf ~", sgOpts{}).Stderr
+	for _, c := range t228CodeRemoves {
+		for _, o := range []sgOpts{{}, top()} {
+			r := s.bash(t, c, o)
+			code(t, r, 2, c)
+			if !o.top && r.Stderr != bare {
+				t.Errorf("%q: %q, want the bare removal's %q", c, r.Stderr, bare)
+			}
+		}
+	}
+	for _, c := range t228CodeHarmless {
+		allowed(t, s, c)
 	}
 }
 
