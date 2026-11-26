@@ -1362,7 +1362,8 @@ func judgeOutward(name string, args []string, env map[string]string) []Finding {
 		(name == "mvn" && slices.Contains(ops, "deploy")) || (name == "gradle" && slices.ContainsFunc(ops, publishTask.MatchString)) {
 		return A("publish", name+" "+undefinedOr(first, hasFirst))
 	}
-	if in(name, "ssh", "sftp", "mosh", "scp", "sshpass", "telnet") {
+	// autossh is ssh, restarted (T228 L14).
+	if in(name, "ssh", "autossh", "sftp", "mosh", "scp", "sshpass", "telnet") {
 		return A("remote", name)
 	}
 	if name == "rsync" && slices.ContainsFunc(ops, func(o string) bool { return rsyncRemote.MatchString(o) || strings.HasPrefix(o, "rsync://") }) {
@@ -1422,10 +1423,11 @@ func judgeOutward(name string, args []string, env map[string]string) []Finding {
 			}
 			return nil
 		}
-		// An SSM session (a shell, an SSH or a port-forwarding session) is a
+		// An SSM session with no document, the SSH one or a port forward is a
 		// connection to the host, as ssh is, not a change to the account
-		// (T228 L12); send-command and every other write stay deploy.
-		if first == "ssm" && at(ops, 1) == "start-session" {
+		// (T228 L12, L14); a session document that runs a command, a custom
+		// one, send-command and every other write stay deploy.
+		if first == "ssm" && at(ops, 1) == "start-session" && sh.SSMConnection(args) {
 			return A("remote", "aws ssm start-session")
 		}
 		if first == "deploy" || (len(ops) > 1 && slices.ContainsFunc(ops[1:], func(o string) bool { return awsWriteOp.MatchString(o) || o == "deploy" })) {

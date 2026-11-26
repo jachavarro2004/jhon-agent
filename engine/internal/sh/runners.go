@@ -298,6 +298,20 @@ func runs(name string, w []string) (in Inner, ok bool, err error) {
 			return Inner{}, false, nil
 		}
 		return in, true, nil
+	case "socat":
+		// socat glues the command an address runs to it (T228 L14).
+		if ss := socatRuns(w); len(ss) > 0 {
+			return Inner{Strings: ss, Self: true}, true, nil
+		}
+		return itself, true, nil
+	case "nc", "ncat", "netcat":
+		// nc -e and -c, ncat --exec, --sh-exec and --lua-exec run a command
+		// for the connection (T228 L14).
+		if in := ncRuns(w); len(in.Strings)+len(in.Words) > 0 {
+			in.Self = true
+			return in, true, nil
+		}
+		return itself, true, nil
 	case "gdb":
 		in, err := gdbRuns(w)
 		return in, true, err
@@ -998,4 +1012,103 @@ func sedCommands(sc string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// socatCommandAddresses are socat's address types whose parameter is a
+// command it runs: EXEC (the words), SYSTEM and SHELL (a string the shell
+// runs).
+var socatCommandAddresses = set("exec", "system", "shell")
+
+// socatRuns is the command lines socat's addresses run (T228 L14): each
+// EXEC:, SYSTEM: or SHELL: address (either side of a `!!` pair), its
+// parameter up to the first option comma, and the value of any exec= or
+// system= option, read as a string the shell runs, as any runner's.
+func socatRuns(w []string) []string {
+	var ss []string
+	for _, word := range w[1:] {
+		for _, addr := range strings.Split(word, "!!") {
+			fields := socatFields(addr)
+			kind, param, ok := strings.Cut(fields[0], ":")
+			if ok && socatCommandAddresses[strings.ToLower(kind)] {
+				ss = append(ss, param)
+			}
+			for _, o := range fields[1:] {
+				if n, v, ok := strings.Cut(o, "="); ok && socatCommandAddresses[strings.ToLower(n)] {
+					ss = append(ss, v)
+				}
+			}
+		}
+	}
+	return ss
+}
+
+// socatFields splits a socat address at the commas that separate its
+// options, not one escaped with a backslash or inside socat's own quotes.
+func socatFields(addr string) []string {
+	var out []string
+	start, quote := 0, byte(0)
+	for i := 0; i < len(addr); i++ {
+		switch c := addr[i]; {
+		case c == '\\':
+			i++
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"':
+			quote = c
+		case c == ',':
+			out = append(out, addr[start:i])
+			start = i + 1
+		}
+	}
+	return append(out, addr[start:])
+}
+
+// ncValued are the nc, ncat and netcat short options that take a value.
+const ncValued = "ceiIOpPqsTVwxXgGmM"
+
+// ncRuns is what nc, ncat or netcat runs for a connection (T228 L14): -e
+// and ncat's --exec (a program and its words), -c and --sh-exec (a string
+// the shell runs) as strings the shell runs; --lua-exec as lua running its
+// script.
+func ncRuns(w []string) Inner {
+	var in Inner
+	for k := 1; k < len(w); k++ {
+		a := w[k]
+		if strings.HasPrefix(a, "--") {
+			n, v, eq := strings.Cut(a, "=")
+			if n != "--exec" && n != "--sh-exec" && n != "--lua-exec" {
+				continue
+			}
+			if !eq {
+				k++
+				v = at(w, k)
+			}
+			if n == "--lua-exec" {
+				in.Words = append(in.Words, []string{"lua", v})
+			} else {
+				in.Strings = append(in.Strings, v)
+			}
+			continue
+		}
+		if len(a) < 2 || a[0] != '-' {
+			continue
+		}
+		for i := 1; i < len(a); i++ {
+			if !strings.ContainsRune(ncValued, rune(a[i])) {
+				continue
+			}
+			v := a[i+1:]
+			if v == "" {
+				k++
+				v = at(w, k)
+			}
+			if a[i] == 'e' || a[i] == 'c' {
+				in.Strings = append(in.Strings, v)
+			}
+			break
+		}
+	}
+	return in
 }
