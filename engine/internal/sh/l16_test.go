@@ -43,13 +43,13 @@ func TestSocatWriteSides(t *testing.T) {
 		"socat - //dev/ttyS0":           {},
 		"socat - dev/ttyS0":             tee("dev/ttyS0"),
 		"socat - /dev/pts/../sda":       tee("/dev/pts/../sda"),
-		"socat PTY,link=/tmp/a PTY":     {},
+		"socat PTY,link=/tmp/a PTY":     {Words: [][]string{{"rm", "/tmp/a"}}}, // T228 L17: link= replaces its path
 		"socat - TCP:h:1":               {},
 		"socat -u TCP-LISTEN:9 STDOUT":  {},
 		"socat STDIO EXEC:cat":          {Strings: []string{"cat"}},
 	} {
-		if got := socatRuns(splitWords(line)); !reflect.DeepEqual(got, want) {
-			t.Errorf("socatRuns(%q) = %+v, want %+v", line, got, want)
+		if got, err := socatRuns(splitWords(line)); err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("socatRuns(%q) = %+v, %v, want %+v", line, got, err, want)
 		}
 	}
 	for p, want := range map[string]bool{
