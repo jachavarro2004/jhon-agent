@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/mod/semver"
@@ -218,7 +219,18 @@ func (t Tool) verified(p Place, version string) bool {
 
 // TreeDigest is the sha256 of a folder's tree: each entry's path in order,
 // its kind, a file's owner execute bit and its content's sha256, so a file
-// changed, added, removed, made executable or swapped for a link changes it.
+// changed, added, removed, made executable or swapped for a link changes it;
+// and the permission bits that give access beyond what jhon's unpack gives
+// (T247, odd/tasks/phase1-security.md S4): of a folder (the top one too), a
+// group's or others' write bit; of a file, a bit beyond rwxr-xr-x for a
+// program or rw-r--r-- for another, setuid and setgid included. A folder's
+// setgid is left out: Linux passes it from a setgid parent (a chmod g+s
+// ~/.local/share, Debian's SETGID_HOME, a setgid TMPDIR) to every folder
+// made inside, and it gives no access, only a group to what is made there;
+// so are a folder's setuid (Linux ignores it) and sticky bit (it only takes
+// away others' right to remove what is not theirs), and a file's sticky bit
+// (ignored). An ordinary tree, whatever the umask took away or a parent
+// passed down, has the digest T242 gave it.
 func TreeDigest(dir string) (string, error) {
 	r, err := os.OpenRoot(dir)
 	if err != nil {
@@ -234,13 +246,23 @@ func treeDigest(fsys fs.FS, dir string) (string, error) {
 		if err != nil {
 			return err
 		}
+		rel := strings.TrimPrefix(strings.TrimPrefix(name, dir), "/")
 		if name == dir {
+			fi, err := d.Info()
+			if err != nil {
+				return err
+			}
+			beyond(h, ".", fi.Mode()&folderBits)
 			return nil
 		}
-		rel := strings.TrimPrefix(strings.TrimPrefix(name, dir), "/")
 		switch {
 		case d.IsDir():
 			fmt.Fprintf(h, "d %s\n", rel)
+			fi, err := d.Info()
+			if err != nil {
+				return err
+			}
+			beyond(h, rel, fi.Mode()&folderBits)
 		case d.Type().IsRegular():
 			fi, err := d.Info()
 			if err != nil {
@@ -256,7 +278,13 @@ func treeDigest(fsys fs.FS, dir string) (string, error) {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(h, "f %s %t %x\n", rel, fi.Mode().Perm()&0o100 != 0, fh.Sum(nil))
+			exec := fi.Mode().Perm()&0o100 != 0
+			fmt.Fprintf(h, "f %s %t %x\n", rel, exec, fh.Sum(nil))
+			ordinary := fs.FileMode(0o644)
+			if exec {
+				ordinary = 0o755
+			}
+			beyond(h, rel, fi.Mode()&^(ordinary|fs.ModeSticky))
 		default:
 			fmt.Fprintf(h, "o %s %v\n", rel, d.Type())
 		}
@@ -266,6 +294,26 @@ func treeDigest(fsys fs.FS, dir string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// folderBits are the bits of a folder's mode that count in its digest:
+// its group's and others' write (TreeDigest).
+const folderBits fs.FileMode = 0o022
+
+// beyond adds to the digest h the bits of rel's mode that count (extra,
+// TreeDigest), when there are any, as octal with setuid 4000 and setgid
+// 2000.
+func beyond(h io.Writer, rel string, extra fs.FileMode) {
+	mode := extra.Perm()
+	if extra&fs.ModeSetuid != 0 {
+		mode |= 0o4000
+	}
+	if extra&fs.ModeSetgid != 0 {
+		mode |= 0o2000
+	}
+	if mode != 0 {
+		fmt.Fprintf(h, "m %s %o\n", rel, uint32(mode))
+	}
 }
 
 // ToolStatus is what InstallTool did or found.
@@ -414,6 +462,7 @@ func unchanged(err error) error { return fmt.Errorf("%w; nothing was changed", e
 // was changed. The newest release that verifies but needs another jhon is
 // passed over for the next older, at most maxCandidates downloads.
 func (c *Client) InstallTool(ctx context.Context, t Tool, p Place, jhon string, check bool) (ToolResult, error) {
+	parent := lookDir(filepath.Dir(p.Dir))
 	in := t.Installed(p)
 	res := ToolResult{From: in.Active}
 	if in.Dev {
@@ -478,10 +527,14 @@ func (c *Client) InstallTool(ctx context.Context, t Tool, p Place, jhon string, 
 		}
 		res.To, res.Signer = r.Version, signer
 		if check {
+			// What the install would refuse, the check says (T247).
+			if err := t.unlike(p, r.Version, want); err != nil {
+				return res, err
+			}
 			res.Status = ToolAvailable
 			return res, nil
 		}
-		if err := t.place(p, artifact, r.Version, want); err != nil {
+		if err := t.place(p, parent, artifact, r.Version, want); err != nil {
 			return res, err
 		}
 		switch {
@@ -511,9 +564,17 @@ func (c *Client) InstallTool(ctx context.Context, t Tool, p Place, jhon string, 
 	return res, nil
 }
 
-// Test hooks: hookShareOpen runs once the share folder is open, and
-// hookBeforeLink right before the link moves (link.go); nil outside tests.
-var hookShareOpen, hookBeforeLink func()
+// Test hooks: hookShareOpen runs once the share folder is open,
+// hookBeforeLink right before the link moves and hookBeforeSwapBack right
+// before what was swapped out of the link's name is put back (link.go);
+// nil outside tests.
+var hookShareOpen, hookBeforeLink, hookBeforeSwapBack func()
+
+// recordTemp is the i-th name version's record is written to before it is
+// renamed over its own (writeRecord).
+func recordTemp(version string, i int) string {
+	return fmt.Sprintf(".%s.%d-%d.tmp", version, os.Getpid(), i)
+}
 
 // became is a place that changed during the install: left as it is.
 func became(why string) string {
@@ -524,22 +585,91 @@ func became(why string) string {
 	return w + " during the install; it was left as it is"
 }
 
+// dirAt is what a folder's path was when an install began (lookDir): the
+// folder it named, nil when nothing was there, and the link's target when
+// it was a link.
+type dirAt struct {
+	fi   os.FileInfo
+	link string
+}
+
+func lookDir(path string) dirAt {
+	var d dirAt
+	if li, err := os.Lstat(path); err == nil && li.Mode()&os.ModeSymlink != 0 {
+		d.link, _ = os.Readlink(path)
+	}
+	d.fi, _ = os.Stat(path)
+	return d
+}
+
+// swapped says why path is no longer what d saw (T247): a link it was not,
+// or not the same folder; "" while it is, or while it is still absent or
+// became a real folder where nothing was.
+func (d dirAt) swapped(path string) string {
+	li, err := os.Lstat(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist) && d.fi == nil:
+		return ""
+	case err != nil:
+		return release.Tilde(path) + " is gone"
+	case li.Mode()&os.ModeSymlink != 0:
+		if target, _ := os.Readlink(path); d.fi == nil || d.link != target {
+			return release.Tilde(path) + " is a link to " + target + ", not a folder"
+		}
+	case !li.IsDir():
+		return release.Tilde(path) + " is a file, not a folder"
+	case d.link != "":
+		return release.Tilde(path) + " is another folder"
+	}
+	if d.fi != nil {
+		if fi, err := os.Stat(path); err != nil || !os.SameFile(fi, d.fi) {
+			return release.Tilde(path) + " is another folder"
+		}
+	}
+	return ""
+}
+
+// differs is the refusal of a folder at p.Dir/<version> that is not the
+// signed release.
+func (t Tool) differs(p Place, version string) error {
+	return fmt.Errorf("%s is not %s's signed release %s (its files differ); move it away for jhon to install it; nothing was changed", release.Tilde(filepath.Join(p.Dir, version)), t.Binary, version)
+}
+
+// unlike is the refusal place would give a version folder already at
+// p.Dir/<version> that is not the release whose digest is want; nil when
+// there is none, or it is that release.
+func (t Tool) unlike(p Place, version, want string) error {
+	r, err := os.OpenRoot(p.Dir)
+	if err != nil {
+		return nil
+	}
+	defer r.Close()
+	fi, err := r.Lstat(version)
+	if err != nil {
+		return nil
+	}
+	if d, err := treeDigest(r.FS(), version); !fi.IsDir() || err != nil || d != want {
+		return t.differs(p, version)
+	}
+	return nil
+}
+
 // place puts the verified artifact, whose tree's digest is want, at
 // p.Dir/<version> and links p.Link to its program. Right before it writes,
-// p.Dir must be a folder (made when missing, never through a link) that is
-// not a clone, and p.Link absent or jhon's link: anything else, even one
-// swapped in during the install, is left as it is and refuses it. It writes
-// through the folder it opened (os.Root), never through a link: a new
+// p.Dir's parent (~/.local/share) must be what it was when the install
+// began (parent): never a link swapped in since, nor another folder; p.Dir
+// must be a folder (made when missing, never through a link) that is not a
+// clone, and p.Link absent or jhon's link: anything else, even one swapped
+// in during the install, is left as it is and refuses it. It writes
+// through the folders it opened (os.Root), never through a link: a new
 // version is unpacked beside, renamed into place and recorded
-// (VerifiedRecord); one already there is linked only when its digest is
-// want. The link moves atomically, and never over what is not jhon's
-// (link.go).
-func (t Tool) place(p Place, artifact, version, want string) error {
-	if err := os.MkdirAll(filepath.Dir(p.Dir), 0o755); err != nil {
-		return unchanged(err)
-	}
-	if err := os.Mkdir(p.Dir, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
-		return unchanged(err)
+// (VerifiedRecord, writeRecord); one already there is linked only when its
+// digest is want. The link moves atomically, and never over what is not
+// jhon's (link.go). A refusal leaves no p.Dir it made (T247).
+func (t Tool) place(p Place, parent dirAt, artifact, version, want string) (err error) {
+	up, name := filepath.Dir(p.Dir), filepath.Base(p.Dir)
+	if why := parent.swapped(up); why != "" {
+		return errors.New(became(why) + "; nothing was changed")
 	}
 	if why := t.shareNotOurs(p); why != "" {
 		return errors.New(became(why) + "; nothing was changed")
@@ -547,13 +677,39 @@ func (t Tool) place(p Place, artifact, version, want string) error {
 	if _, foreign := t.linkState(p); foreign != "" {
 		return errors.New(became(foreign) + "; nothing was changed")
 	}
-	r, err := os.OpenRoot(p.Dir)
+	if err := os.MkdirAll(up, 0o755); err != nil {
+		return unchanged(err)
+	}
+	pr, err := os.OpenRoot(up)
+	if err != nil {
+		return unchanged(err)
+	}
+	defer pr.Close()
+	if why := parent.notOpened(up, pr); why != "" {
+		return errors.New(became(why) + "; nothing was changed")
+	}
+	made := false
+	if err := pr.Mkdir(name, 0o755); err == nil {
+		made = true
+	} else if !errors.Is(err, os.ErrExist) {
+		return unchanged(err)
+	}
+	r, err := pr.OpenRoot(name)
 	if err != nil {
 		return unchanged(err)
 	}
 	defer r.Close()
-	if why := t.notOpened(p, r); why != "" {
+	if why := t.notOpened(p, parent, r); why != "" {
 		return errors.New(became(why) + "; nothing was changed")
+	}
+	if made {
+		// A refusal from here leaves no empty folder it made: rmdir
+		// removes neither a link nor a folder that holds anything.
+		defer func() {
+			if err != nil && t.notOpened(p, parent, r) == "" {
+				syscall.Rmdir(p.Dir)
+			}
+		}()
 	}
 	if _, err := r.Lstat(".git"); err == nil {
 		return fmt.Errorf("%s became a development clone during the install; it was left as it is; nothing was changed", release.Tilde(p.Dir))
@@ -562,13 +718,12 @@ func (t Tool) place(p Place, artifact, version, want string) error {
 		hookShareOpen()
 	}
 	target := filepath.Join(p.Dir, version)
-	differ := fmt.Errorf("%s is not %s's signed release %s (its files differ); move it away for jhon to install it; nothing was changed", release.Tilde(target), t.Binary, version)
 	if fi, err := r.Lstat(version); err == nil {
 		if !fi.IsDir() {
-			return differ
+			return t.differs(p, version)
 		}
 		if d, err := treeDigest(r.FS(), version); err != nil || d != want {
-			return differ
+			return t.differs(p, version)
 		}
 	} else {
 		stage := fmt.Sprintf(".unpacking-%d-%d", os.Getpid(), time.Now().UnixNano())
@@ -593,13 +748,10 @@ func (t Tool) place(p Place, artifact, version, want string) error {
 		}
 	}
 	placed := fmt.Sprintf("%s %s is at %s but not linked: ", t.Binary, version, release.Tilde(target))
-	if err := r.MkdirAll(verifiedDir, 0o755); err != nil {
+	if err := writeRecord(r, p, version, want); err != nil {
 		return errors.New(placed + err.Error())
 	}
-	if err := r.WriteFile(filepath.Join(verifiedDir, version), []byte(want+"\n"), 0o644); err != nil {
-		return errors.New(placed + err.Error())
-	}
-	if why := t.notOpened(p, r); why != "" {
+	if why := t.notOpened(p, parent, r); why != "" {
 		return errors.New(placed + became(why))
 	}
 	if err := t.link(p, version); err != nil {
@@ -608,9 +760,62 @@ func (t Tool) place(p Place, artifact, version, want string) error {
 	return nil
 }
 
-// notOpened says why p.Dir is no longer the folder r opened: a link, not
-// a folder, or another folder; "" while it is.
-func (t Tool) notOpened(p Place, r *os.Root) string {
+// writeRecord records want as version's digest under r, p.Dir's root
+// (VerifiedRecord), never through a link (T247): the record's folder must
+// be a folder, and the digest is written to a new file (O_EXCL, which a
+// link at its name refuses: the next name is tried) renamed over the
+// record's name, which replaces whatever is there, a link too, and
+// follows none.
+func writeRecord(r *os.Root, p Place, version, want string) error {
+	if err := r.Mkdir(verifiedDir, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	notFolder := fmt.Errorf("%s is not a folder; it was left as it is", release.Tilde(filepath.Join(p.Dir, verifiedDir)))
+	fi, err := r.Lstat(verifiedDir)
+	if err != nil {
+		return err
+	}
+	if !fi.IsDir() {
+		return notFolder
+	}
+	vr, err := r.OpenRoot(verifiedDir)
+	if err != nil {
+		return err
+	}
+	defer vr.Close()
+	if open, err := vr.Stat("."); err != nil || !os.SameFile(fi, open) {
+		return notFolder
+	}
+	for i := 0; ; i++ {
+		tmp := recordTemp(version, i)
+		f, err := vr.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, os.ErrExist) && i < 100 {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		_, err = f.WriteString(want + "\n")
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err == nil {
+			err = vr.Rename(tmp, version)
+		}
+		if err != nil {
+			vr.Remove(tmp)
+		}
+		return err
+	}
+}
+
+// notOpened says why p.Dir is no longer the folder r opened: its parent
+// swapped since the install began (parent), p.Dir a link, not a folder, or
+// another folder; "" while it is.
+func (t Tool) notOpened(p Place, parent dirAt, r *os.Root) string {
+	if why := parent.swapped(filepath.Dir(p.Dir)); why != "" {
+		return why
+	}
 	if why := t.shareNotOurs(p); why != "" {
 		return why
 	}
@@ -621,6 +826,23 @@ func (t Tool) notOpened(p Place, r *os.Root) string {
 	open, err := r.Stat(".")
 	if err != nil || !os.SameFile(fi, open) {
 		return release.Tilde(p.Dir) + " is another folder"
+	}
+	return ""
+}
+
+// notOpened says why path, a parent folder, is no longer what d saw or
+// the folder r opened; "" while it is both.
+func (d dirAt) notOpened(path string, r *os.Root) string {
+	if why := d.swapped(path); why != "" {
+		return why
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return release.Tilde(path) + " is gone"
+	}
+	open, err := r.Stat(".")
+	if err != nil || !os.SameFile(fi, open) {
+		return release.Tilde(path) + " is another folder"
 	}
 	return ""
 }

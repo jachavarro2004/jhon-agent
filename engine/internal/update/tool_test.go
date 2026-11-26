@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/sigstore/sigstore-go/pkg/testing/ca"
 
@@ -846,5 +848,485 @@ func TestTheLinkSwappedForAFolderIsSwappedBack(t *testing.T) {
 	}
 	if got := names(t, filepath.Dir(p.Link)); got != "jhon-studio" {
 		t.Errorf("bin: %s", got)
+	}
+}
+
+// T247 (odd/tasks/phase1-security.md S4): the follow-ups of T242's focused
+// re-verify (studio-integration-v1 L21).
+
+// The record of a verified folder is written to a new file and renamed
+// over its name: a link planted at the record's name, or at the name it is
+// written to first, is never written through.
+func TestInstallToolWritesTheRecordWithoutFollowingALink(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	r, c, p := installed01(t, vs)
+	r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", studioTar(t, "0.2.0", ""), "")}, r.releases...)
+	victim, victim2 := filepath.Join(p.Dir, "victim"), filepath.Join(p.Dir, "victim2")
+	for _, v := range []string{victim, victim2} {
+		if err := os.WriteFile(v, []byte("mine"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := VerifiedRecord(p, "0.2.0")
+	if err := os.Symlink("../victim", rec); err != nil {
+		t.Fatal(err)
+	}
+	tmp := filepath.Join(filepath.Dir(rec), recordTemp("0.2.0", 0))
+	if err := os.Symlink("../victim2", tmp); err != nil {
+		t.Fatal(err)
+	}
+	res, err := c.InstallTool(context.Background(), tool, p, "0.5.0", false)
+	if err != nil || res.Status != ToolUpdated || res.To != "0.2.0" {
+		t.Fatalf("result = %+v, %v", res, err)
+	}
+	for _, v := range []string{victim, victim2} {
+		if b, _ := os.ReadFile(v); string(b) != "mine" {
+			t.Errorf("written through a link: %s holds %q", v, b)
+		}
+	}
+	if fi, err := os.Lstat(rec); err != nil || !fi.Mode().IsRegular() {
+		t.Errorf("the record is not a file: %v, %v", fi, err)
+	}
+	if l, err := os.Readlink(tmp); err != nil || l != "../victim2" {
+		t.Errorf("the link at the first temporary name: %q, %v", l, err)
+	}
+	if in := tool.Installed(p); in.Active != "0.2.0" || !in.Verified {
+		t.Errorf("Installed = %+v", in)
+	}
+}
+
+// A ~/.local/share swapped for a link during the install is refused, never
+// followed; one that was a link before the install began is the user's own
+// and is installed through, as before.
+func TestInstallToolRefusesASwappedShareParent(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	ctx := context.Background()
+	t.Run("swapped while the install runs", func(t *testing.T) {
+		r, c, p := installed01(t, vs)
+		parent := filepath.Dir(p.Dir)
+		elsewhere, moved := t.TempDir(), parent+".moved"
+		r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", hostile(t, "0.2.0",
+			"mv '"+parent+"' '"+moved+"' && ln -s '"+elsewhere+"' '"+parent+"'"), "")}, r.releases...)
+		link := linked(t, p)
+		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if want := parent + " became a link to " + elsewhere + " during the install; it was left as it is; nothing was changed"; err == nil || err.Error() != want {
+			t.Errorf("error = %v\nwant %s", err, want)
+		}
+		if got := names(t, elsewhere); got != "" {
+			t.Errorf("written through the link: %s", got)
+		}
+		if got := names(t, filepath.Join(moved, "jhon-studio")); got != ".jhon-verified 0.1.0" {
+			t.Errorf("the moved folder: %s", got)
+		}
+		if l, _ := os.Readlink(p.Link); l != link {
+			t.Errorf("link moved to %s", l)
+		}
+	})
+	t.Run("made a link before a first install", func(t *testing.T) {
+		r := &repo{}
+		c := r.serve(t, vs)
+		p := home(t, tool)
+		parent := filepath.Dir(p.Dir)
+		elsewhere := t.TempDir()
+		r.releases = []toolRelease{signedTool(t, vs, "0.1.0", hostile(t, "0.1.0",
+			"mkdir -p '"+filepath.Dir(parent)+"' && ln -s '"+elsewhere+"' '"+parent+"'"), "")}
+		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if want := parent + " became a link to " + elsewhere + " during the install; it was left as it is; nothing was changed"; err == nil || err.Error() != want {
+			t.Errorf("error = %v\nwant %s", err, want)
+		}
+		if got := names(t, elsewhere); got != "" {
+			t.Errorf("written through the link: %s", got)
+		}
+		if _, err := os.Lstat(p.Link); err == nil {
+			t.Error("linked")
+		}
+	})
+	t.Run("a link before the install began is followed, as before", func(t *testing.T) {
+		r := &repo{}
+		c := r.serve(t, vs)
+		p := home(t, tool)
+		parent, elsewhere := filepath.Dir(p.Dir), t.TempDir()
+		if err := os.MkdirAll(filepath.Dir(parent), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(elsewhere, parent); err != nil {
+			t.Fatal(err)
+		}
+		r.releases = []toolRelease{signedTool(t, vs, "0.1.0", studioTar(t, "0.1.0", ""), "")}
+		if res, err := c.InstallTool(ctx, tool, p, "0.5.0", false); err != nil || res.Status != ToolInstalled {
+			t.Fatalf("result = %+v, %v", res, err)
+		}
+		if got := names(t, filepath.Join(elsewhere, "jhon-studio")); got != ".jhon-verified 0.1.0" {
+			t.Errorf("installed: %s", got)
+		}
+		if in := tool.Installed(p); in.Active != "0.1.0" || !in.Verified {
+			t.Errorf("Installed = %+v", in)
+		}
+	})
+}
+
+// A check says what the update would do: a changed active folder, which
+// the update refuses, is reported with the same fix (move it away), not as
+// one to run jhon update for; a missing one still is.
+func TestInstallToolCheckSaysAChangedFolderIsRefused(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	ctx := context.Background()
+	_, c, p := installed01(t, vs)
+	if err := os.WriteFile(filepath.Join(p.Dir, "0.1.0", "plugin", "README.md"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := tree(t, p)
+	want := filepath.Join(p.Dir, "0.1.0") + " is not jhon-studio's signed release 0.1.0 (its files differ); move it away for jhon to install it; nothing was changed"
+	for _, check := range []bool{true, false} {
+		if res, err := c.InstallTool(ctx, tool, p, "0.5.0", check); err == nil || err.Error() != want {
+			t.Errorf("check %v: %+v, %v", check, res, err)
+		}
+	}
+	if after := tree(t, p); !mapsEqual(before, after) {
+		t.Errorf("changed:\n%v\n%v", before, after)
+	}
+}
+
+// A first install refused after jhon made ~/.local/share/<tool> leaves no
+// empty folder there.
+func TestARefusedFirstInstallLeavesNoEmptyShareFolder(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	ctx := context.Background()
+	t.Run("a file swapped in at the link", func(t *testing.T) {
+		r := &repo{}
+		c := r.serve(t, vs)
+		p := home(t, tool)
+		r.releases = []toolRelease{signedTool(t, vs, "0.1.0", hostile(t, "0.1.0",
+			"mkdir -p '"+filepath.Dir(p.Link)+"' && printf mine > '"+p.Link+"'"), "")}
+		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if want := p.Link + " became a file, not jhon's link to a jhon-studio release, during the install; it was left as it is; nothing was changed"; err == nil || err.Error() != want {
+			t.Errorf("error = %v", err)
+		}
+		if _, err := os.Lstat(p.Dir); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("%s is left: %v", p.Dir, err)
+		}
+	})
+	t.Run("a failure once the folder is open", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root writes into a read-only folder")
+		}
+		r := &repo{}
+		c := r.serve(t, vs)
+		p := home(t, tool)
+		r.releases = []toolRelease{signedTool(t, vs, "0.1.0", studioTar(t, "0.1.0", ""), "")}
+		hookShareOpen = func() { os.Chmod(p.Dir, 0o555) }
+		t.Cleanup(func() { hookShareOpen = nil })
+		_, err := c.InstallTool(ctx, tool, p, "0.5.0", false)
+		if err == nil || !strings.HasSuffix(err.Error(), ": permission denied; nothing was changed") {
+			t.Errorf("error = %v", err)
+		}
+		if _, err := os.Lstat(p.Dir); !errors.Is(err, fs.ErrNotExist) {
+			os.Chmod(p.Dir, 0o755)
+			t.Errorf("%s is left: %v", p.Dir, err)
+		}
+	})
+}
+
+// The tree's digest covers the permission bits that give access: a
+// group's or others' write bit on a file or a folder (the top one too),
+// and setuid or setgid on a file, change it, and a folder made writable by
+// all is not adopted. A folder's setgid (which Linux passes from a setgid
+// parent to every folder made inside), setuid (ignored on a folder) and
+// sticky (which only takes a right away), and a file's sticky (ignored),
+// give no access and do not count. An ordinary tree (folders 0755, files
+// 0644 or 0755) has the digest it had before, so the folders jhon
+// verified before stay verified.
+func TestTreeDigestCoversPermissionBits(t *testing.T) {
+	dir := t.TempDir()
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(os.MkdirAll(filepath.Join(dir, "bin"), 0o755))
+	must(os.WriteFile(filepath.Join(dir, "bin", "tool"), []byte("#!/bin/sh\n"), 0o755))
+	must(os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\n"), 0o644))
+	for _, p := range []string{dir, filepath.Join(dir, "bin")} {
+		must(os.Chmod(p, 0o755))
+	}
+	must(os.Chmod(filepath.Join(dir, "bin", "tool"), 0o755))
+	must(os.Chmod(filepath.Join(dir, "README.md"), 0o644))
+	ordinary, err := TreeDigest(dir)
+	must(err)
+	// The digest T242 recorded for this tree.
+	if want := "abd3c4582cb4f3dfbb420dd7bf2485cda4dd93757024a294c457ddbf697928a9"; ordinary != want {
+		t.Errorf("an ordinary tree's digest changed: %s, want %s", ordinary, want)
+	}
+	// Taking a bit away from the owner's (0700, 0600: another umask) is
+	// not a change of what others may do.
+	for _, c := range []struct {
+		path string
+		mode os.FileMode
+		same bool
+	}{
+		{"README.md", 0o600, true},
+		{"bin", 0o700, true},
+		{"README.md", 0o664, false},
+		{"README.md", 0o646, false},
+		{"bin/tool", 0o775, false},
+		{"bin/tool", 0o755 | os.ModeSetuid, false},
+		{"bin/tool", 0o755 | os.ModeSetgid, false},
+		{"bin/tool", 0o755 | os.ModeSticky, true},
+		{"bin", 0o775, false},
+		{"bin", 0o2775, false},
+		{"bin", 0o755 | os.ModeSetgid, true},
+		{"bin", 0o755 | os.ModeSetuid, true},
+		{"bin", 0o755 | os.ModeSticky, true},
+		{".", 0o755 | os.ModeSetgid, true},
+		{".", 0o777, false},
+	} {
+		p := filepath.Join(dir, c.path)
+		fi, err := os.Lstat(p)
+		must(err)
+		must(os.Chmod(p, c.mode))
+		got, err := TreeDigest(dir)
+		must(err)
+		if (got == ordinary) != c.same {
+			t.Errorf("%s %v: digest %s, ordinary %s", c.path, c.mode, got, ordinary)
+		}
+		must(os.Chmod(p, fi.Mode()&(fs.ModePerm|fs.ModeSetuid|fs.ModeSetgid|fs.ModeSticky)))
+		if got, _ := TreeDigest(dir); got != ordinary {
+			t.Fatalf("%s: chmod back gives %s", c.path, got)
+		}
+	}
+
+	// T247's verify: the same tree with setgid on its folders, as a setgid
+	// parent makes them, keeps T242's digest.
+	for _, d := range []string{dir, filepath.Join(dir, "bin")} {
+		must(os.Chmod(d, 0o755|os.ModeSetgid))
+	}
+	if got, err := TreeDigest(dir); err != nil || got != "abd3c4582cb4f3dfbb420dd7bf2485cda4dd93757024a294c457ddbf697928a9" {
+		t.Errorf("setgid folders: %s, %v", got, err)
+	}
+
+	tool, vs := studioTool(t), virtual(t)
+	_, _, p := installed01(t, vs)
+	must(os.Chmod(filepath.Join(p.Dir, "0.1.0"), 0o777))
+	if in := tool.Installed(p); in.Verified {
+		t.Errorf("a folder writable by all is adopted: %+v", in)
+	}
+}
+
+// T247's verify probes (odd/tasks/phase1-security.md T4), kept as
+// regressions.
+
+// entries are the paths under dir, relative, in walk order.
+func entries(dir string) string {
+	var out []string
+	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && p != dir {
+			r, _ := filepath.Rel(dir, p)
+			out = append(out, r)
+		}
+		return nil
+	})
+	return strings.Join(out, " ")
+}
+
+// Item 2: a link at the record to a file outside the share folder is
+// replaced, never written through.
+func TestARecordLinkOutsideIsNotWrittenThrough(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	r, c, p := installed01(t, vs)
+	r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", studioTar(t, "0.2.0", ""), "")}, r.releases...)
+	victim := filepath.Join(t.TempDir(), "victim")
+	if err := os.WriteFile(victim, []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, VerifiedRecord(p, "0.2.0")); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := c.InstallTool(context.Background(), tool, p, "0.5.0", false); err != nil || res.Status != ToolUpdated {
+		t.Fatalf("result = %+v, %v", res, err)
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "mine" {
+		t.Errorf("written through: %q", b)
+	}
+	if fi, err := os.Lstat(VerifiedRecord(p, "0.2.0")); err != nil || !fi.Mode().IsRegular() {
+		t.Errorf("the record is not a file: %v, %v", fi, err)
+	}
+	if in := tool.Installed(p); in.Active != "0.2.0" || !in.Verified {
+		t.Errorf("Installed = %+v", in)
+	}
+}
+
+// Item 2: a .jhon-verified that is a link to a folder inside the share
+// folder is left as it is and refuses the link; nothing is written there.
+func TestAVerifiedFolderThatIsALinkIsRefused(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	r, c, p := installed01(t, vs)
+	r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", studioTar(t, "0.2.0", ""), "")}, r.releases...)
+	vd := filepath.Join(p.Dir, verifiedDir)
+	if err := os.Rename(vd, vd+".real"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("0.1.0/plugin", vd); err != nil {
+		t.Fatal(err)
+	}
+	_, err := c.InstallTool(context.Background(), tool, p, "0.5.0", false)
+	if want := "jhon-studio 0.2.0 is at " + filepath.Join(p.Dir, "0.2.0") + " but not linked: " + vd + " is not a folder; it was left as it is"; err == nil || err.Error() != want {
+		t.Errorf("error = %v\nwant %s", err, want)
+	}
+	if got := entries(filepath.Join(p.Dir, "0.1.0", "plugin")); got != "README.md" {
+		t.Errorf("written through the link into 0.1.0/plugin: %s", got)
+	}
+	if l, _ := os.Readlink(vd); l != "0.1.0/plugin" {
+		t.Errorf("the link: %q", l)
+	}
+}
+
+// Item 2: .jhon-verified flipping between the folder and a link to
+// 0.1.0/plugin while records are written: nothing lands in the plugin.
+func TestWriteRecordRacingALinkWritesNothingThrough(t *testing.T) {
+	_, _, p := installed01(t, virtual(t))
+	r, err := os.OpenRoot(p.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	vd := filepath.Join(p.Dir, verifiedDir)
+	plugin := filepath.Join(p.Dir, "0.1.0", "plugin")
+	var stop atomic.Bool
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for !stop.Load() {
+			os.Rename(vd, vd+".real")
+			os.Symlink("0.1.0/plugin", vd)
+			time.Sleep(time.Microsecond)
+			os.Remove(vd)
+			os.Rename(vd+".real", vd)
+		}
+	}()
+	for i := range 3000 {
+		writeRecord(r, p, fmt.Sprintf("9.9.%d", i), "digest")
+	}
+	stop.Store(true)
+	<-done
+	if got := entries(plugin); got != "README.md" {
+		t.Errorf("written through the link: %s", got)
+	}
+}
+
+// Item 2: with every temporary name taken by a link, the record is
+// refused, never written through one.
+func TestWriteRecordWithEveryTemporaryNameTaken(t *testing.T) {
+	_, _, p := installed01(t, virtual(t))
+	r, err := os.OpenRoot(p.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	victim := filepath.Join(t.TempDir(), "victim")
+	if err := os.WriteFile(victim, []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i <= 100; i++ {
+		if err := os.Symlink(victim, filepath.Join(p.Dir, verifiedDir, recordTemp("0.3.0", i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writeRecord(r, p, "0.3.0", "d"); !errors.Is(err, fs.ErrExist) {
+		t.Errorf("error = %v", err)
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "mine" {
+		t.Errorf("written through: %q", b)
+	}
+	if _, err := os.Lstat(VerifiedRecord(p, "0.3.0")); err == nil {
+		t.Error("a record was written")
+	}
+}
+
+// Item 4: ~/.local/share swapped for another real folder during the
+// install is refused; nothing is written into the new one.
+func TestInstallToolRefusesAShareParentSwappedForAnotherFolder(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	r, c, p := installed01(t, vs)
+	parent := filepath.Dir(p.Dir)
+	r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", hostile(t, "0.2.0",
+		"mv '"+parent+"' '"+parent+".moved' && mkdir '"+parent+"'"), "")}, r.releases...)
+	link := linked(t, p)
+	_, err := c.InstallTool(context.Background(), tool, p, "0.5.0", false)
+	if want := parent + " became another folder during the install; it was left as it is; nothing was changed"; err == nil || err.Error() != want {
+		t.Errorf("error = %v\nwant %s", err, want)
+	}
+	if got := entries(parent); got != "" {
+		t.Errorf("written into the new folder: %s", got)
+	}
+	if l, _ := os.Readlink(p.Link); l != link {
+		t.Errorf("link moved to %s", l)
+	}
+}
+
+// Item 4: a ~/.local/share that was a link before the install: one
+// retargeted, or whose target folder is swapped, during the install is
+// refused and nothing is written there; one left alone installs.
+func TestInstallToolThroughAShareLinkThatChanges(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	for _, c := range []struct{ name, sh string }{
+		{"retargeted", "ln -sfn '{E2}' '{S}'"},
+		{"its target swapped", "mv '{E1}' '{E1}.moved' && mkdir '{E1}'"},
+		{"unchanged", "true"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := &repo{}
+			cl := r.serve(t, vs)
+			p := home(t, tool)
+			parent := filepath.Dir(p.Dir)
+			e1, e2 := t.TempDir(), t.TempDir()
+			if err := os.MkdirAll(filepath.Dir(parent), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(e1, parent); err != nil {
+				t.Fatal(err)
+			}
+			r.releases = []toolRelease{signedTool(t, vs, "0.1.0", studioTar(t, "0.1.0", ""), "")}
+			if _, err := cl.InstallTool(context.Background(), tool, p, "0.5.0", false); err != nil {
+				t.Fatal(err)
+			}
+			sh := strings.NewReplacer("{E1}", e1, "{E2}", e2, "{S}", parent).Replace(c.sh)
+			r.releases = append([]toolRelease{signedTool(t, vs, "0.2.0", hostile(t, "0.2.0", sh), "")}, r.releases...)
+			res, err := cl.InstallTool(context.Background(), tool, p, "0.5.0", false)
+			switch c.name {
+			case "unchanged":
+				if err != nil || res.Status != ToolUpdated {
+					t.Errorf("result = %+v, %v", res, err)
+				}
+			case "retargeted":
+				if want := parent + " became a link to " + e2 + " during the install; it was left as it is; nothing was changed"; err == nil || err.Error() != want || entries(e2) != "" {
+					t.Errorf("error = %v; %s holds %q", err, e2, entries(e2))
+				}
+			default:
+				if want := parent + " became another folder during the install; it was left as it is; nothing was changed"; err == nil || err.Error() != want || entries(e1) != "" {
+					t.Errorf("error = %v; %s holds %q", err, e1, entries(e1))
+				}
+			}
+		})
+	}
+}
+
+// Item 6: a first install refused because a link jhon did not make
+// appeared at ~/.local/bin/<tool> leaves no ~/.local/share/<tool>.
+func TestARefusedFirstInstallForAForeignLinkLeavesNoShareFolder(t *testing.T) {
+	tool, vs := studioTool(t), virtual(t)
+	r := &repo{}
+	c := r.serve(t, vs)
+	p := home(t, tool)
+	if err := os.MkdirAll(filepath.Dir(p.Link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r.releases = []toolRelease{signedTool(t, vs, "0.1.0", hostile(t, "0.1.0", "ln -s /nonexistent/x '"+p.Link+"'"), "")}
+	_, err := c.InstallTool(context.Background(), tool, p, "0.5.0", false)
+	if want := p.Link + " became a link to /nonexistent/x, not jhon's link to a jhon-studio release, during the install; it was left as it is; nothing was changed"; err == nil || err.Error() != want {
+		t.Errorf("error = %v", err)
+	}
+	if _, err := os.Lstat(p.Dir); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("%s is left: %v", p.Dir, err)
 	}
 }

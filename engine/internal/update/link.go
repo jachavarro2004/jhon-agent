@@ -56,8 +56,12 @@ func (t Tool) link(p Place, version string) error {
 			r.Remove(tmp)
 			return nil
 		}
+		if hookBeforeSwapBack != nil {
+			hookBeforeSwapBack()
+		}
 		if err := swapIn(r, tmp, name); err != nil {
-			return fmt.Errorf("%s was replaced during the install and could not be put back: %v", p.Link, err)
+			// What was swapped in stays at tmp: said where (T247).
+			return fmt.Errorf("%s was replaced during the install and could not be put back: it is at %s (%v)", p.Link, filepath.Join(dir, tmp), err)
 		}
 		r.Remove(tmp)
 		return foreign()

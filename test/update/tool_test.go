@@ -228,3 +228,52 @@ func TestUpdateNamesGitHubsRateLimit(t *testing.T) {
 		"it resets in 60 s; jhon sends no GitHub token, so retry after the reset; nothing was changed\n")
 	sameSnapshot(t, snapshot(t, e.home), before)
 }
+
+// T247 (odd/tasks/phase1-security.md S4): `jhon update --check` gives the
+// advice the update would: a changed active folder, which the update
+// refuses, is said with its fix (move it away), not "run 'jhon update'";
+// a missing one still says to run it.
+func TestUpdateCheckSaysAChangedToolFolderIsRefused(t *testing.T) {
+	vs, err := ca.NewVirtualSigstore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := scratch(t, trustedRoot(t, vs))
+	support.Write(t, e.home, map[string]string{"settings.toml": "schema = 1\n\n[integrations]\nstudio = true\n"})
+	jhon := cli(t, "0.5.0")
+	rels := &studioReleases{}
+	srv := httptest.NewServer(rels)
+	defer srv.Close()
+	env := []string{"JHON_RELEASES_URL=" + srv.URL + "/repos/jachavarro2004/jhon-agent/releases/latest",
+		"JHON_TOOL_RELEASES_URL=" + srv.URL, "JHON_SETTINGS=" + filepath.Join(e.home, "settings.toml")}
+	rels.add(t, vs, srv.URL, "0.1.0", ">=0.5.0-rc.1", "https://github.com/jachavarro2004/jhon-studio/.github/workflows/release.yml@refs/tags/v0.1.0")
+	wantCode(t, e.run(t, jhon, []string{"update"}, env...), 0)
+	program := filepath.Join(e.home, ".local", "share", "jhon-studio", "0.1.0", "bin", "jhon-studio")
+	if err := os.WriteFile(program, []byte("#!/bin/sh\necho changed\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(share(e.home), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	refused := "jhon: jhon-studio: ~/.local/share/jhon-studio/0.1.0 is not jhon-studio's signed release 0.1.0 (its files differ); move it away for jhon to install it; nothing was changed\n"
+	before := snapshot(t, e.home)
+	r := e.run(t, jhon, []string{"update", "--check"}, env...)
+	wantCode(t, r, 1)
+	equal(t, r.Stderr, refused)
+	if strings.Contains(r.Stdout, "jhon-studio") {
+		t.Errorf("stdout: %q", r.Stdout)
+	}
+	r = e.run(t, jhon, []string{"update", "--check", "--json"}, env...)
+	wantCode(t, r, 1)
+	var out struct {
+		Tools []map[string]string `json:"tools"`
+	}
+	if err := json.Unmarshal([]byte(r.Stdout), &out); err != nil || len(out.Tools) != 1 || out.Tools[0]["status"] != "failed" ||
+		out.Tools[0]["error"] != strings.TrimSuffix(strings.TrimPrefix(refused, "jhon: jhon-studio: "), "\n") {
+		t.Errorf("--json: %s (%v)", r.Stdout, err)
+	}
+	r = e.run(t, jhon, []string{"update"}, env...)
+	wantCode(t, r, 1)
+	equal(t, r.Stderr, refused)
+	sameSnapshot(t, snapshot(t, e.home), before)
+}
