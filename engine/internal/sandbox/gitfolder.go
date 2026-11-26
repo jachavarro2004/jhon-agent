@@ -41,6 +41,13 @@ func (in Input) GitFolderProblem(gitDir, commonDir string) string {
 	for _, p := range in.ownFolders() {
 		own = append(own, realPath(p, in.Stat))
 	}
+	return gitFolderWalk(gitDir, commonDir, own, "the project")
+}
+
+// gitFolderWalk is GitFolderProblem's check of gitDir and commonDir, which
+// must lie in one of own (real paths), whose name whose says ("the
+// project", "the repository <top>", T251).
+func gitFolderWalk(gitDir, commonDir string, own []string, whose string) string {
 	walked := 0
 	for _, dir := range []string{gitDir, commonDir} {
 		if !filepath.IsAbs(dir) {
@@ -48,7 +55,7 @@ func (in Input) GitFolderProblem(gitDir, commonDir string) string {
 		}
 		dir = filepath.Clean(dir)
 		if real, err := filepath.EvalSymlinks(dir); err != nil || !within(real, own) {
-			return "the repository's git folder " + dir + " is not in the project"
+			return "the repository's git folder " + dir + " is not in " + whose
 		}
 		problem := ""
 		err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {

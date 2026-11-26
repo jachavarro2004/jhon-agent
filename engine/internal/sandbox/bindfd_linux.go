@@ -8,6 +8,8 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
+
+	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 )
 
 // openHow is openat2's struct open_how.
@@ -306,6 +308,78 @@ func anchorProblem(in Input) *Problem {
 	}
 	syscall.Close(cur)
 	return projectProblem(top, ".", "is neither the folder this command runs in nor one that holds it: a folder on its way changed after Jhon read it")
+}
+
+// RepositoryProblem is why top, the git repository inside a
+// sandbox.allow_write folder a line that runs outside the sandbox works in
+// (Outside, T251), is not the folder Jhon judged, nil when it is or top is
+// "" (the project's line, which ProjectProblem anchors). Called once the
+// line is in the registry, so no sandboxed command that can write the
+// repository runs: top, opened with no link followed (in.homed: the home's
+// own way taken), is by device and inode the folder its path names read
+// through every link, and each folder in top the line's git works in
+// (GitFolders), opened with no link followed, is top or a folder inside it,
+// walked up through ".." (T248's anchors, L4). Where openat2 is missing or
+// refused the line stays inside, as a run fails closed there.
+func (in Input) RepositoryProblem(top, line string) *Problem {
+	if top == "" {
+		return nil
+	}
+	changed := func(path, why string) *Problem {
+		return &Problem{Reason: "the repository " + top + " changed after Jhon read it: " + path + " " + why, Fix: "run the line again; if it is refused again, a command may be replacing a folder on the way to " + top + ": find it and stop it"}
+	}
+	f, err := openNoLink(in.homed(top))
+	if p := openat2Problem(err); p != nil {
+		return p
+	}
+	if err != nil {
+		return changed(top, "cannot be opened with no link followed ("+err.Error()+")")
+	}
+	defer f.Close()
+	var want, named syscall.Stat_t
+	if syscall.Fstat(int(f.Fd()), &want) != nil || syscall.Stat(top, &named) != nil || named.Dev != want.Dev || named.Ino != want.Ino {
+		return changed(top, "is not the folder its path names")
+	}
+	for _, d := range GitFolders(line, in.Cwd) {
+		dir := in.homed(filepath.Clean(d))
+		if !project.Within(dir, top) {
+			continue
+		}
+		g, err := openNoLink(dir)
+		if err != nil {
+			return changed(dir, "is or passes through a link, or cannot be opened ("+err.Error()+")")
+		}
+		cur, err := fcntl(int(g.Fd()), syscall.F_DUPFD_CLOEXEC, 3)
+		g.Close()
+		if err != nil {
+			return changed(dir, "cannot be read ("+err.Error()+")")
+		}
+		inside := false
+		for range strings.Count(strings.TrimPrefix(dir, top), "/") + 1 {
+			var st syscall.Stat_t
+			if syscall.Fstat(cur, &st) != nil {
+				break
+			}
+			if st.Dev == want.Dev && st.Ino == want.Ino {
+				inside = true
+				break
+			}
+			up, err := syscall.Openat(cur, "..", oPath|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+			syscall.Close(cur)
+			if err != nil {
+				cur = -1
+				break
+			}
+			cur = up
+		}
+		if cur >= 0 {
+			syscall.Close(cur)
+		}
+		if !inside {
+			return changed(dir, "is not inside it on the disk")
+		}
+	}
+	return nil
 }
 
 // mainProblem is why in.Main, the main worktree of a linked one as the

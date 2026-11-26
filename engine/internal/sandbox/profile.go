@@ -31,46 +31,36 @@ var shells = []string{"sh", "bash", "zsh", "dash"}
 // `cd <folder> &&` (leadingCd) is taken as -C (T181, L1503): the line
 // stays unsandboxed only when the folder is inside the roots, and its
 // programs then work there. tools are sandbox.deploy_tools (Input.DeployTools):
-// programs the owner lists, which a line runs as it runs docker.
+// programs the owner lists, which a line runs as it runs docker. It knows
+// no sandbox.allow_write folder: ProfileIn also counts a git repository
+// inside one (T251).
 func ProfileAt(command, cwd string, roots []string, stat func(string) (string, bool, bool), tools []string) string {
-	return profileAt(command, cwd, roots, stat, false, tools)
+	return profileAt(Input{Cwd: cwd, Stat: stat, DeployTools: tools}, command, roots, false)
 }
 
-// profileAt is ProfileAt for a line zsh runs when zsh is set: a relative
-// cd folder gives work, as zsh may find it through a cdpath ~/.zshenv sets
-// (bash and sh take CDPATH only from the environment, which an unsandboxed
-// line runs without, UnsandboxedEnv).
-func profileAt(command, cwd string, roots []string, stat func(string) (string, bool, bool), zsh bool, tools []string) string {
-	if classify(command, zsh, tools) != Unsandboxed || !filepath.IsAbs(cwd) {
+// ProfileIn is ProfileAt for a line started in in.Cwd in the project of in
+// (its Roots, Stat and DeployTools), where a git repository inside one of
+// in.AllowWrite counts as a project too (T251, L1722): a line whose every
+// git works in one such repository, which the sandbox opens for writing
+// and the line names with no link on the way (placeOf), stays unsandboxed
+// as a line of the project does. A line that works in the project and in
+// such a repository, or in two of them, gives work. `jhon sandbox profile`
+// and Claude Code's wrap ask it; `jhon sandbox run --profile unsandboxed`
+// asks again (Outside).
+func ProfileIn(in Input, command string) string {
+	return profileAt(in, command, in.Roots, false)
+}
+
+// profileAt is ProfileIn with the project's roots given, for a line zsh
+// runs when zsh is set: a relative cd folder gives work, as zsh may find it
+// through a cdpath ~/.zshenv sets (bash and sh take CDPATH only from the
+// environment, which an unsandboxed line runs without, UnsandboxedEnv).
+func profileAt(in Input, command string, roots []string, zsh bool) string {
+	if classify(command, zsh, in.DeployTools) != Unsandboxed || !filepath.IsAbs(in.Cwd) {
 		return Work
 	}
-	programs, err := sh.JudgeString(command, nil, nil, sh.Opts{})
-	if err != nil {
+	if _, p := in.placeOf(command, roots, zsh); p != nil {
 		return Work
-	}
-	var real []string
-	for _, r := range roots {
-		if filepath.IsAbs(r) {
-			real = append(real, realPath(r, stat))
-		}
-	}
-	inside := func(p string) bool { return within(realPath(p, stat), real) }
-	if dir, ok := leadingCd(command); ok {
-		if zsh && !filepath.IsAbs(dir) {
-			return Work
-		}
-		if !filepath.IsAbs(dir) {
-			dir = filepath.Join(cwd, dir)
-		}
-		if !inside(dir) {
-			return Work
-		}
-		cwd = dir
-	}
-	for _, p := range programs {
-		if p.Argv[0] == "git" && !gitInside(p.Argv[1:], cwd, inside) {
-			return Work
-		}
 	}
 	return Unsandboxed
 }
@@ -90,30 +80,6 @@ func realPath(p string, stat func(string) (string, bool, bool)) string {
 		}
 		tail = append([]string{filepath.Base(head)}, tail...)
 	}
-}
-
-// gitInside is whether git's arguments, run in cwd, work in a folder
-// inside the project (each -C taken in turn from the one before) and, for
-// a clone, write the new folder inside it: the folder named after the
-// repository, or the one given.
-func gitInside(args []string, cwd string, inside func(string) bool) bool {
-	dir, k := gitFolder(args, cwd)
-	if !inside(dir) {
-		return false
-	}
-	if k >= len(args) || args[k] != "clone" {
-		return true
-	}
-	// A folder that starts with ~, quoted or not, gives work, as -C ~ does
-	// (gitDelivers): unquoted, the shell puts the home there (T128h3, L1350).
-	target := cloneTarget(args[k+1:])
-	if target == "" || strings.HasPrefix(target, "~") {
-		return false
-	}
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(dir, target)
-	}
-	return inside(target)
 }
 
 // gitFolder is the folder git's arguments, run in cwd, work in (each -C
@@ -214,10 +180,48 @@ func cloneTarget(args []string) string {
 // PATH has no relative folder (L888, F1, as for bubblewrap). Anything else
 // runs with the work profile. The project's roots are the ones that are no
 // link (ownRoots, T249). The line then runs with OutsidePath.
+//
+// A git repository inside a sandbox.allow_write folder counts as the
+// project (T251, ProfileIn, Outside).
 func RunsOutside(h Host, in Input, argv []string) bool {
-	if len(argv) != 3 || argv[1] != "-c" || !filepath.IsAbs(argv[0]) || !slices.Contains(shells, filepath.Base(argv[0])) || profileAt(argv[2], in.Cwd, in.ownRoots(), in.Stat, filepath.Base(argv[0]) == "zsh", in.DeployTools) != Unsandboxed {
-		return false
+	_, _, ok := Outside(h, in, argv)
+	return ok
+}
+
+// Outside is RunsOutside with where the line works and why it does not run
+// outside the sandbox (T251, L1722): ok when it runs outside, with top the
+// git repository inside a sandbox.allow_write folder its git works in, ""
+// for the project (placeOf; the run then checks that repository as it
+// checks the project: its anchors, RepositoryProblem, its git keys and
+// folders, LineGitFolderProblem, and the registry, OutsideAreas). Not ok,
+// kept is the reason a delivery line's note names: where its git works
+// (placeOf) or a program a sandboxed command may have written; nil for a
+// line that is no `<shell> -c <line>` of programs that run outside, whose
+// note is DeliveryNote's.
+func Outside(h Host, in Input, argv []string) (top string, kept *Problem, ok bool) {
+	if len(argv) != 3 || argv[1] != "-c" || !filepath.IsAbs(argv[0]) || !slices.Contains(shells, filepath.Base(argv[0])) {
+		return "", nil, false
 	}
+	zsh := filepath.Base(argv[0]) == "zsh"
+	if classify(argv[2], zsh, in.DeployTools) != Unsandboxed || !filepath.IsAbs(in.Cwd) {
+		return "", nil, false
+	}
+	top, p := in.placeOf(argv[2], in.ownRoots(), zsh)
+	if p == nil {
+		p = trustProblem(h, in, argv[0])
+	}
+	if p != nil {
+		return "", p, false
+	}
+	return top, nil, true
+}
+
+// trustProblem is why a line run by shell may not run outside the sandbox
+// of in for the programs it would start (L888, F1), nil when it may: the
+// shell's file, and the git, gh, ssh, docker, docker-compose and each of
+// in.DeployTools the shell finds first on PATH, lie outside every writable
+// area of in, and PATH has no relative folder.
+func trustProblem(h Host, in Input, shell string) *Problem {
 	open := writable(in)
 	trusted := func(file string) bool {
 		real, isDir, ok := in.Stat(file)
@@ -227,12 +231,12 @@ func RunsOutside(h Host, in Input, argv []string) bool {
 		folder, _, _ := in.Stat(filepath.Dir(file))
 		return !within(real, open) && !within(folder, open)
 	}
-	if !trusted(argv[0]) {
-		return false
+	if !trusted(shell) {
+		return &Problem{Reason: "the shell " + shell + " is not a file outside the folders a sandboxed command may write", Fix: "run the line with a shell installed for the whole system, such as /usr/bin/bash"}
 	}
 	for _, dir := range in.Path {
 		if !filepath.IsAbs(dir) {
-			return false
+			return &Problem{Reason: "PATH holds the relative folder " + dir + ", which names another folder wherever a program runs", Fix: "take " + dir + " off PATH, or name it by its absolute path"}
 		}
 	}
 	for _, name := range slices.Concat([]string{"git", "gh", "ssh", "docker", "docker-compose"}, in.DeployTools) {
@@ -245,12 +249,12 @@ func RunsOutside(h Host, in Input, argv []string) bool {
 				continue
 			}
 			if !trusted(file) {
-				return false
+				return &Problem{Reason: name + " on PATH is " + file + ", a file a sandboxed command may write", Fix: "take " + dir + " off PATH, or put a folder that holds " + name + " and that no sandboxed command may write before it"}
 			}
 			break
 		}
 	}
-	return true
+	return nil
 }
 
 // OutsidePath is PATH for a line that runs outside the sandbox (RunsOutside,
@@ -797,13 +801,49 @@ func loneBraces(s string) bool {
 // DeliveryNote is the note a work run of argv ends with when it fails and
 // holds git with a network subcommand or gh (T181, L1503): argv itself, or
 // the line of `<shell> -c <line>` and the words after its $0 (the Claude
-// Code wrap passes the command there). "" when it holds none.
+// Code wrap passes the command there). "" when it holds none. It is the
+// note of a line kept inside for its shape: DeliveryNoteAt gives the real
+// reason of one kept inside for another.
 func DeliveryNote(argv []string) string {
 	if slices.ContainsFunc(linePrograms(argv), delivers) {
 		return deliveryNote
 	}
 	return ""
 }
+
+// DeliveryNoteAt is DeliveryNote for a work run of argv in in, which names
+// the real reason its line ran in the sandbox (T251, L1721): kept's, the
+// reason the run found when it was asked to run the line outside (a check
+// that refused it), when it is not nil; else, for `<shell> -c <line>` (or
+// the command the Claude Code wrap passes after the shell's $0), the reason
+// Outside gives for that line (where its git works, a planted program).
+// Only a line kept inside for its shape (a pipe, another command) gets
+// DeliveryNote's "run it alone". "" when argv holds no git network
+// command and no gh.
+func DeliveryNoteAt(h Host, in Input, argv []string, kept *Problem) string {
+	if DeliveryNote(argv) == "" {
+		return ""
+	}
+	if kept != nil {
+		return keptNote + kept.Line()
+	}
+	if len(argv) >= 3 && argv[1] == "-c" {
+		lines := []string{argv[2]}
+		if len(argv) > 4 {
+			lines = append(lines, argv[4:]...)
+		}
+		for _, line := range lines {
+			if _, p, _ := Outside(h, in, []string{argv[0], "-c", line}); p != nil {
+				return keptNote + p.Line()
+			}
+		}
+	}
+	return deliveryNote
+}
+
+// keptNote opens DeliveryNoteAt's note of a line kept inside for a reason
+// other than its shape.
+const keptNote = "git over SSH and gh ran in the sandbox, not outside it: "
 
 // DeployNote is the note a work run of argv ends with, whatever its exit
 // but a signal's, when its line holds a program tools (sandbox.deploy_tools)

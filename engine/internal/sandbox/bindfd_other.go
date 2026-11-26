@@ -36,5 +36,14 @@ func (b *Bound) openSelf() *Problem {
 	return &Problem{Reason: errNotLinux.Error(), Fix: "none on this system: it needs Linux and bubblewrap"}
 }
 
+// RepositoryProblem keeps a line of another repository inside off Linux,
+// where its anchors cannot be checked (T251).
+func (in Input) RepositoryProblem(top, line string) *Problem {
+	if top == "" {
+		return nil
+	}
+	return &Problem{Reason: errNotLinux.Error(), Fix: "none on this system: it needs Linux and bubblewrap"}
+}
+
 // pinnedAs checks nothing off Linux, where the sandbox does not run.
 func pinnedAs(in Input, real, written string) bool { return true }

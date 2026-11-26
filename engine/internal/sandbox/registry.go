@@ -233,8 +233,11 @@ func WritableAreas(in Input) []string { return writable(in) }
 // OutsideAreas are the real paths a line that runs outside the sandbox in
 // in's working folder reads, as it records them (Registry): the project's
 // roots (also one that is a link), the common dir, the listed worktrees,
-// the line's working folder (a leading cd's) and the folder each git on it
-// works in (GitFolders).
+// the line's working folder (a leading cd's), the folder each git on it
+// works in (GitFolders) and the top of the git repository inside a
+// sandbox.allow_write folder it works in (placeOf, T251), so a sandboxed
+// run that can write any of that repository, through the allowed folder,
+// and the line wait for each other.
 func OutsideAreas(in Input, line string) []string {
 	var out []string
 	add := func(p string) {
@@ -256,6 +259,9 @@ func OutsideAreas(in Input, line string) []string {
 	add(in.Cwd)
 	for _, p := range GitFolders(line, in.Cwd) {
 		add(p)
+	}
+	if top, p := in.placeOf(line, in.ownRoots(), false); p == nil && top != "" {
+		add(top)
 	}
 	return out
 }

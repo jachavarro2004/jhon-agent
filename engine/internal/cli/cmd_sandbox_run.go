@@ -105,8 +105,11 @@ const gitListingLimit = 4 << 20
 //
 // A listing or a rev-parse that fails, times out or is too long is a
 // problem too. With no git on PATH the line can run none, and needs no
-// check.
-func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string) string {
+// check. top is the git repository inside a sandbox.allow_write folder the
+// line works in (sandbox.Outside, T251), "" for the project's line: the git
+// folders of a folder inside it lie in it
+// (Input.LineGitFolderProblem).
+func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top string) string {
 	git, err := exec.LookPath("git")
 	if err != nil {
 		return ""
@@ -153,12 +156,16 @@ func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string) strin
 		if why != "" {
 			return why + " in " + dir
 		}
-		if why := in.GitFolderProblem(names[0], names[1]); why != "" {
+		if why := in.LineGitFolderProblem(top, dir, names[0], names[1]); why != "" {
 			return why
 		}
 	}
 	return ""
 }
+
+// repositoryGitFix is the fix the note of a line repositoryGitProblem kept
+// in the sandbox gives (sandbox.DeliveryNoteAt, T251).
+const repositoryGitFix = "remove that from the repository (a sandboxed command may have put it there), or run the line yourself in a terminal"
 
 // gitFolderNames are the git dir and the common dir `git rev-parse
 // --path-format=absolute --git-dir --git-common-dir` printed, exactly as git
