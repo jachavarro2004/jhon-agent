@@ -498,9 +498,15 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            changed file's whole path or import path, or a
                            changed document, and their dependents (every
                            project, with the reason, when that cannot be
-                           told); with no base it is a unit's run, the default
-                           for every intermediate pass: what changed since the
-                           change's last passing run, else since its base; its
+                           told; a changed project that brings in two or more
+                           dependents is said, with the slice's base when the
+                           run measured from further back); with no base it is
+                           a unit's run, the default for every intermediate
+                           pass: what changed since the change's last passing
+                           run, else since its base; that base is the commit
+                           the slice in progress started from (the last that
+                           closed a slice of the change, the change's base
+                           before the first); its
                            record closes no slice and delivers nothing, so the
                            slice base (--affected <base-ref>, or a full run) is
                            for the RED record and the slice's closing run only;
@@ -509,7 +515,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            repository shares (one per project; each run writes
                            a private copy, kept when pytest ran to its end and
                            its failures are not the test environment's: every
-                           test failing, a service refusing the connection),
+                           test failing, a service refusing the connection in
+                           the failures or with no test passing; a copy or
+                           first-run file a killed run left is swept),
                            and one with no record runs whole once to build it,
                            named with its tests' count (a first run its
                            deadline cut is left to jhon executions prime); a
@@ -547,8 +555,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            left, marking its tests failed), so the next
                            affected run builds it again, every test once; the
                            whole record, since a test that failed early
-                           recorded too little of the code it covers; exit 2
-                           for a name that is no such project
+                           recorded too little of the code it covers, and
+                           every worktree's own record of it from before the
+                           shared one; exit 2 for a name that is no such
+                           project
   jhon executions verify <change> --verdict pass|fail [--note <text>] [--json]
                            record a light verify (jhon-checker's, when a
                            slice of a code change closes) in the change's

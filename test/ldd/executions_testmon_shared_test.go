@@ -179,6 +179,8 @@ func TestExecutionsARunThatDidNotEndLeavesTheSharedRecord(t *testing.T) {
 
 // T255 (3): a worktree's own record from before the shared one is adopted
 // when the shared one is missing: copied, the old one left where it was.
+// T256 (L1726): by a run, never a dry run, which writes nothing at all and
+// reads the old record as the run will.
 func TestExecutionsAdoptsTheWorktreesOwnRecord(t *testing.T) {
 	t.Parallel()
 	p := newPytestProject(t)
@@ -187,11 +189,159 @@ func TestExecutionsAdoptsTheWorktreesOwnRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	support.Write(t, filepath.Dir(p.legacy), map[string]string{filepath.Base(p.legacy): string(b)})
+	before := p.untouched(t)
 	command, tests, _ := p.plan(t, "--affected", "base")
 	equal(t, command, p.narrowed(), "the old record narrows")
 	equal(t, tests, "testmon")
+	human := p.jhon(t, nil, "executions", "run", "c1", "--affected", "base", "--dry-run")
+	equal(t, human.Code, 0, human.Out())
+	match(t, human.Stdout, `(?m)^would run  lib: sh -c '`+regexp.QuoteMeta(p.narrowed())+`'`)
+	equal(t, p.untouched(t), before, "a dry run writes nothing")
+	equal(t, exists(p.data), false, "a dry run adopts nothing")
+
+	r := p.jhon(t, nil, "executions", "run", "c1", "--affected", "base", "--json")
+	equal(t, r.Code, 0, r.Out())
+	equal(t, p.calls(t), []string{p.data + ".run|run --with pytest-testmon --extra dev pytest --testmon --rootdir=" + p.root}, "the run narrows from the adopted record")
 	equal(t, p.shared(t), string(b), "the shared record is a copy of it")
 	equal(t, exists(p.legacy), true, "the old record is left where it was")
+}
+
+// untouched is Jhon's cache, every file with its bytes and mode, and the
+// project's git status: what a command that writes nothing leaves as it
+// found them.
+func (p *pytestProject) untouched(t *testing.T) []string {
+	t.Helper()
+	return append(snapshot(t, filepath.Dir(filepath.Dir(filepath.Dir(p.data))), true), support.Git(t, p.root, "status", "--porcelain", "--untracked-files=all"))
+}
+
+// T256 (L1726): what a killed jhon left beside the records (a first run's
+// file, a private copy) is swept by the next run when its process is gone,
+// and the record the run publishes is 0644, readable by every worktree.
+func TestExecutionsSweepsWhatAKilledRunLeftAndPublishesTheRecord0644(t *testing.T) {
+	t.Parallel()
+	p := newPytestProject(t)
+	equal(t, p.jhon(t, nil, "executions", "prime").Code, 0)
+	c := exec.Command("true")
+	if err := c.Run(); err != nil {
+		t.Fatal(err)
+	}
+	dead := strconv.Itoa(c.Process.Pid)
+	left := map[string]string{}
+	for _, f := range []string{".building", ".building-wal", "-3.run", "-3.run-shm"} {
+		left[filepath.Base(p.data)+"."+dead+f] = "left by a killed run"
+	}
+	support.Write(t, filepath.Dir(p.data), left)
+	r := p.jhon(t, nil, "executions", "run", "c1", "--affected", "base", "--json")
+	equal(t, r.Code, 0, r.Out())
+	equal(t, leftBeside(t, p), []string(nil), "the killed run's files are swept")
+	st, err := os.Stat(p.data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	equal(t, st.Mode().Perm(), os.FileMode(0o644), "the published record's mode")
+}
+
+// T256 (L1726): a run that names its deadline (--timeout) gives a first run
+// no deadline of its own: `deadline_minutes` is absent, not 0.
+func TestExecutionsFirstRunDeadlineIsAbsentWithATimeout(t *testing.T) {
+	t.Parallel()
+	p := newPytestProject(t)
+	r := p.jhon(t, nil, "executions", "run", "c1", "--affected", "base", "--dry-run", "--json", "--timeout", "5")
+	equal(t, r.Code, 0, r.Out())
+	var out struct {
+		Projects []struct {
+			Project  string
+			FirstRun map[string]any `json:"first_run"`
+		}
+	}
+	if err := json.Unmarshal([]byte(r.Stdout), &out); err != nil {
+		t.Fatal(err, r.Stdout)
+	}
+	var first map[string]any
+	for _, pp := range out.Projects {
+		if pp.Project == "lib" {
+			first = pp.FirstRun
+		}
+	}
+	equal(t, first, map[string]any{"record": "none", "tests": 1.0, "modules": 1.0}, "first_run with --timeout")
+}
+
+// T256 (L1726): the estimate of what pytest-testmon would run counts the
+// tests its record marks failed, which it runs again whatever changed, so it
+// agrees with the note on them.
+func TestExecutionsEstimateCountsTheFailedTests(t *testing.T) {
+	t.Parallel()
+	p := newPytestProject(t)
+	writeRecord(t, p.data, 3)
+	out := p.planJSON(t, "--affected", "base")
+	notes := strings.Join(out.Notes, "\n")
+	match(t, notes, `(?m)^lib: every test pytest-testmon selects is one its record marks failed \(3\)`)
+	match(t, notes, `(?m)^lib: pytest-testmon would run about 3 of its 10 tests, 18 s of 1 min by the last recorded durations$`)
+	r := p.jhon(t, nil, "executions", "run", "c1", "--affected", "base", "--dry-run", "--json")
+	var est struct {
+		Projects []struct {
+			Project  string
+			Estimate *struct{ Tests, Total int } `json:"estimate"`
+		}
+	}
+	if err := json.Unmarshal([]byte(r.Stdout), &est); err != nil {
+		t.Fatal(err, r.Stdout)
+	}
+	got := ""
+	for _, pp := range est.Projects {
+		if pp.Project == "lib" && pp.Estimate != nil {
+			got = strconv.Itoa(pp.Estimate.Tests) + "/" + strconv.Itoa(pp.Estimate.Total)
+		}
+	}
+	equal(t, got, "3/10", "the estimate as data")
+}
+
+// T256 (L1726): a refusal a passing test logged (a client that retries) is
+// not the failures' cause: with tests passing and the refusal outside the
+// failures, the record is kept.
+func TestExecutionsKeepsTheRecordWhenARefusalIsNotTheFailures(t *testing.T) {
+	t.Parallel()
+	p := newPytestProject(t)
+	equal(t, p.jhon(t, nil, "executions", "prime").Code, 0)
+	failed := p.otherRecord(t, 1)
+	say := `WARNING  client:retry.py:12 Connection refused, retrying\n==================== FAILURES ====================\nE   assert 1 == 2\n==== 1 failed, 9 passed in 0.20s ====`
+	r := p.jhon(t, []string{"FAKE_UV_RECORD=" + failed, "FAKE_UV_EXIT=1", "FAKE_UV_SAY=" + say}, "executions", "run", "c1", "--affected", "base", "--json")
+	equal(t, r.Code, 1, r.Out())
+	noMatch(t, r.Stderr, `not kept`)
+	b, _ := os.ReadFile(failed)
+	equal(t, p.shared(t), string(b), "the run's record is kept")
+}
+
+// T255 verify, T256 (L1726): `jhon executions forget` drops the shared
+// record and every worktree's own from before, and only its project's: an
+// odd name (a path into or out of a project, another project, a
+// non-pytest one) is refused and drops nothing.
+func TestExecutionsForgetDropsEveryWorktreesRecordAndRefusesOtherNames(t *testing.T) {
+	t.Parallel()
+	p := newPytestProject(t)
+	wt := p.worktree(t)
+	cache := filepath.Dir(filepath.Dir(filepath.Dir(p.data)))
+	wtLegacy := testmonData(cache, wt.root, "lib")
+	others := []string{testmonData(cache, filepath.Join(p.root, ".git"), "app"), testmonData(cache, filepath.Join(p.root, ".git"), "lib/tests"),
+		testmonData(cache, filepath.Join(temp(t), ".git"), "lib")}
+	all := append([]string{p.data, p.legacy, wtLegacy}, others...)
+	for _, f := range all {
+		writeRecord(t, f, 10)
+	}
+	for _, name := range []string{"../lib", "lib/tests", "./lib", "lib/..", ".", "app", "LIB", wt.root + "/lib", ""} {
+		r := wt.jhon(t, nil, "executions", "forget", name)
+		equal(t, r.Code, 2, name, r.Out())
+		equal(t, r.Stderr, "jhon executions forget: "+name+" is not a uv-run pytest project here: lib\n", name)
+		for _, f := range all {
+			equal(t, exists(f), true, name+": "+f+" is kept")
+		}
+	}
+	r := wt.jhon(t, nil, "executions", "forget", "lib")
+	equal(t, r.Code, 0, r.Out())
+	equal(t, []bool{exists(p.data), exists(p.legacy), exists(wtLegacy)}, []bool{false, false, false}, "the shared record and every worktree's own")
+	for _, f := range others {
+		equal(t, exists(f), true, f+": another project's or repository's record is kept")
+	}
 }
 
 // T255 (4; L1723): a project with no usable record runs all its tests once:

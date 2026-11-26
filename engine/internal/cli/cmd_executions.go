@@ -42,7 +42,8 @@ import (
 // base, the projects whose test modules name a changed file's path (not its
 // bare name) or a changed document, plus their dependents; with no base, a
 // unit's run, since the change's last passing run (execution.LastPassOf),
-// else its base. stdin is closed,
+// else the commit its slice in progress started from (ldd.SliceBase).
+// stdin is closed,
 // so a command that waits for input fails instead of hanging. --dry-run shows what would run and runs and
 // writes nothing. Exit 0 when every execution passed, 1 otherwise, 2 on a
 // usage error or a run that could not start, 128 + the signal when interrupted.
@@ -169,8 +170,9 @@ type firstRunJSON struct {
 	// Tests and Modules are the test functions its test modules define.
 	Tests   int `json:"tests"`
 	Modules int `json:"modules"`
-	// DeadlineMinutes is the first run's deadline.
-	DeadlineMinutes float64 `json:"deadline_minutes"`
+	// DeadlineMinutes is the first run's deadline, absent when the run names
+	// its own (--timeout, timeout_minutes) (T256).
+	DeadlineMinutes float64 `json:"deadline_minutes,omitempty"`
 }
 
 type failedMarksJSON struct {
@@ -442,6 +444,18 @@ func runExecutions(argv []string) (int, error) {
 			return 1, err
 		}
 		scope, selection, scopeReasons = s.Scope, s.Selected, append(scopeReasons, s.Reasons...)
+		// A changed shared project that fills the selection with its
+		// dependents is said, with the slice's base when the run measured
+		// from further back (T253, L1721).
+		for _, span := range dependentSpans(s.Selected) {
+			n := fmt.Sprintf("the selection spans the %d projects that depend on %s (%s), which changed since %s", len(span.dependents), span.project, listShort(span.dependents), sinceShown)
+			if base != nil {
+				if start, ok := ldd.SliceBase(top, change); ok && start != revParse(top, *base) {
+					n += "; a slice's run measures from the commit the slice started from: `--affected " + start[:min(12, len(start))] + "`"
+				}
+			}
+			scopeReasons = append(scopeReasons, n)
+		}
 	}
 	var plan, precise []string
 	// testmon tracks Python files only; any other changed file (data, a
@@ -486,10 +500,15 @@ func runExecutions(argv []string) (int, error) {
 	firstNotes := map[string]string{}
 	// explicit is a run that names its deadline: it binds every command.
 	explicit := timeoutArg != nil
+	// reads is the file each pytest project's record is read from: the
+	// record a run uses (execution.TestmonData, which adopts a worktree's own
+	// record from before), or in a dry run, which writes nothing, the one it
+	// would read (execution.TestmonReadable) (T256).
+	reads := map[string]string{}
 	// wide is why the run of p is wide, "" when it is not; byReach is whether
 	// its usable record says so, and so can still narrow the touched modules.
 	wide := func(p string) (why string, byReach bool) {
-		data := execution.TestmonData(top, p)
+		data := execution.TestmonPath(top, p)
 		// No record, and the first run that builds one was cut: it is not run
 		// again here, where it would be cut again.
 		if why, cut := execution.FirstRunCut(data); cut && needsFirstRun(states[p]) {
@@ -550,11 +569,16 @@ func runExecutions(argv []string) (int, error) {
 			if !ok {
 				continue
 			}
-			data := execution.TestmonData(top, p)
-			states[p] = execution.TestmonRecord(data)
+			data, read := execution.TestmonPath(top, p), execution.TestmonReadable(top, p)
+			if !dry {
+				data = execution.TestmonData(top, p)
+				read = data
+			}
+			reads[p] = read
+			states[p] = execution.TestmonRecord(read)
 			steps[p][i].data = data
 			if states[p] == execution.RecordUsable {
-				if r, ok := execution.TestmonReach(data, changedPy); ok {
+				if r, ok := execution.TestmonReach(read, changedPy); ok {
 					reaches[p] = r
 					// A record that marks most tests failed runs them all,
 					// whatever changed (T255, L1725): said, with its cause and
@@ -600,7 +624,7 @@ func runExecutions(argv []string) (int, error) {
 				if byReach {
 					var unheld []string
 					var read bool
-					held, unheld, read = heldModules(top, root, p, touch, slices.Concat(readers, execution.AlwaysTests(root, p, always, nil)))
+					held, unheld, read = heldModules(top, root, p, reads[p], touch, slices.Concat(readers, execution.AlwaysTests(root, p, always, nil)))
 					if len(held) > 0 {
 						ran += "; pytest-testmon narrows " + strconv.Itoa(len(held)) + " of them to the tests its record marks affected: " + listShort(held)
 					}
@@ -692,7 +716,7 @@ func runExecutions(argv []string) (int, error) {
 	}
 	for _, p := range precise {
 		if r, ok := estimates[p]; ok {
-			notes = append(notes, fmt.Sprintf("%s: pytest-testmon would run %s", p, r))
+			notes = append(notes, fmt.Sprintf("%s: pytest-testmon would run %s", p, r.Selection()))
 		}
 	}
 	if n := lastRuns(root, plan); n != "" {
@@ -748,7 +772,7 @@ func runExecutions(argv []string) (int, error) {
 					pp.Tests = cmp.Or(narrowed[p], "whole")
 					pp.Modules = modules[p]
 					if r, ok := estimates[p]; ok {
-						pp.Estimate = &reachJSON{r.Tests, r.Total, r.Seconds, r.AllTime}
+						pp.Estimate = &reachJSON{r.Selects, r.Total, r.SelectSeconds, r.AllTime}
 					}
 					if ms, ok := execution.LastTestRun(root, p); ok {
 						pp.LastSeconds = float64(ms) / 1000
@@ -1237,8 +1261,10 @@ type measured struct {
 
 // unitSince is what a unit's run of change (`--affected` with no base) in
 // root measures from, and the note that says which: the working tree of the
-// change's last passing run, compared with workingTree, else the change's
-// base (ldd.ChangeBase) when no run passed or git no longer holds that tree.
+// change's last passing run, compared with workingTree, else, when no run
+// passed or git no longer holds that tree, the commit the slice in progress
+// started from (ldd.SliceBase, T253), which before the change's first
+// closed slice is the change's base (ldd.ChangeBase).
 func unitSince(root, top, change, workingTree string) (m measured, note string) {
 	const unit = "a unit's run (--affected with no base): "
 	commit, label, ok := ldd.ChangeBase(top)
@@ -1254,9 +1280,83 @@ func unitSince(root, top, change, workingTree string) (m measured, note string) 
 		}
 		why = "the tree of the change's last passing run is no longer in git"
 	}
-	m.files, m.outside, m.errMsg = execution.ChangedSince(root, commit)
+	from := "the change's base (" + label + ")"
 	m.since, m.shown = label, "the change's base, "+label
-	return m, unit + why + ", so what changed since the change's base (" + label + ") is selected; a slice's close takes `--affected <base>`"
+	if start, ok := ldd.SliceBase(top, change); ok && start != commit {
+		short := start[:min(12, len(start))]
+		commit, m.commit = start, start
+		m.since, m.shown = start, "the commit the slice in progress started from, "+short
+		from = "the commit the slice in progress started from (" + short + ", the last that closed a slice of the change)"
+	}
+	m.files, m.outside, m.errMsg = execution.ChangedSince(root, commit)
+	return m, unit + why + ", so what changed since " + from + " is selected; a slice's close takes `--affected <base>`"
+}
+
+// spanMin is how many projects a changed one must bring into a selection as
+// its dependents for the run to say so (dependentSpans).
+const spanMin = 2
+
+// span is a changed project and the selected projects that depend on it.
+type span struct {
+	project    string
+	dependents []string
+}
+
+// dependentSpans are the projects of an affected run's selection that bring
+// in at least spanMin others as their dependents, directly or through
+// another dependent (a reason `depends on <project>`), in selection order:
+// a change to a shared project selects every project depending on it,
+// which may be most of a monorepo (T253, L1721).
+func dependentSpans(selected []execution.Selected) []span {
+	why := map[string]string{}
+	for _, s := range selected {
+		why[s.Project] = s.Reason
+	}
+	// rootOf is the project p is selected through: the first of its chain
+	// of `depends on` reasons that is not itself a dependent.
+	rootOf := func(p string) string {
+		for seen := map[string]bool{}; !seen[p]; {
+			seen[p] = true
+			d, ok := strings.CutPrefix(why[p], "depends on ")
+			if !ok {
+				return p
+			}
+			p = d
+		}
+		return ""
+	}
+	var order []string
+	by := map[string][]string{}
+	for _, s := range selected {
+		if !strings.HasPrefix(s.Reason, "depends on ") {
+			continue
+		}
+		r := rootOf(s.Project)
+		if r == "" {
+			continue
+		}
+		if _, ok := by[r]; !ok {
+			order = append(order, r)
+		}
+		by[r] = append(by[r], s.Project)
+	}
+	var out []span
+	for _, r := range order {
+		if len(by[r]) >= spanMin {
+			out = append(out, span{r, by[r]})
+		}
+	}
+	return out
+}
+
+// revParse is the commit ref names in the repository at top, or ref itself
+// when git cannot say.
+func revParse(top, ref string) string {
+	out, err := project.ReadGitCmd(top, "rev-parse", "--verify", "--quiet", ref+"^{commit}").Output()
+	if err != nil {
+		return ref
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // testmonNotes say, for the projects pytest-testmon narrows, whose record is
@@ -1340,9 +1440,9 @@ const executionsForgetUsage = "usage: jhon executions forget <project> [--root <
 // only its failed marks: a test that failed because a service was down
 // recorded only the code it ran before failing, so trusting it as passing
 // would let a change it reaches select it no more, and a record must only
-// ever make pytest-testmon select more, never less (L1724). The worktree's
-// own record from before the shared one goes too, or it would be adopted
-// again. Exit 0, or 2 on a usage error or a name that is no such project.
+// ever make pytest-testmon select more, never less (L1724). Every
+// worktree's own record from before the shared one goes too, or that
+// worktree would adopt it again (T256). Exit 0, or 2 on a usage error or a name that is no such project.
 func runExecutionsForget(argv []string) (int, error) {
 	var rootArg *string
 	var names []string
@@ -1389,11 +1489,12 @@ func runExecutionsForget(argv []string) (int, error) {
 		fmt.Fprintf(os.Stderr, "jhon executions forget: %s is not a uv-run pytest project here: %s\n", name, known)
 		return 2, nil
 	}
-	data := execution.TestmonData(top, name)
-	legacy := execution.LegacyTestmonData(top, name)
+	data := execution.TestmonPath(top, name)
 	dropped := execution.Forget(data)
-	if legacy != "" && execution.Forget(legacy) {
-		dropped = true
+	for _, legacy := range execution.LegacyTestmonRecords(top, name) {
+		if execution.Forget(legacy) {
+			dropped = true
+		}
 	}
 	if !dropped {
 		fmt.Printf("jhon executions forget: %s has no pytest-testmon record; nothing to drop\n", name)
@@ -1428,12 +1529,12 @@ func lastRuns(root string, projects []string) string {
 
 // heldModules splits touch, the test modules (relative to the project at
 // projectPath under root) a wide run's change touched, into those the
-// project's pytest-testmon record holds tests of, which it can narrow, and
+// project's pytest-testmon record, read from data, holds tests of, which it can narrow, and
 // those it holds none of (new, or unknown to it), which run whole. A module
 // of whole (a document's reader, executions_always) runs whole and is in
 // neither. read is false when python3 could not read the record (no
 // python3, an unreadable file): every module then runs whole.
-func heldModules(top, root, projectPath string, touch, whole []string) (held, unheld []string, read bool) {
+func heldModules(top, root, projectPath, data string, touch, whole []string) (held, unheld []string, read bool) {
 	var byTop []string
 	at := map[string]string{}
 	for _, m := range touch {
@@ -1448,7 +1549,7 @@ func heldModules(top, root, projectPath string, touch, whole []string) (held, un
 		rel = filepath.ToSlash(rel)
 		byTop, at[rel] = append(byTop, rel), m
 	}
-	in, ok := execution.TestmonHeld(execution.TestmonData(top, projectPath), byTop)
+	in, ok := execution.TestmonHeld(data, byTop)
 	for _, rel := range byTop {
 		if ok && slices.Contains(in, rel) {
 			held = append(held, at[rel])

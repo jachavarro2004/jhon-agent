@@ -80,9 +80,13 @@ retired switch had).
 
 Every intermediate pass is a unit's run, `jhon executions run <change>
 --affected` with no base: it runs what changed since the change's last
-passing run. The slice base, `--affected <base-ref>`, is only for the RED
-record and the slice's closing run, which a slice commit and delivery
-require (a unit's run closes no slice). In a wide selection a project with
+passing run, else since the commit the slice in progress started from
+(T253). The slice base, `--affected <base-ref>`, the commit the slice
+started from and never the default branch, is only for the RED record and
+the slice's closing run, which a slice commit and delivery require (a
+unit's run closes no slice). A changed project that brings two or more
+dependents into the selection is named in a note, with the slice's base
+when the run measured from further back. In a wide selection a project with
 a usable pytest-testmon record runs the test modules the change touched
 narrowed by it, and a test of another project selects it only by naming a
 changed file's whole path or import path (`jhon executions --help`).

@@ -3,6 +3,7 @@ package execution
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
@@ -71,16 +73,14 @@ func repoOf(top string) string {
 	return common
 }
 
-// TestmonData is the file holding pytest-testmon's record of the project at
+// TestmonPath is the file holding pytest-testmon's record of the project at
 // projectPath in the repository whose top level is top. It is one per
 // repository and project (T255): keyed by the repository's git common dir,
 // so every worktree of it, a new one per change, narrows from the record
 // the others built, instead of running every test of each affected project
-// once to build its own. Outside git it is the folder's own.
-//
-// When the shared record is missing and this worktree has one from before
-// (keyed by its top level), that one is adopted: copied, never moved, once.
-func TestmonData(top, projectPath string) string {
+// once to build its own. Outside git it is the folder's own. It writes
+// nothing: TestmonData is the record a run uses.
+func TestmonPath(top, projectPath string) string {
 	common := ""
 	if top != "" {
 		common = repoOf(top)
@@ -88,21 +88,66 @@ func TestmonData(top, projectPath string) string {
 	if common == "" {
 		return legacyTestmonData(top, projectPath)
 	}
-	data := testmonFile(common + "\x00" + projectPath)
-	if !project.Exists(data) {
-		adopt(legacyTestmonData(top, projectPath), data)
+	return testmonFile(common + "\x00" + projectPath)
+}
+
+// TestmonData is TestmonPath for a run, which may write: when the shared
+// record is missing and this worktree has one from before (keyed by its top
+// level), that one is adopted, copied, never moved, once. A dry run, which
+// writes nothing (T256), reads TestmonReadable instead.
+func TestmonData(top, projectPath string) string {
+	data := TestmonPath(top, projectPath)
+	if old := legacyTestmonData(top, projectPath); old != data && !project.Exists(data) {
+		adopt(old, data)
 	}
 	return data
 }
 
-// LegacyTestmonData is the record the worktree at top kept of the project at
-// projectPath before T255, which TestmonData adopts when the shared record
-// is missing; "" when it is the shared record itself (outside git).
-func LegacyTestmonData(top, projectPath string) string {
-	if old := legacyTestmonData(top, projectPath); old != TestmonData(top, projectPath) {
+// TestmonReadable is the file a run of the project at projectPath reads its
+// record from, found without writing: the shared record (TestmonPath), or,
+// while it is missing, the worktree's own from before, which the run would
+// adopt (TestmonData).
+func TestmonReadable(top, projectPath string) string {
+	data := TestmonPath(top, projectPath)
+	if old := legacyTestmonData(top, projectPath); old != data && !project.Exists(data) && project.Exists(old) {
 		return old
 	}
-	return ""
+	return data
+}
+
+// LegacyTestmonRecords are the records every worktree of top's repository
+// (`git worktree list`, top among them) kept of the project at projectPath
+// before T255: any of them is adopted again by its worktree while the
+// shared record is missing, so forgetting the record drops them all
+// (T256). None outside git, where the folder's own record is the record.
+func LegacyTestmonRecords(top, projectPath string) []string {
+	data := TestmonPath(top, projectPath)
+	var out []string
+	for _, t := range append(worktreeTops(top), top) {
+		if old := legacyTestmonData(t, projectPath); old != data && !slices.Contains(out, old) {
+			out = append(out, old)
+		}
+	}
+	return out
+}
+
+// worktreeTops are the top levels of every worktree of top's repository, in
+// `git worktree list` order; nil when git cannot list them.
+func worktreeTops(top string) []string {
+	if top == "" {
+		return nil
+	}
+	out, err := project.ReadGitCmd(top, "worktree", "list", "--porcelain").Output()
+	if err != nil {
+		return nil
+	}
+	var tops []string
+	for _, l := range strings.Split(string(out), "\n") {
+		if dir, ok := strings.CutPrefix(l, "worktree "); ok && dir != "" {
+			tops = append(tops, dir)
+		}
+	}
+	return tops
 }
 
 // adopt makes the record old the record data, which is missing: a copy,
@@ -117,6 +162,7 @@ func adopt(old, data string) {
 	}
 	defer drop(tmp)
 	merge(tmp)
+	shareable(tmp)
 	if os.Link(tmp, data) == nil {
 		if st, err := os.Stat(tmp + "-wal"); err == nil && st.Size() > 0 {
 			_ = os.Rename(tmp+"-wal", data+"-wal")
@@ -124,11 +170,12 @@ func adopt(old, data string) {
 	}
 }
 
-// privateCopy is a new file beside data, `<data>.<n>.<kind>`, holding a copy
-// of the record src and of the write-ahead log beside it. With no record at
-// src the file is not there: the run makes it.
+// privateCopy is a new file beside data, `<data>.<pid>-<n>.<kind>`, holding a
+// copy of the record src and of the write-ahead log beside it. With no
+// record at src the file is not there: the run makes it. The pid in its name
+// lets a later run sweep it when this process was killed (sweep).
 func privateCopy(src, data, kind string) (string, error) {
-	f, err := os.CreateTemp(filepath.Dir(data), filepath.Base(data)+".*."+kind)
+	f, err := os.CreateTemp(filepath.Dir(data), filepath.Base(data)+"."+strconv.Itoa(os.Getpid())+"-*."+kind)
 	if err != nil {
 		return "", err
 	}
@@ -182,10 +229,25 @@ func merge(file string) {
 	}
 }
 
+// sharedMode is the record's mode: every worktree's run, and the owner, read it.
+const sharedMode = 0o644
+
+// shareable gives a record file, and the write-ahead log beside it, the
+// record's mode: a private copy is made 0600 (os.CreateTemp).
+func shareable(file string) {
+	for _, f := range []string{file, file + "-wal"} {
+		if project.Exists(f) {
+			_ = os.Chmod(f, sharedMode)
+		}
+	}
+}
+
 // publish makes the record file tmp the record data, in one rename: a reader
-// opens the old record or the new one, never a part of either.
+// opens the old record or the new one, never a part of either. The record is
+// 0644 whatever tmp was (T256).
 func publish(tmp, data string) bool {
 	merge(tmp)
+	shareable(tmp)
 	// A write-ahead log belongs to the file it is beside: the old record's
 	// goes, the new one's moves with it.
 	for _, suffix := range sqliteBeside {
@@ -207,6 +269,64 @@ func drop(file string) {
 	}
 }
 
+// staleAge is how old a run's file beside a record (runFile) must be to be
+// stale although a process with its pid is alive: the pid was reused, as
+// a jhon killed long ago frees it.
+const staleAge = 24 * time.Hour
+
+// maxPid bounds the pids a run's file can name (Linux's PID_MAX_LIMIT): a
+// larger number is no process (T255 named a private copy with a random one).
+const maxPid = 1 << 22
+
+// runFile is a run's file beside a record and what sqlite keeps beside it:
+// a first run's `<record>.<pid>.building`, a private copy
+// `<record>.<pid>-<n>.run` or `.adopt`, or T255's `<record>.<n>.run`.
+var runFile = lazyre.New(`^([0-9a-f]{16}\.db\.([0-9]+)(?:-[0-9]+)?\.(?:building|run|adopt))(?:-wal|-shm|-journal)?$`)
+
+// sweep removes from dir, the records' folder, the files a jhon killed while
+// it ran (SIGKILL, a closed terminal) left beside a record (T256): a run's
+// file (runFile) whose process is gone, or that is older than staleAge. A
+// live run's own files, the records and their cut markers stay.
+func sweep(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	old := time.Now().Add(-staleAge)
+	for _, e := range entries {
+		m := runFile.FindStringSubmatch(e.Name())
+		if m == nil || e.IsDir() {
+			continue
+		}
+		file := filepath.Join(dir, m[1])
+		if pid, err := strconv.Atoi(m[2]); err == nil && alive(pid) && !before(file, old) {
+			continue
+		}
+		drop(file)
+	}
+}
+
+// alive is whether a process with pid runs (signal 0 reaches it, or it is
+// another user's).
+func alive(pid int) bool {
+	if pid <= 0 || pid > maxPid {
+		return false
+	}
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
+}
+
+// before is whether file and what sqlite keeps beside it were all last
+// written before t.
+func before(file string, t time.Time) bool {
+	for _, suffix := range append([]string{""}, sqliteBeside...) {
+		if st, err := os.Stat(file + suffix); err == nil && !st.ModTime().Before(t) {
+			return false
+		}
+	}
+	return true
+}
+
 // ranToEnd is whether a pytest run that exited with code (nil when it was
 // cut) ran to its end: its tests passed (0) or some failed (1). 2 is pytest
 // interrupted, 3 an internal error, 4 a usage error, 5 no test collected.
@@ -224,11 +344,13 @@ type Private struct {
 }
 
 // CheckOut copies the shared record at data to a private file beside it,
-// for one run; with no record, the run starts from none.
+// for one run; with no record, the run starts from none. What a killed run
+// left beside the records goes first (sweep).
 func CheckOut(data string) (*Private, error) {
 	if err := os.MkdirAll(filepath.Dir(data), 0o777); err != nil {
 		return nil, err
 	}
+	sweep(filepath.Dir(data))
 	file, err := privateCopy(data, data, "run")
 	if err != nil {
 		return nil, err
@@ -339,6 +461,10 @@ type Watch struct {
 	passed, failed, errors    int
 	summary                   bool
 	refusedBy, collectionLine string
+	// refusedIn is the first refusal said in the failures (failureLine),
+	// and inFailures whether the output is in their sections.
+	refusedIn  string
+	inFailures bool
 }
 
 // NewWatch is a Watch of a run that has not started.
@@ -378,9 +504,21 @@ var (
 	serviceDown = lazyre.New(`(?i)connection refused|could not connect to server|connect call failed|error 111 connecting|temporary failure in name resolution`)
 	// collectionError is pytest failing to import a test module.
 	collectionError = lazyre.New(`errors? during collection|ERROR collecting `)
+	// sectionLine is a pytest section's header, `==== FAILURES ====`.
+	sectionLine = lazyre.New(`^=+ (.+?) =+$`)
+	// failureLine is a line of a failure wherever it is: a traceback's
+	// error line, or the short summary's.
+	failureLine = lazyre.New(`^(?:E |FAILED |ERROR )`)
 )
 
+// failureSections are the sections of pytest's output that hold only the
+// failures and errors.
+var failureSections = []string{"FAILURES", "ERRORS", "short test summary info"}
+
 func (w *Watch) scan(s string) {
+	if m := sectionLine.FindStringSubmatch(strings.TrimSpace(s)); m != nil {
+		w.inFailures = slices.Contains(failureSections, m[1])
+	}
 	if m := collectedLine.FindStringSubmatch(s); m != nil {
 		collected, _ := strconv.Atoi(m[1])
 		w.selected = collected
@@ -409,8 +547,14 @@ func (w *Watch) scan(s string) {
 			}
 		}
 	}
-	if w.refusedBy == "" && serviceDown.MatchString(s) {
-		w.refusedBy = shorten(strings.TrimSpace(s), 160)
+	if serviceDown.MatchString(s) {
+		line := shorten(strings.TrimSpace(s), 160)
+		if w.refusedBy == "" {
+			w.refusedBy = line
+		}
+		if w.refusedIn == "" && (w.inFailures || failureLine.MatchString(s)) {
+			w.refusedIn = line
+		}
 	}
 	if w.collectionLine == "" && collectionError.MatchString(s) {
 		w.collectionLine = shorten(strings.TrimSpace(s), 160)
@@ -426,9 +570,10 @@ func shorten(s string, n int) string {
 
 // Refusal is why the run's record is not kept, its failures being the test
 // environment's rather than the change's (T255, L1725): its output says a
-// test service refused the connection while tests failed, pytest could not
-// collect a test module, or every one of at least EnvFailureMin tests failed
-// and none passed. "" when none is the case, and for a nil Watch. A record
+// test service refused the connection in its failures, or anywhere when no
+// test passed (a passing test may log a refusal it retries, T256), pytest
+// could not collect a test module, or every one of at least EnvFailureMin
+// tests failed and none passed. "" when none is the case, and for a nil Watch. A record
 // such a run wrote marks every test it ran failed, and pytest-testmon runs
 // every failed test again whatever changed.
 func (w *Watch) Refusal() string {
@@ -443,7 +588,9 @@ func (w *Watch) Refusal() string {
 	}
 	bad := w.failed + w.errors
 	switch {
-	case w.refusedBy != "" && (bad > 0 || !w.summary):
+	case w.refusedIn != "" && bad > 0:
+		return "its output says a test service refused the connection (" + w.refusedIn + ")"
+	case w.refusedBy != "" && w.passed == 0 && (bad > 0 || !w.summary):
 		return "its output says a test service refused the connection (" + w.refusedBy + ")"
 	case w.collectionLine != "":
 		return "pytest could not collect every test module (" + w.collectionLine + ")"
