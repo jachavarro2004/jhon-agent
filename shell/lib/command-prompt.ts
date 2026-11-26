@@ -15,7 +15,14 @@
  * ends the wait once the session has stayed idle for NO_RUN_MS.
  */
 
-/** How long a headless command waits, idle, for its prompt to start a run. */
+/**
+ * How long a headless command waits, idle, for its prompt to start a run.
+ * The input handlers run before the session counts as busy, so this bound
+ * covers them too: an extension whose `input` handler takes longer than this
+ * for the command's prompt lets the wait end before the run starts, and the
+ * stale-ctx failure comes back for that run. Jhon's own input handler is
+ * quicker (a compaction it awaits counts as busy, so it is waited for).
+ */
 export const NO_RUN_MS = 5_000;
 const POLL_MS = 25;
 
@@ -47,17 +54,27 @@ export function commandPrompts(pi: any, wait: { noRunMs?: number; pollMs?: numbe
 		const options = busy(ctx) ? { deliverAs: "steer" } : undefined;
 		if (!headless(ctx)) { pi.sendUserMessage(text, options); return; }
 		let poll: ReturnType<typeof setInterval> | undefined;
+		// Every way out of the wait goes through end: the run's own end, the idle bound, a send pi refused.
+		let end: () => void = () => {};
 		const settled = new Promise<void>((resolve) => {
+			end = () => { started = undefined; clearInterval(poll); resolve(); };
 			// Asked at agent_start, while the run is busy: pi resolves it after the settle and what it deferred.
-			started = () => { started = undefined; clearInterval(poll); resolve(ctx.waitForIdle?.()); };
+			// A waitForIdle that throws or rejects (a stale ctx) ends the wait as its resolving does.
+			started = () => {
+				started = undefined;
+				clearInterval(poll);
+				let idle: unknown;
+				try { idle = ctx.waitForIdle?.(); } catch { idle = undefined; }
+				Promise.resolve(idle).then(end, end);
+			};
 			let idleFor = 0;
 			poll = setInterval(() => {
 				idleFor = busy(ctx) ? 0 : idleFor + pollMs;
-				if (idleFor >= noRunMs) { started = undefined; clearInterval(poll); resolve(); }
+				if (idleFor >= noRunMs) end();
 			}, pollMs);
 		});
 		try { pi.sendUserMessage(text, options); }
-		catch (error) { started = undefined; clearInterval(poll); throw error; }
+		catch (error) { end(); throw error; }
 		await settled;
 	};
 }
