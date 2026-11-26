@@ -93,13 +93,13 @@ func TestSocatAddresses(t *testing.T) {
 		"socat - CREATE:f":              {Words: [][]string{{"tee", "f"}}},
 		"socat - creat:f":               {Words: [][]string{{"tee", "f"}}},
 		"socat - OPEN:f,creat":          {Words: [][]string{{"tee", "f"}}},
-		"socat - OPEN:f,o-append":       {Words: [][]string{{"tee", "-a", "f"}}},
+		"socat - OPEN:f,o-append":       {Words: [][]string{{"tee", "f"}}}, // T228 L16
 		"socat - GOPEN:f,trunc":         {Words: [][]string{{"tee", "f"}}},
 		"socat - ./f,trunc":             {Words: [][]string{{"tee", "./f"}}},
-		"socat -u OPEN:f,trunc -":       {},
-		"socat -U - OPEN:f,trunc":       {},
+		"socat -u OPEN:f,trunc -":       {Words: [][]string{{"tee", "f"}}}, // T228 L16: trunc on the read side
+		"socat -U - OPEN:f,trunc":       {Words: [][]string{{"tee", "f"}}}, // T228 L16
 		"socat -U OPEN:f,trunc -":       {Words: [][]string{{"tee", "f"}}},
-		"socat - OPEN:f":                {},
+		"socat - OPEN:f":                {Words: [][]string{{"tee", "f"}}}, // T228 L16: the written side
 		"socat - /dev/ttyS0,raw":        {},
 		"socat -lf log - TCP:h:1":       {Words: [][]string{{"tee", "-a", "log"}}},
 		"socat -T 5 -r dump - TCP:h:1":  {Words: [][]string{{"tee", "-a", "dump"}}},
