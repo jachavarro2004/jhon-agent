@@ -212,6 +212,11 @@ func piSessionWith(t *testing.T, steps ...pstep) string {
 			c := newPWriter(id, &childClock)
 			c.user(s.task)
 			for j, x := range s.childCalls {
+				if x.name == "" { // pcontinued: a subagent_continue's message, appended to the child's session
+					c.reply("stopped")
+					c.user(x.result)
+					continue
+				}
 				c.call(fmt.Sprintf("toolu_c%02d_%02d", i, j), x)
 			}
 			c.reply(s.text)
