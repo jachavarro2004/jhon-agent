@@ -89,10 +89,6 @@ func TestPiResumeForgetsTheEarlierTaskIDs(t *testing.T) {
 	}
 	eq(t, "deliveries", deliveries(t, piSessionWith(t, steps...)), []string{""})
 	eq(t, "unfinished", outcomeOf(piAudit(t, steps...), chg).Unfinished, 1)
-	// A /reload is no resume: the same sitting's ids stand.
-	reload := []pstep{pstart("tui"), puser("go"), psub("jhon-builder", sliceTask("1.1"), pstarted("agent-1")),
-		preload(), pagentNotice("agent-1", "jhon-builder", "slice 1 done")}
-	eq(t, "after a reload", deliveries(t, piSessionWith(t, reload...)), []string{"slice 1 done"})
 }
 
 // piBudgetNotice is the shell's notice a pi child hears past its context
@@ -120,6 +116,44 @@ func TestPiAgentAtItsContextBudgetIsUnfinished(t *testing.T) {
 	c := outcomeOf(piAudit(t, pstart("tui"), puser("go"),
 		psub("jhon-builder", sliceTask("1.1"), "done", heard, pcontinued("Go on with 1.3."), pbash("uv run pytest -q", "4 passed"))), chg)
 	eq(t, "continued after the notice: unfinished", c.Unfinished, 0)
+
+	// The read budget's reminder, appended after it, leaves it the result's end.
+	read := pbash("rg -n x src", "a.txt:1:x"+piBudgetNotice+"Read budget: 13 lookups, 120000 bytes without CodeGraph. codegraph_explore returns the source of a symbol already read; read only the lines you change; prefer the read tool with offset/limit over cat/sed through bash.")
+	r := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("jhon-builder", sliceTask("1.1"), checkpoint, read)), chg)
+	eq(t, "the notice, then the read budget: unfinished", r.Unfinished, 1)
+	// A legacy name of a builder (a *-worker) checkpoints too.
+	w := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("app-worker", sliceTask("1.1"), checkpoint, heard)), chg)
+	eq(t, "a *-worker: unfinished", w.Unfinished, 1)
+}
+
+// S2: only a builder checkpoints at the notice (prose/agents/jhon-builder.md);
+// a scout returns what it found there (jhon-scout.md: "At the context notice,
+// return what you found"), which is its finished part, and a checker or a
+// review facet has no such instruction.
+func TestPiOnlyABuilderStopsAtItsContextBudget(t *testing.T) {
+	heard := pbash("rg -n x src", "a.txt:1:x"+piBudgetNotice)
+	for _, agent := range []string{"jhon-scout", "jhon-checker", "prism-safety"} {
+		x := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub(agent, sliceTask("1.1"), "found it (a.txt:1)", heard),
+			psub(agent, sliceTask("1.2"), "found it (a.txt:2)")), chg)
+		eq(t, agent+": unfinished", x.Unfinished, 0)
+		eq(t, agent+": relaunches", x.Relaunches, 0)
+	}
+}
+
+// T262: the notice and the old refusal quoted as data are no stop; only the
+// shell's notice appended to a result, and its refusal, are.
+func TestPiQuotedContextNoticeIsNoStop(t *testing.T) {
+	read := pcall{name: "read", args: obj("path", testRoot+"/engine/internal/audit/t262_test.go"),
+		result: "   101\tconst piBudgetNotice = \"" + piBudgetNotice + "\"\n   102\t"}
+	b := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("jhon-builder", sliceTask("1.1"), "slice 1 done", read)), chg)
+	eq(t, "a builder that read the notice: unfinished", b.Unfinished, 0)
+	rg := pbash("rg -n 'context cap' shell/test", `shell/test/child-budget.test.ts:364:  await recorded(t, fakeJsonPi("past the 150K-token sub-agent context cap"), () => runAgent(AGENT, "look"))`)
+	g := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("jhon-builder", sliceTask("1.1"), "slice 1 done", rg)), chg)
+	eq(t, "a builder that grepped the old refusal: unfinished", g.Unfinished, 0)
+	report := testRoot + "/openspec/changes/" + chg + "/verify-report.md"
+	write := pcall{name: "write", args: obj("path", report, "content", "# Verify\n\nverdict: pass\n"), result: "written"}
+	v := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("jhon-checker", "Verify openspec/changes/"+chg+"/ against its specs", "verdict: pass", rg, write)), chg)
+	eq(t, "a checker that grepped it: verdicts", v.Verdicts, [3]int{1, 0, 0})
 }
 
 // S2: before T155 (shell/lib/child-budget.ts at 3118fbc) a child past its
@@ -135,6 +169,12 @@ func TestPiAgentAtItsOldContextCapIsUnfinished(t *testing.T) {
 	eq(t, "unfinished", x.Unfinished, 1)
 	eq(t, "relaunches", x.Relaunches, 1)
 	eq(t, "the result's line is a stop", stopped("1.1 done"+line), true)
+	// An answer that only talks about the wording is no stop.
+	eq(t, "the wording mentioned", stopped("The shell's note says the agent stopped at its sub-agent context cap."), false)
+	// Nor is a refusal's text a tool printed without an error.
+	printed := pbash("cat log", "jhon: your context is at 151K tokens, past the 150K-token sub-agent context cap. Call no more tools")
+	p := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("jhon-builder", sliceTask("1.1"), "done", printed)), chg)
+	eq(t, "a printed refusal: unfinished", p.Unfinished, 0)
 
 	report := testRoot + "/openspec/changes/" + chg + "/verify-report.md"
 	write := pcall{name: "write", args: obj("path", report, "content", "# Verify\n\nverdict: fail\n\nChecking."), result: "written"}

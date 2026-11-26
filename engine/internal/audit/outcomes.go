@@ -361,35 +361,52 @@ func mainAttribution(s *Session) ([]string, map[string]*attribution) {
 
 // capRefusal is the refusal an agent past its turn cap gets on its next
 // call: pi's (shell/extensions/jhon.ts), Claude Code's retired turn guard
-// (in transcripts from before c7074cfa), and Claude Code's own maxTurns stop;
-// and a pi child's past its context cap before T155 (shell/lib/child-budget.ts
-// childCapReason at 3118fbc: `jhon: your context is at 151K tokens, past the
-// 150K-token sub-agent context cap. Call no more tools: …`).
-var capRefusal = lazyre.New(`you have spent your \d+ turns|turn-guard: .* has spent \d+ turns, past its cap|reached maxTurns|past the \d+K-token sub-agent context cap\b`)
+// (in transcripts from before c7074cfa), and Claude Code's own maxTurns stop.
+var capRefusal = lazyre.New(`you have spent your \d+ turns|turn-guard: .* has spent \d+ turns, past its cap|reached maxTurns`)
+
+// contextCapRefusal is the refusal a pi child past its context cap got on
+// its next call before T155 (shell/lib/child-budget.ts childCapReason at
+// 3118fbc, the reason of the call's block: `jhon: your context is at 151K
+// tokens, past the 150K-token sub-agent context cap. Call no more tools: …`).
+// Only a call's error is one: the same words a tool printed (a file read,
+// a grep of the shell's tests) are data.
+var contextCapRefusal = lazyre.New(`^jhon: your context is at \d+K tokens, past the \d+K-token sub-agent context cap\. Call no more tools`)
 
 // capRefused is capRefusal.MatchString(text): each of its branches starts
 // with a literal, so a text with none of them cannot match and is not run
 // through the regex, whose `.*` is slow on a long tool result.
 func capRefused(text string) bool {
-	if !strings.Contains(text, "you have spent your ") && !strings.Contains(text, "turn-guard: ") && !strings.Contains(text, "reached maxTurns") &&
-		!strings.Contains(text, "sub-agent context cap") {
+	if !strings.Contains(text, "you have spent your ") && !strings.Contains(text, "turn-guard: ") && !strings.Contains(text, "reached maxTurns") {
 		return false
 	}
 	return capRefusal.MatchString(text)
 }
 
-// budgetNotice is the notice a pi child hears on a tool result once its
-// context is past its budget (shell/lib/child-budget.ts childBudgetNotice,
-// since T122): `Context budget: this sub-agent's context is at 86K tokens,
-// past its 80K-token budget. Wrap up: …`. Its source, quoted, has no numbers.
-var budgetNotice = lazyre.New(`Context budget: this sub-agent's context is at \d+K tokens, past its \d+K-token budget\.`)
+// budgetNotice is the notice a pi child hears once its context is past its
+// budget (shell/lib/child-budget.ts childBudgetNotice, since T122), which the
+// shell appends to a tool result as its last text part, before only the read
+// budget's reminder (childReads, `Read budget: …`) when both are due. Only a
+// result that ends so carries it: the same words inside a result (a file
+// read, a grep) are data.
+var budgetNotice = lazyre.New(`Context budget: this sub-agent's context is at \d+K tokens, past its \d+K-token budget\. ` +
+	`Wrap up: finish the step in hand, then return what you found as path:line evidence and decisions, not raw output, and what remains\.` +
+	`(?:Read budget: \d+ lookups, \d+ bytes without [^\n]*)?$`)
 
-// atContextBudget is whether the agent stopped at its context budget: its
-// last run, after its launch or its last continue, heard the budget notice,
-// which tells it to wrap up and return what is done and what remains
-// (prose/agents/jhon-builder.md: at the context notice, checkpoint). What it
-// returned then is a checkpoint, not its finished part.
+// checkpoints is the agents told to stop at the budget notice and return
+// what is done and what remains (prose/agents/jhon-builder.md): a
+// builder-type agent, as the shell's read budget names one
+// (shell/lib/child-budget.ts readBudgetKind). A scout returns what it found
+// there, its finished part; a checker or a review facet is told nothing.
+var checkpoints = lazyre.New(`-(?:builder|worker)$`)
+
+// atContextBudget is whether the agent stopped at its context budget: a
+// builder-type agent whose last run, after its launch or its last continue,
+// heard the budget notice. What it returned then is a checkpoint, not its
+// finished part.
 func atContextBudget(a *Subagent) bool {
+	if !checkpoints.MatchString(a.AgentType) {
+		return false
+	}
 	heard := false
 	for _, e := range a.Entries {
 		if e.Role == "user" && len(e.ToolResults) == 0 {
@@ -404,12 +421,13 @@ func atContextBudget(a *Subagent) bool {
 	return heard
 }
 
-// capped is whether the agent ran into its turn cap: a call of its was
-// refused for it. What it returned then is what it had, not its finished work.
+// capped is whether the agent ran into its turn cap, or its context cap
+// before T155: a call of its was refused for it. What it returned then is
+// what it had, not its finished work.
 func capped(a *Subagent) bool {
 	for _, e := range a.Entries {
 		for _, r := range e.ToolResults {
-			if capRefused(r.Text) {
+			if capRefused(r.Text) || (r.IsError && contextCapRefusal.MatchString(r.Shown)) {
 				return true
 			}
 		}
@@ -418,11 +436,11 @@ func capped(a *Subagent) bool {
 }
 
 // stoppedShort is a result that says the agent stopped short at its turn
-// cap, or the line a pi parent's result ended with before T155 when its
-// child stopped at its context cap (shell/lib/child-budget.ts
-// contextCapLine at 3118fbc: `[jhon: <agent> stopped at its sub-agent
-// context cap; …]`).
-var stoppedShort = lazyre.New(ci(`\bmax(?:imum)?[ -]?turns\b|\bturn (?:cap|limit)\b|\bstopped at its sub-agent context cap\b`))
+// cap, or the note a pi parent's result ended with before T155 when its
+// child stopped at its context cap (shell/lib/child-budget.ts capNote at
+// 3118fbc: `[jhon: <agent> stopped at its sub-agent context cap; …]`), in
+// its bracketed form only: an answer that mentions the words is no stop.
+var stoppedShort = lazyre.New(ci(`\bmax(?:imum)?[ -]?turns\b|\bturn (?:cap|limit)\b|\[jhon: \S+ stopped at its sub-agent context cap;`))
 
 // jhonRefusal is one of Jhon's own refusal lines, quoted in a result or not,
 // by the exact prefix it is printed with (T224 S2): a guard's
