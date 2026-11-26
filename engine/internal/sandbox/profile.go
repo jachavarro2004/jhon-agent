@@ -16,6 +16,7 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
 )
 
@@ -268,7 +269,10 @@ func trustProblem(h Host, in Input, shell string) *Problem {
 // $TMPDIR, sandbox.allow_write, any folder on the way to one of them), so
 // no program a command planted there is what git, gh, docker or a deploy
 // tool runs by its name outside the sandbox. A folder of the project's
-// roots is left out whether or not the sandbox binds it.
+// roots is left out whether or not the sandbox binds it, and so is one in
+// any other git repository, its git folder or its <top>-worktrees
+// (project.InSomeRepository, T250 L43e): a sandboxed run of that project
+// writes it, whatever this project's sandbox binds.
 func OutsidePath(in Input) string {
 	mounts, _ := layout(in, false)
 	var roots []string
@@ -282,7 +286,7 @@ func OutsidePath(in Input) string {
 		if !filepath.IsAbs(dir) {
 			continue
 		}
-		if within(filepath.Clean(dir), roots) || within(realPath(dir, in.Stat), roots) || changeable(mounts, dir) {
+		if within(filepath.Clean(dir), roots) || within(realPath(dir, in.Stat), roots) || changeable(mounts, dir) || project.InSomeRepository(dir) {
 			continue
 		}
 		keep = append(keep, dir)

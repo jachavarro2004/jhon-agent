@@ -9,12 +9,14 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sandbox"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/telemetry"
 )
@@ -93,15 +95,20 @@ const gitListingLimit = 4 << 20
 // environment without GIT_CONFIG_PARAMETERS (as the line runs) and at most
 // 5 s each:
 //
-//   - its `git config --list --show-scope -z` (at most gitListingLimit
-//     bytes) sets only keys on the allowlist, or gate's (the merge gate's
-//     entries the line runs with) with their values
-//     (sandbox.RepositoryGitConfig);
+//   - its `git config --list --show-scope --show-origin -z` (at most
+//     gitListingLimit bytes) sets only keys on the allowlist, or gate's (the
+//     merge gate's entries the line runs with) with their values, and reads
+//     the owner's keys from no file a sandboxed command may change, such as
+//     a global include in the cache (Input.GitConfigKept, T250 L43c);
 //   - the git folders `git rev-parse --path-format=absolute --git-dir
 //     --git-common-dir` names hold no link and no hard-linked file git
 //     writes, and lie in the project (Input.GitFolderProblem). A folder in
 //     no repository (gh's, a deploy tool's) has none, when its listing
-//     shows no repository scope.
+//     shows no repository scope and Jhon's own reader finds no `.git` entry
+//     there or above it (project.ReadRepo, T250 L43b);
+//   - for a git pull, the work tree `git rev-parse --show-toplevel` names
+//     holds no .gitattributes that is not a regular file, which git would
+//     wait on (sandbox.WorkTreeProblem, T250 L43a).
 //
 // A listing or a rev-parse that fails, times out or is too long is a
 // problem too. With no git on PATH the line can run none, and needs no
@@ -151,16 +158,18 @@ func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top s
 		if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
 			return &sandbox.Problem{Reason: dir + " does not exist, so git cannot change into it", Fix: "name a folder that exists"}
 		}
-		listing, err := run("-C", dir, "config", "--list", "--show-scope", "-z")
+		listing, err := run("-C", dir, "config", "--list", "--show-scope", "--show-origin", "-z")
 		if err != nil {
 			return owner("git cannot list the configuration in " + dir + " (" + err.Error() + ")")
 		}
-		if p := sandbox.RepositoryGitConfigKept(listing, gate); p != nil {
+		if p := in.GitConfigKept(listing, dir, gate); p != nil {
 			return p
 		}
 		gitDirs, err := run("-C", dir, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
 		if err != nil {
-			if strings.Contains(listing, "local\x00") || strings.Contains(listing, "worktree\x00") {
+			// A `.git` git ignores (a format it does not know) lists no
+			// repository scope, yet it is a repository (L43b).
+			if strings.Contains(listing, "local\x00") || strings.Contains(listing, "worktree\x00") || project.ReadRepo(dir).Top != "" {
 				return owner("git cannot name the git folders in " + dir + " (" + err.Error() + ")")
 			}
 			continue
@@ -170,6 +179,21 @@ func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top s
 			return owner(why + " in " + dir)
 		}
 		if p := in.LineGitFolderKept(top, dir, names[0], names[1]); p != nil {
+			return p
+		}
+	}
+	// A pull checks files out in its work tree, where a .gitattributes that
+	// is a pipe makes git wait forever (L43a).
+	for _, dir := range sandbox.PullFolders(line, in.Cwd) {
+		top, err := run("-C", dir, "rev-parse", "--show-toplevel")
+		if err != nil {
+			return owner("git cannot name the work tree in " + dir + " (" + err.Error() + ")")
+		}
+		name, ok := strings.CutSuffix(top, "\n")
+		if !ok || strings.Contains(name, "\n") {
+			return owner("git named the work tree in " + dir + " on no single full line")
+		}
+		if p := sandbox.WorkTreeProblem(name); p != nil {
 			return p
 		}
 	}
@@ -266,6 +290,12 @@ func sandboxSupervised(path string, argv, env []string, profile, failNote, runNo
 	signals := make(chan os.Signal, 4)
 	signal.Notify(signals, forwarded...)
 	defer signal.Stop(signals)
+	// The program ends with this process, killed or not (L43f): its
+	// parent-death signal is tied to the thread that starts it, which stays
+	// this goroutine's until the program has ended.
+	sandbox.DieWithParent(cmd)
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	start := time.Now()
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "jhon: exec: %s: cannot execute: %v\n", argv[0], err)

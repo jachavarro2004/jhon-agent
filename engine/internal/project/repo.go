@@ -57,6 +57,39 @@ func ReadRepo(dir string) Repo {
 	}
 }
 
+// InSomeRepository is whether dir, as written or where its existing part
+// leads (Realish), lies in a folder any git repository's sandboxed run may
+// write (T250, L43e): a folder that holds a `.git` entry of any kind or is a
+// git folder itself (isGitDir), or a <top>-worktrees folder beside one that
+// holds a `.git` entry (rootsOf), at any depth above it. / , the home and
+// the folders above it are skipped, as no sandboxed run writes them (the
+// sandbox never binds one writable); the walk does not stop at a file
+// system boundary, and nothing it reads names a folder.
+func InSomeRepository(dir string) bool {
+	home := Realish(Home())
+	for _, p := range []string{filepath.Clean(dir), Realish(dir)} {
+		if !filepath.IsAbs(p) {
+			continue
+		}
+		for d := p; ; d = filepath.Dir(d) {
+			if !Within(home, d) && !Within(home, Realish(d)) {
+				if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil || isGitDir(d) {
+					return true
+				}
+				if top, ok := strings.CutSuffix(d, "-worktrees"); ok && top != "" {
+					if _, err := os.Lstat(filepath.Join(top, ".git")); err == nil {
+						return true
+					}
+				}
+			}
+			if filepath.Dir(d) == d {
+				break
+			}
+		}
+	}
+	return false
+}
+
 // RepoAt is the Repo whose top is dir, whatever is above it and whether or
 // not dir still holds a `.git` entry: the caller pinned the project when the
 // session started, and a sandboxed command may have removed the entry since.

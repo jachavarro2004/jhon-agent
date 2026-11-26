@@ -221,7 +221,10 @@ nor in a git repository inside a sandbox.allow_write folder; fix: …`). A line
 of docker or docker-compose, the owner's deployment tool, also runs outside
 the sandbox, with the owner's environment (`DOCKER_HOST`, the docker context) and its volume
 mounts not judged; `docker login`, `docker logout` and a change of docker
-contexts keep the sandbox. The programs you list in `sandbox.deploy_tools`
+contexts keep the sandbox, and so does a docker configuration folder
+(`--config`, `DOCKER_CONFIG`), its `cli-plugins` or a plugin folder its own
+configuration file lists that a sandboxed command may change: docker would
+load a plugin planted there outside the sandbox. The programs you list in `sandbox.deploy_tools`
 (empty by default; `jhon settings set sandbox.deploy_tools aws,cdk,sam`,
 `""` empties it; the shells, wrappers, terminals, editors, interpreters,
 remote shells and script runners Jhon knows, such as `bash`, `env`, `sudo`,
@@ -230,7 +233,9 @@ taken, so list only deploy tools) run outside the sandbox the same way, so a dep
 your cloud credentials (the AWS ones) and the rest of your environment: on a line of their own, or with
 other programs that run outside, with no pipe to another program, redirect to a file, `$` or
 backtick, and taken from a PATH folder a sandboxed command cannot write;
-such a line gets a PATH without the project's folders and every other
+such a line gets a PATH without the project's folders, the folders of any
+other git repository (its work tree, its git folder, its `<root>-worktrees`,
+which that project's sandboxed commands write) and every other
 folder a sandboxed command may change, so a program planted there is never
 what git, gh, docker or a deploy tool runs by its name;
 anything else on the line keeps it in the sandbox, and such a line ends, failed
@@ -249,7 +254,15 @@ push and fetch defaults, and Jhon's merge gate. A repository that sets any
 other key (`http.cookieFile`, `http.proxy`, `url.*.insteadOf`,
 `include.path`, a filter, `core.worktree`, a key git adds later) keeps the
 line in the sandbox: a sandboxed command could have written it, and a list of
-the keys that run a command or write a file was broken twice. A line whose
+the keys that run a command or write a file was broken twice. Your own
+git configuration (the system's, the global one, and every file they
+include) is read only from files no sandboxed command may change: an include
+from the cache, the project or `/tmp` keeps the line inside, as a command
+could set a key there that runs a program (`core.gitProxy`, a filter). A
+folder whose `.git` git refuses to read (a format it does not know) keeps the
+line inside too, and a pull runs outside only when no `.gitattributes` in
+its work tree is anything but a regular file: git would wait forever on a
+pipe there. A line whose
 git folders lie outside the project, or hold a link, a hard-linked file git
 writes (`FETCH_HEAD`, a reflog, a ref) or a FIFO, socket or device, or are
 named with white space around them (git keeps it, a trimmed name would be
@@ -278,7 +291,11 @@ stops every sandboxed command with the fix: name a concrete subfolder such as
 folder, go's module cache and the like) that holds a PATH folder is not
 writable inside the sandbox; status names it with the fix (move the tool's
 bin out of the cache, or take it off PATH). `/tmp` and `$TMPDIR` are not
-judged so.
+judged so. A cache or store wherever a variable puts it
+(`GOMODCACHE=~/.local`) that holds Jhon's release, the `jhon` program, the
+source checkout or Jhon's protected files, where a command could rename a
+folder around them, is not writable either; status and doctor name it with
+the fix (point the variable at a folder that holds none of them).
 `jhon sandbox status` says which ones the next command creates and why
 Jhon will not create any other. A command that fails on a read-only
 path ends with a note telling the agent to stop and name the path: whether
@@ -299,7 +316,9 @@ such a command could otherwise change what the outside line reads (the
 repository's git configuration) while it reads it; and while such a line
 runs, a sandboxed command that can write its project waits and is refused the
 same way. A line that puts anything in the background (`&`, a coprocess)
-never runs outside the sandbox, as it would outlive that check. A
+never runs outside the sandbox, as it would outlive that check, and the
+program a line outside starts ends with the jhon that runs it, killed or
+not (one that program starts in turn is not reached). A
 long-running sandboxed command (a dev server in the background) therefore
 holds the project's `git push` until it ends, and a long deploy holds the
 project's sandboxed commands. Docker's and podman's sockets are hidden inside
