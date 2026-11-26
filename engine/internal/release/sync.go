@@ -9,17 +9,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/grant"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/session"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/version"
 )
 
-// git runs git in dir with the caller's environment; its
-// stderr reaches this process's unless quiet. It returns the substituted
-// stdout and whether git exited 0.
+// git runs git in dir as jhon's own reads run it (project.ReadGitCmd: no
+// inherited GIT_* variable, and no fsmonitor, hook, filter or other program
+// the repository's configuration names, which a sandboxed command may have
+// written, T250); its stderr reaches this process's unless quiet. It
+// returns the substituted stdout and whether git exited 0.
 func git(dir string, quiet bool, args ...string) (string, bool) {
-	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	c.Env = project.GitReadEnv()
+	c := project.ReadGitCmd(dir, args...)
 	if !quiet {
 		c.Stderr = os.Stderr
 	}
@@ -212,6 +214,10 @@ func goCmd(dir string, args ...string) (string, bool) { return goCmdEnv(dir, nil
 // goCmdEnv is goCmd with extra KEY=VALUE pairs over the environment.
 func goCmdEnv(dir string, extra []string, args ...string) (string, bool) {
 	env, done, err := goEnv()
+	var refused goRefused
+	if errors.As(err, &refused) {
+		return err.Error(), false
+	}
 	if err != nil {
 		return "cannot create a config directory for go: " + err.Error(), false
 	}
@@ -230,6 +236,17 @@ func goCmdEnv(dir string, extra []string, args ...string) (string, bool) {
 	return Substituted(out), err == nil
 }
 
+// MayChange is whether a sandboxed command may change what path names, as
+// the sandbox of the folder jhon runs in reads it (the cli sets it to
+// sandbox.Input.MayChange); nil, in a test, checks nothing.
+var MayChange func(path string) bool
+
+// goRefused is goEnv's refusal: a folder or file go would read that a
+// sandboxed command may change. Its text is the whole note, with the fix.
+type goRefused string
+
+func (r goRefused) Error() string { return string(r) }
+
 // goEnv is the caller's environment with go's config directory a throwaway
 // one, so go's telemetry counters (which GOTELEMETRY=off in the environment
 // does not stop: go reads that mode from the config directory) land there,
@@ -237,7 +254,54 @@ func goCmdEnv(dir string, extra []string, args ...string) (string, bool) {
 // removes the directory. Telemetry is off in it: in a fresh config
 // directory go would start a detached telemetry child that creates the
 // directory again after done removed it (T113).
+//
+// go builds with caches no sandboxed command can write (T250 A8): the
+// caller's GOCACHE (~/.cache/go-build) and GOMODCACHE (~/go/pkg/mod) are
+// writable inside the sandbox, where a command could plant a compiled
+// package or change a module's source, and the next sync would link it
+// into jhon. So the module cache and the build cache are <state>/go/{mod,
+// build}, under Jhon's state folder, which the sandbox keeps read-only and
+// refuses to run with where a command could change it, and go's work
+// folder a fresh one no sandbox binds (goWork); JHON_GO_CACHE, absolute,
+// names another folder for both caches, checked the same way (the test
+// suites share one across their scratch homes);
+// the toolchain is the local one (GOTOOLCHAIN=local, no other downloaded
+// and run), go.mod and go.sum are only read (GOFLAGS=-mod=readonly, the
+// caller's flags dropped; -modcacherw leaves the module cache's folders
+// removable, as a scratch state folder is removed with its home: the
+// sandbox, not the file modes, keeps it), and the modules come first from the caller's
+// download cache (GOPROXY=file://<old GOMODCACHE>/cache/download, then the
+// caller's proxy), whose zips go checks against go.sum as from any proxy:
+// a changed one is refused, and a first build needs no network. A cache
+// folder or a go env file a sandboxed command may change (MayChange) is
+// refused before go runs (goRefused).
 func goEnv() (env []string, done func(), err error) {
+	state := filepath.Join(filepath.Dir(grant.Dir()), "go")
+	if v := os.Getenv("JHON_GO_CACHE"); filepath.IsAbs(v) {
+		state = filepath.Clean(v)
+	}
+	caches := [][2]string{{"GOMODCACHE", filepath.Join(state, "mod")}, {"GOCACHE", filepath.Join(state, "build")}}
+	goenv, set := os.LookupEnv("GOENV")
+	if !set {
+		if user, err := os.UserConfigDir(); err == nil {
+			goenv = filepath.Join(user, "go", "env")
+		}
+	}
+	if MayChange != nil {
+		for _, c := range caches {
+			if MayChange(c[1]) {
+				return nil, nil, goRefused("jhon builds with the Go caches in " + state + ", and a sandboxed command may change " + c[1] + ", where it could plant code the build would take into jhon; fix: keep Jhon's state folder outside the project, /tmp, $TMPDIR, the caches and sandbox.allow_write")
+			}
+		}
+		if goenv != "off" && goenv != "" && MayChange(goenv) {
+			return nil, nil, goRefused("go reads its settings from " + goenv + ", which a sandboxed command may change, where it could set what the build of jhon takes (GOFLAGS, GOPROXY, GOWORK); fix: keep that file outside the project, /tmp, $TMPDIR, the caches and sandbox.allow_write, or point GOENV at one that is")
+		}
+	}
+	work, err := goWork()
+	if err != nil {
+		return nil, nil, err
+	}
+	proxy := "file://" + filepath.Join(callerModCache(), "cache", "download") + "," + callerProxy(goenv)
 	dir, err := os.MkdirTemp("", "jhon-go-config-")
 	if err != nil {
 		return nil, nil, err
@@ -248,16 +312,76 @@ func goEnv() (env []string, done func(), err error) {
 	}
 	if err != nil {
 		os.RemoveAll(dir)
+		os.RemoveAll(work)
 		return nil, nil, err
 	}
 	env = os.Environ()
-	if _, ok := os.LookupEnv("GOENV"); !ok {
-		if user, err := os.UserConfigDir(); err == nil {
-			env = append(env, "GOENV="+filepath.Join(user, "go", "env"))
-		}
+	if !set && goenv != "" {
+		env = append(env, "GOENV="+goenv)
 	}
 	env = append(env, "XDG_CONFIG_HOME="+dir)
-	return env, func() { os.RemoveAll(dir) }, nil
+	for _, c := range caches {
+		env = append(env, c[0]+"="+c[1])
+	}
+	env = append(env, "GOTMPDIR="+work, "TMPDIR="+work, "GOTOOLCHAIN=local", "GOFLAGS=-mod=readonly -modcacherw", "GOPROXY="+proxy)
+	return env, func() { os.RemoveAll(dir); os.RemoveAll(work) }, nil
+}
+
+// goWork is go's work folder for one run (GOTMPDIR), made fresh, mode 0700:
+// where go compiles each package before the build cache takes it, so a
+// sandboxed command that changed a file there would put its code in the
+// cache. It is under /var/tmp, which no sandbox binds unless $TMPDIR or
+// sandbox.allow_write names it, not /tmp, which every sandbox does; and not
+// under the home, as the tests a sync runs make their t.TempDir in
+// GOTMPDIR, and some judge a path by whether it lies in the home. It is
+// their TMPDIR too, so t.TempDir and os.MkdirTemp share one folder, as the
+// tests expect, and go leaves nothing behind once it is removed. Where a
+// sandboxed command may change it (MayChange) the build is refused.
+func goWork() (string, error) {
+	base := "/var/tmp"
+	if fi, err := os.Stat(base); err != nil || !fi.IsDir() {
+		base = os.TempDir()
+	}
+	work, err := os.MkdirTemp(base, "jhon-go-")
+	if err != nil {
+		return "", err
+	}
+	if MayChange != nil && MayChange(work) {
+		os.RemoveAll(work)
+		return "", goRefused("jhon builds in a work folder of go's under " + base + ", which a sandboxed command may write, where it could change a package go compiled before the build cache takes it; fix: run jhon sync with $TMPDIR outside " + base + ", or take " + base + " out of sandbox.allow_write")
+	}
+	return work, nil
+}
+
+// callerModCache is the module cache go uses for the caller with no
+// GOMODCACHE of Jhon's: $GOMODCACHE, else GOPATH's first folder's pkg/mod,
+// else ~/go/pkg/mod.
+func callerModCache() string {
+	if m := os.Getenv("GOMODCACHE"); filepath.IsAbs(m) {
+		return m
+	}
+	if p := filepath.SplitList(os.Getenv("GOPATH")); len(p) > 0 && filepath.IsAbs(p[0]) {
+		return filepath.Join(p[0], "pkg", "mod")
+	}
+	return filepath.Join(project.Home(), "go", "pkg", "mod")
+}
+
+// callerProxy is the proxy go uses for the caller: $GOPROXY, else the go
+// env file's GOPROXY line, else go's default.
+func callerProxy(goenv string) string {
+	if p := os.Getenv("GOPROXY"); p != "" {
+		return p
+	}
+	if goenv != "off" && goenv != "" {
+		if data, err := os.ReadFile(goenv); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				if v, ok := strings.CutPrefix(strings.TrimSpace(line), "GOPROXY="); ok && v != "" {
+					return v
+				}
+			}
+		}
+	}
+	return "https://proxy.golang.org,direct"
 }
 
 // buildBinary builds the release's binary from its own source, through a
@@ -333,8 +457,9 @@ func goTest(dir string) (string, bool) {
 // archive is `git archive --format=tar <commit> | tar -x -C <dir>` under
 // pipefail: whether both sides succeeded.
 func archive(source, commit, dir string) bool {
-	g := exec.Command("git", "-C", source, "archive", "--format=tar", commit)
-	g.Env = project.GitReadEnv()
+	// No filter the source's configuration names runs (git archive smudges
+	// what it exports), as for every read of jhon's (project.ReadGitCmd).
+	g := project.ReadGitCmd(source, "archive", "--format=tar", commit)
 	t := exec.Command("tar", "-x", "-C", dir)
 	g.Stderr, t.Stderr, t.Stdout = os.Stderr, os.Stderr, os.Stdout
 	pipe, err := g.StdoutPipe()

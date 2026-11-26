@@ -270,7 +270,36 @@ named with white space around them (git keeps it, a trimmed name would be
 another folder), runs in the sandbox too, with a note: git would write
 through it outside the sandbox, or wait on it. uv's tools go to a
 sandbox-only folder under the cache, and uv's own tool folder in the home stays
-read-only. A `sandbox.allow_write` folder that does not exist yet is
+read-only. So do the package stores uv, pnpm and bun link into your
+installs (uv's cache, pnpm's store, bun's cache, wherever their variables
+put them): a file there is the same file as one in a project you installed
+outside the sandbox, and a command that changed it in place would change
+that project. Inside, installs use stores of the sandbox's own under
+~/.cache/jhon/sandbox and copy each file into the project
+(`UV_LINK_MODE=copy`, pnpm's `package-import-method=copy`), so the first
+install of a package inside downloads it again. A file a project you
+installed outside the sandbox already holds by link stays shared with the
+store: install with copies there too (pnpm's `package-import-method`,
+`UV_LINK_MODE`) to end that. The files a runtime runs outside the sandbox
+are read-only in each of the project's roots (the folder the session works
+in, a worktree's main checkout, the workspace's members; not the
+repository's other worktrees, which the session must still be able to
+remove): Claude Code's
+`.claude` folder (its settings and hooks) and its MCP file (.mcp.json), pi's `.pi`
+folder, and git's hooks folder in the git folder, each where it already
+exists: Jhon makes none, so in a project with no `.claude` folder a command
+can still make one with settings and hooks (pi asks before it trusts a new
+`.pi`, and Claude Code before it starts a server a new MCP file names).
+Edit them with the agent's own file tools, which run outside the sandbox.
+One that is a link stops every sandboxed command with the fix (replace the
+link with what it leads to). The git configuration stays writable (`git
+config`, `git remote add`, `git branch -u`, and the branch deletions and
+tracking branches that rewrite it), so a command can still set
+`core.hooksPath`, a configured hook or a filter there, which your own git
+runs outside the sandbox. Jhon's own git, which runs outside it (sync, the
+doctor, the hooks' reads of the repository), runs none of them: no
+fsmonitor, hook, filter, pager, editor, external diff, textconv or ssh
+command the configuration names. A `sandbox.allow_write` folder that does not exist yet is
 created before the next sandboxed command starts, outside the sandbox, so
 you need not make it by hand: only under the home, with no link followed,
 never in or around a path the sandbox hides or keeps read-only (the
@@ -331,6 +360,14 @@ system's (`/run/docker.sock`, `/run/podman`), Docker Desktop's under
 ~/.docker and any unix socket `DOCKER_HOST`, `CONTAINER_HOST` or a docker
 context names. herdr's sockets (its API runs commands in its panes), the system
 bus, sshd's local socket and the pi harness's socket folder are hidden too.
+A socket the sandbox hides that lies in a folder sandboxed commands write
+(`SSH_AUTH_SOCK` under `$TMPDIR`, the session bus's or `DOCKER_HOST`'s path)
+is hidden at its topmost folder there, which no command can then rename to
+reach it under another name; when that folder also holds what the command
+needs (the folder it runs in), nothing runs, and the note names the socket
+and the fix (keep it under `$XDG_RUNTIME_DIR`, or unset its variable). A
+socket made while a sandboxed command is already running is not hidden
+from that command.
 With
 `sandbox.mode = "on"` set and a sandbox that cannot run (no bubblewrap,
 user namespaces off) every command is refused with the fix and `jhon
@@ -629,7 +666,19 @@ Each top directory has a README that says what is in it and how it is used.
 Only `jhon sync` installs: it builds a release from the committed HEAD
 under `.local/share/jhon/releases/<commit>/` in the home, validates it,
 switches `current` to it atomically, and installs the projections from it.
-It refuses a dirty tree, pushes nothing and keeps old releases. The
+It refuses a dirty tree, pushes nothing and keeps old releases. It builds
+with Go caches of its own under the state folder
+(~/.local/state/jhon/go: the module cache and the build cache), never your
+`GOCACHE` or `GOMODCACHE`, which a sandboxed command can write, and with
+go's work folder a fresh one under /var/tmp, not /tmp; with the local
+toolchain only, `go.mod` read-only, and the modules taken first from your
+module download cache (checked against `go.sum`). So the first sync needs no
+network but compiles everything once: about 70 seconds more than a later
+one, and about 1.5 GB on disk that every later sync reuses (go trims build
+entries unused for five days; the module cache grows only when `go.mod`
+changes; `JHON_GO_CACHE` names another folder for both, as the test
+suites do to share one). A go env file (`GOENV`) or a cache folder a
+sandboxed command could change stops the build with the fix. The
 runtimes load that release, never the live source. Each agent in
 `prose/agents.yaml` becomes a Claude Code agent (`.claude/agents/<name>.md`
 in the home, the always-on layer inline and its guards in its frontmatter)

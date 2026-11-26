@@ -123,25 +123,147 @@ type Input struct {
 }
 
 // toolCaches are the caches and stores the common toolchains write outside
-// a project (go, cargo, npm, pnpm, bun, gradle, maven, nuget, pip, uv, mise):
-// the variable that moves each and the folder under it, and its place under
-// the home; either may be "". None holds the programs the owner or a runtime
-// runs later (go's and cargo's bin, rustup, mise's installs and shims, pnpm's
-// and bun's own folders), nor what decides which ones run (mise's state,
-// with the configs it trusts): what a sandboxed command wrote there would
-// run outside the sandbox (L888, F2). Those are the owner's
-// sandbox.allow_write.
+// a project (go, cargo, npm, gradle, maven, nuget, pip, mise): the variable
+// that moves each and the folder under it, and its place under the home;
+// either may be "". None holds the programs the owner or a runtime runs
+// later (go's and cargo's bin, rustup, mise's installs and shims, pnpm's and
+// bun's own folders), nor what decides which ones run (mise's state, with
+// the configs it trusts): what a sandboxed command wrote there would run
+// outside the sandbox (L888, F2). Those are the owner's sandbox.allow_write.
+// uv's, pnpm's and bun's stores are not among them: they are read-only
+// (linkedStores, T250 A5).
 var toolCaches = []struct{ env, sub, home string }{
 	{"GOPATH", "pkg", "go/pkg"}, {"GOMODCACHE", "", ""}, {"GOCACHE", "", ""},
 	{"CARGO_HOME", "registry", ".cargo/registry"}, {"CARGO_HOME", "git", ".cargo/git"},
 	{"npm_config_cache", "", ".npm"},
-	{"PNPM_HOME", "store", ".local/share/pnpm/store"}, {"", "", ".pnpm-store"},
-	{"BUN_INSTALL", "install/cache", ".bun/install/cache"},
 	{"GRADLE_USER_HOME", "", ".gradle"},
 	{"", "", ".m2/repository"},
 	{"NUGET_PACKAGES", "", ".nuget/packages"},
-	{"PIP_CACHE_DIR", "", ""}, {"UV_CACHE_DIR", "", ""},
+	{"PIP_CACHE_DIR", "", ""},
 	{"MISE_CACHE_DIR", "", ""},
+}
+
+// linkedStores are the package stores whose files uv, pnpm and bun link
+// into a project by default (a hard link: one file, two names), where they
+// are, as written: with one writable, a sandboxed command would change in
+// place a file the owner's own installs outside the sandbox share (T250
+// A5). They are read-only inside; the sandbox installs from stores of its
+// own (StoreEnv). Each is where its tool finds it: uv's under the cache or
+// $UV_CACHE_DIR, pnpm's under the data folder, ~/.pnpm-store, $PNPM_HOME or
+// the store_dir setting's variables, bun's under ~/.bun, $BUN_INSTALL or
+// $BUN_INSTALL_CACHE_DIR.
+func (in Input) linkedStores() []string {
+	out := []string{
+		filepath.Join(in.xdg("XDG_CACHE_HOME", ".cache"), "uv"), in.under(".cache/uv"),
+		filepath.Join(in.xdg("XDG_DATA_HOME", ".local/share"), "pnpm", "store"), in.under(".local/share/pnpm/store"), in.under(".pnpm-store"),
+		in.under(".bun/install/cache"),
+	}
+	for _, v := range [][2]string{{"UV_CACHE_DIR", ""}, {"PNPM_HOME", "store"}, {"pnpm_config_store_dir", ""}, {"npm_config_store_dir", ""}, {"BUN_INSTALL", "install/cache"}, {"BUN_INSTALL_CACHE_DIR", ""}} {
+		if p := in.Env[v[0]]; filepath.IsAbs(p) {
+			out = append(out, filepath.Join(p, v[1]))
+		}
+	}
+	return out
+}
+
+// StoreEnv are the variables a work command gets for its installs (T250
+// A5): uv's cache, pnpm's store and bun's cache are folders of the
+// sandbox's own under the cache, $XDG_CACHE_HOME/jhon/sandbox, and uv and
+// pnpm copy each file into a project instead of linking it, so no file of
+// the sandbox's stores is another project's too. They replace the owner's
+// own values (WithEnv), which name the stores that are read-only inside.
+// pnpm reads its settings from pnpm_config_* since version 11, and from
+// npm_config_* before.
+func StoreEnv(in Input) []string {
+	dir := filepath.Join(in.xdg("XDG_CACHE_HOME", ".cache"), "jhon", "sandbox")
+	pnpm := filepath.Join(dir, "pnpm-store")
+	return []string{
+		"UV_CACHE_DIR=" + filepath.Join(dir, "uv"), "UV_LINK_MODE=copy",
+		"pnpm_config_store_dir=" + pnpm, "npm_config_store_dir=" + pnpm,
+		"pnpm_config_package_import_method=copy", "npm_config_package_import_method=copy",
+		"BUN_INSTALL_CACHE_DIR=" + filepath.Join(dir, "bun"),
+	}
+}
+
+// WithEnv is env with set's KEY=VALUE pairs in place of any of env's for
+// the same keys, set's last: a program reads the first of two, so none is
+// left beside.
+func WithEnv(env, set []string) []string {
+	keys := map[string]bool{}
+	for _, kv := range set {
+		k, _, _ := strings.Cut(kv, "=")
+		keys[k] = true
+	}
+	var out []string
+	for _, kv := range env {
+		if k, _, _ := strings.Cut(kv, "="); !keys[k] {
+			out = append(out, kv)
+		}
+	}
+	return append(out, set...)
+}
+
+// projectHooks are the paths, in each of the project's tops, of the files a
+// runtime runs outside the sandbox (T250 A3): Claude Code's settings with
+// their hooks and its MCP servers, pi's settings and extensions, and git's
+// hooks; with the runtime each belongs to, for the note on a link.
+var projectHooks = [][2]string{{".claude", "Claude Code"}, {".mcp.json", "Claude Code"}, {".pi", "pi"}, {".git/hooks", "git"}}
+
+// hookPath is one of the project's paths a runtime runs outside the
+// sandbox: where it is, as written, and whose it is.
+type hookPath struct{ path, runtime string }
+
+// hookPaths are projectHooks in each top of the project, its roots that are
+// no link (ownRoots: the folder the session works in, a linked worktree's
+// main checkout, the workspace's members), and the common dir's hooks
+// folder, which a linked worktree's git runs. The repository's other
+// worktrees are left writable: a mount point in one makes `git worktree
+// remove` of it fail (the folder is busy), and agents remove worktrees from
+// the project's session (163 times in the owner's sessions of 30 days).
+func (in Input) hookPaths() []hookPath {
+	var out []hookPath
+	for _, top := range in.hookTops() {
+		for _, h := range projectHooks {
+			out = append(out, hookPath{filepath.Join(top, h[0]), h[1]})
+		}
+	}
+	if filepath.IsAbs(in.CommonDir) && in.linkOn(in.CommonDir) == "" {
+		out = append(out, hookPath{filepath.Join(in.CommonDir, "hooks"), "git"})
+	}
+	return out
+}
+
+// hookTops are the project's roots that are no link and pass through
+// none, each once.
+func (in Input) hookTops() []string {
+	var out []string
+	for _, top := range in.ownRoots() {
+		if filepath.IsAbs(top) && in.linkOn(top) == "" && !slices.Contains(out, filepath.Clean(top)) {
+			out = append(out, filepath.Clean(top))
+		}
+	}
+	return out
+}
+
+// HookProblem is why the sandbox of in runs nothing while one of the
+// project's paths a runtime runs outside the sandbox is a link (T250 A3):
+// a mount follows it, so the folder it leads to would be read-only and the
+// link itself, in the writable project, one a command could point at files
+// it wrote. nil when none is.
+func HookProblem(in Input) *Problem {
+	for _, h := range in.hookPaths() {
+		if _, isLink, ok := in.lstat(h.path); ok && isLink {
+			what := "what that folder holds"
+			if strings.HasSuffix(h.path, ".json") {
+				what = "what that file names"
+			}
+			return &Problem{
+				Reason: h.path + " is a link, which a sandboxed command could point at files it wrote, and " + h.runtime + " runs " + what + " outside the sandbox",
+				Fix:    "replace the link " + h.path + " with the folder or file it leads to",
+			}
+		}
+	}
+	return nil
 }
 
 // moreCredentials are the home paths that hold credentials besides the
@@ -257,7 +379,19 @@ type mount struct {
 	// way changed between the check and the read of the real path (T248,
 	// L4). A run binds the area only through them (openBind).
 	written []string
+	// note is what a refused write there says after where it is, when the
+	// mount has its own reason (storeNote, hookNote); "" for the kind's.
+	note string
 }
+
+// storeNote and hookNote are what a write refused in a linked store or in a
+// file a runtime runs outside the sandbox says (T250 A5, A3): the store's
+// with the stop, a hook file's with how to change it, as the agent's own
+// file tools run outside the sandbox.
+const (
+	storeNote = "a package store whose files your installs outside the sandbox share, read-only by design: installs inside use the sandbox's own ($UV_CACHE_DIR, pnpm's store-dir, $BUN_INSTALL_CACHE_DIR), and no setting opens it; that is a stop: tell the owner the path and why, never write it elsewhere"
+	hookNote  = "a file a runtime runs outside the sandbox (Claude Code's settings, hooks and MCP servers, pi's settings and extensions, git's hooks), read-only by design: change it with the agent's own file tools (write, edit), which run outside the sandbox, never with a shell command; no setting opens it"
+)
 
 // under is rel under the home.
 func (in Input) under(rel string) string { return filepath.Join(in.Home, rel) }
@@ -272,38 +406,143 @@ func (in Input) xdg(name, rel string) string {
 
 // socketPaths are the socket paths and folders outside the runtime dirs the
 // sandbox hides, whether or not they exist (layout hides the ones that
-// do): in.SocketFolders, the X authority file, systemSockets, homeSockets
-// (and $XDG_CONFIG_HOME's), the session and system buses an address names,
-// and the SSH agent's socket.
+// do): socketSources' paths.
 func (in Input) socketPaths() []string {
-	out := slices.Concat(in.SocketFolders, []string{in.under(".Xauthority")}, systemSockets)
+	var out []string
+	for _, s := range in.socketSources() {
+		out = append(out, s.path)
+	}
+	return out
+}
+
+// socketSource is a socket path or folder the sandbox hides, and what names
+// it, for the note of one it cannot keep hidden (socketPin).
+type socketSource struct{ name, path string }
+
+// socketSources are in.SocketFolders, the X authority file, systemSockets,
+// homeSockets (and $XDG_CONFIG_HOME's), the session and system buses an
+// address names, the container engines' sockets unless the owner shows
+// them, and the SSH agent's socket, each with what names it.
+func (in Input) socketSources() []socketSource {
+	var out []socketSource
+	put := func(name string, paths ...string) {
+		for _, p := range paths {
+			out = append(out, socketSource{name, p})
+		}
+	}
+	put("the socket folder", in.SocketFolders...)
+	put("the X authority file", in.under(".Xauthority"))
+	put("the system socket", systemSockets...)
 	config := in.xdg("XDG_CONFIG_HOME", ".config")
 	for _, rel := range homeSockets {
-		out = append(out, in.under(rel))
+		put("the socket folder", in.under(rel))
 		if moved, ok := strings.CutPrefix(rel, ".config/"); ok {
-			out = append(out, filepath.Join(config, moved))
+			put("the socket folder", filepath.Join(config, moved))
 		}
 	}
 	for _, bus := range []string{"DBUS_SESSION_BUS_ADDRESS", "DBUS_SYSTEM_BUS_ADDRESS"} {
 		if path, ok := strings.CutPrefix(in.Env[bus], "unix:path="); ok {
 			path, _, _ = strings.Cut(path, ",")
-			out = append(out, path)
+			put("$"+bus, path)
 		}
 	}
 	// The container engines' sockets, unless the owner shows them (L37,
 	// L39): through one a container can write anywhere the owner can.
 	if !in.Docker {
-		out = append(out, systemContainerSockets...)
+		put("the container socket", systemContainerSockets...)
 		docker := in.under(".docker")
 		if d := in.Env["DOCKER_CONFIG"]; filepath.IsAbs(d) {
 			docker = d
 		}
 		for _, rel := range homeContainerSockets {
-			out = append(out, in.under(rel), filepath.Join(docker, strings.TrimPrefix(rel, ".docker/")))
+			put("the container socket", in.under(rel), filepath.Join(docker, strings.TrimPrefix(rel, ".docker/")))
 		}
-		out = append(out, in.containerHosts()...)
+		for _, h := range in.containerHosts() {
+			put(in.containerHostName(h), h)
+		}
 	}
-	return append(out, in.Env["SSH_AUTH_SOCK"])
+	put("$SSH_AUTH_SOCK", in.Env["SSH_AUTH_SOCK"])
+	return out
+}
+
+// containerHostName is what names h, a socket containerHosts gives:
+// $DOCKER_HOST, $CONTAINER_HOST, or a docker context.
+func (in Input) containerHostName(h string) string {
+	for _, v := range []string{"DOCKER_HOST", "CONTAINER_HOST"} {
+		if slices.Contains(Input{Env: map[string]string{v: in.Env[v]}}.containerHosts(), h) {
+			return "$" + v
+		}
+	}
+	return "a docker context"
+}
+
+// socketPin is where layout hides s, a socket the sandbox hides, so that
+// no command can move it out of its hide (T250 WU4): a hide by path in a
+// folder a command may write is a mount point the kernel keeps where it is,
+// but a folder around it is not, and a command that renames that folder
+// reaches the socket under the new name in the next run. So a socket whose
+// real path lies in a writable area of mounts (layout's, any order) below
+// its topmost folder there is hidden at that folder, which then no command
+// renames. "" when s is not there, lies in no writable area, or is itself
+// that topmost entry (its own hide pins it). A topmost folder that also
+// holds what the run needs (the folder it runs in, another area or mount)
+// cannot be hidden: the problem says so, and "" is given.
+func (in Input) socketPin(s socketSource, mounts []mount) (string, *Problem) {
+	if !filepath.IsAbs(s.path) {
+		return "", nil
+	}
+	r, _, ok := in.Stat(s.path)
+	if !ok {
+		return "", nil
+	}
+	var at *mount
+	for i, m := range mounts {
+		if m.dir && m.path != r && project.Within(r, m.path) && (at == nil || len(m.path) > len(at.path)) {
+			at = &mounts[i]
+		}
+	}
+	if at == nil || at.kind != write {
+		return "", nil
+	}
+	rel, err := filepath.Rel(at.path, r)
+	if err != nil {
+		return "", nil
+	}
+	first, _, _ := strings.Cut(rel, string(filepath.Separator))
+	top := filepath.Join(at.path, first)
+	if top == r {
+		return "", nil
+	}
+	held := ""
+	if cwd := realPath(in.Cwd, in.Stat); filepath.IsAbs(in.Cwd) && project.Within(cwd, top) {
+		held = "the folder the command runs in (" + cwd + ")"
+	}
+	for _, m := range mounts {
+		// What the sandbox hides there anyway (another socket) needs no use.
+		if held == "" && m.path != r && project.Within(m.path, top) && !m.sealed {
+			held = m.path
+		}
+	}
+	if held == "" {
+		return top, nil
+	}
+	name := strings.TrimPrefix(s.name, "$")
+	fix := "keep the socket outside every folder sandboxed commands may write (under $XDG_RUNTIME_DIR, which the sandbox hides)"
+	if name != s.name {
+		fix += ", or unset " + name + " before the session starts"
+	}
+	return "", &Problem{
+		Reason: "the socket " + s.name + " names (" + s.path + ") lies in " + at.path + ", a folder sandboxed commands may write, and the folder that holds it there, " + top + ", also holds " + held + ", which must stay usable, so the sandbox cannot hide that folder, and a command could rename it to reach the socket",
+		Fix:    fix,
+	}
+}
+
+// SocketProblem is why the sandbox of in runs nothing while a socket it
+// hides lies where no hide keeps it from a command (socketPin, T250 WU4):
+// the first such socket, nil when there is none.
+func (in Input) SocketProblem() *Problem {
+	_, _, p := layoutAll(in, true)
+	return p
 }
 
 // DockerContexts are the endpoints the docker CLI's contexts name: the
@@ -367,6 +606,13 @@ func within(p string, areas []string) bool {
 // Jhon's own: the variable is the caller's, and any other value (/proc/sys)
 // names no scratch (F7).
 func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
+	mounts, tmpdir, _ = layoutAll(in, withPath)
+	return mounts, tmpdir
+}
+
+// layoutAll is layout with the first socket it cannot keep hidden from a
+// command (socketPin), which SocketProblem gives.
+func layoutAll(in Input, withPath bool) (mounts []mount, tmpdir bool, sockets *Problem) {
 	real := func(p string) string {
 		if r, _, ok := in.Stat(p); ok {
 			return r
@@ -392,6 +638,9 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 				m.kind = max(old.kind, m.kind)
 				m.shown, m.sealed, m.guarded = old.shown || m.shown, old.sealed || m.sealed, old.guarded || m.guarded
 				m.written = append(slices.Clone(old.written), m.written...)
+				if m.note == "" {
+					m.note = old.note
+				}
 				mounts[i] = m
 				return
 			}
@@ -437,6 +686,21 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 		add(in.under(rel), mount{kind: read, guarded: true})
 	}
 	area(in.Telemetry)
+
+	// Read-only: the stores the owner's installs share files with by inode
+	// (T250 A5), where their links lead: what matters is their files, which
+	// no link to them makes writable. And the project's files a runtime runs
+	// outside the sandbox (T250 A3), each where it is as written: one that is
+	// or passes through a link is mounted nowhere, as the link itself would
+	// stay for a command to point elsewhere (HookProblem refuses the run).
+	for _, p := range in.linkedStores() {
+		add(p, mount{kind: read, guarded: true, note: storeNote})
+	}
+	for _, h := range in.hookPaths() {
+		if in.linkOn(h.path) == "" {
+			add(h.path, mount{kind: read, guarded: true, note: hookNote})
+		}
+	}
 
 	// Read-only: PATH's folders outside the project, also inside a writable
 	// folder, where the inner mount decides: what the owner or a runtime
@@ -523,6 +787,18 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 		area(in.Env["TMPDIR"])
 	}
 
+	// A hidden socket in a writable area is hidden at its topmost folder
+	// there, which no command can then rename (socketPin, T250 WU4).
+	for _, src := range in.socketSources() {
+		pin, p := in.socketPin(src, mounts)
+		if p != nil && sockets == nil {
+			sockets = p
+		}
+		if pin != "" {
+			add(pin, mount{kind: hide, sealed: true})
+		}
+	}
+
 	// Nothing but what the sandbox shows (the container sockets) is mounted
 	// inside a sealed folder: no writable area in ~/.ssh.
 	sealed := func(p string) bool {
@@ -552,7 +828,7 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 		m := innermost(mounts, r)
 		tmpdir = m != nil && m.kind == write
 	}
-	return mounts, tmpdir
+	return mounts, tmpdir, sockets
 }
 
 // inWritable is whether an entry on the way to path, a real path, sits in a

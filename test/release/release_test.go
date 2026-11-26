@@ -99,7 +99,9 @@ func offlineGo(t *testing.T) []string {
 		}
 		v := strings.Split(strings.TrimSpace(string(out)), "\n")
 		if len(v) == 2 {
-			goEnv = []string{"GOCACHE=" + v[0], "GOMODCACHE=" + v[1], "GOPROXY=off", "GOTOOLCHAIN=local"}
+			// jhon builds with its own caches (T250): one for the whole
+			// binary, its modules taken offline from GOMODCACHE's downloads.
+			goEnv = []string{"GOCACHE=" + v[0], "GOMODCACHE=" + v[1], "GOPROXY=off", "GOTOOLCHAIN=local", support.GoCacheEnv()}
 		}
 	})
 	if goEnv == nil {

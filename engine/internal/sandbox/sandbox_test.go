@@ -181,7 +181,9 @@ func TestAWritableAreaIsNeverTheRootOrTheHome(t *testing.T) {
 }
 
 // The default list is the toolchains' caches and stores, each where its
-// variable puts it; the folders with their programs take no mount (F2).
+// variable puts it; the folders with their programs take no mount (F2), and
+// the stores uv, pnpm and bun link into the owner's installs are read-only
+// (T250 A5).
 func TestToolFoldersAreCachesAndStoresAndFollowTheirVariables(t *testing.T) {
 	d := with(machine, disk{
 		"/home/u/go": "dir", "/home/u/go/bin": "dir", "/home/u/go/pkg": "dir",
@@ -194,12 +196,12 @@ func TestToolFoldersAreCachesAndStoresAndFollowTheirVariables(t *testing.T) {
 	})
 	in := sample(d)
 	args := Args(in)
-	for _, open := range []string{"/home/u/go/pkg", "/home/u/.cargo/registry", "/home/u/.cargo/git", "/home/u/.bun/install/cache", "/home/u/.local/share/pnpm/store", "/home/u/.npm", "/home/u/.gradle", "/home/u/.m2/repository", "/home/u/.nuget/packages"} {
+	for _, open := range []string{"/home/u/go/pkg", "/home/u/.cargo/registry", "/home/u/.cargo/git", "/home/u/.npm", "/home/u/.gradle", "/home/u/.m2/repository", "/home/u/.nuget/packages"} {
 		if index(args, "--bind", open) < 0 {
 			t.Errorf("%s is not writable:\n%s", open, strings.Join(args, " "))
 		}
 	}
-	for _, closed := range []string{"/home/u/go", "/home/u/go/bin", "/home/u/.cargo", "/home/u/.cargo/bin", "/home/u/.rustup", "/home/u/.bun", "/home/u/.local/share/pnpm", "/home/u/.local/share/mise", "/home/u/.local/share/mise/shims", "/home/u/.local/state/mise"} {
+	for _, closed := range []string{"/home/u/go", "/home/u/go/bin", "/home/u/.cargo", "/home/u/.cargo/bin", "/home/u/.rustup", "/home/u/.bun", "/home/u/.local/share/pnpm", "/home/u/.local/share/mise", "/home/u/.local/share/mise/shims", "/home/u/.local/state/mise", "/home/u/.bun/install/cache", "/home/u/.local/share/pnpm/store"} {
 		if index(args, "--bind", closed) >= 0 {
 			t.Errorf("%s is writable:\n%s", closed, strings.Join(args, " "))
 		}

@@ -197,9 +197,9 @@ loop:
 // A hidden path in a writable area, the SSH agent's socket in $TMPDIR (on a
 // real machine /tmp/ssh-*/agent.*, and /tmp is writable in every sandbox),
 // is hidden by its path: one run renames its folder, and the next, which
-// finds nothing at the path to hide, reads it under the new name.
+// finds nothing at the path to hide, reads it under the new name. Since
+// T250 (b) the folder is the hide's mount point, which no run renames.
 func TestT248V3AHiddenPathMovedByAnEarlierRunStaysHidden(t *testing.T) {
-	t.Skip("T250: a socket hidden by its path in a folder another sandboxed run can write or rename (pre-existing at 889c070, as the renamable /tmp socket folders)")
 	b := newBox(t)
 	support.Write(t, b.tmp, map[string]string{"ssh-X/agent.1": "AGENT-SECRET"})
 	env := t248Env(b.env, "SSH_AUTH_SOCK="+filepath.Join(b.tmp, "ssh-X", "agent.1"))

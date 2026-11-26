@@ -84,8 +84,11 @@ loop:
 			// The program ran; its own path went through the swapped link
 			// to the read-only home while it ran.
 			started++
-		case r.Code == 1 && strings.HasPrefix(r.Stderr, "bwrap: Race condition binding dirfd"):
-			// bubblewrap's own check refused the run, in its words (exit 1).
+		case r.Code == 1 && t248v2BwrapRaced(r.Stderr) && strings.Contains(r.Stderr, "\njhon sandbox: bubblewrap refused the sandbox because a folder changed while it mounted it, so nothing was run; fix: run the command again\n"):
+			// bubblewrap's own check refused the run, in its words (exit 1),
+			// with jhon's note: a folder changed, or one it binds inside the
+			// project is gone (T250: the project's .claude, read-only), when
+			// it opened the descriptor's path again.
 			bwrapRefused++
 		default:
 			line, _, _ := strings.Cut(r.Stderr, "\n")
@@ -114,6 +117,14 @@ loop:
 		t.Errorf("none of %d runs started its program", runs)
 	}
 	t.Logf("%d runs: %d started, %d refused by jhon (126 with the note), %d refused by bubblewrap (exit 1, \"bwrap: Race condition binding dirfd\"), %d other; %s", runs, started, refused, bwrapRefused, runs-started-refused-bwrapRefused, strings.TrimSpace(attacker.Stdout))
+}
+
+// t248v2BwrapRaced is whether stderr opens with bubblewrap's refusal of a
+// folder that changed while it mounted it: its race check, or a bind whose
+// source or destination is gone (T250: the read-only binds in the project).
+func t248v2BwrapRaced(stderr string) bool {
+	line, _, _ := strings.Cut(stderr, "\n")
+	return strings.HasPrefix(line, "bwrap: Race condition binding dirfd") || strings.HasPrefix(line, "bwrap: Can't mount on symlink destination ") || strings.HasPrefix(line, "bwrap: Can't ") && strings.HasSuffix(line, ": No such file or directory")
 }
 
 // The project: work/sub/victim, its parent swapped for a link to the home,

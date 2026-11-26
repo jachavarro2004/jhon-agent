@@ -566,12 +566,10 @@ func gitQuietOK(dir string, args ...string) (string, bool) {
 	return release.Substituted(b), err == nil
 }
 
-// readGit is git in dir with args, a read, with optional locks off.
-func readGit(dir string, args ...string) *exec.Cmd {
-	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	c.Env = project.GitReadEnv()
-	return c
-}
+// readGit is git in dir with args, a read, as jhon's reads run it
+// (project.ReadGitCmd): optional locks off, and no program the repository's
+// configuration names (T250).
+func readGit(dir string, args ...string) *exec.Cmd { return project.ReadGitCmd(dir, args...) }
 
 // countNamed is `find <dir> [-maxdepth <depth>] -name <pattern> | wc -l`:
 // the entries under dir, links not followed, whose name matches; depth < 0

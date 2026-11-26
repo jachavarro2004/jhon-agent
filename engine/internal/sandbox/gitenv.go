@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 )
 
 // gitOverrides are the configuration git runs with on an unsandboxed line
@@ -35,20 +37,11 @@ var gitOverrides = [][2]string{
 	{"maintenance.autoDetach", "false"},
 }
 
-// hookEvents are the hook events of githooks(5) (git 2.56): an unsandboxed
-// git runs with hook.<event>.enabled=false for each (L1318 b). Since git
-// 2.54 a hook may be named in the configuration (hook.<name>.command with
-// hook.<name>.event), and core.hooksPath does not turn those off; git has
-// no switch for every event, and an older git ignores the key. The list
-// holds every event, not only the ones a network command fires (pre-push,
-// post-merge, post-checkout, post-rewrite, reference-transaction,
-// pre-auto-gc, pre-rebase, pre-merge-commit, prepare-commit-msg,
-// commit-msg, post-index-change), so a later path to one fires nothing.
-var hookEvents = []string{
-	"applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit", "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-commit",
-	"pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-receive", "update", "proc-receive", "post-receive", "post-update",
-	"reference-transaction", "push-to-checkout", "pre-auto-gc", "post-rewrite", "sendemail-validate", "fsmonitor-watchman", "post-index-change",
-}
+// hookEvents are the hook events an unsandboxed git turns off, as jhon's
+// own git does (project.GitHookEvents, L1318 b): the list holds every event,
+// not only the ones a network command fires, so a later path to one fires
+// nothing.
+var hookEvents = project.GitHookEvents
 
 // UnsandboxedEnv is env (KEY=VALUE) for an unsandboxed line: without
 // GIT_CONFIG_PARAMETERS and CDPATH (a leading `cd <folder>` goes where
