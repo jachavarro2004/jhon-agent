@@ -81,7 +81,8 @@ func guardedWord(w string) string {
 // brace lists expanded. It judges an assignment (alone or before a
 // program), export, declare, typeset, readonly, local, unset, read, printf
 // -v, mapfile, readarray, an exported function, `exec -c`, and env by any
-// path or through command, builtin, exec, nohup or time: -i, -, an
+// path or through command, builtin, exec, nohup, time or what the shared
+// reader unwraps (envUnwrapped: -, noglob, repeat, nice, setsid, …): -i, -, an
 // abbreviation of --ignore-environment, -u and --unset, -S, and the
 // variables it sets. A shell's -c string and eval's words are read the same
 // way. A line the parser cannot read is judged by its text.
@@ -220,6 +221,48 @@ func envCommand(words []string, depth int) string {
 					return envChangeIn(args[i+1], depth+1)
 				}
 			}
+		}
+		return envUnwrapped(words[k:], depth)
+	}
+	return ""
+}
+
+// envUnwrapped judges what a program that runs another runs, read by the
+// shared reader (sh.Unwrap, T228 L2): zsh's precommand modifiers and
+// repeat, a wrapper (nice, timeout, sudo, …), an external runner (setsid,
+// chrt, strace, watch, …) or a builtin that runs a string later (trap,
+// sched, zpty, alias, emulate -c). Its words are judged as the line's own,
+// its strings as a shell's -c string. A runner whose options the reader
+// cannot read, so that the command it runs cannot be told, is judged by its
+// words: one that is env, exec, unset or an export, or changes a guarded
+// variable, is found.
+func envUnwrapped(words []string, depth int) string {
+	in, ok, err := sh.Unwrap(words)
+	if !ok {
+		return ""
+	}
+	if err != nil {
+		for _, w := range words[1:] {
+			if b := sh.Base(w); b == "env" || b == "exec" || b == "unset" || b == "export" || guardedWord(w) != "" {
+				return "the line cannot be read (" + err.Error() + "), and it runs " + w
+			}
+		}
+		if src := strings.Join(words, " "); markerWord.MatchString(src) || configEnv.MatchString(src) {
+			return "the line cannot be read (" + err.Error() + "), and it names " + AgentVariable + " or GIT_CONFIG_*"
+		}
+		return ""
+	}
+	for _, s := range in.Strings {
+		if depth < 4 {
+			if why := envChangeIn(s, depth+1); why != "" {
+				return why
+			}
+		}
+	}
+	// Words are fewer at each step: no bound is needed.
+	for _, w := range in.Words {
+		if why := envCommand(w, depth); why != "" {
+			return why
 		}
 	}
 	return ""

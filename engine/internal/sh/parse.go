@@ -267,6 +267,9 @@ func (r *reader) walk(n syntax.Node) {
 		case *syntax.ProcSubst:
 			r.nested(y.Stmts)
 			return false
+		case *syntax.ExtGlob:
+			r.extGlob(y)
+			return false
 		}
 		return true
 	})
@@ -275,7 +278,11 @@ func (r *reader) walk(n syntax.Node) {
 func (r *reader) assign(a *syntax.Assign) string {
 	if a.Naked {
 		if a.Value != nil {
-			return r.word(a.Value)
+			v := r.word(a.Value)
+			if n, val, ok := strings.Cut(v, "="); ok {
+				r.assigned(n, "", val, nil)
+			}
+			return v
 		}
 		if a.Name != nil {
 			return a.Name.Value
@@ -289,14 +296,23 @@ func (r *reader) assign(a *syntax.Assign) string {
 	if a.Append {
 		op = "+="
 	}
+	// A subscript is arithmetic: a substitution in it runs (T228).
+	index := ""
+	if a.Index != nil {
+		r.walk(a.Index)
+		index = r.text(a.Index)
+	}
 	if a.Array != nil {
 		r.walk(a.Array)
+		r.assigned(name, index, "", a.Array)
 		return name + op + r.text(a.Array)
 	}
 	if a.Value == nil {
 		return name + op
 	}
-	return name + op + r.word(a.Value)
+	v := r.word(a.Value)
+	r.assigned(name, index, v, nil)
+	return name + op + v
 }
 
 // word is a word as the guards read it: quotes removed, ANSI-C decoded, a
@@ -310,9 +326,20 @@ func (r *reader) word(w *syntax.Word) string {
 
 func (r *reader) parts(ps []syntax.WordPart, dq bool) string {
 	var b strings.Builder
+	// lits is the run of unquoted literals read last: the parser splits
+	// zsh's `$~name` into `$` and `~name` (globSubst).
+	lits := ""
+	defer func() { r.globSubst(lits) }()
 	for _, p := range ps {
+		if _, ok := p.(*syntax.Lit); !ok || dq {
+			r.globSubst(lits)
+			lits = ""
+		}
 		switch x := p.(type) {
 		case *syntax.Lit:
+			if !dq {
+				lits += x.Value
+			}
 			b.WriteString(unescape(x.Value, dq))
 		case *syntax.SglQuoted:
 			if x.Dollar {

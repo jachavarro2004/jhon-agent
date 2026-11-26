@@ -1513,3 +1513,58 @@ verifiers.tsv:176	safety-guard	allow	refuse	hole T224 L8 (found on main): a zsh 
 verifiers.tsv:177	safety-guard	allow	refuse	hole T224 L8 (found on main): zsh's repeat runs a builtin in the shell, which may assign d
 verifiers.tsv:178	safety-guard	allow	refuse	hole T224 L8 (found on main): zsh's - runs a builtin in the shell, which may assign d
 verifiers.tsv:179	safety-guard	allow	refuse	hole T224 L8 (found on main): zsh's private assigns in the shell
+verifiers.tsv:181	safety-guard	allow	refuse	hole T228 S1 (found on main): zsh's repeat runs the command after it, read as bare
+verifiers.tsv:182	safety-guard	allow	refuse	hole T228 S1 (found on main): zsh's - precommand runs the command after it, read as bare
+verifiers.tsv:183	safety-guard	allow	refuse	hole T228 S1 (found on main): zsh's nocorrect runs the command after it, read as bare
+verifiers.tsv:184	safety-guard	allow	refuse	hole T228 S1 (found on main): zsh's noglob runs the command after it, read as bare
+verifiers.tsv:185	safety-guard	allow	refuse	hole T228 S1 (found on main): builtin before command, read in the shared reader
+verifiers.tsv:186	safety-guard	allow	refuse	hole T228 S1 (found on main): zsh's repeat with a brace group
+verifiers.tsv:187	safety-guard	allow	refuse	hole T228 S1 (found on main): the - precommand in a string eval runs
+verifiers.tsv:188	safety-guard	allow	refuse	hole T228 S1 (found on main): noglob in a shell's -c string
+verifiers.tsv:189	safety-guard	allow	ask	hole T228 S1 (found on main): an outward command behind noglob is asked as bare
+verifiers.tsv:190	safety-guard	allow	ask	hole T228 S1 (found on main): an outward command behind repeat is asked as bare
+verifiers.tsv:191	safety-guard	allow	refuse	hole T228 S1 (found on main): a zsh glob qualifier's e string runs in the shell
+verifiers.tsv:192	safety-guard	allow	refuse	hole T228 S1 (found on main): a zsh glob qualifier's +command runs in the shell
+verifiers.tsv:193	safety-guard	allow	refuse	hole T228 S1 (found on main): a zsh glob sort by an e string runs it
+verifiers.tsv:194	safety-guard	allow	refuse	hole T228 S1 (found on main): a (#q) qualifier's e string runs in the shell
+verifiers.tsv:195	safety-guard	allow	refuse	hole T228 S1 (found on main): zsh reads !(test.test) as qualifiers t, e with delimiter s (code t.te), t
+verifiers.tsv:196	safety-guard	allow	refuse	hole T228 S1 (found on main): an expansion may supply a qualifier that runs code
+verifiers.tsv:197	safety-guard	allow	refuse	hole T228 S1 (found on main): zsh's $~g globs the value, qualifiers and all
+verifiers.tsv:198	safety-guard	allow	refuse	hole T228 S1 (found on main): a qualifier's code in a loop's words
+verifiers.tsv:199	safety-guard	allow	refuse	hole T228 S1 (found on main): a qualifier's code in a string eval runs
+verifiers.tsv:200	safety-guard	allow	refuse	hole T228 S1 (found on main): a substitution inside an extended glob runs, unread before
+verifiers.tsv:201	safety-guard	allow	refuse	hole T228 S1 (found on main): a backquoted substitution inside an extended glob runs
+verifiers.tsv:202	safety-guard	allow	refuse	hole T228 L2 (found on main): setsid's command, read through its options
+verifiers.tsv:203	safety-guard	allow	refuse	hole T228 L2 (found on main): ionice's command, read through its options
+verifiers.tsv:204	safety-guard	allow	refuse	hole T228 L2 (found on main): chrt's command, after its options and priority
+verifiers.tsv:205	safety-guard	allow	refuse	hole T228 L2 (found on main): taskset's command, after its options and mask
+verifiers.tsv:206	safety-guard	allow	refuse	hole T228 L2 (found on main): strace's command, read through its options
+verifiers.tsv:207	safety-guard	allow	refuse	hole T228 L2 (found on main): ltrace's command, read through its options
+verifiers.tsv:208	safety-guard	allow	refuse	hole T228 L2 (found on main): watch runs its words as a shell string
+verifiers.tsv:209	safety-guard	allow	refuse	hole T228 L2 (found on main): unbuffer's command
+verifiers.tsv:210	safety-guard	allow	refuse	hole T228 L2 (found on main): chroot's command, after the root
+verifiers.tsv:211	safety-guard	allow	refuse	hole T228 L2 (found on main): nsenter's command, read through its options
+verifiers.tsv:212	safety-guard	allow	refuse	hole T228 L2 (found on main): unshare's command, read through its options
+verifiers.tsv:213	safety-guard	allow	refuse	hole T228 L2 (found on main): firejail's command, its options one word each
+verifiers.tsv:214	safety-guard	allow	refuse	hole T228 L2 (found on main): bubblewrap's command, after its options and their values
+verifiers.tsv:215	safety-guard	allow	refuse	hole T228 L2 (found on main): systemd-run's command, read through its options
+verifiers.tsv:216	safety-guard	allow	refuse	hole T228 L2 (found on main): gdb's shell command
+verifiers.tsv:217	safety-guard	allow	refuse	hole T228 L2 (found on main): expect's spawn
+verifiers.tsv:218	safety-guard	allow	refuse	hole T228 L2 (found on main): gosu's command, after the user
+verifiers.tsv:219	safety-guard	allow	ask	hole T228 L2 (found on main): xargs running a wrapper on unseen input is xargs running the program
+verifiers.tsv:220	safety-guard	allow	ask	hole T228 L2 (found on main): xargs running a runner on unseen input is xargs running the program
+verifiers.tsv:221	safety-guard	allow	refuse	hole T228 L2 (found on main): trap's action is a command line run later
+verifiers.tsv:222	safety-guard	allow	refuse	hole T228 L2 (found on main): zsh's sched runs its command later
+verifiers.tsv:223	safety-guard	allow	refuse	hole T228 L2 (found on main): zsh's zpty runs its command as eval would
+verifiers.tsv:224	safety-guard	allow	refuse	hole T228 L2 (found on main): an alias's value is a command line run later
+verifiers.tsv:225	safety-guard	allow	refuse	hole T228 L2 (found on main): PS4's substitutions run at each traced command
+verifiers.tsv:226	safety-guard	allow	refuse	hole T228 L2 (found on main): PROMPT_COMMAND runs before each prompt
+verifiers.tsv:227	safety-guard	allow	refuse	hole T228 L2 (found on main): zsh's functions table entry is a function's body
+verifiers.tsv:228	safety-guard	allow	ask	hole T228 L2 (found on main): a runner option the reader does not know: unreadable
+verifiers.tsv:229	safety-guard	allow	ask	hole T228 L2 (found on main): perf's options are not told from its command without --: unreadable
+verifiers.tsv:230	safety-guard	allow	ask	hole T228 L2 (found on main): a gdb command file may run anything: unreadable
+verifiers.tsv:231	safety-guard	allow	refuse	hole T228 L2 (found on main): GLOB_SUBST makes each unquoted expansion a glob whose qualifiers may run code
+verifiers.tsv:232	safety-guard	allow	refuse	hole T228 L2 (found on main): GLOB_SUBST turned on by set -o
+verifiers.tsv:233	safety-guard	allow	refuse	hole T228 L2 (found on main): sh emulation turns GLOB_SUBST on
+verifiers.tsv:234	safety-guard	allow	refuse	hole T228 L2 (found on main): GLOB_SUBST turned on through zsh's options table
+verifiers.tsv:235	safety-guard	allow	refuse	hole T228 L2 (found on main): zsh started with GLOB_SUBST on

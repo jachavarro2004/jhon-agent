@@ -206,6 +206,65 @@ func lineFacts(line string) *mktempFacts {
 	return facts
 }
 
+// trapSignals are the signals a cleanup trap may name: the shell's exit and
+// the interrupts. Run at any of them, a scratch variable holds the folder or
+// nothing (it is assigned once, from mktemp -d).
+var trapSignals = set("EXIT", "0", "INT", "TERM", "HUP", "QUIT", "SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT")
+
+// trapExit is the action of the line's one top-level trap whose action is
+// single-quoted text and whose signals are trapSignals, with the scratch
+// folders scratchVars proves for the line with that trap a no-op and its
+// action run at the end (T228 L2: `d=$(mktemp -d); trap 'rm -rf "$d"'
+// EXIT; …` is `d=$(mktemp -d); …; rm -rf "$d"`); "" and nil for any other
+// line, or one where the action removes no folder the line proves.
+func trapExit(line string, ctx *Ctx) (string, map[string]string) {
+	segs, ok := scratchSegments(line)
+	if !ok {
+		return "", nil
+	}
+	trap := ""
+	for _, s := range segs {
+		if m := scratchFirst.FindStringSubmatch(s.text); m != nil && m[1] == "trap" {
+			if trap != "" {
+				return "", nil
+			}
+			trap = s.text
+		}
+	}
+	if trap == "" || strings.Count(line, trap) != 1 {
+		return "", nil
+	}
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(trap), "")
+	if err != nil || len(f.Stmts) != 1 || len(f.Stmts[0].Redirs) > 0 {
+		return "", nil
+	}
+	call, ok := f.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Assigns) > 0 || len(call.Args) < 3 {
+		return "", nil
+	}
+	args := call.Args[1:]
+	if v, _ := wordLit(args[0]); v == "--" {
+		args = args[1:]
+	}
+	if len(args) < 2 || len(args[0].Parts) != 1 {
+		return "", nil
+	}
+	q, ok := args[0].Parts[0].(*syntax.SglQuoted)
+	if !ok || q.Dollar {
+		return "", nil
+	}
+	for _, s := range args[1:] {
+		if v, lit := wordLit(s); !lit || !trapSignals[v] {
+			return "", nil
+		}
+	}
+	scratch := scratchVars(strings.Replace(line, trap, ":", 1)+"; "+q.Value, ctx)
+	if len(scratch) == 0 {
+		return "", nil
+	}
+	return q.Value, scratch
+}
+
 // astIndex is a subscript bash cannot evaluate as arithmetic on a
 // variable: a plain number, @ or *.
 func astIndex(e syntax.ArithmExpr) bool {

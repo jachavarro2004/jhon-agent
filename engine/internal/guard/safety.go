@@ -26,6 +26,10 @@ type Ctx struct {
 	// line is `rm $(mktemp -d)` (T64c).
 	scratch  map[string]string
 	mktempRm bool
+	// trapAction is the action of the line's one cleanup trap (trapExit,
+	// T228 L2), and trapScratch the scratch folders it removes.
+	trapAction  string
+	trapScratch map[string]string
 	// targets, when set, collects each program the walk judges, with the
 	// root it acts on (Targets, T140).
 	targets *[]Target
@@ -188,6 +192,7 @@ func unreadableAsk(err error) Finding {
 // Classify is the findings of a command line run in ctx.Cwd.
 func Classify(command string, ctx *Ctx) []Finding {
 	ctx.scratch, ctx.mktempRm = scratchVars(command, ctx), mktempRm(command)
+	ctx.trapAction, ctx.trapScratch = trapExit(command, ctx)
 	st := &State{Dir: ctx.Cwd, Links: &Links{}}
 	out := classify(command, ctx, 0, st)
 	// An rm of a mktemp -d folder assigned after `&&` names the safe form (scratchHint, T224 L5).
@@ -199,6 +204,7 @@ func Classify(command string, ctx *Ctx) []Finding {
 		}
 	}
 	ctx.scratch, ctx.mktempRm = nil, false
+	ctx.trapAction, ctx.trapScratch = "", nil
 	// A file the write reader finds the line writing (curl -o, go build -o) is
 	// refused when it is a credentials file, as judgeWrite's targets are (L1368).
 	if !slices.ContainsFunc(out, func(f Finding) bool { return f.Level == "deny" && strings.Contains(f.Why, "which the owner handles") }) {
@@ -423,12 +429,19 @@ func runsGrant(name string, argv []string) bool {
 
 func hasInPlace(args []string) bool { return slices.ContainsFunc(args, sh.InPlace) }
 
+// shellOwn are the routes that run a cd in the shell itself, once: eval,
+// command, builtin and zsh's -, nocorrect and noglob (T228).
+var shellOwn = set("eval", "command", "builtin", "-", "nocorrect", "noglob")
+
 func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]string, st *State, depth int) []Finding {
-	// `builtin x` runs the shell's own x: it is judged as x.
-	if (p.Name == "builtin" || (p.Name == "" && sh.Base(at(p.Argv, 0)) == "builtin")) && len(p.Argv) > 1 {
-		q := p
-		q.Argv, q.Name, q.Via = p.Argv[1:], sh.Base(p.Argv[1]), append(slices.Clone(p.Via), "builtin")
-		return judgeOne(q, redirects, ctx, vars, st, depth)
+	// `builtin x` runs the shell's own x: the reader reads it as x, with
+	// zsh's other precommand modifiers and repeat (sh.Programs, T228).
+	// A glob qualifier that runs code runs it in the shell (sh.GlobCode).
+	if p.Name == sh.GlobCode {
+		return []Finding{deny("the glob qualifier "+strings.Join(p.Argv[1:], " "), "zsh runs its code (an e string or a +command) in the shell, which the guard does not read")}
+	}
+	if p.Name == sh.GlobSubst {
+		return []Finding{deny(strings.Join(p.Argv[1:], " "), globSubstWhy)}
 	}
 	var out []Finding
 	dir := st.Dir
@@ -474,6 +487,10 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	// A program the guard cannot see (read from stdin, a preload, a
 	// variable) is judged by its visible words alone (L1311).
 	out = append(out, ownerActFinding(name, args)...)
+	// zsh's GLOB_SUBST turned on (T228 L2).
+	if l := sh.GlobSubstOn(name, args); l != "" {
+		out = append(out, deny(l, globSubstWhy))
+	}
 	// xargs deleting or overwriting operands the guard cannot see (`find … |
 	// xargs rm -rf`) is the destructive core: asked, as in v0.3.7.
 	if slices.Contains(via, sh.XargsUnseen) && (xargsDestroy[name] || ((name == "sed" || name == "perl") && hasInPlace(args))) {
@@ -579,7 +596,7 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 		// shell's -c string, a wrapper) moves that process, not the line,
 		// and the walk keeps no scope of its own for it: the directory is
 		// lost, so what follows is placed nowhere (fail closed).
-		if ctx.targets != nil && slices.ContainsFunc(via, func(v string) bool { return v != "eval" && v != "command" && v != "builtin" }) {
+		if ctx.targets != nil && slices.ContainsFunc(via, func(v string) bool { return !shellOwn[v] }) {
 			st.Dir, st.Lost = "", true
 			return out
 		}
@@ -1312,6 +1329,15 @@ func loopBindings(loops []sh.Loop, vars map[string]string) []map[string]string {
 
 // judgeCommand is the findings of one simple command under vars.
 func judgeCommand(c *sh.Command, ctx *Ctx, vars map[string]string, st *State, depth int) []Finding {
+	// The line's cleanup trap removes its scratch folders as a removal at
+	// the line's end would (trapExit, T228 L2).
+	if depth == 0 && len(c.Scope) == 0 && ctx.trapAction != "" && at(c.Words, 0) == "trap" &&
+		(at(c.Words, 1) == ctx.trapAction || at(c.Words, 1) == "--" && at(c.Words, 2) == ctx.trapAction) {
+		scratch, action := ctx.scratch, ctx.trapAction
+		ctx.scratch, ctx.trapAction = ctx.trapScratch, ""
+		defer func() { ctx.scratch, ctx.trapAction = scratch, action }()
+		return classify(action, ctx, 0, st)
+	}
 	words := make([]string, len(c.Words))
 	// The line's own mktemp -d directory, named whole by an rm or rmdir, reads as the path it makes (scratchVars).
 	scratchRm := depth == 0 && len(c.Scope) == 0 && len(c.Words) > 0 && (c.Words[0] == "rm" || c.Words[0] == "rmdir")

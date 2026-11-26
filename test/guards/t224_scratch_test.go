@@ -132,7 +132,8 @@ func TestT224ScratchFolderRemovalKeepsRefusingTheRest(t *testing.T) {
 		c = s.expand(c)
 		r := s.bash(t, c, sgOpts{})
 		code(t, r, 2, c)
-		if !strings.Contains(r.Stderr, "safety-guard: refused: rm -r") {
+		// A glob qualifier that runs code before the rm is refused first (T228).
+		if !strings.Contains(r.Stderr, "safety-guard: refused: rm -r") && !(strings.HasPrefix(r.Stderr, "safety-guard: refused: the glob qualifier ") && strings.Contains(r.Stderr, "; rm -r")) {
 			t.Errorf("%q: the refusal names no rm: %s", c, r.Stderr)
 		}
 		if r := s.piCall(t, c, true); r.Code != 2 {

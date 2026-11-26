@@ -177,3 +177,72 @@ safety-guard	Bash	"x=d; d=$(mktemp -d) && : /*(e:'eval $x=$HOME':) && rm -rf $d"
 safety-guard	Bash	"x=d; d=$(mktemp -d) && repeat 1 typeset -g $x=$HOME && rm -rf $d"	refuse	none	T224	-	L8, found on main: zsh's repeat runs typeset in the shell
 safety-guard	Bash	"x=d; d=$(mktemp -d) && - eval $x=$HOME && rm -rf $d"	refuse	none	T224	-	L8, found on main: zsh's - runs eval in the shell
 safety-guard	Bash	"x=d; d=$(mktemp -d); private $x=$HOME; rm -rf \"$d\""	refuse	none	T224	-	L8, found on main: zsh's private assigns in the shell
+# T228 (odd/tasks/phase1-security.md S1, L2): commands the guard never saw, found on main; each now gets the bare command's verdict.
+safety-guard	Bash	"repeat 2 rm -rf ~"	refuse	none	T228	-	S1: zsh's repeat runs the command after it, read as bare
+safety-guard	Bash	"- rm -rf ~"	refuse	none	T228	-	S1: zsh's - precommand runs the command after it, read as bare
+safety-guard	Bash	"nocorrect rm -rf ~"	refuse	none	T228	-	S1: zsh's nocorrect runs the command after it, read as bare
+safety-guard	Bash	"noglob rm -rf ~"	refuse	none	T228	-	S1: zsh's noglob runs the command after it, read as bare
+safety-guard	Bash	"builtin command rm -rf ~"	refuse	none	T228	-	S1: builtin before command, read in the shared reader
+safety-guard	Bash	"repeat 2 { rm -rf ~ }"	refuse	none	T228	-	S1: zsh's repeat with a brace group
+safety-guard	Bash	"eval - rm -rf ~"	refuse	none	T228	-	S1: the - precommand in a string eval runs
+safety-guard	Bash	"sh -c \"noglob rm -rf ~\""	refuse	none	T228	-	S1: noglob in a shell's -c string
+safety-guard	Bash	"noglob git push origin main"	ask	none	T228	-	S1: an outward command behind noglob is asked as bare
+safety-guard	Bash	"repeat 1 git push origin main"	ask	none	T228	-	S1: an outward command behind repeat is asked as bare
+safety-guard	Bash	"ls *(e:'rm -rf ~':)"	refuse	none	T228	-	S1: a zsh glob qualifier's e string runs in the shell
+safety-guard	Bash	"ls *(+cleanup)"	refuse	none	T228	-	S1: a zsh glob qualifier's +command runs in the shell
+safety-guard	Bash	"ls *(oe:'REPLY=x':)"	refuse	none	T228	-	S1: a zsh glob sort by an e string runs it
+safety-guard	Bash	"ls *(#qe:x:)"	refuse	none	T228	-	S1: a (#q) qualifier's e string runs in the shell
+safety-guard	Bash	"ls !(test.test)"	refuse	none	T228	-	S1: zsh reads !(test.test) as qualifiers t, e with delimiter s (code t.te), t
+safety-guard	Bash	"ls *($q)"	refuse	none	T228	-	S1: an expansion may supply a qualifier that runs code
+safety-guard	Bash	"g='*(e:x:)'; ls $~g"	refuse	none	T228	-	S1: zsh's $~g globs the value, qualifiers and all
+safety-guard	Bash	"for f in *(e:x:); do echo $f; done"	refuse	none	T228	-	S1: a qualifier's code in a loop's words
+safety-guard	Bash	"eval 'ls *(e:x:)'"	refuse	none	T228	-	S1: a qualifier's code in a string eval runs
+safety-guard	Bash	"ls @($(rm -rf ~)|x)"	refuse	none	T228	-	S1: a substitution inside an extended glob runs, unread before
+safety-guard	Bash	"ls !(`rm -rf ~`|y)"	refuse	none	T228	-	S1: a backquoted substitution inside an extended glob runs
+safety-guard	Bash	"setsid -f rm -rf ~"	refuse	none	T228	-	L2: setsid's command, read through its options
+safety-guard	Bash	"ionice -c 3 rm -rf ~"	refuse	none	T228	-	L2: ionice's command, read through its options
+safety-guard	Bash	"chrt -f 99 rm -rf ~"	refuse	none	T228	-	L2: chrt's command, after its options and priority
+safety-guard	Bash	"taskset -c 0 rm -rf ~"	refuse	none	T228	-	L2: taskset's command, after its options and mask
+safety-guard	Bash	"strace -f -o x rm -rf ~"	refuse	none	T228	-	L2: strace's command, read through its options
+safety-guard	Bash	"ltrace -o x rm -rf ~"	refuse	none	T228	-	L2: ltrace's command, read through its options
+safety-guard	Bash	"watch -n1 'rm -rf ~'"	refuse	none	T228	-	L2: watch runs its words as a shell string
+safety-guard	Bash	"unbuffer -p rm -rf ~"	refuse	none	T228	-	L2: unbuffer's command
+safety-guard	Bash	"chroot / rm -rf ~"	refuse	none	T228	-	L2: chroot's command, after the root
+safety-guard	Bash	"nsenter -t 1 -m rm -rf ~"	refuse	none	T228	-	L2: nsenter's command, read through its options
+safety-guard	Bash	"unshare -r rm -rf ~"	refuse	none	T228	-	L2: unshare's command, read through its options
+safety-guard	Bash	"firejail --noprofile rm -rf ~"	refuse	none	T228	-	L2: firejail's command, its options one word each
+safety-guard	Bash	"bwrap --bind / / rm -rf ~"	refuse	none	T228	-	L2: bubblewrap's command, after its options and their values
+safety-guard	Bash	"systemd-run --user rm -rf ~"	refuse	none	T228	-	L2: systemd-run's command, read through its options
+safety-guard	Bash	"gdb -batch -ex 'shell rm -rf ~'"	refuse	none	T228	-	L2: gdb's shell command
+safety-guard	Bash	"expect -c 'spawn rm -rf ~'"	refuse	none	T228	-	L2: expect's spawn
+safety-guard	Bash	"gosu root rm -rf ~"	refuse	none	T228	-	L2: gosu's command, after the user
+safety-guard	Bash	"find . | xargs nohup rm -rf"	ask	none	T228	-	L2: xargs running a wrapper on unseen input is xargs running the program
+safety-guard	Bash	"find . | xargs setsid rm -rf"	ask	none	T228	-	L2: xargs running a runner on unseen input is xargs running the program
+safety-guard	Bash	"trap 'rm -rf ~' EXIT"	refuse	none	T228	-	L2: trap's action is a command line run later
+safety-guard	Bash	"sched +1 rm -rf ~"	refuse	none	T228	-	L2: zsh's sched runs its command later
+safety-guard	Bash	"zpty -b w 'rm -rf ~'"	refuse	none	T228	-	L2: zsh's zpty runs its command as eval would
+safety-guard	Bash	"alias x='rm -rf ~'"	refuse	none	T228	-	L2: an alias's value is a command line run later
+safety-guard	Bash	"PS4='$(rm -rf ~)' bash -xc true"	refuse	none	T228	-	L2: PS4's substitutions run at each traced command
+safety-guard	Bash	"PROMPT_COMMAND='rm -rf ~' bash -i"	refuse	none	T228	-	L2: PROMPT_COMMAND runs before each prompt
+safety-guard	Bash	"functions[x]='rm -rf ~'"	refuse	none	T228	-	L2: zsh's functions table entry is a function's body
+safety-guard	Bash	"strace --no-such-option rm -rf ~"	ask	none	T228	-	L2: a runner option the reader does not know: unreadable
+safety-guard	Bash	"perf record -g rm -rf ~"	ask	none	T228	-	L2: perf's options are not told from its command without --: unreadable
+safety-guard	Bash	"gdb -x cmds ./a.out"	ask	none	T228	-	L2: a gdb command file may run anything: unreadable
+safety-guard	Bash	"setopt globsubst; ls $g"	refuse	none	T228	-	L2: GLOB_SUBST makes each unquoted expansion a glob whose qualifiers may run code
+safety-guard	Bash	"set -o glob_subst"	refuse	none	T228	-	L2: GLOB_SUBST turned on by set -o
+safety-guard	Bash	"emulate sh"	refuse	none	T228	-	L2: sh emulation turns GLOB_SUBST on
+safety-guard	Bash	"options[globsubst]=on"	refuse	none	T228	-	L2: GLOB_SUBST turned on through zsh's options table
+safety-guard	Bash	"zsh -o globsubst -c 'ls $g'"	refuse	none	T228	-	L2: zsh started with GLOB_SUBST on
+safety-guard	Bash	"ls *(om[1])"	allow	none	T228	-	S1: a qualifier that runs no code
+safety-guard	Bash	"ls !(*.test.go)"	allow	none	T228	-	S1: bash's extended glob, whose e zsh never closes
+safety-guard	Bash	"ls @(a|b).go"	allow	none	T228	-	S1: an alternation, never qualifiers
+safety-guard	Bash	"noglob ls *"	allow	none	T228	-	S1: noglob before a harmless command
+safety-guard	Bash	"repeat 3 echo hi"	allow	none	T228	-	S1: repeat before a harmless command
+safety-guard	Bash	"setsid -f ls"	allow	none	T228	-	L2: a runner before a harmless command
+safety-guard	Bash	"watch -n1 'git status'"	allow	none	T228	-	L2: watch of a harmless string
+safety-guard	Bash	"strace -c ls"	allow	none	T228	-	L2: strace of a harmless command
+safety-guard	Bash	"trap 'echo done' EXIT"	allow	none	T228	-	L2: a harmless trap action
+safety-guard	Bash	"alias ll='ls -l'"	allow	none	T228	-	L2: a harmless alias
+safety-guard	Bash	"setopt extendedglob"	allow	none	T228	-	L2: an option that is not GLOB_SUBST
+safety-guard	Bash	"emulate -L zsh"	allow	none	T228	-	L2: zsh emulation leaves GLOB_SUBST off
+safety-guard	Bash	"set -o pipefail"	allow	none	T228	-	L2: an option that is not GLOB_SUBST
