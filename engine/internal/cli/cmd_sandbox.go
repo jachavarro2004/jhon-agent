@@ -247,9 +247,17 @@ func sandboxRun(argv []string) (int, error) {
 	// command could have written make no folder. The sandbox is then read
 	// and checked again with the new folders there.
 	var missing []sandbox.MissingFolder
+	// So are the sandbox's own stores, which the sandbox then pins
+	// (sandbox.EnsureOwnStores, T250 A5); a link a command put in place of
+	// one is replaced, and the note says so.
 	if p == nil {
 		var created []string
-		if created, missing = sandbox.CreateAllowWrite(in); len(created) > 0 {
+		created, missing = sandbox.CreateAllowWrite(in)
+		made, fixed := sandbox.EnsureOwnStores(in)
+		for _, f := range fixed {
+			fmt.Fprintf(os.Stderr, "jhon sandbox: the sandbox's own store %s was a link to %s, which a sandboxed command may have put there, so installs inside would have failed on a read-only store; it is a folder of its own again\n", f[0], f[1])
+		}
+		if len(created) > 0 || len(made) > 0 || len(fixed) > 0 {
 			in = sandboxInput(pinned)
 			bwrap, p = runProblem(in)
 		}
@@ -366,9 +374,7 @@ func runProblem(in sandbox.Input) (string, *sandbox.Problem) {
 // grants and the modes, wherever they are (sandbox-deploy-tools S9, S10):
 // it could turn the sandbox off or grant itself what the guards ask for;
 // or while a file of the project's a runtime runs outside the sandbox is a
-// link (sandbox.HookProblem, T250 A3), or a socket it hides lies where a
-// command could rename a folder around it (Input.SocketProblem, T250 WU4).
-// nil when none of these holds.
+// link (sandbox.HookProblem, T250 A3). nil when none of these holds.
 func ownFilesProblem(in sandbox.Input) *sandbox.Problem {
 	var p *sandbox.Problem
 	if os.Getenv("JHON_SETTINGS") != "" {
@@ -386,11 +392,6 @@ func ownFilesProblem(in sandbox.Input) *sandbox.Problem {
 	// could point it (T250 A3).
 	if p == nil {
 		p = sandbox.HookProblem(in)
-	}
-	// A socket the sandbox hides that a command could move out of its hide
-	// (T250 WU4).
-	if p == nil {
-		p = in.SocketProblem()
 	}
 	return p
 }

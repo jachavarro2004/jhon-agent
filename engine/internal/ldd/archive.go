@@ -79,11 +79,11 @@ func Archive(args []string, stdout, stderr io.Writer) int {
 	// Outside a work tree nothing can be tracked. Inside one, a failing
 	// `git ls-files` is an error to report, not evidence of "untracked".
 	method := "mv"
-	inside := exec.Command("git", "rev-parse", "--is-inside-work-tree")
-	inside.Env = project.GitReadEnv()
+	// jhon's own git runs no program the repository's configuration names
+	// (project.ReadGitCmd, T250): a sandboxed command may have written it.
+	inside := project.ReadGitCmd(".", "rev-parse", "--is-inside-work-tree")
 	if inside.Run() == nil {
-		ls := exec.Command("git", "ls-files", "--", source)
-		ls.Env = project.GitReadEnv()
+		ls := project.ReadGitCmd(".", "ls-files", "--", source)
 		ls.Stderr = stderr
 		out, err := ls.Output()
 		if err != nil {
@@ -114,7 +114,9 @@ func Archive(args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "method: %s\n", method)
 	if method == "git-mv" {
-		mv := exec.Command("git", "mv", source, destination)
+		// git mv cleans the moved path through the index: no filter the
+		// configuration names runs (T250 B4).
+		mv := project.ReadGitCmd(".", "mv", source, destination)
 		mv.Stdout, mv.Stderr = stdout, stderr
 		if err := mv.Run(); err != nil {
 			code := exitCode(err)

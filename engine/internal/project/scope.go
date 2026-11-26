@@ -255,9 +255,11 @@ func neutralGit() [][2]string {
 }
 
 // filterCommands are the git commands that may run a filter driver's
-// clean, smudge or process program (a status compares a changed file
-// through its clean filter).
-var filterCommands = []string{"update-index", "status", "diff", "log", "show", "blame", "grep", "add", "checkout", "switch", "restore", "reset", "stash", "merge", "cherry-pick", "rebase", "commit", "archive", "apply", "am", "ls-files"}
+// clean, smudge or process program, checked against git 2.5x (T250 B4): a
+// status compares a changed file through its clean filter, mv, rm (with
+// --cached too), add and commit clean, checkout-index, read-tree -u and
+// worktree add smudge.
+var filterCommands = []string{"mv", "rm", "checkout-index", "read-tree", "worktree", "update-index", "status", "diff", "log", "show", "blame", "grep", "add", "checkout", "switch", "restore", "reset", "stash", "merge", "cherry-pick", "rebase", "commit", "archive", "apply", "am", "ls-files"}
 
 // gitFilters are the filter drivers' programs the configuration in dir
 // names, each emptied, for a command that may run one (filterCommands):

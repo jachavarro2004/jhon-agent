@@ -1,12 +1,14 @@
 package release
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/grant"
@@ -147,7 +149,7 @@ func activate(r Roots, o *Out, commit, release string, built, tests bool) (int, 
 	}
 	fmt.Fprintf(o.W, "release %s:\n", Tilde(release))
 	if tests {
-		if out, ok := SourceChecks(release, r.Source); !ok {
+		if out, ok := SourceChecks(release, r.Source, commit); !ok {
 			return failed(out, "failed the preflight")
 		}
 	}
@@ -262,7 +264,8 @@ func (r goRefused) Error() string { return string(r) }
 // into jhon. So the module cache and the build cache are <state>/go/{mod,
 // build}, under Jhon's state folder, which the sandbox keeps read-only and
 // refuses to run with where a command could change it, and go's work
-// folder a fresh one no sandbox binds (goWork); JHON_GO_CACHE, absolute,
+// folder one of its own no sandbox binds (goWork); GOWORK=off, so no
+// go.work a command planted above the tree joins the build; JHON_GO_CACHE, absolute,
 // names another folder for both caches, checked the same way (the test
 // suites share one across their scratch homes);
 // the toolchain is the local one (GOTOOLCHAIN=local, no other downloaded
@@ -276,10 +279,7 @@ func (r goRefused) Error() string { return string(r) }
 // folder or a go env file a sandboxed command may change (MayChange) is
 // refused before go runs (goRefused).
 func goEnv() (env []string, done func(), err error) {
-	state := filepath.Join(filepath.Dir(grant.Dir()), "go")
-	if v := os.Getenv("JHON_GO_CACHE"); filepath.IsAbs(v) {
-		state = filepath.Clean(v)
-	}
+	state := goState()
 	caches := [][2]string{{"GOMODCACHE", filepath.Join(state, "mod")}, {"GOCACHE", filepath.Join(state, "build")}}
 	goenv, set := os.LookupEnv("GOENV")
 	if !set {
@@ -297,7 +297,7 @@ func goEnv() (env []string, done func(), err error) {
 			return nil, nil, goRefused("go reads its settings from " + goenv + ", which a sandboxed command may change, where it could set what the build of jhon takes (GOFLAGS, GOPROXY, GOWORK); fix: keep that file outside the project, /tmp, $TMPDIR, the caches and sandbox.allow_write, or point GOENV at one that is")
 		}
 	}
-	work, err := goWork()
+	work, err := goWork(state)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -312,7 +312,6 @@ func goEnv() (env []string, done func(), err error) {
 	}
 	if err != nil {
 		os.RemoveAll(dir)
-		os.RemoveAll(work)
 		return nil, nil, err
 	}
 	env = os.Environ()
@@ -323,34 +322,67 @@ func goEnv() (env []string, done func(), err error) {
 	for _, c := range caches {
 		env = append(env, c[0]+"="+c[1])
 	}
-	env = append(env, "GOTMPDIR="+work, "TMPDIR="+work, "GOTOOLCHAIN=local", "GOFLAGS=-mod=readonly -modcacherw", "GOPROXY="+proxy)
-	return env, func() { os.RemoveAll(dir); os.RemoveAll(work) }, nil
+	env = append(env, "GOTMPDIR="+work, "TMPDIR="+work, "GOWORK=off", "GOTOOLCHAIN=local", "GOFLAGS=-mod=readonly -modcacherw", "GOPROXY="+proxy)
+	return env, func() { os.RemoveAll(dir) }, nil
 }
 
-// goWork is go's work folder for one run (GOTMPDIR), made fresh, mode 0700:
-// where go compiles each package before the build cache takes it, so a
-// sandboxed command that changed a file there would put its code in the
-// cache. It is under /var/tmp, which no sandbox binds unless $TMPDIR or
-// sandbox.allow_write names it, not /tmp, which every sandbox does; and not
-// under the home, as the tests a sync runs make their t.TempDir in
-// GOTMPDIR, and some judge a path by whether it lies in the home. It is
-// their TMPDIR too, so t.TempDir and os.MkdirTemp share one folder, as the
-// tests expect, and go leaves nothing behind once it is removed. Where a
-// sandboxed command may change it (MayChange) the build is refused.
-func goWork() (string, error) {
+// goState is the folder of the Go caches jhon builds with: <state>/go under
+// Jhon's state folder, or JHON_GO_CACHE when absolute.
+func goState() string {
+	if v := os.Getenv("JHON_GO_CACHE"); filepath.IsAbs(v) {
+		return filepath.Clean(v)
+	}
+	return filepath.Join(filepath.Dir(grant.Dir()), "go")
+}
+
+// goWork is go's work folder (GOTMPDIR), one per cache folder state and
+// user, kept across runs (T250 round 3: a fresh one per run is a new
+// TMPDIR for the tests, which go test's cache keys on, so every warm sync
+// ran the whole engine suite again): /var/tmp/jhon-go-<uid>-<hash of
+// state>, mode 0700, owned by this user, no link. It is where go compiles
+// each package before the build cache takes it, and where sync tests the
+// commit's tree (goTestTree), so a sandboxed command that changed a file
+// there would put its code in the cache or the tests. It is under /var/tmp,
+// which no sandbox binds unless $TMPDIR or sandbox.allow_write names it,
+// not /tmp, which every sandbox does; and not under the home, as the tests
+// a sync runs make their t.TempDir in GOTMPDIR, and some judge a path by
+// whether it lies in the home. It is their TMPDIR too, so t.TempDir and
+// os.MkdirTemp share one folder, as the tests expect. One a sandboxed
+// command may change (MayChange), or that another user made, is a link or
+// is open to others, is refused.
+func goWork(state string) (string, error) {
+	work := goWorkPath(state)
+	base := filepath.Dir(work)
+	if err := os.Mkdir(work, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+		return "", err
+	}
+	fi, err := os.Lstat(work)
+	if err != nil {
+		return "", err
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 || fi.Mode().Perm()&0o077 != 0 || !ok || int(st.Uid) != os.Getuid() {
+		return "", goRefused("jhon builds in " + work + ", go's work folder, which is not a folder of this user's open to no one else (a link, another user's, or with others' permissions), so another program could change what go compiles there; fix: remove it, and jhon makes it again")
+	}
+	if MayChange != nil && MayChange(work) {
+		return "", goRefused("jhon builds in a work folder of go's under " + base + ", which a sandboxed command may write, where it could change a package go compiled before the build cache takes it; fix: run jhon sync with $TMPDIR outside " + base + ", or take " + base + " out of sandbox.allow_write")
+	}
+	return work, nil
+}
+
+// goWorkPath is where goWork keeps go's work folder for state: under
+// /var/tmp, or with JHON_GO_CACHE, which names state, in it (the test
+// suites' folder, removed with their run).
+func goWorkPath(state string) string {
+	if v := os.Getenv("JHON_GO_CACHE"); filepath.IsAbs(v) && filepath.Clean(v) == state {
+		return filepath.Join(state, "work")
+	}
 	base := "/var/tmp"
 	if fi, err := os.Stat(base); err != nil || !fi.IsDir() {
 		base = os.TempDir()
 	}
-	work, err := os.MkdirTemp(base, "jhon-go-")
-	if err != nil {
-		return "", err
-	}
-	if MayChange != nil && MayChange(work) {
-		os.RemoveAll(work)
-		return "", goRefused("jhon builds in a work folder of go's under " + base + ", which a sandboxed command may write, where it could change a package go compiled before the build cache takes it; fix: run jhon sync with $TMPDIR outside " + base + ", or take " + base + " out of sandbox.allow_write")
-	}
-	return work, nil
+	sum := sha256.Sum256([]byte(state))
+	return filepath.Join(base, fmt.Sprintf("jhon-go-%d-%x", os.Getuid(), sum[:6]))
 }
 
 // callerModCache is the module cache go uses for the caller with no
@@ -422,8 +454,8 @@ func buildArgs(out, ldflags string) []string {
 // half they read (T10f): the engine's tests (goTest) and the repository
 // validation (README references, audit fixtures, matrix evidence) by the
 // release's own renderer.
-func SourceChecks(release, source string) (string, bool) {
-	if out, ok := goTest(source); !ok {
+func SourceChecks(release, source, commit string) (string, bool) {
+	if out, ok := goTest(source, commit); !ok {
 		return out, false
 	}
 	// An empty HOME: this judges the repository; the projected runtime is
@@ -445,13 +477,58 @@ func SourceChecks(release, source string) (string, bool) {
 // ship, so they run in the clean source at the release's commit.
 // JHON_SYNC_GO_TEST=0 skips them, for the conformance suite, which runs them
 // on their own.
-func goTest(dir string) (string, bool) {
+func goTest(source, commit string) (string, bool) {
 	if os.Getenv("JHON_SYNC_GO_TEST") == "0" {
 		return "", true
 	}
+	// One sync or pack at a time checks its tree out and tests it: the tree
+	// is one per work folder (goTestTree), which a second one would rewrite
+	// under the first one's tests.
+	work, err := goWork(goState())
+	if err != nil {
+		return err.Error(), false
+	}
+	lock, err := os.OpenFile(filepath.Join(work, "tree.lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0o600)
+	if err != nil {
+		return "cannot lock the tree the tests run in: " + err.Error(), false
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return "cannot lock the tree the tests run in: " + err.Error(), false
+	}
+	tree, out, ok := goTestTree(source, commit)
+	if !ok {
+		return out, false
+	}
 	// Bounded: a test that hangs fails the preflight with its stack instead
 	// of holding the sync (and `jhon test`) for go's default ten minutes.
-	return goCmd(dir, "test", "-trimpath", "-timeout", "300s", "./engine/...")
+	return goCmd(tree, "test", "-trimpath", "-timeout", "300s", "./engine/...")
+}
+
+// goTestTree is the tree of commit in source, checked out by git from the
+// commit itself into go's work folder (goWork), where the engine's tests
+// run (T250 round 3, the verify's A1): not the live checkout, where a
+// sandboxed command can put a go.work, a _test.go hidden by
+// .git/info/exclude, or a changed file git is told not to look at, all of
+// which go test would compile and run outside the sandbox. git updates
+// only the files that differ from the last sync's (read-tree --reset -u
+// with an index of the tree's own), so go test's cache still knows the
+// rest. It runs no filter or hook the repository names (project.ReadGitCmd).
+func goTestTree(source, commit string) (tree, out string, ok bool) {
+	work, err := goWork(goState())
+	if err != nil {
+		return "", err.Error(), false
+	}
+	tree = filepath.Join(work, "tree")
+	if err := os.MkdirAll(tree, 0o700); err != nil {
+		return "", err.Error(), false
+	}
+	c := project.ReadGitCmd(source, "read-tree", "--reset", "-u", commit)
+	c.Env = append(c.Env, "GIT_INDEX_FILE="+filepath.Join(work, "tree.index"), "GIT_WORK_TREE="+tree)
+	if b, err := c.CombinedOutput(); err != nil {
+		return "", "cannot check " + commit + " out for its tests: " + strings.TrimSpace(string(b)), false
+	}
+	return tree, "", true
 }
 
 // archive is `git archive --format=tar <commit> | tar -x -C <dir>` under

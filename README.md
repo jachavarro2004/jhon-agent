@@ -282,23 +282,33 @@ installed outside the sandbox already holds by link stays shared with the
 store: install with copies there too (pnpm's `package-import-method`,
 `UV_LINK_MODE`) to end that. The files a runtime runs outside the sandbox
 are read-only in each of the project's roots (the folder the session works
-in, a worktree's main checkout, the workspace's members; not the
-repository's other worktrees, which the session must still be able to
-remove): Claude Code's
-`.claude` folder (its settings and hooks) and its MCP file (.mcp.json), pi's `.pi`
-folder, and git's hooks folder in the git folder, each where it already
-exists: Jhon makes none, so in a project with no `.claude` folder a command
-can still make one with settings and hooks (pi asks before it trusts a new
-`.pi`, and Claude Code before it starts a server a new MCP file names).
-Edit them with the agent's own file tools, which run outside the sandbox.
-One that is a link stops every sandboxed command with the fix (replace the
-link with what it leads to). The git configuration stays writable (`git
+in, a worktree's main checkout, the workspace's members) and in the
+repository's other worktrees: Claude Code's
+`.claude` folder (its settings and hooks) and its MCP file (.mcp.json), and pi's `.pi`
+folder. A root of the project with no `.claude` or `.pi` gets an empty,
+read-only one for each run, so no command can make one with settings,
+hooks or extensions: bubblewrap cannot cover a missing path without making
+it, so an empty `.claude` and `.pi` stay on the disk afterwards (git shows
+no change for an empty folder). No MCP file (.mcp.json) is made, as an empty one
+would show in every project's `git status`: a command can still make one
+where there is none, and Claude Code asks before it starts a server a new
+one names. The repository's other worktrees are covered only where such a
+file is already there and holds something. Edit them with the agent's own file tools,
+which run outside the sandbox. A worktree that holds one cannot be removed
+from inside (git removes the rest and stops on the folder); the note says
+to remove it in a terminal. One that is a link stops every sandboxed
+command with the fix (replace the link with what it leads to). Every
+folder on the way to such a file, a socket the sandbox hides or the
+sandbox's own stores, inside a folder sandboxed commands write, is bound
+onto itself, so no command can rename the folder around it and put another
+in its place. git's hooks folder is not kept read-only: git takes its hooks
+from `core.hooksPath`, and the git configuration stays writable (`git
 config`, `git remote add`, `git branch -u`, and the branch deletions and
 tracking branches that rewrite it), so a command can still set
 `core.hooksPath`, a configured hook or a filter there, which your own git
 runs outside the sandbox. Jhon's own git, which runs outside it (sync, the
-doctor, the hooks' reads of the repository), runs none of them: no
-fsmonitor, hook, filter, pager, editor, external diff, textconv or ssh
+doctor, `jhon archive`, the hooks' reads of the repository), runs none of
+them: no fsmonitor, hook, filter, pager, editor, external diff, textconv or ssh
 command the configuration names. A `sandbox.allow_write` folder that does not exist yet is
 created before the next sandboxed command starts, outside the sandbox, so
 you need not make it by hand: only under the home, with no link followed,
@@ -362,12 +372,10 @@ context names. herdr's sockets (its API runs commands in its panes), the system
 bus, sshd's local socket and the pi harness's socket folder are hidden too.
 A socket the sandbox hides that lies in a folder sandboxed commands write
 (`SSH_AUTH_SOCK` under `$TMPDIR`, the session bus's or `DOCKER_HOST`'s path)
-is hidden at its topmost folder there, which no command can then rename to
-reach it under another name; when that folder also holds what the command
-needs (the folder it runs in), nothing runs, and the note names the socket
-and the fix (keep it under `$XDG_RUNTIME_DIR`, or unset its variable). A
-socket made while a sandboxed command is already running is not hidden
-from that command.
+stays hidden: every folder on the way to it, up to the outermost writable
+folder, is bound onto itself, so no command can rename one to reach the
+socket under another name in a later run. A socket made while a sandboxed
+command is already running is not hidden from that command.
 With
 `sandbox.mode = "on"` set and a sandbox that cannot run (no bubblewrap,
 user namespaces off) every command is refused with the fix and `jhon
@@ -670,9 +678,12 @@ It refuses a dirty tree, pushes nothing and keeps old releases. It builds
 with Go caches of its own under the state folder
 (~/.local/state/jhon/go: the module cache and the build cache), never your
 `GOCACHE` or `GOMODCACHE`, which a sandboxed command can write, and with
-go's work folder a fresh one under /var/tmp, not /tmp; with the local
-toolchain only, `go.mod` read-only, and the modules taken first from your
-module download cache (checked against `go.sum`). So the first sync needs no
+go's work folder one of its own under /var/tmp (not /tmp), kept between
+syncs; with the local toolchain only, no `go.work` (`GOWORK=off`), `go.mod`
+read-only, and the modules taken first from your module download cache
+(checked against `go.sum`). The engine's tests run in the commit's own tree,
+which git writes into that work folder, never in your checkout, where a
+command could leave a file git does not show. So the first sync needs no
 network but compiles everything once: about 70 seconds more than a later
 one, and about 1.5 GB on disk that every later sync reuses (go trims build
 entries unused for five days; the module cache grows only when `go.mod`

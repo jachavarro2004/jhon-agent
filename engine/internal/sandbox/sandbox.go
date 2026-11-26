@@ -120,6 +120,9 @@ type Input struct {
 	// and for a link its text. nil takes Stat's answer: a path whose real
 	// path is another is a link to that one (replaceable).
 	Lstat func(path string) (link string, isLink, ok bool)
+	// Empty is whether path is a folder with nothing in it; nil answers no.
+	// A runtime's empty folder in another worktree is not mounted (T250 B3).
+	Empty func(path string) bool
 }
 
 // toolCaches are the caches and stores the common toolchains write outside
@@ -175,14 +178,56 @@ func (in Input) linkedStores() []string {
 // pnpm reads its settings from pnpm_config_* since version 11, and from
 // npm_config_* before.
 func StoreEnv(in Input) []string {
-	dir := filepath.Join(in.xdg("XDG_CACHE_HOME", ".cache"), "jhon", "sandbox")
-	pnpm := filepath.Join(dir, "pnpm-store")
+	stores := in.ownStores()
+	uv, pnpm, bun := stores[0], stores[1], stores[2]
 	return []string{
-		"UV_CACHE_DIR=" + filepath.Join(dir, "uv"), "UV_LINK_MODE=copy",
+		"UV_CACHE_DIR=" + uv, "UV_LINK_MODE=copy",
 		"pnpm_config_store_dir=" + pnpm, "npm_config_store_dir=" + pnpm,
 		"pnpm_config_package_import_method=copy", "npm_config_package_import_method=copy",
-		"BUN_INSTALL_CACHE_DIR=" + filepath.Join(dir, "bun"),
+		"BUN_INSTALL_CACHE_DIR=" + bun,
 	}
+}
+
+// ownStores are the sandbox's own stores StoreEnv names, uv's, pnpm's and
+// bun's, in that order, under $XDG_CACHE_HOME/jhon/sandbox. Each is a folder
+// the sandbox binds onto itself where it exists (pinWay), so no command can
+// put a link to a store the sandbox keeps read-only in its place, which
+// would make every later install fail (T250 A5); EnsureOwnStores makes
+// them.
+func (in Input) ownStores() []string {
+	dir := filepath.Join(in.xdg("XDG_CACHE_HOME", ".cache"), "jhon", "sandbox")
+	return []string{filepath.Join(dir, "uv"), filepath.Join(dir, "pnpm-store"), filepath.Join(dir, "bun")}
+}
+
+// EnsureOwnStores makes each of the sandbox's own stores (ownStores) that
+// is missing, before a run and outside the sandbox, as a folder made with
+// no link followed (mkdirUnder), so the run pins it (T250 A5). One that is
+// a link, which only a command could have put there in an older jhon, is
+// removed first (the link alone, never where it leads): fixed gives each
+// such path with where it led, made each folder made. A store outside the
+// home is left as it is.
+func EnsureOwnStores(in Input) (made []string, fixed [][2]string) {
+	home := filepath.Clean(in.Home)
+	for _, d := range in.ownStores() {
+		p := in.homed(d)
+		if !project.Within(p, home) || p == home {
+			continue
+		}
+		fi, err := os.Lstat(p)
+		if err == nil && fi.Mode()&os.ModeSymlink != 0 {
+			to, _ := os.Readlink(p)
+			if os.Remove(p) != nil {
+				continue
+			}
+			fixed = append(fixed, [2]string{d, to})
+		} else if err == nil {
+			continue
+		}
+		if mkdirUnder(home, p) == nil {
+			made = append(made, d)
+		}
+	}
+	return made, fixed
 }
 
 // WithEnv is env with set's KEY=VALUE pairs in place of any of env's for
@@ -205,39 +250,50 @@ func WithEnv(env, set []string) []string {
 
 // projectHooks are the paths, in each of the project's tops, of the files a
 // runtime runs outside the sandbox (T250 A3): Claude Code's settings with
-// their hooks and its MCP servers, pi's settings and extensions, and git's
-// hooks; with the runtime each belongs to, for the note on a link.
-var projectHooks = [][2]string{{".claude", "Claude Code"}, {".mcp.json", "Claude Code"}, {".pi", "pi"}, {".git/hooks", "git"}}
+// their hooks and its MCP servers, pi's settings and extensions; with the
+// runtime each belongs to, for the note on a link. git's hooks folder is
+// not among them: git takes its hooks from core.hooksPath, which a
+// sandboxed command may set in .git/config, writable inside (251 of 21,212
+// bash calls of the owner's 30 days write it), so a read-only .git/hooks
+// contained nothing and cost `rm -rf .git` (T250 round 3).
+var projectHooks = [][2]string{{".claude", "Claude Code"}, {".mcp.json", "Claude Code"}, {".pi", "pi"}}
 
 // hookPath is one of the project's paths a runtime runs outside the
-// sandbox: where it is, as written, and whose it is.
-type hookPath struct{ path, runtime string }
+// sandbox: where it is, as written, and whose it is; root is whether its
+// top is a root of the project that git works in, not another worktree.
+type hookPath struct {
+	path, runtime string
+	root          bool
+}
 
-// hookPaths are projectHooks in each top of the project, its roots that are
-// no link (ownRoots: the folder the session works in, a linked worktree's
-// main checkout, the workspace's members), and the common dir's hooks
-// folder, which a linked worktree's git runs. The repository's other
-// worktrees are left writable: a mount point in one makes `git worktree
-// remove` of it fail (the folder is busy), and agents remove worktrees from
-// the project's session (163 times in the owner's sessions of 30 days).
+// hookPaths are projectHooks in each top of the project: its roots that
+// are no link (ownRoots: the folder the session works in, a linked
+// worktree's main checkout, the workspace's members) and the repository's
+// other worktrees. Where one exists in another worktree, that worktree
+// cannot be removed from inside (its folder is pinned, pinWay): 3 of the
+// 163 `git worktree remove` of the owner's 30 days were in a repository
+// that tracks one, and the note says to remove it outside.
 func (in Input) hookPaths() []hookPath {
+	var roots []string
+	for _, r := range in.ownRoots() {
+		if _, _, ok := in.Stat(filepath.Join(r, ".git")); ok {
+			roots = append(roots, filepath.Clean(r))
+		}
+	}
 	var out []hookPath
 	for _, top := range in.hookTops() {
 		for _, h := range projectHooks {
-			out = append(out, hookPath{filepath.Join(top, h[0]), h[1]})
+			out = append(out, hookPath{filepath.Join(top, h[0]), h[1], slices.Contains(roots, top)})
 		}
-	}
-	if filepath.IsAbs(in.CommonDir) && in.linkOn(in.CommonDir) == "" {
-		out = append(out, hookPath{filepath.Join(in.CommonDir, "hooks"), "git"})
 	}
 	return out
 }
 
-// hookTops are the project's roots that are no link and pass through
-// none, each once.
+// hookTops are the project's roots and listed worktrees that are no link
+// and pass through none, each once.
 func (in Input) hookTops() []string {
 	var out []string
-	for _, top := range in.ownRoots() {
+	for _, top := range slices.Concat(in.ownRoots(), in.Worktrees) {
 		if filepath.IsAbs(top) && in.linkOn(top) == "" && !slices.Contains(out, filepath.Clean(top)) {
 			out = append(out, filepath.Clean(top))
 		}
@@ -382,6 +438,10 @@ type mount struct {
 	// note is what a refused write there says after where it is, when the
 	// mount has its own reason (storeNote, hookNote); "" for the kind's.
 	note string
+	// pin is a writable folder bound onto itself only so that it is a mount
+	// point no command can rename (pinWay): it is mounted though it lies in
+	// a writable area.
+	pin bool
 }
 
 // storeNote and hookNote are what a write refused in a linked store or in a
@@ -390,7 +450,8 @@ type mount struct {
 // file tools run outside the sandbox.
 const (
 	storeNote = "a package store whose files your installs outside the sandbox share, read-only by design: installs inside use the sandbox's own ($UV_CACHE_DIR, pnpm's store-dir, $BUN_INSTALL_CACHE_DIR), and no setting opens it; that is a stop: tell the owner the path and why, never write it elsewhere"
-	hookNote  = "a file a runtime runs outside the sandbox (Claude Code's settings, hooks and MCP servers, pi's settings and extensions, git's hooks), read-only by design: change it with the agent's own file tools (write, edit), which run outside the sandbox, never with a shell command; no setting opens it"
+	hookNote  = "a file a runtime runs outside the sandbox (Claude Code's settings, hooks and MCP servers, pi's settings and extensions), read-only by design: change it with the agent's own file tools (write, edit), which run outside the sandbox, never with a shell command, and remove a worktree that holds one outside the sandbox, in a terminal (git worktree remove <worktree>, or rm -r <worktree> when git removed the rest); no setting opens it"
+	pinNote   = "a folder the sandbox keeps where it is, as it holds, or lies on the way to, a file a runtime runs outside the sandbox (.claude, .pi, .mcp.json), a socket the sandbox hides or the sandbox's own store, so no command moves or removes it from inside: move or remove it outside the sandbox, in a terminal (a worktree: git worktree remove <worktree>, or, when git removed the rest and its record already, rm -r <worktree>); no setting opens it"
 )
 
 // under is rel under the home.
@@ -406,143 +467,38 @@ func (in Input) xdg(name, rel string) string {
 
 // socketPaths are the socket paths and folders outside the runtime dirs the
 // sandbox hides, whether or not they exist (layout hides the ones that
-// do): socketSources' paths.
+// do): in.SocketFolders, the X authority file, systemSockets, homeSockets
+// (and $XDG_CONFIG_HOME's), the session and system buses an address names,
+// and the SSH agent's socket.
 func (in Input) socketPaths() []string {
-	var out []string
-	for _, s := range in.socketSources() {
-		out = append(out, s.path)
-	}
-	return out
-}
-
-// socketSource is a socket path or folder the sandbox hides, and what names
-// it, for the note of one it cannot keep hidden (socketPin).
-type socketSource struct{ name, path string }
-
-// socketSources are in.SocketFolders, the X authority file, systemSockets,
-// homeSockets (and $XDG_CONFIG_HOME's), the session and system buses an
-// address names, the container engines' sockets unless the owner shows
-// them, and the SSH agent's socket, each with what names it.
-func (in Input) socketSources() []socketSource {
-	var out []socketSource
-	put := func(name string, paths ...string) {
-		for _, p := range paths {
-			out = append(out, socketSource{name, p})
-		}
-	}
-	put("the socket folder", in.SocketFolders...)
-	put("the X authority file", in.under(".Xauthority"))
-	put("the system socket", systemSockets...)
+	out := slices.Concat(in.SocketFolders, []string{in.under(".Xauthority")}, systemSockets)
 	config := in.xdg("XDG_CONFIG_HOME", ".config")
 	for _, rel := range homeSockets {
-		put("the socket folder", in.under(rel))
+		out = append(out, in.under(rel))
 		if moved, ok := strings.CutPrefix(rel, ".config/"); ok {
-			put("the socket folder", filepath.Join(config, moved))
+			out = append(out, filepath.Join(config, moved))
 		}
 	}
 	for _, bus := range []string{"DBUS_SESSION_BUS_ADDRESS", "DBUS_SYSTEM_BUS_ADDRESS"} {
 		if path, ok := strings.CutPrefix(in.Env[bus], "unix:path="); ok {
 			path, _, _ = strings.Cut(path, ",")
-			put("$"+bus, path)
+			out = append(out, path)
 		}
 	}
 	// The container engines' sockets, unless the owner shows them (L37,
 	// L39): through one a container can write anywhere the owner can.
 	if !in.Docker {
-		put("the container socket", systemContainerSockets...)
+		out = append(out, systemContainerSockets...)
 		docker := in.under(".docker")
 		if d := in.Env["DOCKER_CONFIG"]; filepath.IsAbs(d) {
 			docker = d
 		}
 		for _, rel := range homeContainerSockets {
-			put("the container socket", in.under(rel), filepath.Join(docker, strings.TrimPrefix(rel, ".docker/")))
+			out = append(out, in.under(rel), filepath.Join(docker, strings.TrimPrefix(rel, ".docker/")))
 		}
-		for _, h := range in.containerHosts() {
-			put(in.containerHostName(h), h)
-		}
+		out = append(out, in.containerHosts()...)
 	}
-	put("$SSH_AUTH_SOCK", in.Env["SSH_AUTH_SOCK"])
-	return out
-}
-
-// containerHostName is what names h, a socket containerHosts gives:
-// $DOCKER_HOST, $CONTAINER_HOST, or a docker context.
-func (in Input) containerHostName(h string) string {
-	for _, v := range []string{"DOCKER_HOST", "CONTAINER_HOST"} {
-		if slices.Contains(Input{Env: map[string]string{v: in.Env[v]}}.containerHosts(), h) {
-			return "$" + v
-		}
-	}
-	return "a docker context"
-}
-
-// socketPin is where layout hides s, a socket the sandbox hides, so that
-// no command can move it out of its hide (T250 WU4): a hide by path in a
-// folder a command may write is a mount point the kernel keeps where it is,
-// but a folder around it is not, and a command that renames that folder
-// reaches the socket under the new name in the next run. So a socket whose
-// real path lies in a writable area of mounts (layout's, any order) below
-// its topmost folder there is hidden at that folder, which then no command
-// renames. "" when s is not there, lies in no writable area, or is itself
-// that topmost entry (its own hide pins it). A topmost folder that also
-// holds what the run needs (the folder it runs in, another area or mount)
-// cannot be hidden: the problem says so, and "" is given.
-func (in Input) socketPin(s socketSource, mounts []mount) (string, *Problem) {
-	if !filepath.IsAbs(s.path) {
-		return "", nil
-	}
-	r, _, ok := in.Stat(s.path)
-	if !ok {
-		return "", nil
-	}
-	var at *mount
-	for i, m := range mounts {
-		if m.dir && m.path != r && project.Within(r, m.path) && (at == nil || len(m.path) > len(at.path)) {
-			at = &mounts[i]
-		}
-	}
-	if at == nil || at.kind != write {
-		return "", nil
-	}
-	rel, err := filepath.Rel(at.path, r)
-	if err != nil {
-		return "", nil
-	}
-	first, _, _ := strings.Cut(rel, string(filepath.Separator))
-	top := filepath.Join(at.path, first)
-	if top == r {
-		return "", nil
-	}
-	held := ""
-	if cwd := realPath(in.Cwd, in.Stat); filepath.IsAbs(in.Cwd) && project.Within(cwd, top) {
-		held = "the folder the command runs in (" + cwd + ")"
-	}
-	for _, m := range mounts {
-		// What the sandbox hides there anyway (another socket) needs no use.
-		if held == "" && m.path != r && project.Within(m.path, top) && !m.sealed {
-			held = m.path
-		}
-	}
-	if held == "" {
-		return top, nil
-	}
-	name := strings.TrimPrefix(s.name, "$")
-	fix := "keep the socket outside every folder sandboxed commands may write (under $XDG_RUNTIME_DIR, which the sandbox hides)"
-	if name != s.name {
-		fix += ", or unset " + name + " before the session starts"
-	}
-	return "", &Problem{
-		Reason: "the socket " + s.name + " names (" + s.path + ") lies in " + at.path + ", a folder sandboxed commands may write, and the folder that holds it there, " + top + ", also holds " + held + ", which must stay usable, so the sandbox cannot hide that folder, and a command could rename it to reach the socket",
-		Fix:    fix,
-	}
-}
-
-// SocketProblem is why the sandbox of in runs nothing while a socket it
-// hides lies where no hide keeps it from a command (socketPin, T250 WU4):
-// the first such socket, nil when there is none.
-func (in Input) SocketProblem() *Problem {
-	_, _, p := layoutAll(in, true)
-	return p
+	return append(out, in.Env["SSH_AUTH_SOCK"])
 }
 
 // DockerContexts are the endpoints the docker CLI's contexts name: the
@@ -606,13 +562,6 @@ func within(p string, areas []string) bool {
 // Jhon's own: the variable is the caller's, and any other value (/proc/sys)
 // names no scratch (F7).
 func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
-	mounts, tmpdir, _ = layoutAll(in, withPath)
-	return mounts, tmpdir
-}
-
-// layoutAll is layout with the first socket it cannot keep hidden from a
-// command (socketPin), which SocketProblem gives.
-func layoutAll(in Input, withPath bool) (mounts []mount, tmpdir bool, sockets *Problem) {
 	real := func(p string) string {
 		if r, _, ok := in.Stat(p); ok {
 			return r
@@ -641,6 +590,7 @@ func layoutAll(in Input, withPath bool) (mounts []mount, tmpdir bool, sockets *P
 				if m.note == "" {
 					m.note = old.note
 				}
+				m.pin = old.pin || m.pin
 				mounts[i] = m
 				return
 			}
@@ -697,8 +647,26 @@ func layoutAll(in Input, withPath bool) (mounts []mount, tmpdir bool, sockets *P
 		add(p, mount{kind: read, guarded: true, note: storeNote})
 	}
 	for _, h := range in.hookPaths() {
-		if in.linkOn(h.path) == "" {
+		if in.linkOn(h.path) != "" {
+			continue
+		}
+		_, _, there := in.Stat(h.path)
+		_, isLink, _ := in.lstat(h.path)
+		switch {
+		case there && !h.root && in.Empty != nil && in.Empty(h.path):
+			// An empty .claude or .pi in another worktree, which a
+			// session there left: no mount, so `git worktree remove`
+			// of it still works (T250 B3).
+		case there:
 			add(h.path, mount{kind: read, guarded: true, note: hookNote})
+		case !isLink && h.root && !strings.HasSuffix(h.path, ".json") && writableTop(filepath.Dir(h.path), mounts):
+			// A root's missing .claude or .pi (T250 B3, the owner's
+			// decision): an empty read-only folder, which bubblewrap
+			// makes as its mount point, so an empty folder is left on
+			// the disk; no command can create one with settings, hooks
+			// or extensions. Not .mcp.json, a file: an empty one would
+			// show in every project's git status.
+			mounts = append(mounts, mount{path: filepath.Clean(h.path), kind: hide, dir: true, guarded: true, note: hookNote})
 		}
 	}
 
@@ -787,15 +755,23 @@ func layoutAll(in Input, withPath bool) (mounts []mount, tmpdir bool, sockets *P
 		area(in.Env["TMPDIR"])
 	}
 
-	// A hidden socket in a writable area is hidden at its topmost folder
-	// there, which no command can then rename (socketPin, T250 WU4).
-	for _, src := range in.socketSources() {
-		pin, p := in.socketPin(src, mounts)
-		if p != nil && sockets == nil {
-			sockets = p
+	// Pinned: every folder on the way to what the sandbox hides or keeps
+	// read-only inside a writable area, and to the sandbox's own stores,
+	// is a mount point no command can rename (pinWay, T250 round 3).
+	var targets [][2]string
+	for _, m := range mounts {
+		if (m.sealed || m.note != "") && m.kind != write {
+			targets = append(targets, [2]string{m.path, ""})
 		}
-		if pin != "" {
-			add(pin, mount{kind: hide, sealed: true})
+	}
+	for _, d := range in.ownStores() {
+		if r, dir, ok := in.Stat(d); ok && dir && in.linkOn(d) == "" {
+			targets = append(targets, [2]string{r, "self"})
+		}
+	}
+	for _, t := range targets {
+		for _, f := range pinWay(t[0], mounts, t[1] == "self") {
+			add(f, mount{kind: write, pin: true, written: []string{in.homed(f)}})
 		}
 	}
 
@@ -821,14 +797,85 @@ func layoutAll(in Input, withPath bool) (mounts []mount, tmpdir bool, sockets *P
 	// mount. With no link on any area's way (area), every area bound
 	// writable is reached only through folders no command can change.
 	all := slices.Clone(mounts)
-	mounts = slices.DeleteFunc(mounts, func(m mount) bool { return m.kind == write && inWritable(m.path, all) })
+	mounts = slices.DeleteFunc(mounts, func(m mount) bool { return m.kind == write && !m.pin && inWritable(m.path, all) })
 	// $TMPDIR stays for the program while it is writable.
 	if scratchTMPDIR {
 		r, _, _ := in.Stat(in.Env["TMPDIR"])
 		m := innermost(mounts, r)
 		tmpdir = m != nil && m.kind == write
 	}
-	return mounts, tmpdir, sockets
+	return mounts, tmpdir
+}
+
+// pinWay is the one rule for a path the sandbox must keep where it is
+// (T250 round 3): every folder on the way to target, a real path, whose own
+// folder is writable in mounts (the innermost mount that holds it is
+// writable) and that is no mount point but a writable area's (a writable
+// area inside another takes no mount of its own, layout), and with self
+// target too. A mount point cannot be renamed from inside its namespace,
+// but the folder that holds it can, and with it the path; so each such
+// folder, up to the outermost writable area, is bound onto itself (a pin)
+// and none can be moved: not the folder of a socket the sandbox hides, a
+// worktree that holds a runtime's file, nor a writable area nested in
+// another. A pin hides nothing, so it never stands in the way of the
+// command. Under /dev nothing is pinned.
+func pinWay(target string, mounts []mount, self bool) []string {
+	if !filepath.IsAbs(target) || within(target, []string{"/dev"}) {
+		return nil
+	}
+	writableAt := func(dir string) bool {
+		var at *mount
+		for i, m := range mounts {
+			if (m.dir || m.path == dir) && project.Within(dir, m.path) && (at == nil || len(m.path) > len(at.path)) {
+				at = &mounts[i]
+			}
+		}
+		return at != nil && at.kind == write
+	}
+	point := func(p string) bool {
+		return slices.ContainsFunc(mounts, func(m mount) bool { return m.path == p && (m.kind != write || m.pin) })
+	}
+	var out []string
+	t := filepath.Clean(target)
+	var way []string
+	for e := t; filepath.Dir(e) != e; e = filepath.Dir(e) {
+		if e != t || self {
+			way = append(way, e)
+		}
+	}
+	for i := len(way) - 1; i >= 0; i-- {
+		f := way[i]
+		if writableAt(filepath.Dir(f)) && !point(f) && !isOuterArea(f, mounts) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// writableTop is whether dir, a real path, lies in a folder mounts (in any
+// order) leave writable: the innermost one that is or holds it is. Where it
+// does not (Jhon's source checkout, read-only from its linked worktree), no
+// command can create anything there, and bubblewrap could not make a
+// mount point there either (T250 B3).
+func writableTop(dir string, mounts []mount) bool {
+	var at *mount
+	for i, m := range mounts {
+		if m.dir && project.Within(dir, m.path) && (at == nil || len(m.path) > len(at.path)) {
+			at = &mounts[i]
+		}
+	}
+	return at != nil && at.kind == write
+}
+
+// isOuterArea is whether p is a writable area of mounts that no other
+// writable area holds: bound on its own already, a mount point.
+func isOuterArea(p string, mounts []mount) bool {
+	if !slices.ContainsFunc(mounts, func(m mount) bool { return m.path == p && m.kind == write }) {
+		return false
+	}
+	return !slices.ContainsFunc(mounts, func(m mount) bool {
+		return m.kind == write && m.dir && m.path != p && project.Within(p, m.path)
+	})
 }
 
 // inWritable is whether an entry on the way to path, a real path, sits in a
@@ -1088,7 +1135,7 @@ func build(in Input, bind func(m mount) ([]string, *Problem), hide func(m mount)
 				outer = k.kind
 			}
 		}
-		if m.kind == outer {
+		if m.kind == outer && !m.pin {
 			continue
 		}
 		kept = append(kept, m)
@@ -1235,6 +1282,21 @@ func Disk(path string) (real string, dir, ok bool) {
 	return real, fi.IsDir(), true
 }
 
+// diskEmpty is Input.Empty on this machine's disk: a folder, not a link,
+// with no entry.
+func diskEmpty(path string) bool {
+	if fi, err := os.Lstat(path); err != nil || !fi.IsDir() {
+		return false
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	names, err := f.Readdirnames(1)
+	return len(names) == 0 && err != nil
+}
+
 // Fresh is in with every filesystem question read from the disk anew
 // (Disk, DiskLstat), nothing remembered (T251, L1732): what runs after a
 // line enters the registry runs on Fresh, so no fact read before it (when
@@ -1295,6 +1357,7 @@ func Current(cwd, pinned string) Input {
 		SocketFolders: []string{"/tmp/tmux-" + uid, "/tmp/.X11-unix", "/tmp/.ICE-unix", "/tmp/gentle-pi-" + uid},
 		Stat:          remembered(Disk),
 		Lstat:         DiskLstat,
+		Empty:         diskEmpty,
 	}
 	for _, kv := range os.Environ() {
 		k, v, _ := strings.Cut(kv, "=")

@@ -198,7 +198,7 @@ loop:
 // real machine /tmp/ssh-*/agent.*, and /tmp is writable in every sandbox),
 // is hidden by its path: one run renames its folder, and the next, which
 // finds nothing at the path to hide, reads it under the new name. Since
-// T250 (b) the folder is the hide's mount point, which no run renames.
+// T250 (b) the folder is pinned (bound onto itself), which no run renames.
 func TestT248V3AHiddenPathMovedByAnEarlierRunStaysHidden(t *testing.T) {
 	b := newBox(t)
 	support.Write(t, b.tmp, map[string]string{"ssh-X/agent.1": "AGENT-SECRET"})

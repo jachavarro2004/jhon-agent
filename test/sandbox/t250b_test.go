@@ -65,19 +65,19 @@ func TestAStoreFileTheOwnersInstallsShareCannotBeChangedInside(t *testing.T) {
 	}
 }
 
-// WU7 (A3): the files Claude Code and pi run outside the sandbox, and git's
-// hooks, in each root of the project (the folder the session works in, a
-// worktree's main checkout), cannot be written, created, moved or removed
-// from inside; a missing .claude folder or hooks folder is made, empty,
-// before the run, so none can be planted where it was missing. The
-// harness's own tools, which run outside, still edit them, and the session
-// still removes another worktree of the repository (no mount there). Only
-// the hook paths that are there are mounted: Jhon makes none (the owner's
-// decision), so a project with no .claude folder gets one from a command.
+// WU7 (A3), round 3: the files Claude Code and pi run outside the sandbox
+// (.claude, .mcp.json, .pi), in each root of the project and in the
+// repository's other worktrees, cannot be written, created, moved or
+// removed from inside, nor the worktree that holds one (pinned): the
+// verifier planted a SessionStart hook in a sibling worktree on 1459cc1.
+// The harness's own tools, which run outside, still edit them. A worktree
+// that holds one is removed outside the sandbox (3 of the 163 removals in
+// the owner's 30 days), and the note says so; one that holds none is
+// removed from inside as before. Only the paths that are there are mounted:
+// a project with no .claude gets one from a command (stays open, below).
 func TestTheProjectsHookFilesCannotBePlantedInside(t *testing.T) {
 	b := newBox(t)
 	support.Write(t, b.proj, map[string]string{".mcp.json": "{}\n", ".pi/settings.json": "{}\n", ".claude/settings.json": "{}\n"})
-	mkdirs(t, filepath.Join(b.proj, ".git", "hooks"))
 	wt := filepath.Join(b.home, "project-worktrees", "w")
 	support.Git(t, b.proj, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "base")
 	support.Git(t, b.proj, "worktree", "add", "-q", "-b", "w", wt)
@@ -88,14 +88,13 @@ func TestTheProjectsHookFilesCannotBePlantedInside(t *testing.T) {
 		{"Claude Code's MCP servers", b.proj, `echo '{"mcpServers":{"x":{"command":"sh"}}}' > .mcp.json`},
 		{"pi's extensions", b.proj, `mkdir -p .pi/extensions && echo 'x' > .pi/extensions/x.ts`},
 		{"pi's settings", b.proj, `echo '{}' >> .pi/settings.json`},
-		{"git's hooks", b.proj, `printf '#!/bin/sh\ntouch /tmp/pwned\n' > .git/hooks/pre-commit`},
 		{"a worktree's .claude", wt, `printf '%s' '` + hooksJSON + `' > .claude/settings.local.json`},
 		{"a worktree's MCP servers", wt, `echo '{"mcpServers":{}}' > .mcp.json`},
-		{"git's hooks from a worktree", wt, `printf '#!/bin/sh\n' > "$(git rev-parse --git-common-dir)/hooks/post-checkout"`},
+		{"another worktree's .claude, from the main checkout", b.proj, `printf '%s' '` + hooksJSON + `' > ` + wt + `/.claude/settings.local.json`},
+		{"moving another worktree aside, from the main checkout", b.proj, `mv ` + wt + ` ` + wt + `-old && mkdir -p ` + wt + `/.claude && printf '%s' '` + hooksJSON + `' > ` + wt + `/.claude/settings.local.json`},
 		{"moving .claude aside", b.proj, `mv .claude .claude-old && mkdir .claude && printf '%s' '` + hooksJSON + `' > .claude/settings.local.json`},
 		{"moving .pi aside", b.proj, `mv .pi .pi-old`},
 		{"removing .mcp.json", b.proj, `rm .mcp.json && echo '{"mcpServers":{}}' > .mcp.json`},
-		{"moving the hooks folder aside", b.proj, `mv .git/hooks .git/hooks-old && mkdir .git/hooks && printf '#!/bin/sh\n' > .git/hooks/pre-push`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			r := b.sh(t, c.dir, "", c.script)
@@ -104,7 +103,7 @@ func TestTheProjectsHookFilesCannotBePlantedInside(t *testing.T) {
 			}
 		})
 	}
-	for _, p := range []string{filepath.Join(b.proj, ".claude", "settings.local.json"), filepath.Join(wt, ".claude", "settings.local.json"), filepath.Join(b.proj, ".pi", "extensions"), filepath.Join(b.proj, ".git", "hooks", "pre-commit"), filepath.Join(b.proj, ".git", "hooks", "post-checkout"), filepath.Join(b.proj, ".claude-old"), filepath.Join(b.proj, ".pi-old"), filepath.Join(b.proj, ".git", "hooks-old")} {
+	for _, p := range []string{filepath.Join(b.proj, ".claude", "settings.local.json"), filepath.Join(wt, ".claude", "settings.local.json"), filepath.Join(b.proj, ".pi", "extensions"), filepath.Join(b.proj, ".claude-old"), filepath.Join(b.proj, ".pi-old"), wt + "-old"} {
 		if exists(p) {
 			t.Errorf("%s was planted", p)
 		}
@@ -114,38 +113,84 @@ func TestTheProjectsHookFilesCannotBePlantedInside(t *testing.T) {
 	}
 	// The note says how to change one: with the agent's own file tools.
 	r := b.sh(t, b.proj, "", `echo '{}' > "$PWD/.mcp.json"`)
-	note := "the sandbox refused a write to " + filepath.Join(b.proj, ".mcp.json") + ", which exists; it is " + filepath.Join(b.proj, ".mcp.json") + ", a file a runtime runs outside the sandbox (Claude Code's settings, hooks and MCP servers, pi's settings and extensions, git's hooks), read-only by design: change it with the agent's own file tools (write, edit), which run outside the sandbox, never with a shell command; no setting opens it\n"
+	note := "the sandbox refused a write to " + filepath.Join(b.proj, ".mcp.json") + ", which exists; it is " + filepath.Join(b.proj, ".mcp.json") + ", a file a runtime runs outside the sandbox (Claude Code's settings, hooks and MCP servers, pi's settings and extensions), read-only by design: change it with the agent's own file tools (write, edit), which run outside the sandbox, never with a shell command, and remove a worktree that holds one outside the sandbox, in a terminal (git worktree remove <worktree>, or rm -r <worktree> when git removed the rest); no setting opens it\n"
 	if !readOnly(r) || !strings.HasSuffix(r.Stderr, note) {
 		t.Errorf("a write to .mcp.json: exit %d, stderr %q; want it refused, ending with %q", r.Code, r.Stderr, note)
 	}
-	// What stays open, on the record: in a project with no .claude, Jhon
-	// makes none, and a command can make one with settings and hooks.
+	// B3 (owner's decision, option a): in a project with no .claude, the
+	// run gets an empty read-only one, which bubblewrap leaves on the disk,
+	// empty; no command can put settings or hooks there. Likewise .pi. No
+	// .mcp.json is made: an empty file would show in git status.
 	bare := filepath.Join(b.base, "bare-project")
 	mkdirs(t, bare)
 	support.GitRepo(t, bare)
-	r = support.Jhon(t, bare, b.env, "sandbox", "run", "--", "sh", "-c", `test -e .claude && echo there; mkdir .claude && echo '{}' > .claude/settings.json && echo planted`)
-	if r.Code != 0 || r.Stdout != "planted\n" {
-		t.Errorf("a project with no .claude: exit %d, stdout %q, stderr %q; want no folder made by Jhon and the command's own made", r.Code, r.Stdout, r.Stderr)
+	r = support.Jhon(t, bare, b.env, "sandbox", "run", "--", "sh", "-c", `mkdir -p .claude; echo '{}' > .claude/settings.json && echo planted; mkdir -p .pi/extensions && echo x > .pi/extensions/x.ts && echo planted-pi; ls -A .claude .pi; echo ok`)
+	if r.Code != 0 || strings.Contains(r.Stdout, "planted") || !strings.HasSuffix(r.Stdout, "ok\n") {
+		t.Errorf("a project with no .claude or .pi: exit %d, stdout %q, stderr %q; want nothing planted", r.Code, r.Stdout, r.Stderr)
 	}
-	// Preserved: the rest of the project, and .git's own files, are written
-	// as before (a commit, a branch, git config), and the harness's tools
-	// edit the hook files outside.
+	for _, d := range []string{".claude", ".pi"} {
+		if entries, err := os.ReadDir(filepath.Join(bare, d)); err != nil || len(entries) != 0 {
+			t.Errorf("%s on the disk after the run: %v, %d entries; want an empty folder", d, err, len(entries))
+		}
+	}
+	if exists(filepath.Join(bare, ".mcp.json")) {
+		t.Error("an empty .mcp.json was left on the disk")
+	}
+	if st := support.Git(t, bare, "status", "--porcelain"); st != "" {
+		t.Errorf("git status after the run: %q, want clean (an empty folder is no change)", st)
+	}
+	// An ordinary run there is unaffected.
+	if r := support.Jhon(t, bare, b.env, "sandbox", "run", "--", "sh", "-c", `echo x > f && cat f`); r.Code != 0 || r.Stdout != "x\n" {
+		t.Errorf("an ordinary run in a project with no .claude: exit %d, stdout %q, stderr %q", r.Code, r.Stdout, r.Stderr)
+	}
+	// Preserved: the rest of the project and .git (a commit, git config, a
+	// hook in .git/hooks: not mounted, see TestGitHooksAreWritableInside),
+	// and the harness's tools edit the hook files outside.
 	r = b.sh(t, b.proj, "", `echo x > src.txt && git add src.txt && git -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -q -m x && git config branch.main.description x && mkdir -p sub/.claude && echo ok > sub/.claude/f && echo done`)
 	if r.Code != 0 || r.Stdout != "done\n" {
 		t.Errorf("ordinary work in the project: exit %d, stdout %q, stderr %q", r.Code, r.Stdout, r.Stderr)
 	}
 	support.Write(t, b.proj, map[string]string{".claude/settings.local.json": "{}\n"})
-	// Preserved: another worktree, whose .claude and .mcp.json are tracked,
-	// is removed from the main checkout's session.
-	support.Write(t, b.proj, map[string]string{"tracked/.keep": ""})
-	other := filepath.Join(b.home, "project-worktrees", "other")
-	support.Git(t, b.proj, "worktree", "add", "-q", "-b", "other", other)
-	support.Write(t, other, map[string]string{".claude/settings.json": "{}\n", ".mcp.json": "{}\n"})
-	support.Git(t, other, "add", ".claude", ".mcp.json")
-	support.Git(t, other, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "hooks")
-	r = b.sh(t, b.proj, "", `git worktree remove `+other+` && echo removed`)
-	if r.Code != 0 || r.Stdout != "removed\n" || exists(other) {
-		t.Errorf("git worktree remove of another worktree: exit %d, stdout %q, stderr %q; want it removed", r.Code, r.Stdout, r.Stderr)
+	// Another worktree with no hook file is removed from inside, also one a
+	// session ran in as its own project, which left an empty .claude and
+	// .pi there; one with a hook file is not, and the note says to remove
+	// it outside.
+	plain := filepath.Join(b.home, "project-worktrees", "plain")
+	support.Git(t, b.proj, "worktree", "add", "-q", "-b", "plain", plain)
+	if r := b.sh(t, plain, "", `echo ran`); r.Code != 0 || !exists(filepath.Join(plain, ".claude")) {
+		t.Fatalf("a run in the worktree plain: exit %d, stderr %q; want it run, and an empty .claude left", r.Code, r.Stderr)
+	}
+	r = b.sh(t, b.proj, "", `git worktree remove `+plain+` && echo removed`)
+	if r.Code != 0 || r.Stdout != "removed\n" || exists(plain) {
+		t.Errorf("git worktree remove of a worktree with no hook file: exit %d, stdout %q, stderr %q; want it removed", r.Code, r.Stdout, r.Stderr)
+	}
+	// git removes what it can and its record, and fails on the pinned
+	// folder: the note names the folder and the fix outside.
+	r = b.sh(t, b.proj, "", `git worktree remove --force `+wt+` && echo removed`)
+	if r.Code == 0 || !exists(filepath.Join(wt, ".claude", "settings.json")) || !strings.Contains(r.Stderr, "it is "+wt+", a folder the sandbox keeps where it is") || !strings.Contains(r.Stderr, "rm -r <worktree>") {
+		t.Errorf("git worktree remove of a worktree that holds .claude: exit %d, stdout %q, stderr %q; want it refused with the note", r.Code, r.Stdout, r.Stderr)
+	}
+	if err := os.RemoveAll(wt); err != nil || exists(wt) {
+		t.Errorf("outside the sandbox what is left is removed: %v", err)
+	}
+}
+
+// T250 round 3 (B2): git's hooks folder is writable inside the sandbox, on
+// purpose. git takes its hooks from core.hooksPath, which a sandboxed
+// command may set in .git/config, writable inside (251 of 21,212 bash calls
+// of the owner's 30 days write it), so a read-only .git/hooks contained
+// nothing (the verify moved .git aside and planted one) and cost `rm -rf
+// .git`. The CHANGELOG records why; re-adding the mount needs new evidence.
+func TestGitHooksAreWritableInside(t *testing.T) {
+	b := newBox(t)
+	mkdirs(t, filepath.Join(b.proj, ".git", "hooks"))
+	r := b.sh(t, b.proj, "", `printf '#!/bin/sh\n' > .git/hooks/pre-commit && rm -rf "$PWD/.git" && git init -q . && echo done`)
+	if r.Code != 0 || r.Stdout != "done\n" {
+		t.Errorf("a hook written and .git removed inside: exit %d, stdout %q, stderr %q", r.Code, r.Stdout, r.Stderr)
+	}
+	changelog := support.Read(t, support.Path("CHANGELOG.md"))
+	if !strings.Contains(changelog, "git's hooks folder is not mounted read-only") {
+		t.Error("the CHANGELOG no longer says why git's hooks folder is not mounted read-only")
 	}
 }
 
@@ -195,9 +240,9 @@ func TestSyncRefusesAGoEnvFileASandboxedCommandMayChange(t *testing.T) {
 	}
 }
 
-// WU4 (b): a socket in a writable area (here $TMPDIR) is hidden at its
-// topmost folder there, so no run can rename that folder and read the
-// socket under the new name in the next one: $SSH_AUTH_SOCK's,
+// WU4 (b): a socket in a writable area (here $TMPDIR) is hidden, and every
+// folder on the way to it there is pinned (round 3), so no run can rename
+// one and read the socket under the new name in the next one: $SSH_AUTH_SOCK's,
 // $DBUS_SESSION_BUS_ADDRESS's path, $DOCKER_HOST's. One directly in the
 // area is its own mount point. What stays open: a socket made while a
 // sandboxed run is already going is not hidden from that run.
@@ -235,23 +280,50 @@ func TestASocketInAWritableAreaCannotBeMovedAndRead(t *testing.T) {
 	}
 }
 
-// WU4 (b): a socket whose topmost folder in the writable area also holds
-// what the run needs (here the folder it runs in) cannot be hidden that
-// way: nothing runs, and the note names the socket and the fix.
-func TestASocketThatCannotBePinnedRefusesTheRun(t *testing.T) {
+// WU4 (b), round 3: the folder that holds a hidden socket is the folder the
+// command runs in: it is pinned, not hidden, so the run goes, the socket
+// stays hidden, and the folder cannot be moved to reach it.
+func TestASocketInTheWorkingFolderStaysHiddenAndTheRunGoes(t *testing.T) {
 	b := newBox(t)
 	run := filepath.Join(b.proj, "run")
 	support.Write(t, run, map[string]string{"agent.sock": "SSH-SECRET"})
 	sock := filepath.Join(run, "agent.sock")
 	env := append(slices.Clone(b.env), "SSH_AUTH_SOCK="+sock)
-	r := support.Jhon(t, run, env, "sandbox", "run", "--", "sh", "-c", `echo ran; cat "$1"`, "sh", sock)
-	want := "jhon sandbox: the socket $SSH_AUTH_SOCK names (" + sock + ") lies in " + b.proj + ", a folder sandboxed commands may write, and the folder that holds it there, " + run + ", also holds the folder the command runs in (" + run + "), which must stay usable, so the sandbox cannot hide that folder, and a command could rename it to reach the socket, so nothing was run; fix: keep the socket outside every folder sandboxed commands may write (under $XDG_RUNTIME_DIR, which the sandbox hides), or unset SSH_AUTH_SOCK before the session starts\n"
-	if r.Code != 126 || r.Stdout != "" || r.Stderr != want {
-		t.Errorf("exit %d, stdout %q, stderr %q; want 126 and %q", r.Code, r.Stdout, r.Stderr, want)
+	r := support.Jhon(t, run, env, "sandbox", "run", "--", "sh", "-c", `cat "$1" 2>/dev/null; mv "$2" "$2.x" 2>/dev/null; rm -f "$1" 2>/dev/null; echo ran`, "sh", sock, run)
+	if r.Code != 0 || r.Stdout != "ran\n" || !exists(sock) || exists(run+".x") {
+		t.Errorf("exit %d, stdout %q, stderr %q; want only ran, the socket and its folder in place", r.Code, r.Stdout, r.Stderr)
 	}
-	// From the project's top, the socket's folder is hidden and the run goes.
-	r = support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c", `cat "$1" 2>/dev/null; mv "$2" "$2.x" 2>/dev/null; echo ran`, "sh", sock, run)
-	if r.Code != 0 || r.Stdout != "ran\n" || !exists(run) {
-		t.Errorf("from the top: exit %d, stdout %q, stderr %q", r.Code, r.Stdout, r.Stderr)
+}
+
+// T250 A5, round 3: no command can put a link to a store the sandbox keeps
+// read-only in place of the sandbox's own pnpm store (it is pinned), and a
+// link left there by an older jhon is replaced before the run, with a note,
+// so installs inside do not fail on a read-only store nobody connects to it.
+func TestTheSandboxsOwnStoreCannotBeSwappedForTheRealOne(t *testing.T) {
+	b := newBox(t)
+	real := filepath.Join(b.home, ".local", "share", "pnpm", "store")
+	mkdirs(t, real)
+	own := filepath.Join(b.home, ".cache", "jhon", "sandbox", "pnpm-store")
+	r := b.sh(t, b.proj, "", `rm -rf "$pnpm_config_store_dir" 2>/dev/null; mv "$pnpm_config_store_dir" "$pnpm_config_store_dir.x" 2>/dev/null; mv "$(dirname "$pnpm_config_store_dir")" "$(dirname "$pnpm_config_store_dir").x" 2>/dev/null; ln -s '`+real+`' "$pnpm_config_store_dir" 2>/dev/null; echo x > "$pnpm_config_store_dir/f" && echo wrote`)
+	if r.Stdout != "wrote\n" || !exists(filepath.Join(own, "f")) {
+		t.Errorf("the own store after an attempt to swap it: exit %d, stdout %q, stderr %q; want it in place and writable", r.Code, r.Stdout, r.Stderr)
+	}
+	if fi, err := os.Lstat(own); err != nil || !fi.IsDir() {
+		t.Fatalf("the own store is not a folder: %v %v", fi, err)
+	}
+	// A link left by an older jhon: replaced, with a note.
+	if err := os.RemoveAll(own); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, own); err != nil {
+		t.Fatal(err)
+	}
+	r = b.sh(t, b.proj, "", `echo x > "$pnpm_config_store_dir/f" && echo wrote`)
+	note := "jhon sandbox: the sandbox's own store " + own + " was a link to " + real + ", which a sandboxed command may have put there, so installs inside would have failed on a read-only store; it is a folder of its own again\n"
+	if r.Stdout != "wrote\n" || !strings.HasPrefix(r.Stderr, note) {
+		t.Errorf("a linked own store: exit %d, stdout %q, stderr %q; want it replaced with the note %q", r.Code, r.Stdout, r.Stderr, note)
+	}
+	if entries, _ := os.ReadDir(real); len(entries) != 0 {
+		t.Errorf("the real store was written: %v", entries)
 	}
 }

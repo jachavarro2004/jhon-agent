@@ -425,7 +425,9 @@ func (l *lastByte) last() byte {
 // its check of a bind's folder ("Race condition binding dirfd"), or a bind
 // it cannot place because its source or its destination is gone by then
 // ("Can't …: No such file or directory" on that first line, or a folder
-// it hides now a link: "Can't mount on symlink destination"), as bubblewrap
+// it hides now a link: "Can't mount on symlink destination", or a bind of a
+// folder Jhon opened a moment before that the kernel no longer takes where
+// it is: "Can't bind mount …", T250 round 3, A3), as bubblewrap
 // turns a descriptor back into its path and places every mount by path
 // (T250: the read-only binds inside the project, whose parent a concurrent
 // run swapped, which Jhon opened a moment before). bwrapRaceNote is what a
@@ -434,6 +436,7 @@ func bwrapRaced(opening string) bool {
 	line, _, _ := strings.Cut(opening, "\n")
 	return strings.HasPrefix(line, "bwrap: Race condition binding dirfd") ||
 		strings.HasPrefix(line, "bwrap: Can't mount on symlink destination ") ||
+		strings.HasPrefix(line, "bwrap: Can't bind mount ") ||
 		strings.HasPrefix(line, "bwrap: Can't ") && strings.HasSuffix(line, ": No such file or directory")
 }
 

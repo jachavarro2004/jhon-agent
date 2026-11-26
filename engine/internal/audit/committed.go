@@ -2,13 +2,14 @@ package audit
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 )
 
 // A slice delivered as a commit (contracts/ldd.md, "Slices") is tested
@@ -43,12 +44,9 @@ func committedAs(dir, commit, tree string) string {
 	defer cancel()
 	c := exec.CommandContext(ctx, "git", "-C", dir, "log", "--all", "--max-count="+strconv.Itoa(committedAsCommits), "--format=%H %T %P")
 	c.WaitDelay = committedAsTimeout / 10
-	c.Env = []string{"GIT_OPTIONAL_LOCKS=0"}
-	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, "GIT_") {
-			c.Env = append(c.Env, kv)
-		}
-	}
+	// jhon's own reads' environment (project.ReadGitCmd, T250): no GIT_*
+	// variable of the caller's, and no program the configuration names.
+	c.Env = project.ReadGitCmd(dir).Env
 	out, err := c.Output()
 	if err != nil || ctx.Err() != nil {
 		return ""

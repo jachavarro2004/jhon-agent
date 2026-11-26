@@ -15,8 +15,14 @@ import (
 // that fails and whose output says "Read-only file system" ends with one
 // note naming the path, so the agent stops and tells the owner.
 
-// readOnly is the kernel's message for EROFS, as libc and Rust print it.
-const readOnly = "Read-only file system"
+// readOnly is the kernel's message for EROFS, as libc and Rust print it,
+// and busy its message for EBUSY: a mount point the sandbox keeps where it
+// is (a pin, a read-only file a runtime runs, a hidden path), which no
+// command moves or removes (T250 round 3).
+const (
+	readOnly = "Read-only file system"
+	busy     = "Device or resource busy"
+)
 
 var (
 	// quotedPath is an absolute path in the quotes the common tools use:
@@ -36,6 +42,9 @@ var (
 func RefusedWrite(output string) (path string, said bool) {
 	for _, line := range strings.Split(output, "\n") {
 		before, after, found := strings.Cut(line, readOnly)
+		if !found {
+			before, after, found = strings.Cut(line, busy)
+		}
 		if !found {
 			continue
 		}

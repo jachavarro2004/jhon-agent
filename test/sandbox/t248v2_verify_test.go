@@ -124,7 +124,7 @@ loop:
 // source or destination is gone (T250: the read-only binds in the project).
 func t248v2BwrapRaced(stderr string) bool {
 	line, _, _ := strings.Cut(stderr, "\n")
-	return strings.HasPrefix(line, "bwrap: Race condition binding dirfd") || strings.HasPrefix(line, "bwrap: Can't mount on symlink destination ") || strings.HasPrefix(line, "bwrap: Can't ") && strings.HasSuffix(line, ": No such file or directory")
+	return strings.HasPrefix(line, "bwrap: Race condition binding dirfd") || strings.HasPrefix(line, "bwrap: Can't mount on symlink destination ") || strings.HasPrefix(line, "bwrap: Can't bind mount ") || strings.HasPrefix(line, "bwrap: Can't ") && strings.HasSuffix(line, ": No such file or directory")
 }
 
 // The project: work/sub/victim, its parent swapped for a link to the home,
