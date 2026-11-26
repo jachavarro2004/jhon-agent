@@ -68,12 +68,13 @@ func testmonData(cache, common, projectPath string) string {
 	return filepath.Join(cache, "jhon", "testmon", hex.EncodeToString(sum[:8])+".db")
 }
 
-// private is s with a run's private copy of a record (`<record>.<n>.run`)
-// and a first run's file (`<record>.<pid>.building`) named without the
-// number that makes each its own: `<record>.run`, `<record>.building`.
+// private is s with a run's private copy of a record
+// (`<record>.<pid>-<n>.run`) and a first run's file
+// (`<record>.<pid>.building`) named without the numbers that make each its
+// own: `<record>.run`, `<record>.building`.
 func private(s string) string { return privateNumber.ReplaceAllString(s, ".db.$1") }
 
-var privateNumber = regexp.MustCompile(`\.db\.[0-9]+\.(run|building)\b`)
+var privateNumber = regexp.MustCompile(`\.db\.[0-9]+(?:-[0-9]+)?\.(run|building)\b`)
 
 func newPytestProject(t *testing.T) *pytestProject {
 	t.Helper()

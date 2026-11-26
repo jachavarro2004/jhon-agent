@@ -75,9 +75,11 @@ with `red_before_green`, as `tests` does here.
 
 `jhon executions run <change> --affected` with no base is a unit's run
 (T133): it selects what changed since the change's last complete,
-undisturbed passing run, else since the change's base, and says which. Its
-record holds `unit: true` and `since` (that run's `working_tree`, or the
-base ref), and every record keeps `last_pass`, `{timestamp, working_tree}`,
+undisturbed passing run, else since the commit the slice in progress
+started from (the last commit on the branch that closed a slice of the
+change in its tasks.md; the change's base before the first, T253), and says
+which. Its record holds `unit: true` and `since` (that run's
+`working_tree`, the slice's commit, or the base ref), and every record keeps `last_pass`, `{timestamp, working_tree}`,
 the last passing run before it. All three are absent from a record written
 before them, which reads as a wide run. A slice's close and `jhon deliver
 check` refuse a record whose run was a unit's: they take `--affected
@@ -108,33 +110,39 @@ in `~/.cache/jhon/testmon/`, one file per repository and project (T255):
 keyed by the repository's git common dir and the project's path, so every
 worktree of the repository, a new one per change, narrows from the same
 record. When it is missing and the worktree has its own record from
-before (keyed by its top level), that one is copied in once. A run never
+before (keyed by its top level), a run copies that one in once; a dry run
+reads it and writes nothing (T256). A run never
 writes the record in place: it runs pytest-testmon on a private copy beside
-it (`<record>.<n>.run`), which replaces the record in one rename only when
+it (`<record>.<pid>-<n>.run`), which replaces the record in one rename only when
 pytest ran to its end (exit 0 or 1); a run cut, interrupted or failing
 inside pytest leaves the record as it was, and of two runs at once the last
 to finish wins (a record of other code only makes pytest-testmon select
-more, never less). With no record (or one holding no fingerprints) an
+more, never less). The record is 0644 whichever file it came from. A copy
+or first-run file a killed jhon left beside the records is swept by the
+next run when its process is gone or it is over a day old. With no record (or one holding no fingerprints) an
 affected run runs the project's whole test command once with
 `--testmon-noselect`, into `<record>.<pid>.building`, renamed to the record
 only when pytest ran to its end; the dry run and the run name each such
 project with how many test functions its test modules define, and in
 `--json` its `projects[]` entry carries `first_run: {record, tests,
-modules, deadline_minutes}`. A first run its deadline cut keeps none and
+modules, deadline_minutes}` (`deadline_minutes` absent when `--timeout`
+names the run's deadline). A first run its deadline cut keeps none and
 leaves `<record>.cut`: later runs run only the test modules the change
 touched and name `jhon executions prime --timeout <minutes>`, which builds
 every missing record and writes no execution record.
 
 A run whose failures are the test environment's keeps no record, the
 shared one or a first one, and says the test services may be down: its
-output says a test service refused the connection while tests failed,
-pytest could not collect a test module, or every one of at least 5 tests
+output says a test service refused the connection in its failures (a
+traceback's `E` line, a `FAILED` line, the FAILURES section), or anywhere
+when tests failed and none passed (a passing test may log a refusal it
+retries), pytest could not collect a test module, or every one of at least 5 tests
 failed and none passed (a unit's RED, a few failing tests, is kept). A
 record that marks most of its tests failed (at least 5), which
 pytest-testmon runs again whatever changed, is named in the dry run and the
 run (`failed_marks: {failed, total}` in `--json`) with `jhon executions
-forget <project>`, which drops the whole record, and the worktree's own
-from before: a test that failed because a service was down recorded only
+forget <project>`, which drops the whole record, and every worktree's own
+from before (`git worktree list`), which that worktree would copy in again: a test that failed because a service was down recorded only
 the code it ran before failing, so trusting it as passing would select
 less. A first run, and a pytest-testmon run whose selected tests are all
 (or mostly) ones the record marks failed, have a deadline of 180 min

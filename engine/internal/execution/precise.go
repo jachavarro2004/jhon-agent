@@ -28,7 +28,7 @@ import (
 // monorepo): with the project's own directory as rootdir, a change there
 // would select no test. The record lives in Jhon's cache, one file per
 // repository and project that every worktree of the repository shares
-// (TestmonData), never in the project; a run writes a private copy of it
+// (TestmonPath), never in the project; a run writes a private copy of it
 // (CheckOut), never the record itself. ok is false for any other command,
 // and outside a git repository.
 //
@@ -40,7 +40,7 @@ func Precise(command, top, projectPath string, cov bool) (string, bool) {
 	if top == "" || len(words) < 3 || words[0] != "uv" || words[1] != "run" || !slices.Contains(words[2:], "pytest") {
 		return "", false
 	}
-	return underTestmon(command, top, TestmonData(top, projectPath), "--testmon", cov), true
+	return underTestmon(command, top, TestmonPath(top, projectPath), "--testmon", cov), true
 }
 
 // underTestmon is a `uv run ... pytest` command run under pytest-testmon
@@ -67,7 +67,7 @@ func Collect(command, top, projectPath string, cov bool) (string, bool) {
 	if _, ok := Precise(command, top, projectPath, cov); !ok {
 		return "", false
 	}
-	return underTestmon(command, top, BuildFile(TestmonData(top, projectPath)), "--testmon-noselect", cov), true
+	return underTestmon(command, top, BuildFile(TestmonPath(top, projectPath)), "--testmon-noselect", cov), true
 }
 
 // BuildFile is where this process's first run (Collect) writes the record
@@ -79,8 +79,11 @@ func BuildFile(data string) string { return data + "." + strconv.Itoa(os.Getpid(
 var sqliteBeside = []string{"-wal", "-shm"}
 
 // StartBuild removes what an earlier first run of this process left at
-// data's BuildFile.
-func StartBuild(data string) { drop(BuildFile(data)) }
+// data's BuildFile, and what a killed run left beside the records (sweep).
+func StartBuild(data string) {
+	drop(BuildFile(data))
+	sweep(filepath.Dir(data))
+}
 
 // FinishBuild ends a first run whose command exited with code, nil when it
 // was cut (its deadline, a signal, sh not starting), and whose output w
@@ -169,8 +172,9 @@ func TestmonRecord(data string) string {
 
 // testmonReach prints, for a record and the files named after it: how many
 // tests ran any of the files, how many the record holds, the seconds each
-// set took when last recorded, how many tests it marks failed, and how many
-// of those that ran the files it does not.
+// set took when last recorded, how many tests it marks failed, how many of
+// those that ran the files it does not, and how many tests and seconds
+// pytest-testmon selects: those that ran the files and those marked failed.
 const testmonReach = `import sqlite3, sys
 c = sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True)
 files = sys.argv[2:]
@@ -182,7 +186,8 @@ hit = set()
 if files:
     q = "select distinct x.test_execution_id from test_execution_file_fp x join file_fp f on f.id = x.fingerprint_id where f.filename in (" + ",".join("?" * len(files)) + ")"
     hit = {r[0] for r in c.execute(q, files)} & tests.keys()
-print(len(hit), len(tests), sum(tests[i] or 0 for i in hit), sum(d or 0 for d in tests.values()), len(failed), len(hit - failed))`
+run = hit | (failed & tests.keys())
+print(len(hit), len(tests), sum(tests[i] or 0 for i in hit), sum(d or 0 for d in tests.values()), len(failed), len(hit - failed), len(run), sum(tests[i] or 0 for i in run))`
 
 // WideShare is the share of a project's test time past which a narrowed
 // run is wide: it runs about what the PR's CI runs whole anyway.
@@ -204,6 +209,10 @@ type Reach struct {
 	// pytest-testmon runs again whatever changed; Passing how many of Tests
 	// it does not mark failed.
 	Failed, Passing int
+	// Selects is how many tests pytest-testmon would run, Tests and the
+	// failed ones, and SelectSeconds their last recorded time (T256).
+	Selects       int
+	SelectSeconds float64
 }
 
 // MostlyFailed is whether the record marks most of its tests failed, at
@@ -223,9 +232,17 @@ func (r Reach) Wide() bool {
 	return r.Seconds >= WideSeconds || (r.AllTime > 0 && r.Seconds >= WideShare*r.AllTime)
 }
 
-// String is the estimate as a note reads it.
+// String is what the change reaches as a note reads it: the tests that
+// ran a changed file.
 func (r Reach) String() string {
 	return fmt.Sprintf("about %d of its %d tests, %s of %s by the last recorded durations", r.Tests, r.Total, minutes(r.Seconds), minutes(r.AllTime))
+}
+
+// Selection is the estimate of what pytest-testmon would run as a note reads
+// it: the tests the change reaches and those the record marks failed, so it
+// agrees with the note on the failed ones (T256).
+func (r Reach) Selection() string {
+	return fmt.Sprintf("about %d of its %d tests, %s of %s by the last recorded durations", r.Selects, r.Total, minutes(r.SelectSeconds), minutes(r.AllTime))
 }
 
 func minutes(s float64) string {
@@ -244,17 +261,19 @@ func TestmonReach(data string, files []string) (Reach, bool) {
 		return Reach{}, false
 	}
 	f := strings.Fields(string(out))
-	if len(f) != 6 {
+	if len(f) != 8 {
 		return Reach{}, false
 	}
 	var r Reach
-	var errs [6]error
+	var errs [8]error
 	r.Tests, errs[0] = strconv.Atoi(f[0])
 	r.Total, errs[1] = strconv.Atoi(f[1])
 	r.Seconds, errs[2] = strconv.ParseFloat(f[2], 64)
 	r.AllTime, errs[3] = strconv.ParseFloat(f[3], 64)
 	r.Failed, errs[4] = strconv.Atoi(f[4])
 	r.Passing, errs[5] = strconv.Atoi(f[5])
+	r.Selects, errs[6] = strconv.Atoi(f[6])
+	r.SelectSeconds, errs[7] = strconv.ParseFloat(f[7], 64)
 	for _, e := range errs {
 		if e != nil {
 			return Reach{}, false

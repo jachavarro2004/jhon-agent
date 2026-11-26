@@ -135,7 +135,10 @@ A live task list is optional: when you keep one,
   tests run as `jhon executions run <change> --affected <base>` from the
   worktree that holds the change (each lane's from its own), never as a
   loose `pytest` or `npm test`:
-  only its record lets `jhon deliver check` deliver. A suite longer than a few minutes
+  only its record lets `jhon deliver check` deliver. Its `<base>` is the
+  commit the slice started from, never the default branch (`origin/main`),
+  which reaches every earlier slice and each project depending on what they
+  changed; a brief names that commit. A suite longer than a few minutes
   runs once, recorded (`jhon executions run`), in the background; never
   pipe it through `tail`, `head`, or `grep` (the pipe hides its exit code
   and failures): read its summary and record.

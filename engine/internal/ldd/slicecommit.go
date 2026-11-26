@@ -89,6 +89,16 @@ func (g gitReads) sliceBase(top, change string) (string, bool) {
 	return base, true
 }
 
+// SliceBase is the commit the slice in progress of change is measured from
+// (sliceBase): the last commit on HEAD's branch that closed a slice of it in
+// its tasks.md, the change's base (ChangeBase) before the first. A unit's
+// test run with no passing run on record measures from it, so a slice's run
+// never reaches back to what earlier slices changed (T253,
+// odd/tasks/v0-1-release.md L1721). ok is false when HEAD is not a commit.
+func SliceBase(top, change string) (commit string, ok bool) {
+	return gitReads(nil).sliceBase(top, change)
+}
+
 // ClosedSliceLines are the sizes of the slices a commit in the repository
 // whose top level is top closes, one per active change of its branch that
 // closes one, under route r.

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // T255 (L1724): every worktree of a repository shares one pytest-testmon
@@ -258,6 +259,12 @@ func TestARunWhoseFailuresAreTheEnvironmentsKeepsNoRecord(t *testing.T) {
 		{"a few tests fail", watch("==== 4 failed in 0.10s ===="), ""},
 		{"some fail, some pass", watch("==== 6 failed, 1 passed in 0.10s ===="), ""},
 		{"a refusal tested and passing", watch("checking: Connection refused is retried", "==== 3 passed in 0.10s ===="), ""},
+		// T256 (L1726): a refusal a passing test logged is not the failures'
+		// cause: only one in the failures, or a run where no test passed.
+		{"a passing test logs a refusal, another fails", watch("WARNING  client:retry.py:12 Connection refused, retrying", "tests/test_a.py ..F.  [100%]", "=================================== FAILURES ===================================", "E   assert 1 == 2", "==== 1 failed, 9 passed in 3.00s ===="), ""},
+		{"a refusal in the failures section", watch("=================================== FAILURES ===================================", "____ test_q ____", "psycopg.OperationalError: connection failed: Connection refused", "=========================== short test summary info ============================", "FAILED tests/test_q.py::test_q - assert False", "==== 1 failed, 9 passed in 3.00s ===="), "its output says a test service refused the connection (psycopg.OperationalError: connection failed: Connection refused)"},
+		{"a refusal logged and no test passed", watch("WARNING  client:retry.py:12 Connection refused, retrying", "==== 2 failed in 3.00s ===="), "its output says a test service refused the connection (WARNING  client:retry.py:12 Connection refused, retrying)"},
+		{"a refusal logged before a later one in the failures", watch("WARNING  retry: Connection refused", "=================================== FAILURES ===================================", "E   redis.exceptions.ConnectionError: Error 111 connecting to localhost:6379. Connection refused.", "==== 1 failed, 9 passed in 3.00s ===="), "its output says a test service refused the connection (E   redis.exceptions.ConnectionError: Error 111 connecting to localhost:6379. Connection refused.)"},
 		{"no output", watch(), ""},
 	} {
 		if got := c.w.Refusal(); got != c.want {
@@ -379,12 +386,13 @@ c.commit()`
 		want                     Reach
 		mostlyFailed, onlyFailed bool
 	}{
-		{0, []string{"a.py"}, Reach{Tests: 2, Total: 10, Seconds: 2, AllTime: 10, Failed: 0, Passing: 2}, false, false},
-		{1, []string{"a.py"}, Reach{Tests: 2, Total: 10, Seconds: 2, AllTime: 10, Failed: 1, Passing: 1}, false, false},
-		{1, nil, Reach{Tests: 0, Total: 10, Seconds: 0, AllTime: 10, Failed: 1}, false, true},
-		{10, []string{"a.py"}, Reach{Tests: 2, Total: 10, Seconds: 2, AllTime: 10, Failed: 10}, true, true},
-		{6, nil, Reach{Total: 10, AllTime: 10, Failed: 6}, true, true},
-		{5, nil, Reach{Total: 10, AllTime: 10, Failed: 5}, false, true},
+		{0, []string{"a.py"}, Reach{Tests: 2, Total: 10, Seconds: 2, AllTime: 10, Failed: 0, Passing: 2, Selects: 2, SelectSeconds: 2}, false, false},
+		{1, []string{"a.py"}, Reach{Tests: 2, Total: 10, Seconds: 2, AllTime: 10, Failed: 1, Passing: 1, Selects: 2, SelectSeconds: 2}, false, false},
+		{1, nil, Reach{Tests: 0, Total: 10, Seconds: 0, AllTime: 10, Failed: 1, Selects: 1, SelectSeconds: 1}, false, true},
+		{10, []string{"a.py"}, Reach{Tests: 2, Total: 10, Seconds: 2, AllTime: 10, Failed: 10, Selects: 10, SelectSeconds: 10}, true, true},
+		{6, nil, Reach{Total: 10, AllTime: 10, Failed: 6, Selects: 6, SelectSeconds: 6}, true, true},
+		{5, nil, Reach{Total: 10, AllTime: 10, Failed: 5, Selects: 5, SelectSeconds: 5}, false, true},
+		{3, []string{"a.py"}, Reach{Tests: 2, Total: 10, Seconds: 2, AllTime: 10, Failed: 3, Passing: 1, Selects: 4, SelectSeconds: 4}, false, false},
 	} {
 		record(c.failed)
 		got, ok := TestmonReach(db, c.files)
@@ -392,6 +400,16 @@ c.commit()`
 			t.Errorf("%d failed, %v changed: %+v %v (mostly %v, only %v), want %+v (mostly %v, only %v)", c.failed, c.files, got, ok,
 				got.MostlyFailed(), got.OnlyFailed(), c.want, c.mostlyFailed, c.onlyFailed)
 		}
+	}
+	// T256 (L1726): what a run would select counts the failed tests
+	// pytest-testmon runs again, as the note on them does; what the change
+	// reaches counts only the tests that ran a changed file.
+	r := Reach{Total: 10, AllTime: 600, Failed: 3, Selects: 3, SelectSeconds: 180}
+	if got, want := r.Selection(), "about 3 of its 10 tests, 3 min of 10 min by the last recorded durations"; got != want {
+		t.Errorf("Selection() = %q, want %q", got, want)
+	}
+	if got, want := r.String(), "about 0 of its 10 tests, 0 s of 10 min by the last recorded durations"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
 	}
 }
 
@@ -412,5 +430,248 @@ func TestForgetDropsTheRecord(t *testing.T) {
 	}
 	if Forget(data) {
 		t.Error("no record was there")
+	}
+}
+
+// deadPid is the pid of a process that has ended.
+func deadPid(t *testing.T) int {
+	t.Helper()
+	c := exec.Command("true")
+	if err := c.Run(); err != nil {
+		t.Skip("no true to end:", err)
+	}
+	return c.Process.Pid
+}
+
+// T256 (L1726): a jhon killed while it ran (SIGKILL, a closed terminal)
+// leaves its first run's `<record>.<pid>.building` and its private copy
+// `<record>.<pid>-<n>.run` behind; the next run sweeps them when their
+// process is gone, or, a pid being reused, when they are older than
+// staleAge. A live run's files, another record and a cut marker stay.
+func TestStaleFilesOfAKilledRunAreSwept(t *testing.T) {
+	dir := tempDir(t)
+	data := filepath.Join(dir, "0123456789abcdef.db")
+	other := filepath.Join(dir, "fedcba9876543210.db")
+	write(t, data, "shared")
+	write(t, other, "another record")
+	dead, live := strconv.Itoa(deadPid(t)), strconv.Itoa(os.Getppid())
+	gone := []string{
+		data + "." + dead + ".building", data + "." + dead + ".building-wal",
+		data + "." + dead + "-42.run", data + "." + dead + "-42.run-shm",
+		other + "." + dead + "-7.run",
+		// T255's private copies carried no pid: the number is CreateTemp's.
+		data + ".3999999999.run",
+		data + "." + live + "-9.run",
+	}
+	kept := []string{data + "." + live + ".building", data + "." + live + "-8.run", cutFile(data), filepath.Join(dir, "notes.txt")}
+	for _, f := range append(slices.Clone(gone), kept...) {
+		write(t, f, "x")
+	}
+	// The live process's old copy: its pid reused, or a run that died
+	// without its pid ever being freed.
+	old := time.Now().Add(-2 * staleAge)
+	if err := os.Chtimes(data+"."+live+"-9.run", old, old); err != nil {
+		t.Fatal(err)
+	}
+	p, err := CheckOut(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Finish(nil, nil)
+	for _, f := range gone {
+		if exists(f) {
+			t.Errorf("not swept: %s", filepath.Base(f))
+		}
+	}
+	for _, f := range append(kept, data, other) {
+		if !exists(f) {
+			t.Errorf("swept: %s", filepath.Base(f))
+		}
+	}
+	// A first run's start sweeps too.
+	write(t, data+"."+dead+".building", "x")
+	StartBuild(data)
+	if exists(data + "." + dead + ".building") {
+		t.Error("a first run's start did not sweep")
+	}
+}
+
+// T256 (L1726): the record every worktree reads is 0644 whatever file it
+// came from: a private copy (CreateTemp makes it 0600), a first run's file,
+// a worktree's own record adopted.
+func TestThePublishedRecordIs0644(t *testing.T) {
+	dir := tempDir(t)
+	data := filepath.Join(dir, "x.db")
+	write(t, data, "shared")
+	p, err := CheckOut(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, p.File(), "run")
+	if published, _ := p.Finish(ptr(0), nil); !published {
+		t.Fatal("not published")
+	}
+	mode := func(f string) os.FileMode {
+		st, err := os.Stat(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st.Mode().Perm()
+	}
+	if m := mode(data); m != 0o644 {
+		t.Errorf("a private copy published as %o", m)
+	}
+	first := filepath.Join(dir, "first.db")
+	if err := os.WriteFile(BuildFile(first), []byte("built"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	FinishBuild(first, ptr(0), nil)
+	if m := mode(first); m != 0o644 {
+		t.Errorf("a first run's record published as %o", m)
+	}
+
+	t.Setenv("XDG_CACHE_HOME", tempDir(t))
+	top := tempDir(t)
+	gitT(t, top, "init", "-q")
+	old := legacyTestmonData(top, "svc")
+	write(t, old, "old record")
+	if err := os.Chmod(old, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if m := mode(TestmonData(top, "svc")); m != 0o644 {
+		t.Errorf("an adopted record is %o", m)
+	}
+}
+
+// T256 (L1726): which record a project's run reads, and where it lives, is
+// known without writing: TestmonPath adopts nothing, and TestmonReadable is
+// the worktree's own record from before while the shared one is missing,
+// which a dry run reads as the run would after adopting it.
+func TestTestmonPathAndReadableWriteNothing(t *testing.T) {
+	cache := tempDir(t)
+	t.Setenv("XDG_CACHE_HOME", cache)
+	top := tempDir(t)
+	gitT(t, top, "init", "-q")
+	old := legacyTestmonData(top, "svc")
+	data := TestmonPath(top, "svc")
+	if got := TestmonReadable(top, "svc"); got != data {
+		t.Errorf("with no record, the readable one is %s, want the shared path %s", got, data)
+	}
+	write(t, old, "old record")
+	if got := TestmonReadable(top, "svc"); got != old {
+		t.Errorf("readable %s, want the worktree's own %s", got, old)
+	}
+	if exists(data) {
+		t.Error("TestmonPath or TestmonReadable adopted the old record")
+	}
+	if left := beside(t, old); len(left) != 0 {
+		t.Errorf("left %v", left)
+	}
+	if got := TestmonData(top, "svc"); got != data || !exists(data) {
+		t.Errorf("TestmonData %s adopted %v", got, exists(data))
+	}
+	if got := TestmonReadable(top, "svc"); got != data {
+		t.Errorf("readable once adopted: %s", got)
+	}
+}
+
+// T256 (L1726): `jhon executions forget` drops every worktree's own record
+// of the project from before, not only its own: another worktree would
+// adopt its own again while the shared one is missing.
+func TestLegacyTestmonRecordsAreEveryWorktrees(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", tempDir(t))
+	main := tempDir(t)
+	gitT(t, main, "init", "-q")
+	gitT(t, main, "commit", "-q", "--allow-empty", "-m", "base")
+	wt := filepath.Join(tempDir(t), "wt")
+	gitT(t, main, "worktree", "add", "-q", "-b", "other", wt)
+	got := LegacyTestmonRecords(wt, "svc")
+	want := []string{legacyTestmonData(main, "svc"), legacyTestmonData(wt, "svc")}
+	if !slices.Equal(got, want) {
+		t.Errorf("LegacyTestmonRecords = %v, want %v", got, want)
+	}
+	plain := tempDir(t)
+	if got := LegacyTestmonRecords(plain, "svc"); len(got) != 0 {
+		t.Errorf("outside git the record is the folder's own, no legacy: %v", got)
+	}
+}
+
+// T255 verify (L1726): publishing folds the write-ahead log into the record,
+// so the record file alone, copied or adopted without its -wal, holds the
+// whole run.
+func TestPublishMergesTheWriteAheadLog(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 writes the record")
+	}
+	dir := tempDir(t)
+	rows := func(db string) string {
+		out, err := exec.Command("python3", "-I", "-c", `import sqlite3, sys
+c = sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True)
+print(c.execute("select count(*) from t").fetchone()[0])`, db).CombinedOutput()
+		if err != nil {
+			return "unreadable: " + strings.TrimSpace(string(out))
+		}
+		return strings.TrimSpace(string(out))
+	}
+	// A run that ends with its rows still in the log: the process exits
+	// without the checkpoint a close makes.
+	inWAL := func(db string, n int) {
+		t.Helper()
+		script := `import sqlite3, sys, os
+c = sqlite3.connect(sys.argv[1])
+c.execute("pragma journal_mode=wal")
+c.execute("pragma wal_autocheckpoint=0")
+c.execute("create table if not exists t (x)")
+c.executemany("insert into t values (?)", [(i,) for i in range(int(sys.argv[2]))])
+c.commit()
+os._exit(0)`
+		if out, err := exec.Command("python3", "-I", "-c", script, db, strconv.Itoa(n)).CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+		if st, err := os.Stat(db + "-wal"); err != nil || st.Size() == 0 {
+			t.Fatalf("no write-ahead log beside %s", db)
+		}
+	}
+	alone := func(db string) string {
+		t.Helper()
+		b, err := os.ReadFile(db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		copied := filepath.Join(tempDir(t), "alone.db")
+		if err := os.WriteFile(copied, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return rows(copied)
+	}
+
+	data := filepath.Join(dir, "x.db")
+	p, err := CheckOut(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inWAL(p.File(), 7)
+	if published, _ := p.Finish(ptr(0), nil); !published {
+		t.Fatal("not published")
+	}
+	if got := alone(data); got != "7" {
+		t.Errorf("the record alone holds %s rows, want 7", got)
+	}
+	if st, err := os.Stat(data + "-wal"); err == nil && st.Size() > 0 {
+		t.Errorf("a %d-byte log is left beside the record", st.Size())
+	}
+
+	first := filepath.Join(dir, "first.db")
+	inWAL(BuildFile(first), 5)
+	FinishBuild(first, ptr(0), nil)
+	if got := alone(first); got != "5" {
+		t.Errorf("a first run's record alone holds %s rows, want 5", got)
+	}
+	// What is left beside the records is at most an empty log and the index
+	// a reader of a write-ahead-logged database keeps: no run's file.
+	for _, f := range beside(t, data, first) {
+		if strings.Contains(f, ".run") || strings.Contains(f, ".building") {
+			t.Errorf("left %s", f)
+		}
 	}
 }
