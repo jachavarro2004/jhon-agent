@@ -7,7 +7,7 @@ import (
 )
 
 // T228 L17: socat by class: every path an address names is a write, a
-// removal, or (with an option outside socatHarmless) unreadable.
+// removal, or (with an option outside socatOptions) unreadable.
 func TestSocatPathsByClass(t *testing.T) {
 	type res struct{ writes, removes []string }
 	for line, want := range map[string]res{
@@ -16,10 +16,10 @@ func TestSocatPathsByClass(t *testing.T) {
 		"socat -U - GOPEN:f,unlink-late":            {removes: []string{"f"}},
 		"socat PTY,link=g /dev/null":                {writes: []string{"/dev/null"}, removes: []string{"g"}},
 		"socat EXEC:cat,pty,link=g -":               {removes: []string{"g"}},
-		"socat UNIX-LISTEN:s,unlink-early -":        {removes: []string{"s", "s"}},
-		"socat UNIX-L:s -":                          {removes: []string{"s"}},
-		"socat -u UNIX-RECV:s /dev/null":            {writes: []string{"/dev/null"}, removes: []string{"s"}},
-		"socat UNIX-RECVFROM:s -":                   {removes: []string{"s"}},
+		"socat UNIX-LISTEN:s,unlink-early -":        {removes: []string{"s"}},
+		"socat UNIX-L:s -":                          {}, // T228 L18: a listener removes only with an unlink option
+		"socat -u UNIX-RECV:s /dev/null":            {writes: []string{"/dev/null"}},
+		"socat UNIX-RECVFROM:s -":                   {},
 		"socat - UNIX-CONNECT:s,bind=b":             {removes: []string{"b"}},
 		"socat - UNIX-SENDTO:s,bind=b":              {removes: []string{"b"}},
 		"socat - UNIX-CONNECT:/var/run/docker.sock": {},

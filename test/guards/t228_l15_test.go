@@ -85,7 +85,7 @@ func TestT228L15SocatQuotesAndNcatPrefixes(t *testing.T) {
 	} {
 		refused(t, s, c, "rm -r ~: it reaches the home directory")
 	}
-	for _, c := range []string{"socat - TCP:h:22", "socat - 'SYSTEM:echo a,b'", "ncat --ssl h 443", "ncat --proxy-type socks5 --proxy p:1 h 22"} {
+	for _, c := range []string{"socat - TCP:h:22", "socat - 'SYSTEM:echo \"a,b\"'", "ncat --ssl h 443", "ncat --proxy-type socks5 --proxy p:1 h 22"} {
 		allowed(t, s, c)
 	}
 }

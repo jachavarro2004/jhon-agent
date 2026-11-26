@@ -4,6 +4,8 @@ import (
 	"path"
 	"strings"
 
+	"mvdan.cc/sh/v3/syntax"
+
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 )
 
@@ -16,17 +18,20 @@ import (
 
 // socatCommandAddresses are socat's address types whose parameter is a
 // command it runs: EXEC (the words), SYSTEM and SHELL (a string the shell
-// runs). An option of the same name is read the same way.
+// runs).
 var socatCommandAddresses = set("exec", "system", "shell")
 
-// socat is read by class (T228 L17: rounds 9, 10 and 11 each found the
+// socat is read by class (T228 L17, L18: rounds 9 to 12 each found the
 // next socat spelling, so the class is closed once, as L6 closed the
-// runners and L10 the ssh keywords). Every address that names a filesystem
-// path, and every option that does (link=, lockfile=, waitlock=, history=,
-// a unix bind=), is read by socatPaths into a write (judged as tee), a
-// removal (judged as rm), or unreadable: an address that names a path and
-// carries an option outside socatHarmless, so an option socat adds asks
-// instead of passing.
+// runners and L10 the ssh keywords). Every option on every address, of
+// whatever type, is looked up in socatOptions, a table of socat's own
+// option names and the aliases `socat -hhh` lists for them: harmless, a
+// path it writes or removes, the folder its command runs in, or (any name
+// the table does not hold, or holds as unsafe where it stands) unreadable.
+// socat itself refuses an option name it does not know and any shortened
+// one, so an option or alias socat adds asks until it is read here. Every
+// address that names a filesystem path is read by its type into a write
+// (judged as tee) or a removal (judged as rm).
 
 // socatFileAddresses are socat's address types that open a file by its
 // path (FILE is OPEN's other name, CREAT CREATE's); a bare path is GOPEN.
@@ -37,96 +42,175 @@ var socatFileAddresses = set("open", "file", "gopen", "create", "creat")
 var socatPipeAddresses = set("pipe", "fifo", "echo")
 
 // socatBindAddresses are the unix socket listeners and receivers: each
-// binds its path, and socat replaces what is there (unlink-early).
+// binds a new socket at its path, and replaces what is there only with an
+// unlink option (without one socat stops: the path exists).
 var socatBindAddresses = set("unix-listen", "unix-l", "unix-recv", "unix-recvfrom")
 
 // socatConnectAddresses are the unix socket clients: each names a path it
 // connects or sends to, and binds one only with bind=.
-var socatConnectAddresses = set("unix-connect", "unix-client", "unix", "local", "unix-sendto")
+var socatConnectAddresses = set("unix-connect", "unix-client", "unix", "local", "unix-sendto", "unix-send")
 
-// socatNoPath is whether an address type names no filesystem path: the
-// network families, the abstract and message-queue namespaces, the standard
-// streams and descriptors, the commands, PTY and READLINE (whose paths are
-// options).
-func socatNoPath(kind string) bool {
-	for _, family := range []string{"tcp", "udp", "sctp", "dccp", "ip", "openssl", "ssl", "dtls", "socks", "proxy", "vsock", "abstract", "posixmq", "socket-"} {
+// socatNetwork is whether an address type is of a network family, whose
+// parameters are hosts and ports and whose bind= is an address.
+func socatNetwork(kind string) bool {
+	for _, family := range []string{"tcp", "udp", "sctp", "dccp", "ip", "inet", "openssl", "ssl", "dtls", "socks", "proxy", "vsock"} {
 		if strings.HasPrefix(kind, family) {
 			return true
 		}
 	}
-	return socatStreams[kind]
+	return false
+}
+
+// socatNoPath is whether an address type names no filesystem path: the
+// network families, the abstract and message-queue namespaces, the generic
+// sockets, the standard streams and descriptors, the commands, PTY and
+// READLINE (whose paths are options).
+func socatNoPath(kind string) bool {
+	return socatNetwork(kind) || socatStreams[kind] || socatGenericSocket(kind) ||
+		strings.HasPrefix(kind, "abstract") || strings.HasPrefix(kind, "posixmq")
 }
 
 var socatStreams = set("", "-", "stdio", "stdin", "stdout", "stderr", "fd", "accept-fd", "accept", "text", "stall", "pty",
 	"readline", "interface", "tun", "exec", "system", "shell")
 
-// socatHarmless are the options an address that names a path may carry
-// and still be read: the serial line's speed, mode, parity and bits; the
-// listener's fork and reuse; the open flags and the options this reader
-// judges itself (the truncating ones, unlink-*, link, lockfile, waitlock,
-// history, bind); and b<rate>. Any other option (perm, mode, user, group,
-// seek, chroot, one socat adds) leaves the line unreadable.
-var socatHarmless = set("fork", "reuseaddr", "raw", "rawer", "sane", "echo", "crnl", "cr", "icrnl", "ignoreeof", "nonblock",
-	"rdonly", "wronly", "rdwr", "o-rdonly", "o-wronly", "o-rdwr", "o_rdonly", "o_wronly", "o_rdwr", "append", "o-append", "o_append",
-	"creat", "o-creat", "o_creat", "excl", "o-excl", "o_excl", "trunc", "o-trunc", "o_trunc", "ftruncate",
-	"unlink-early", "unlink-late", "unlink-close", "link", "lockfile", "waitlock", "history", "bind",
-	"parenb", "parodd", "cs5", "cs6", "cs7", "cs8", "csize", "cstopb", "clocal", "crtscts", "ixon", "ixoff", "ixany", "icanon",
-	"isig", "istrip", "inlcr", "igncr", "onlcr", "ocrnl", "opost", "echoe", "echok", "echonl", "ispeed", "ospeed",
-	"setsid", "ctty", "pty", "wait-slave", "pty-wait-slave", "pty-interval", "max-children", "backlog", "retry", "interval",
-	"forever", "stderr", "sigint", "sigquit", "sighup", "escape", "prompt", "noprompt", "noecho")
+// socatGenericSocket is whether an address type is a generic socket, whose
+// address is raw bytes that may hold a unix path the reader cannot read.
+func socatGenericSocket(kind string) bool {
+	return strings.HasPrefix(kind, "socket-") || kind == "socketpair" || kind == "dgram" || kind == "sendto"
+}
+
+// socatOpt is what an option does, as the reader judges it.
+type socatOpt int
+
+const (
+	optHarmless socatOpt = iota + 1
+	optLink              // replaces the file at its value: removed
+	optFile              // writes the file at its value
+	optUnlink            // removes the address's own path
+	optTruncate          // creates or truncates a file address's file, any value (creat=0, ftruncate=0)
+	optBind              // a network address, or a unix path it binds: removed
+	optOwner             // owner and mode: harmless on a listener or a file socat creates
+	optSeek              // an offset: harmless on the side socat only reads
+	optChdir             // the folder a command runs in
+)
+
+// socatOptions are the options the reader knows, under socat 1.8's
+// canonical name and every alias `socat -hhh` lists for it. Harmless: a
+// serial line's speed, mode, parity, bits and read settings; the
+// listener's and the connection's network settings; the child's terminal
+// and signals; the open flags. Any other name (umask, path, shell, chroot,
+// setuid, substuser, netns, fs-*, ioctl-*, an option socat adds) is not
+// here, so the line is unreadable.
+var socatOptions = func() map[string]socatOpt {
+	m := map[string]socatOpt{}
+	add := func(o socatOpt, names string) {
+		for _, n := range strings.Fields(names) {
+			m[n] = o
+		}
+	}
+	add(optHarmless, `raw termios-rawer rawer sane echo icanon isig cs5 cs6 cs7 cs8 csize cstopb parenb parodd clocal crtscts
+		ixon ixoff ixany icrnl inlcr igncr onlcr ocrnl opost istrip echoe echok echonl ispeed ospeed vmin min vtime time
+		tiocsctty ctty crnl crlf cr ignoreeof ignoreof escape noecho prompt noprompt
+		pty stderr setsid sid sighup sigint sigquit pty-wait-slave wait-slave waitslave pty-interval
+		fork max-children maxchildren backlog retry interval intervall forever
+		so-reuseaddr reuseaddr so-reuseport reuseport tcp-nodelay nodelay so-keepalive keepalive connect-timeout range
+		sourceport sp lowport protocol-family pf proxyport proxy-authorization proxy-auth proxyauth proxy-resolve resolve resolv
+		socksport socksuser openssl-verify verify openssl-certificate cert certificate openssl-key key openssl-cafile cafile
+		openssl-capath capath openssl-commonname cn commonname openssl-snihost snihost
+		o-rdonly o_rdonly rdonly o-wronly o_wronly wronly o-rdwr o_rdwr rdwr o-nonblock ndelay nonblock o-ndelay o_ndelay
+		append o-append o-excl excl o_excl o-noctty noctty`)
+	add(optLink, "symbolic-link link")
+	add(optFile, "history-file history lockfile waitlock")
+	add(optUnlink, "unlink-early new unlink-late unlink-close unlink delete remove")
+	add(optTruncate, "o-creat creat create o_creat o-create o_create o-trunc trunc o_trunc ftruncate64 ftruncate truncate ftruncate32")
+	add(optBind, "bind")
+	add(optOwner, "perm mode perm-early perm-late user owner uid user-early user-late group gid group-early group-late")
+	add(optSeek, "lseek64-set lseek lseek64 seek seek-set lseek64-end seek-end lseek64-cur seek-cur lseek32-set lseek32-end lseek32-cur")
+	add(optChdir, "chdir cd")
+	return m
+}()
 
 // socatRate is a serial speed option, b<rate>.
 var socatRate = lazyre.New(`^b[0-9]+$`)
 
-// socatPaths reads one socat address by class: the paths it writes (a file
-// address on the side socat writes, socatTruncating on either side, CREATE
-// and PIPE anywhere, lockfile=, waitlock=, history=, any other address
-// that names a path), the paths it removes (unlink-* on its path, a unix
-// listener's or receiver's path, link=, a unix bind=), and an error when
-// it names a path and carries an option outside socatHarmless. A serial
-// device (socatSerial) is not a write.
-func socatPaths(ad socatAddress, written bool) (writes, removes []string, err error) {
-	unix := socatBindAddresses[ad.kind] || socatConnectAddresses[ad.kind]
+// socatRead is what one socat address does, as the reader reads it.
+type socatRead struct {
+	commands, writes, removes []string
+}
+
+// socatPaths reads one socat address by class (T228 L17, L18). Its type:
+// EXEC, SYSTEM and SHELL run their parameter (in the folder chdir= names);
+// a file address writes its path on the side socat writes, CREATE and PIPE
+// on either side, any other type that names a path writes it; a unix
+// client names a path it only connects to, a listener binds a new one.
+// Its options, each looked up in socatOptions whatever the type: link=
+// removes its value, history-file=, lockfile= and waitlock= write theirs,
+// an unlink option removes the address's own path, a truncating one makes
+// a file address a write, bind= on an address that is not a network one
+// removes its value, owner and mode are harmless only on a listener or a
+// file socat creates, an offset only on the side socat only reads, chdir
+// only on a command; anything else is unreadable. A serial device
+// (socatSerial) is not a write.
+func socatPaths(ad socatAddress, written bool) (r socatRead, err error) {
 	file := socatFileAddresses[ad.kind]
+	command := socatCommandAddresses[ad.kind]
 	named := ad.param != "" && !socatNoPath(ad.kind)
 	write := named && (file && written || ad.kind == "create" || ad.kind == "creat" || socatPipeAddresses[ad.kind] ||
-		!file && !unix)
-	if named && socatBindAddresses[ad.kind] {
-		removes = append(removes, ad.param)
+		!file && !socatBindAddresses[ad.kind] && !socatConnectAddresses[ad.kind])
+	creates := ad.kind == "create" || ad.kind == "creat" || socatBindAddresses[ad.kind]
+	chdir := ""
+	var unsafe []string
+	for _, o := range ad.options {
+		n, _, _ := strings.Cut(o, "=")
+		if t := socatOptions[strings.ToLower(n)]; t == optTruncate && strings.Contains(strings.ToLower(n), "creat") {
+			creates = true
+		}
 	}
-	var unknown []string
 	for _, o := range ad.options {
 		n, v, _ := strings.Cut(o, "=")
 		n = strings.ToLower(n)
-		switch {
-		case n == "link" || n == "bind" && unix:
-			named = true
-			removes = append(removes, v)
-		case n == "lockfile" || n == "waitlock" || n == "history":
-			named = true
-			writes = append(writes, v)
-		case strings.HasPrefix(n, "unlink-") && ad.param != "" && !socatNoPath(ad.kind):
-			removes = append(removes, ad.param)
-		case file && socatTruncating[n]:
-			write = true
+		switch t := socatOptions[n]; {
+		case t == optHarmless || socatRate.MatchString(n):
+		case t == optLink:
+			r.removes = append(r.removes, v)
+		case t == optFile:
+			r.writes = append(r.writes, v)
+		case t == optUnlink && named:
+			r.removes = append(r.removes, ad.param)
+		case t == optUnlink && (socatGenericSocket(ad.kind) || !socatNoPath(ad.kind)):
+			unsafe = append(unsafe, n)
+		case t == optUnlink:
+		case t == optTruncate:
+			write = write || file
+		case t == optBind && socatNetwork(ad.kind):
+		case t == optBind:
+			r.removes = append(r.removes, v)
+		case t == optOwner && creates, t == optSeek && !written:
+		case t == optChdir && command:
+			chdir = v
+		default:
+			unsafe = append(unsafe, n)
 		}
-		if !socatHarmless[n] && !socatRate.MatchString(n) && !socatCommandAddresses[n] {
-			unknown = append(unknown, n)
+	}
+	if len(unsafe) > 0 {
+		return socatRead{}, &Unreadable{Why: "socat's address " + ad.kind + " carries an option the reader does not read as safe there: " + strings.Join(unsafe, ", ")}
+	}
+	if command && ad.param != "" {
+		c := ad.param
+		if chdir != "" {
+			q, err := syntax.Quote(chdir, syntax.LangBash)
+			if err != nil {
+				return socatRead{}, &Unreadable{Why: "socat's chdir " + chdir + " cannot be read"}
+			}
+			c = "cd " + q + " && " + c
 		}
+		r.commands = append(r.commands, c)
 	}
 	if write && !socatSerial(ad.param) {
-		writes = append(writes, ad.param)
+		r.writes = append(r.writes, ad.param)
 	}
-	if named && len(unknown) > 0 {
-		return nil, nil, &Unreadable{Why: "socat's address " + ad.kind + " names a path with an option the reader does not know: " + strings.Join(unknown, ", ")}
-	}
-	return writes, removes, nil
+	return r, nil
 }
-
-// socatTruncating are the socat options that create or truncate a file
-// address's file when it is opened, whichever way the data then flows: any
-// value, `creat=0` and `ftruncate=0` included (T228 L16).
-var socatTruncating = set("creat", "o-creat", "o_creat", "trunc", "o-trunc", "o_trunc", "ftruncate")
 
 // socatSerial is whether p, by its shape once cleaned (the machine is not
 // looked at), is a serial character device: /dev/tty*, /dev/pts/*,
@@ -155,14 +239,16 @@ type socatAddress struct {
 	options     []string
 }
 
-// socatRuns is what socat runs and writes (T228 L14, L15): the command of
-// each EXEC:, SYSTEM: or SHELL: address (either side of a `!!` pair) and of
-// any exec=, system= or shell= option, as a string the shell runs; and
+// socatRuns is what socat runs, writes and removes (T228 L14 to L18): the
+// command of each EXEC:, SYSTEM: or SHELL: address (either side of a `!!`
+// pair), in the folder its chdir= names, as a string the shell runs; the
+// paths socatPaths reads its addresses to write (as tee) and remove (as
+// rm), an option it does not read as safe leaving the line unreadable; and
 // tee writing the file of each address that writes one (T228 L16): on the
 // side socat writes (both sides with no -u or -U; with -u the second, with
 // -U the first) every OPEN:, FILE:, GOPEN:, CREATE: or CREAT: address or bare
 // path; on either side a CREATE: or CREAT: address and a file address with
-// a creating or truncating option (socatTruncating); but not a serial
+// a creating or truncating option (optTruncate); but not a serial
 // device (socatSerial). And tee writing the file of the -lf, -L, -W, -r
 // and -R options.
 func socatRuns(w []string) (Inner, error) {
@@ -191,22 +277,15 @@ func socatRuns(w []string) (Inner, error) {
 	for i, word := range addrs {
 		written := oneway == "" || oneway == "-u" && i == 1 || oneway == "-U" && i == 0
 		for _, ad := range socatAddresses(word) {
-			if socatCommandAddresses[ad.kind] {
-				in.Strings = append(in.Strings, ad.param)
-			}
-			for _, o := range ad.options {
-				if n, v, ok := strings.Cut(o, "="); ok && socatCommandAddresses[strings.ToLower(n)] {
-					in.Strings = append(in.Strings, v)
-				}
-			}
-			writes, removes, err := socatPaths(ad, written)
+			r, err := socatPaths(ad, written)
 			if err != nil {
 				return Inner{}, err
 			}
-			for _, p := range writes {
+			in.Strings = append(in.Strings, r.commands...)
+			for _, p := range r.writes {
 				in.Words = append(in.Words, []string{"tee", p})
 			}
-			for _, p := range removes {
+			for _, p := range r.removes {
 				in.Words = append(in.Words, []string{"rm", p})
 			}
 		}

@@ -511,7 +511,7 @@ safety-guard	Bash	"socat - 'SYSTEM:echo [a,b]; rm -rf ~'"	refuse	none	T228	-	L15
 safety-guard	Bash	"socat - 'SYSTEM:echo a\\,b; rm -rf ~'"	refuse	none	T228	-	L15 B3: socat keeps an escaped comma
 safety-guard	Bash	"ncat --sh 'rm -rf ~' h 1"	refuse	none	T228	-	L15 B3: ncat takes a prefix of --sh-exec
 safety-guard	Bash	"ncat --exe 'rm -rf ~' h 1"	refuse	none	T228	-	L15 B3: same, --exec
-safety-guard	Bash	"socat - 'SYSTEM:echo a,b'"	allow	none	T228	-	L15 preserve: a harmless SYSTEM with options
+safety-guard	Bash	"socat - 'SYSTEM:echo a,b'"	ask	none	T228	-	L15 preserve, changed in T228 L18: socat reads `b` as an option (it refuses it and runs nothing); an option the reader does not know asks
 safety-guard	Bash	"ncat --ssl h 443"	allow	none	T228	-	L15 preserve: ncat --ssl is no --sh-exec
 safety-guard	Bash	"socat - CREATE:.git/hooks/pre-commit"	refuse	none	T228	-	L15 item 4: socat CREATE writes its file
 safety-guard	Bash	"socat - OPEN:.git/hooks/post-merge,creat,trunc"	refuse	none	T228	-	L15 item 4: socat OPEN with creat or trunc writes its file
@@ -568,8 +568,8 @@ safety-guard	Bash	"socat UNIX-LISTEN:/tmp/dbg.sock,fork,unlink-early TCP:localho
 safety-guard	Bash	"socat -d -d PTY,link=./ttyV0,raw,echo=0 PTY,link=./ttyV1,raw,echo=0"	allow	none	T228	-	verify: a pty link in the project stays allowed
 # T228 L17: socat by class: every path an address names is a write (tee), a removal (rm) or, with an option outside the harmless list, unreadable
 safety-guard	Bash	"socat -u 'OPEN:.git/config,unlink-late' /dev/null"	refuse	none	T228	-	L17 W2: unlink-late deletes the file
-safety-guard	Bash	"socat 'UNIX-L:.git/config' /dev/null"	refuse	none	T228	-	L17 W3: UNIX-L is UNIX-LISTEN by another name and binds its path
-safety-guard	Bash	"socat 'UNIX-RECVFROM:.git/HEAD' -"	refuse	none	T228	-	L17 W3: a unix receiver binds its path
+safety-guard	Bash	"socat 'UNIX-L:.git/config' /dev/null"	allow	none	T228	-	L17 W3: UNIX-L is UNIX-LISTEN by another name and binds its path; changed in T228 L18: with no unlink option a listener only creates its own socket (socat stops if the path exists)
+safety-guard	Bash	"socat 'UNIX-RECVFROM:.git/HEAD' -"	allow	none	T228	-	L17 W3: a unix receiver binds its path; changed in T228 L18: with no unlink option a listener only creates its own socket (socat stops if the path exists)
 safety-guard	Bash	"socat - 'UNIX-CONNECT:/tmp/s,bind=.git/config'"	refuse	none	T228	-	L17 W3: a unix client's bind= binds a path
 safety-guard	Bash	"socat 'EXEC:cat,pty,link=.git/config' -"	refuse	none	T228	-	L17 W3: link= anywhere replaces its path
 safety-guard	Bash	"socat 'READLINE,history=.git/config' -"	refuse	none	T228	-	L17: history= writes its file
@@ -584,3 +584,31 @@ safety-guard	Bash	"socat /dev/ttyS0,b9600,cs8,parenb=0,cstopb=0,clocal=1,crtscts
 safety-guard	Bash	"socat READLINE,history=./.socat_history TCP:h:1"	allow	none	T228	-	L17 preserve: a history file in the project
 safety-guard	Bash	"socat -r in.dump -R out.dump - TCP:h:1"	allow	none	T228	-	L17 preserve: capture dumps in the project
 safety-guard	Bash	"socat OPENSSL-LISTEN:4443,cert=server.pem,verify=0,fork TCP:localhost:80"	allow	none	T228	-	L17 preserve: a network address's options are not the path reader's
+# T228 L17 re-verify (5e983be): options on addresses that name no path; harmless forms the short list asks
+safety-guard	Bash	"socat PTY,symbolic-link=.git/config /dev/null"	refuse	none	T228	-	verify: symbolic-link is link's canonical name; it replaces the file
+safety-guard	Bash	"socat 'SYSTEM:true,pty,symbolic-link=.git/config' -"	refuse	none	T228	-	verify: same on a command address
+safety-guard	Bash	"socat -u READLINE,history-file=.git/config /dev/null"	refuse	none	T228	-	verify: history-file is history's canonical name; it writes the file
+safety-guard	Bash	"socat - 'SYSTEM:rm config,chdir=.git'"	refuse	none	T228	-	verify: chdir moves where the command runs
+safety-guard	Bash	"socat - 'EXEC:rm -rf data,chdir=/'"	refuse	none	T228	-	verify: same, EXEC
+safety-guard	Bash	"socat -u /dev/null 'UNIX-SEND:/tmp/s,bind=.git/config,unlink-early'"	refuse	none	T228	-	verify: UNIX-SEND is UNIX-SENDTO's alias; its bind path is removed
+safety-guard	Bash	"socat UNIX-LISTEN:/run/user/1000/app.sock,fork TCP:localhost:8080"	allow	none	T228	-	verify: a listener with no unlink option removes only its own socket
+safety-guard	Bash	"socat - /dev/ttyUSB0,b115200,raw,echo=0,nonblock,min=1,time=0"	allow	none	T228	-	verify: serial read settings
+safety-guard	Bash	"socat -u FILE:/var/log/syslog,seek-end=0,ignoreeof -"	allow	none	T228	-	verify: socat's tail idiom on the read side
+safety-guard	Bash	"socat UNIX-LISTEN:/tmp/app.sock,fork,mode=600 TCP:localhost:8080"	allow	none	T228	-	verify: a listener's socket mode
+safety-guard	Bash	"socat PTY,link=/tmp/ttyV0,raw,echo=0,waitslave TCP:host:9000"	allow	none	T228	-	verify: waitslave is wait-slave's alias
+# T228 L18: every option on every socat address is read through one table of socat's names and aliases; a listener removes only with unlink
+safety-guard	Bash	"socat 'SHELL:true,symbolic-link=.git/hooks/pre-commit' -"	refuse	none	T228	-	L18 W5: symbolic-link on SHELL replaces its path
+safety-guard	Bash	"socat - 'SYSTEM:rm config,cd=.git'"	refuse	none	T228	-	L18 W5: cd is chdir's alias; the command runs in .git
+safety-guard	Bash	"socat - 'UNIX-SEND:/tmp/s,bind=.git/config'"	refuse	none	T228	-	L18 W5: UNIX-SEND binds bind='s path
+safety-guard	Bash	"socat -u 'OPEN:.git/config,new' /dev/null"	refuse	none	T228	-	L18 W5: new is unlink-early's alias
+safety-guard	Bash	"socat -u 'OPEN:.git/config,truncate=0' /dev/null"	refuse	none	T228	-	L18 W5: truncate is ftruncate's alias
+safety-guard	Bash	"socat 'EXEC:cat,path=/tmp/evil' -"	ask	none	T228	-	L18 W5: an option the table does not read as safe on a command asks
+safety-guard	Bash	"socat 'PTY,umask=0' -"	ask	none	T228	-	L18 W5: same on PTY
+safety-guard	Bash	"socat 'TCP:h:1,newopt=1' -"	ask	none	T228	-	L18 W5: an option the table does not know asks on a network address too
+safety-guard	Bash	"socat UNIX-LISTEN:/tmp/a.sock,fork,user=me,group=me,perm=0660 TCP:h:1"	allow	none	T228	-	L18 preserve: owner and mode on a listener
+safety-guard	Bash	"socat - 'OPEN:out.txt,creat,perm=0644'"	allow	none	T228	-	L18 preserve: mode on a file socat creates
+safety-guard	Bash	"socat -u 'OPEN:big.log,seek=100' -"	allow	none	T228	-	L18 preserve: an offset on the side socat only reads
+safety-guard	Bash	"socat 'SYSTEM:make,chdir=build' -"	allow	none	T228	-	L18 preserve: chdir into the project
+safety-guard	Bash	"socat UNIX-LISTEN:.git/x.sock -"	allow	none	T228	-	L18 item 2: a listener with no unlink option creates only its own socket
+safety-guard	Bash	"socat - TCP:h:1,nodelay,keepalive,connect-timeout=5"	allow	none	T228	-	L18 preserve: network settings
+safety-guard	Bash	"socat - 'SYSTEM:echo \"a,b\"'"	allow	none	T228	-	L18 preserve: a comma inside socat's quotes is the command's

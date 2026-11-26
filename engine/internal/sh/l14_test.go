@@ -77,7 +77,6 @@ func TestSocatAndNcRuns(t *testing.T) {
 		"socat TCP-LISTEN:9,fork EXEC:a,pty":     {"a"},
 		"socat - EXEC:a\\,b,pty":                 {"a,b"},
 		"socat - EXEC:'a,b',pty":                 {"a,b"},
-		"socat - TCP:h:1,exec=a":                 {"a"},
 		"socat EXEC:a!!STDOUT TCP:h:1":           {"a"},
 		"socat - TCP:h:1":                        nil,
 		"socat -d -d STDIO OPENSSL:h:1,verify=0": nil,

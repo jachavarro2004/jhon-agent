@@ -104,7 +104,6 @@ func TestSocatAddresses(t *testing.T) {
 		"socat -lf log - TCP:h:1":       {Words: [][]string{{"tee", "-a", "log"}}},
 		"socat -T 5 -r dump - TCP:h:1":  {Words: [][]string{{"tee", "-a", "dump"}}},
 		"socat - SYSTEM:'echo_a,b',pty": {Strings: []string{"echo a,b"}},
-		"socat - TCP:h:1,system=x":      {Strings: []string{"x"}},
 	} {
 		if got, err := socatRuns(splitWords(line)); err != nil || !reflect.DeepEqual(got, want) {
 			t.Errorf("socatRuns(%q) = %+v, %v, want %+v", line, got, err, want)
