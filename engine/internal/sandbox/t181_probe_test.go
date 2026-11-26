@@ -61,7 +61,7 @@ func TestT181OnlyALeadingCdIntoTheProjectLeavesTheSandbox(t *testing.T) {
 		{"cd " + p + "/sub && git fetch origin", Unsandboxed, true},
 	}
 	for _, c := range cases {
-		if got := profileAt(c.line, p, []string{p}, Disk, c.zsh, nil); got != c.want {
+		if got := profileAt(Input{Cwd: p, Stat: Disk}, c.line, []string{p}, c.zsh); got != c.want {
 			t.Errorf("profileAt(%q, zsh=%v) = %s, want %s", c.line, c.zsh, got, c.want)
 		}
 	}

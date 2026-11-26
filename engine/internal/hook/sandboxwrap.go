@@ -46,7 +46,8 @@ const sandboxAllowReason = "Jhon's guards allow the command; it runs in Jhon's s
 // where <jhon> is this binary, the folder is the one `jhon start` pinned
 // (sandbox.ProjectEnv) and the command is single-quoted, every other field
 // kept byte for byte. A line of git network commands or gh whose git works
-// inside the project (sandbox.ProfileAt, T128g, L1303 G1, L1306), of docker,
+// inside the project, or inside a git repository in a sandbox.allow_write
+// folder (sandbox.ProfileIn, T128g, L1303 G1, L1306, T251), of docker,
 // or of the owner's sandbox.deploy_tools (in.DeployTools) is handed
 // back as
 //
@@ -128,7 +129,7 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 		return nil, "sandbox: sandbox.mode is on and jhon cannot name its own program; the call is refused; fix: run `jhon doctor`"
 	}
 	shell := shellWord(sandboxShell())
-	profile := sandbox.ProfileAt(command, cwd, in.Roots, in.Stat, in.DeployTools)
+	profile := sandbox.ProfileIn(in, command)
 	// The pinned project goes to the run as the session wrote it, not as it
 	// read here through every link: the run opens that spelling with no
 	// link followed and refuses one a swap changed (T248 L4's second

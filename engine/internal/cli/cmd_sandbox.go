@@ -93,7 +93,7 @@ func runSandbox(argv []string) (int, error) {
 			return 2, nil
 		}
 		in := sandboxInput(pinned)
-		fmt.Println(sandbox.ProfileAt(rest[1], in.Cwd, in.Roots, in.Stat, in.DeployTools))
+		fmt.Println(sandbox.ProfileIn(in, rest[1]))
 		return 0, nil
 	case "status":
 		asJSON, pinned := false, ""
@@ -164,6 +164,9 @@ func sandboxRun(argv []string) (int, error) {
 	// it, reads the sandbox again once it is there.
 	_, err := os.Stat(runRegistry().Dir)
 	registryThere := err == nil
+	// kept is why a line asked to run outside the sandbox runs in it: the
+	// note of its failure names it (sandbox.DeliveryNoteAt, T251).
+	var kept *sandbox.Problem
 	if profile == sandbox.Unsandboxed {
 		// git runs with the repository's hooks, ssh command, helpers and
 		// transports overridden (sandbox.UnsandboxedEnv, L1306), only for a
@@ -179,12 +182,21 @@ func sandboxRun(argv []string) (int, error) {
 		// Only for the project it was taken from: the working folder or the
 		// --project value as written (sandbox.Input.ProjectProblem, L4);
 		// anything else runs in the sandbox, which refuses it.
+		// A git repository inside a sandbox.allow_write folder counts as the
+		// project (sandbox.Outside, T251, L1722): its line runs outside with
+		// the same checks, its anchors once in the registry
+		// (Input.RepositoryProblem), and its own merge gate.
 		in := sandboxInput(pinned)
 		in.ProjectFrom = "."
 		if pinned != "" {
 			in.ProjectFrom = pinnedAs
 		}
-		if in.ProjectProblem() == nil && sandbox.RunsOutside(sandbox.ThisHost(), in, program) {
+		kept = in.ProjectProblem()
+		top, ok := "", false
+		if kept == nil {
+			top, kept, ok = sandbox.Outside(sandbox.ThisHost(), in, program)
+		}
+		if ok {
 			leave, refused := enterRegistry(sandbox.KindOutside, sandbox.OutsideAreas(in, program[2]))
 			if refused != "" {
 				fmt.Fprintln(os.Stderr, refused)
@@ -192,16 +204,25 @@ func sandboxRun(argv []string) (int, error) {
 			}
 			path := os.Getenv("PATH")
 			os.Setenv("PATH", sandbox.OutsidePath(in))
-			gate := mergeGateEntries(pinned)
-			why := repositoryGitProblem(in, program[2], gate)
-			if why == "" {
+			kept = in.RepositoryProblem(top, program[2])
+			var gate [][2]string
+			if kept == nil {
+				gate = mergeGateEntries(pinned)
+				if top != "" {
+					gate = mergeGateEntries(top)
+				}
+				if why := repositoryGitProblem(in, program[2], gate, top); why != "" {
+					kept = &sandbox.Problem{Reason: why, Fix: repositoryGitFix}
+				}
+			}
+			if kept == nil {
 				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), gate...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil, nil, nil)
 				leave()
 				return code, err
 			}
 			leave()
 			os.Setenv("PATH", path)
-			fmt.Fprintln(os.Stderr, "jhon sandbox: "+why+"; the line runs in the sandbox instead")
+			fmt.Fprintln(os.Stderr, "jhon sandbox: "+kept.Reason+"; the line runs in the sandbox instead")
 		}
 		profile = sandbox.Work
 	}
@@ -276,7 +297,7 @@ func sandboxRun(argv []string) (int, error) {
 		}
 		defer started.Close()
 	}
-	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), bound.Command(program)...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal, bound, started)
+	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), bound.Command(program)...), env, profile, sandbox.DeliveryNoteAt(sandbox.ThisHost(), in, program, kept), sandbox.DeployNote(program, in.DeployTools), refusal, bound, started)
 	bound.Close()
 	leave()
 	return code, err

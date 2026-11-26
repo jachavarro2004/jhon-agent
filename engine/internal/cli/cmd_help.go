@@ -871,7 +871,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            line, git over SSH and gh run outside the
                            sandbox only on a line of their own, with no
                            pipes, $(…) or other commands: run it alone, as
-                           in git -C <dir> fetch origin main; any exit but
+                           in git -C <dir> fetch origin main, or, when the
+                           line was kept inside for another reason, git
+                           over SSH and gh ran in the sandbox, not outside
+                           it: <why>; fix: <fix> (its git works in a folder
+                           neither in the project nor in a git repository
+                           inside a sandbox.allow_write folder, a link on
+                           the way, a check below refused it); any exit but
                            a signal's, a success too, of a line that holds
                            one of sandbox.deploy_tools ends after those
                            with one line, <tool> runs outside the sandbox
@@ -932,7 +938,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            configuration git cannot list, runs the line with
                            the work profile; so does a line whose git
                            folders (the git dir and the common dir) lie
-                           outside the project, or hold a link, a file git
+                           outside the project (or the sandbox.allow_write
+                           repository the line works in, which must also
+                           be, with no link followed, the folder Jhon
+                           judged), or hold a link, a file git
                            writes that is hard-linked (objects aside) or
                            anything but a folder or a regular file (a FIFO
                            git would wait on), as git would write through
@@ -962,7 +971,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            sandbox.mode on: unsandboxed when every program
                            on it is git with a network subcommand (fetch,
                            pull, push, ls-remote, clone, remote update) and
-                           only listed options, working inside the project
+                           only listed options, working inside the project,
+                           or inside one git repository in a
+                           sandbox.allow_write folder the sandbox opens for
+                           writing, named with no link on the way, which
+                           then counts as the project for git and gh (not
+                           for docker or sandbox.deploy_tools)
                            (the working directory, a leading cd <folder> &&
                            whose folder has no .. part, its -C folders and
                            a clone's new folder), or gh with a listed

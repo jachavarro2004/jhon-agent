@@ -65,7 +65,7 @@ func TestRepositoryGitProblemWalksTheCommonDirGitPrints(t *testing.T) {
 				t.Fatalf("git names the common dir %q (%v); want %q", out, err, common+"\n")
 			}
 			in := sandbox.Current(proj, proj)
-			if why := repositoryGitProblem(in, "git fetch origin", nil); why == "" {
+			if why := repositoryGitProblem(in, "git fetch origin", nil, ""); why == "" {
 				t.Errorf("an outside fetch may run although %s, in the common dir git uses (%q), is a link out of the project", link, common)
 			}
 		})

@@ -190,7 +190,21 @@ update) working inside the project, or gh, runs outside the sandbox, still
 judged by the guards: git over SSH and gh cannot run inside it. The line may
 open with `cd <folder> &&` into the project and name gh's `{owner}` and
 `{repo}`; anything else on it (a pipe, `$(…)`, another command) keeps it in
-the sandbox, and when such a line fails it ends with a note saying so. A line
+the sandbox, and when such a line fails it ends with a note saying so. A git
+repository inside a `sandbox.allow_write` folder counts as the project for
+such a line of git and gh (a second repository you work on from the
+project's session; docker and the deploy tools below run outside only from
+the project):
+`git -C <repo> fetch`, `cd <repo> && git pull`, a push run in it, all run
+outside the sandbox with the same checks the project's lines get (its git
+configuration, its git folders, the clean PATH, the wait for sandboxed
+commands below), once the repository is named with no link on the way and
+is, with no link followed, the folder Jhon judged; a line that works in two
+repositories, or in one the sandbox does not open for writing, stays
+inside. A line kept inside for any reason but its shape ends, when it
+fails, with that reason and what you can do (`git over SSH and gh ran in
+the sandbox, not outside it: <folder> is neither in the project (<project>)
+nor in a git repository inside a sandbox.allow_write folder; fix: …`). A line
 of docker or docker-compose, the owner's deployment tool, also runs outside
 the sandbox, with the owner's environment (`DOCKER_HOST`, the docker context) and its volume
 mounts not judged; `docker login`, `docker logout` and a change of docker
