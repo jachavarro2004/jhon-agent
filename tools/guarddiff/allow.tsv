@@ -1799,8 +1799,6 @@ verifiers.tsv:564	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of
 verifiers.tsv:565	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): PIPE writes into an existing file
 verifiers.tsv:566	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): PIPE to a disk
 verifiers.tsv:570	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): L17 W2: unlink-late deletes the file
-verifiers.tsv:571	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): L17 W3: UNIX-L is UNIX-LISTEN by another name and binds its path
-verifiers.tsv:572	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): L17 W3: a unix receiver binds its path
 verifiers.tsv:573	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): L17 W3: a unix client's bind= binds a path
 verifiers.tsv:574	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): L17 W3: link= anywhere replaces its path
 verifiers.tsv:575	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): L17: history= writes its file
@@ -1809,3 +1807,18 @@ verifiers.tsv:577	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of
 verifiers.tsv:578	safety-guard	allow	refuse	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): L17 W4: PIPE writes on either side
 verifiers.tsv:579	safety-guard	allow	ask	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): L17: an option outside the harmless list leaves the address unreadable
 verifiers.tsv:580	safety-guard	allow	ask	hole T228 L17 (re-verify mwxelg03 of 5a7fa93): L17: same, on a link
+verifiers.tsv:514	safety-guard	allow	ask	hole T228 L18 (re-verify mwxgsurt of 5e983be): L15 preserve, changed in T228 L18: socat reads `b` as an option (it refuses it and runs nothing); an option the reader does not know asks
+verifiers.tsv:588	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): symbolic-link is link's canonical name; it replaces the file
+verifiers.tsv:589	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): same on a command address
+verifiers.tsv:590	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): history-file is history's canonical name; it writes the file
+verifiers.tsv:591	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): chdir moves where the command runs
+verifiers.tsv:592	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): same, EXEC
+verifiers.tsv:593	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): UNIX-SEND is UNIX-SENDTO's alias; its bind path is removed
+verifiers.tsv:600	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: symbolic-link on SHELL replaces its path
+verifiers.tsv:601	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: cd is chdir's alias; the command runs in .git
+verifiers.tsv:602	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: UNIX-SEND binds bind='s path
+verifiers.tsv:603	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: new is unlink-early's alias
+verifiers.tsv:604	safety-guard	allow	refuse	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: truncate is ftruncate's alias
+verifiers.tsv:605	safety-guard	allow	ask	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: an option the table does not read as safe on a command asks
+verifiers.tsv:606	safety-guard	allow	ask	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: same on PTY
+verifiers.tsv:607	safety-guard	allow	ask	hole T228 L18 (re-verify mwxgsurt of 5e983be): L18 W5: an option the table does not know asks on a network address too

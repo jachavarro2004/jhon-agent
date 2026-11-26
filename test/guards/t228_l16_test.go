@@ -36,7 +36,7 @@ func TestT228L16SocatWrites(t *testing.T) {
 		"socat -u TCP-LISTEN:9 OPEN:out.txt,creat,trunc", "socat - /dev/null", "socat -u TCP:h:1 /dev/stdout",
 		// Rounds 8 and 9.
 		"socat -lf socat.log - TCP:h:1", "ncat -o out.txt h 1", "ncat --output=out.txt h 1", "ncat -x hex.log h 1", "nc -o dump h 1",
-		"socat - 'SYSTEM:echo a,b'", "ncat --ssl h 443", "ncat --proxy-type socks5 --proxy p:1 h 22", "socat - TCP:h:22",
+		"socat - 'SYSTEM:echo \"a,b\"'", "ncat --ssl h 443", "ncat --proxy-type socks5 --proxy p:1 h 22", "socat - TCP:h:22",
 	} {
 		allowed(t, s, c)
 	}

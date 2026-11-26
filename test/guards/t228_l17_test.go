@@ -15,8 +15,8 @@ func TestT228L17SocatByClass(t *testing.T) {
 	for c, why := range map[string]string{
 		// Removals.
 		"socat -u 'OPEN:.git/config,unlink-late' /dev/null":   "rm .git/config",
-		"socat 'UNIX-L:.git/config' /dev/null":                "rm .git/config",
-		"socat 'UNIX-RECVFROM:.git/HEAD' -":                   "rm .git/HEAD",
+		"socat 'UNIX-L:.git/config,unlink-early' /dev/null":   "rm .git/config",
+		"socat 'UNIX-RECVFROM:.git/HEAD,unlink-close' -":      "rm .git/HEAD",
 		"socat - 'UNIX-CONNECT:/tmp/s,bind=.git/config'":      "rm .git/config",
 		"socat - 'UNIX-SENDTO:/tmp/s,bind=.git/config'":       "rm .git/config",
 		"socat 'PTY,link=.git/hooks/pre-commit' -":            "rm .git/hooks/pre-commit",
