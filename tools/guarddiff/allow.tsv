@@ -1707,3 +1707,15 @@ verifiers.tsv:421	safety-guard	allow	refuse	hole T228 L10 (found on 498b176, re-
 verifiers.tsv:422	safety-guard	allow	refuse	hole T228 L10 (found on 498b176, re-verify mwx5kvx9): --config-env takes the key's value from a variable set on the line
 verifiers.tsv:423	safety-guard	allow	refuse	hole T228 L10 (found on 498b176, re-verify mwx5kvx9): same, core.sshCommand
 verifiers.tsv:424	safety-guard	allow	refuse	hole T228 L10 (found on 498b176, re-verify mwx5kvx9): same, exported
+verifiers.tsv:428	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): every ssh flag bundled before o
+verifiers.tsv:429	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): a valued letter takes its own word, -o follows
+verifiers.tsv:430	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): ssh reads options again after its host
+verifiers.tsv:431	safety-guard	allow	ask	hole T228 L12 (re-verify mwx6phap of 5fb10e8): quotes inside the keyword, which ssh removes
+verifiers.tsv:432	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): scp's grammar
+verifiers.tsv:433	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): a reassignment after export is git's value
+verifiers.tsv:434	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): a value built from another variable on the line
+verifiers.tsv:440	safety-guard	allow	ask	hole T228 L12 (found in review of the transport rule): a deploy in a ProxyCommand is never the connection
+verifiers.tsv:441	safety-guard	allow	ask	hole T228 L12 (found in review of the transport rule): same, kubectl apply naming %h
+verifiers.tsv:442	safety-guard	allow	ask	hole T228 L12 (found in review of the transport rule): an ssh ProxyCommand that runs a command on the far side is no forward
+verifiers.tsv:443	safety-guard	allow	ask	hole T228 L12 (found in review of the transport rule): a chained deploy before the forward
+verifiers.tsv:444	safety-guard	allow	ask	hole T228 L12 (found in review of the transport rule): a chained request after the forward

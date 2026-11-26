@@ -45,6 +45,11 @@ type Command struct {
 	// one moves its own directory, never the enclosing one's. A funsub
 	// (`${ …; }`) runs in the current shell and opens none.
 	Scope []int64
+	// Forward marks a command an ssh transport value runs on this machine
+	// (ProxyCommand, LocalCommand, KnownHostsCommand) that is one plain
+	// forward to its host (ForwardCommand, T228 L12): the connection the git
+	// command already makes.
+	Forward bool
 }
 
 // subshells numbers every subshell read, so that no two share a Scope entry.

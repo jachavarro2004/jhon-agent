@@ -424,3 +424,23 @@ safety-guard	Bash	"X='rm -rf ~' git --config-env=core.sshCommand=X fetch"	refuse
 safety-guard	Bash	"export X='rm -rf ~'; git --config-env=core.pager=X log"	refuse	none	T228	-	verify: same, exported
 safety-guard	Bash	"GIT_SSH_COMMAND='ssh -vvv -o IdentitiesOnly=yes' git fetch"	allow	none	T228	-	verify: ordinary bundled flags stay allowed
 safety-guard	Bash	"git --config-env=core.pager=PAGER log"	allow	none	T228	-	verify: an ordinary --config-env stays allowed
+# T228 L10 re-verify (5fb10e8): the grammar's edges; ordinary ProxyCommand transports
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -46AaCfGgKkMNnqsTtVvXxYyZoProxyCommand=rm\\ -rf\\ ~' git fetch"	refuse	none	T228	-	verify: every ssh flag bundled before o
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -vl x -oProxyCommand=\"rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: a valued letter takes its own word, -o follows
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh h -vo ProxyCommand=\"rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: ssh reads options again after its host
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o \"Proxy\\\"Command\\\"=rm -rf ~\"' git fetch"	ask	none	T228	-	verify: quotes inside the keyword, which ssh removes
+safety-guard	Bash	"GIT_SSH_COMMAND='scp -3o ProxyCommand=\"rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: scp's grammar
+safety-guard	Bash	"export X=less; X='rm -rf ~'; git --config-env=core.pager=X log"	refuse	none	T228	-	verify: a reassignment after export is git's value
+safety-guard	Bash	"Y='rm -rf ~'; X=\"${Y}\" git --config-env=core.pager=X log"	refuse	none	T228	-	verify: a value built from another variable on the line
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o PermitLocalCommand=yes -o LocalCommand=\"echo connected\"' git fetch"	allow	none	T228	-	verify: the backstop spares a harmless LocalCommand
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"cloudflared access ssh --hostname %h\"' git fetch"	allow	none	T228	-	verify: an ordinary ProxyCommand
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"ssh -W %h:%p bastion\"' git fetch"	allow	none	T228	-	verify: a bastion ProxyCommand is the transport, not a remote act of its own
+safety-guard	Bash	"GIT_SSH_COMMAND=\"ssh -o ProxyCommand='aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p'\" git fetch"	allow	none	T228	-	verify: same, SSM
+# T228 L12 narrowed: a transport loses only a plain forward's remote ask; an SSM session is remote
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"terraform apply -auto-approve; nc %h %p\"' git fetch"	ask	none	T228	-	verify: a deploy in a ProxyCommand is never the connection
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"kubectl apply -f x %h\"' git fetch"	ask	none	T228	-	verify: same, kubectl apply naming %h
+safety-guard	Bash	"GIT_SSH_COMMAND=\"ssh -o ProxyCommand=\\\"ssh bastion 'sudo systemctl stop app'\\\"\" git fetch"	ask	none	T228	-	verify: an ssh ProxyCommand that runs a command on the far side is no forward
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"aws s3 rm s3://b --recursive; nc %h %p\"' git fetch"	ask	none	T228	-	verify: a chained deploy before the forward
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"ssh -W %h:%p bastion; curl -X POST https://x/deploy\"' git fetch"	ask	none	T228	-	verify: a chained request after the forward
+safety-guard	Bash	"aws ssm start-session --target i-1"	ask	none	T228	-	L12: an SSM session is a connection (remote), as ssh is; it was deploy
+safety-guard	Bash	"aws ssm send-command --instance-ids i-1 --document-name AWS-RunShellScript"	ask	none	T228	-	L12: SSM send-command stays deploy

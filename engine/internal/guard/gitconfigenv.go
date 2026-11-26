@@ -6,6 +6,28 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
 )
 
+// transportOutward are the outward classes a transport's plain forward is
+// not judged by on its own (T228 L12): a ProxyCommand, KnownHostsCommand or
+// LocalCommand an ssh transport value runs that is one forward to its host
+// (sh.ForwardCommand: `ssh -W %h:%p bastion`, `aws ssm start-session
+// --target %h …`) is the connection the git command already makes. Only
+// "remote": a deploy is never the connection, and every destructive and
+// local-harm reading (a removal, the class rule, an environment change, a
+// write, a push) stays.
+var transportOutward = set("remote")
+
+// transportFindings is fs without the asks of transportOutward classes.
+func transportFindings(fs []Finding) []Finding {
+	var out []Finding
+	for _, f := range fs {
+		if f.Level == "ask" && transportOutward[f.Cls] {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
 // judgeGitConfigEnv is the findings of git's --config-env=<key>=<VAR>
 // settings (T228 L10): git takes the key's value from VAR, so when the line
 // sets VAR (before git, by export or by env; env holds both) its value is
@@ -25,12 +47,16 @@ func judgeGitConfigEnv(args []string, env map[string]string, ctx *Ctx, vars map[
 		if !ok || !set {
 			continue
 		}
-		strs, err := sh.GitSetting(key+"="+value, rest)
+		strs, transport, err := sh.GitSetting(key+"="+value, rest)
 		if err != nil {
 			return append(out, unreadableAsk(err))
 		}
 		for _, s := range strs {
-			out = append(out, judgeScript(s, ctx, vars, st, depth, route, envv)...)
+			f := judgeScript(s, ctx, vars, st, depth, route, envv)
+			if transport && sh.ForwardCommand(s) {
+				f = transportFindings(f)
+			}
+			out = append(out, f...)
 		}
 	}
 	return out

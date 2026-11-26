@@ -288,6 +288,9 @@ func judgeProgram(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[str
 	}
 	dir, lost := pst.Dir, pst.Lost
 	out := judgeOne(p, redirects, ctx, vars, pst, depth)
+	if p.Forward {
+		out = transportFindings(out)
+	}
 	for i := range out {
 		if out[i].Level == "ask" && !out[i].RootSet {
 			out[i].RootSet = true
