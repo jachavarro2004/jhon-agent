@@ -92,6 +92,7 @@ const (
 	optOwner             // owner and mode: harmless on a listener or a file socat creates
 	optSeek              // an offset: harmless on the side socat only reads
 	optChdir             // the folder a command runs in
+	optNetwork           // a network setting: harmless on a network-family address
 )
 
 // socatOptions are the options the reader knows, under socat 1.8's
@@ -127,6 +128,57 @@ var socatOptions = func() map[string]socatOpt {
 	add(optOwner, "perm mode perm-early perm-late user owner uid user-early user-late group gid group-early group-late")
 	add(optSeek, "lseek64-set lseek lseek64 seek seek-set lseek64-end seek-end lseek64-cur seek-cur lseek32-set lseek32-end lseek32-cur")
 	add(optChdir, "chdir cd")
+	// T228 L19: every option socat 1.8.1.3's `socat -hhh` puts only in the
+	// SOCKET, IP4, IP6, TCP, UDP, SCTP, DCCP, OPENSSL, SOCKS, HTTP, RANGE,
+	// LISTEN, CHILD and RETRY groups, with every alias it lists (150 options,
+	// 330 names), generated from that listing, not chosen by hand: a socket,
+	// IP, transport or TLS setting, harmless on a network-family address
+	// (socatNetwork) and unread elsewhere. The TLS files (cafile, capath,
+	// cert, key, dhparam, egd) are only read. proxy-authorization-file is
+	// left out: it reads a file and sends its contents to the proxy. A name
+	// the table already reads keeps its reading (bind, fork, verify, …).
+	for _, n := range strings.Fields(`accept-timeout acceptconn add-membership add-source-membership addrconfig ai-addrconfig ai-all ai-passive
+		ai-v4mapped attach-filter attachfilter authhdr backlog bind bindtodevice broadcast bsdcompat cafile capath
+		ccid cert certificate children-shutup cipher cipherlist ciphers cn commonname compress connect-timeout cork
+		dccp-set-ccid debug defer-accept defnames detach-filter detachfilter dh dhparam dhparams dns dnsrch dontroute
+		dstopts egd error fiosetown forever fork freebind hdrincl hoplimit hopopts http-version if ignorecr igntc info
+		interface interval intervall ip-add-membership ip-add-source-membership ip-freebind ip-hdrincl ip-membership
+		ip-mtu ip-mtu-discover ip-multicast-if ip-multicast-loop ip-multicast-ttl ip-options ip-pktinfo ip-pktoptions
+		ip-recverr ip-recvopts ip-recvtos ip-recvttl ip-retopts ip-router-alert ip-tos ip-transparent ip-ttl
+		ipfreebind iphdrincl ipmtu ipmtudiscover ipmulticastloop ipmulticastttl ipoptions ippktinfo ippktoptions
+		iprecverr iprecvopts iprecvtos iprecvttl ipretopts iprouteralert iptos ipttl ipv6-add-membership
+		ipv6-add-source-membership ipv6-authhdr ipv6-dstopts ipv6-hoplimit ipv6-hopopts ipv6-join-group
+		ipv6-join-source-group ipv6-mcloop ipv6-mtu-discover ipv6-multicast-loop ipv6-pktinfo ipv6-recvdstopts
+		ipv6-recverr ipv6-recvhoplimit ipv6-recvhopopts ipv6-recvpathmtu ipv6-recvpktinfo ipv6-recvrthdr
+		ipv6-recvtclass ipv6-rthdr ipv6-tclass ipv6-unicast-hops ipv6-v6only ipv6only join-group join-source-group
+		keepalive keepcnt keepidle keepintvl key linger linger2 listen-timeout max-children max-proto-version
+		max-version maxchildren maxfraglen maxseg maxseg-late maxsendfrag mcloop mcloop6 membership min-proto-version
+		min-version mss mss-late mtu mtudiscover mtudiscover6 multicast-if multicast-loop multicast-ttl multicastloop
+		multicastttl nameserver no-check no-sni nocheck nodelay nosni nsaddr null-eof oobinline openssl-cafile
+		openssl-capath openssl-certificate openssl-cipherlist openssl-commonname openssl-compress openssl-dhparam
+		openssl-dhparams openssl-egd openssl-key openssl-max-proto-version openssl-maxfraglen openssl-maxsendfrag
+		openssl-min-proto-version openssl-no-sni openssl-pseudo openssl-snihost openssl-verify passcred passive
+		peercred pf pktinfo pktoptions pktopts priority protocol protocol-family prototype proxy-auth
+		proxy-authorization proxy-resolve proxyauth proxyport pseudo quickack range rcvbuf rcvbuf-late rcvlowat
+		rcvtimeo recurse recvdstopts recverr recvhoplimit recvhopopts recvopts recvpktinfo recvrthdr recvtos recvttl
+		res-debug res-defnames res-dnsrch res-igntc res-maxretrans res-maxretry res-nsaddr res-recurse res-retrans
+		res-retry res-stayopen res-usevc resolv resolve retopts retrans retry reuseaddr reuseport routeralert rthdr
+		security-authentication security-encryption-network security-encryption-transport securityauthentication
+		securityencryptionnetwork securityencryptiontransport setsockopt setsockopt-bin setsockopt-connected
+		setsockopt-int setsockopt-listen setsockopt-socket setsockopt-string siocspgrp sndbuf sndbuf-late sndlowat
+		sndtimeo snihost so-acceptconn so-attach-filter so-bindtodevice so-broadcast so-bsdcompat so-debug
+		so-detach-filter so-dontroute so-error so-keepalive so-linger so-no-check so-oobinline so-passcred so-peercred
+		so-priority so-protocol so-prototype so-rcvbuf so-rcvbuf-late so-rcvlowat so-rcvtimeo so-reuseaddr
+		so-reuseport so-security-authentication so-security-encryption-network so-security-encryption-transport
+		so-sndbuf so-sndbuf-late so-sndlowat so-sndtimeo so-timestamp so-type sockopt sockopt-bin sockopt-conn
+		sockopt-int sockopt-listen sockopt-sock sockopt-string sockspass socksport socksuser socktype
+		source-membership stayopen syncnt tcp-cork tcp-defer-accept tcp-info tcp-keepcnt tcp-keepidle tcp-keepintvl
+		tcp-linger2 tcp-maxseg tcp-maxseg-late tcp-md5sig tcp-nodelay tcp-quickack tcp-syncnt tcp-window-clamp
+		timestamp tos transparent ttl type unicast-hops usevc v4mapped v6only verify window-clamp`) {
+		if m[n] == 0 {
+			m[n] = optNetwork
+		}
+	}
 	return m
 }()
 
@@ -188,6 +240,7 @@ func socatPaths(ad socatAddress, written bool) (r socatRead, err error) {
 		case t == optOwner && creates, t == optSeek && !written:
 		case t == optChdir && command:
 			chdir = v
+		case t == optNetwork && socatNetwork(ad.kind):
 		default:
 			unsafe = append(unsafe, n)
 		}
