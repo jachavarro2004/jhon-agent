@@ -110,7 +110,11 @@ const gitListingLimit = 4 << 20
 // folders of a folder inside it lie in it
 // (Input.LineGitFolderKept). The problem carries the fix its note gives,
 // chosen where the problem is found, by what it is (L1731 N1).
+//
+// It runs after the line enters the registry, so it reads the disk anew
+// for every fact (Input.Fresh, L1732), nothing remembered from before.
 func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top string) *sandbox.Problem {
+	in = in.Fresh()
 	git, err := exec.LookPath("git")
 	if err != nil {
 		return nil
@@ -142,6 +146,11 @@ func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top s
 		return out.String(), err
 	}
 	for _, dir := range folders {
+		// A folder that is not there is one git -C cannot change into: the
+		// line fails wherever it runs, and the note says why (L1732).
+		if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+			return &sandbox.Problem{Reason: dir + " does not exist, so git cannot change into it", Fix: "name a folder that exists"}
+		}
 		listing, err := run("-C", dir, "config", "--list", "--show-scope", "-z")
 		if err != nil {
 			return owner("git cannot list the configuration in " + dir + " (" + err.Error() + ")")

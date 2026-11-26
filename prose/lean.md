@@ -45,11 +45,11 @@ development included.
   `~/.local/share/jhon/current/prose/contracts/asked-operations.md`.
 - With Jhon's sandbox on, git over SSH, `gh` and `sandbox.deploy_tools`
   run outside, with the owner's credentials, alone on their line, by
-  name: no pipes, `;`, `&&` (but a leading `cd <absolute dir> &&`),
-  `$(…)`, `$VAR`, `~` or `VAR=value` in front. git and `gh` also run
-  outside in a git repository in `sandbox.allow_write`, by its real path
-  with no `..`. One kept inside says why: follow that fix, never turn the
-  sandbox off.
+  name: no pipes, `;`, `&&` (but a leading
+  `cd <absolute repository dir> &&`), `$(…)`, `$VAR`, `~` or `VAR=value`
+  in front. git and `gh` also run outside in a git repository in
+  `sandbox.allow_write`, by its real path with no `..`. One kept inside
+  says why: follow that fix, never turn the sandbox off.
 - Report success only when it was observed. Relay the owner's choices
   completely and never pick one for them.
 - A read-only request writes nothing. Asked for a plan or how something

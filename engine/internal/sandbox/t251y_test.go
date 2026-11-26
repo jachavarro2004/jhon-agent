@@ -11,7 +11,8 @@ import (
 
 // The folders LineFoldersProblem anchors: the repository's top, the working
 // folder, a leading cd's folder, each -C as written in the chain, and the
-// deepest existing folder of a clone's new one, each with its root (top or
+// clone's new folder as written (its deepest existing part is found when
+// it is checked), each with its root (top or
 // the project's) and how its `..` is judged.
 func TestT251YLineFoldersListsEveryFolderTheLineWritesOrWorksIn(t *testing.T) {
 	d := with(t251Disk, disk{"/home/u/work/b/sub": "dir"})
@@ -36,9 +37,9 @@ func TestT251YLineFoldersListsEveryFolderTheLineWritesOrWorksIn(t *testing.T) {
 		{"git fetch", "", []f{{p, p, false, true}}},
 		{"git -C /home/u/project/sub/../b fetch", "", []f{{p, p, false, true}, {p + "/sub/../b", p, false, false}}},
 		{"git -C sub -C .. fetch", "", []f{{p, p, false, true}, {p + "/sub", p, false, false}, {p + "/sub/..", p, false, false}}},
-		{"git -C /home/u/work/b clone https://h/o/r sub/newc", b, []f{{p, p, false, true}, {b, b, true, false}, {b + "/sub", b, true, false}}},
+		{"git -C /home/u/work/b clone https://h/o/r sub/newc", b, []f{{p, p, false, true}, {b, b, true, false}, {b + "/sub/newc", b, true, false}}},
 		{"cd /home/u/work/b && git pull", b, []f{{p, p, false, true}, {b, b, true, false}}},
-		{"git clone https://h/o/r.git", "", []f{{p, p, false, true}}},
+		{"git clone https://h/o/r.git", "", []f{{p, p, false, true}, {p + "/r", p, false, false}}},
 	} {
 		w := got(c.line, c.top)
 		if len(w) != len(c.want) {

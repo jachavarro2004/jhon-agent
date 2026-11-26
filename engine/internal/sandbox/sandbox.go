@@ -920,6 +920,17 @@ func Disk(path string) (real string, dir, ok bool) {
 	return real, fi.IsDir(), true
 }
 
+// Fresh is in with every filesystem question read from the disk anew
+// (Disk, DiskLstat), nothing remembered (T251, L1732): what runs after a
+// line enters the registry runs on Fresh, so no fact read before it (when
+// a sandboxed command could still change the disk) can stand in for the
+// disk then. Every post-registry check takes its Input through Fresh at its
+// own entry.
+func (in Input) Fresh() Input {
+	in.Stat, in.Lstat = Disk, DiskLstat
+	return in
+}
+
 // remembered is stat with each path's answer kept: one start asks for the
 // same paths more than once (Check, then Args).
 func remembered(stat func(string) (string, bool, bool)) func(string) (string, bool, bool) {

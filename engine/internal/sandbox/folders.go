@@ -26,17 +26,21 @@ import (
 // where only gh or docker run), whether its `..` parts are judged as a
 // repository's (strict, dotDotProblem), whether it is the folder the
 // process runs in (here), and whether git refusing a missing one is
-// enough (missing: git cannot change into it, so it works nowhere).
+// enough (missing: git cannot change into it, so it works nowhere). A
+// clone's is its new folder as written (clone): what is anchored is the
+// deepest part of it that exists when the check runs, read then, part by
+// part (L1732 C2).
 type lineFolder struct {
-	what, written, root   string
-	strict, here, missing bool
+	what, written, root          string
+	strict, here, missing, clone bool
 }
 
 // lineFolders are the folders line, run in in.Cwd, writes or works in, top
 // being the git repository inside a sandbox.allow_write folder it works in
 // ("" for a project's line, placeOf): the working folder, top, a leading
-// cd's folder, each -C of each git in turn and, for a clone, the deepest
-// folder of its new folder's path that exists, as written. Each one's root
+// cd's folder, each -C of each git in turn and, for a clone, its new
+// folder, as written (its deepest existing part is found when it is
+// checked, never from what was read before). Each one's root
 // is top when it lies in top, else the project's root that holds it, the
 // longest, else none; one path is listed once.
 func (in Input) lineFolders(line, top string) []lineFolder {
@@ -115,28 +119,9 @@ func (in Input) lineFolders(line, top string) []lineFolder {
 		if !filepath.IsAbs(target) {
 			target = dir + "/" + target
 		}
-		if parent := in.deepestExisting(target); parent != "" {
-			add(lineFolder{what: "the folder " + parent + ", where git clone writes,", written: parent})
-		}
+		add(lineFolder{what: "the folder git clone writes " + target + " in", written: target, clone: true})
 	}
 	return out
-}
-
-// deepestExisting is the longest leading part of written, a path as
-// written, that exists (in.Stat, read as the kernel reads it), "" when
-// none does but /.
-func (in Input) deepestExisting(written string) string {
-	parts := strings.Split(written, "/")
-	for i := len(parts); i > 1; i-- {
-		p := strings.Join(parts[:i], "/")
-		if p == "" {
-			continue
-		}
-		if _, _, ok := in.Stat(p); ok {
-			return p
-		}
-	}
-	return ""
 }
 
 // homedWritten is written, a path as written, with the home's own way (the
@@ -168,7 +153,13 @@ func (in Input) homedWritten(written string) string {
 // writes or works in (lineFolders), nil when it may (L1729 B2, L1731):
 // called once the line is in the registry, so no sandboxed command moves
 // one again. Each is judged by foldersProblem.
+//
+// It reads the disk anew for every fact (Fresh, L1732): whatever in
+// remembered before the registry (sandbox.Current's remembered Stat) is
+// unreachable from here, so a folder made a link while the line waited is
+// seen as one.
 func (in Input) LineFoldersProblem(line, top string) *Problem {
+	in = in.Fresh()
 	return in.foldersProblem(in.lineFolders(line, top))
 }
 
