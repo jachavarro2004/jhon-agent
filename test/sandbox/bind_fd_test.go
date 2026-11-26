@@ -37,8 +37,9 @@ func withSwappingBwrap(t *testing.T, b box, folder, target string) []string {
 
 // The project, <root>-worktrees, $TMPDIR and a sandbox.allow_write folder,
 // all in area/, are checked; then area/ becomes a link to the home, where a
-// folder of each name lies. Every write lands in the folder jhon checked,
-// none in the home's.
+// folder of each name lies. bubblewrap mounts the checked folders where the
+// link leads, so jhon sandbox enter refuses the run before the program
+// starts: nothing is written, in the home or in the folders checked.
 func TestAFolderSwappedForALinkBeforeBubblewrapMountsItIsNotWrittenThrough(t *testing.T) {
 	b := newBox(t)
 	area := filepath.Join(b.home, "area")
@@ -59,12 +60,12 @@ func TestAFolderSwappedForALinkBeforeBubblewrapMountsItIsNotWrittenThrough(t *te
 			t.Errorf("the write to area/%s went through the link into the home folder %s", n, filepath.Join(b.home, n))
 		}
 	}
-	if r.Code != 0 || r.Stdout != "wrote\n" || r.Stderr != "" {
-		t.Fatalf("exit %d, stdout %q, stderr %q; want the writes to succeed", r.Code, r.Stdout, r.Stderr)
+	if r.Code != 126 || r.Stdout != "" || !strings.HasPrefix(r.Stderr, "jhon sandbox: "+area+"/") || !strings.HasSuffix(r.Stderr, enterRefused) {
+		t.Errorf("exit %d, stdout %q, stderr %q; want 126 and the note", r.Code, r.Stdout, r.Stderr)
 	}
 	for _, n := range names {
-		if !exists(filepath.Join(area+".moved", n, "planted")) {
-			t.Errorf("the write to area/%s did not land in the folder jhon checked", n)
+		if exists(filepath.Join(area+".moved", n, "planted")) {
+			t.Errorf("the program ran: it wrote area/%s", n)
 		}
 	}
 }

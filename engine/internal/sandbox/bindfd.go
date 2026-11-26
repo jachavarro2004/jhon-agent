@@ -25,6 +25,16 @@ import (
 // the machine's root and /dev stay paths, which no sandboxed command can
 // change; the hidden paths (--tmpfs, the null device) are mount points
 // bubblewrap makes, with no source to follow.
+//
+// That is not enough by itself (L4): bubblewrap 0.13 turns a --bind-fd back
+// into the descriptor's path and resolves it again, and places every mount
+// by its destination's path, so a parent swapped in that moment mounts
+// another folder (the home's), or the checked one elsewhere. So the program
+// starts through `jhon sandbox enter` (Command, Enter), run from a
+// descriptor of jhon's own program: inside the sandbox, before anything of
+// the program's runs, it checks that each bind's destination is a mount
+// whose folder is the one checked (a duplicate of its descriptor, Keep),
+// read-only where it should be, and only then becomes the program.
 
 // Bound is bubblewrap's arguments for one run with each bind opened (Open):
 // Args as Args gives them, but each --bind and --ro-bind of an area is a
@@ -32,20 +42,33 @@ import (
 // to it (--bind-fd 7 /home/u/project), so it stays readable. Files are the
 // descriptors, each at its own number, close-on-exec: the run passes them
 // to bubblewrap alone (ExtraFiles, Inherit), which closes them before the
-// program starts.
+// program starts. Keep are what enter checks with and runs from, passed
+// past bubblewrap, which leaves them open: a duplicate of each bind's
+// descriptor (expect names each, with its destination) and jhon's own
+// program; enter closes them all before the program starts.
 type Bound struct {
 	Args  []string
 	Files []*os.File
+	Keep  []*os.File
+	// expect are enter's --expect values, <dest>=<fd>[,ro], in Args' order.
+	expect []string
+	// self is jhon's own program, opened from /proc/self/exe.
+	self *os.File
 }
 
 // Open is Args for in with each bind, writable or read-only, opened with no
-// link followed and checked on its descriptor (openBind): a folder is
+// link followed, a writable one through the path its checks judged, and
+// checked on its descriptor (openBind), once the project's top is the
+// folder the project was taken from (anchorProblem): a folder is
 // still a folder, a file still a file, and a writable one is not the root,
 // the home folder or a folder above it. A bind that changed since layout
 // judged it refuses the run (changedProblem), and so does a kernel with no
 // openat2 or a seccomp filter that refuses it (openat2Problem): a run never
 // falls back to a path. The caller closes Bound once bubblewrap started.
 func Open(in Input) (*Bound, *Problem) {
+	if p := anchorProblem(in); p != nil {
+		return nil, p
+	}
 	b := &Bound{}
 	args, p := build(in, func(m mount) ([]string, *Problem) {
 		f, p := openBind(in, m)
@@ -53,12 +76,21 @@ func Open(in Input) (*Bound, *Problem) {
 			return nil, p
 		}
 		b.Files = append(b.Files, f)
-		opt := "--ro-bind-fd"
-		if m.kind == write {
-			opt = "--bind-fd"
+		keep, err := dupHigh(f)
+		if err != nil {
+			return nil, changedProblem(m, m.path, "its descriptor cannot be kept for the check inside the sandbox ("+err.Error()+")")
 		}
+		b.Keep = append(b.Keep, keep)
+		opt, expect := "--ro-bind-fd", m.path+"="+strconv.Itoa(int(keep.Fd()))+",ro"
+		if m.kind == write {
+			opt, expect = "--bind-fd", m.path+"="+strconv.Itoa(int(keep.Fd()))
+		}
+		b.expect = append(b.expect, expect)
 		return []string{opt, strconv.Itoa(int(f.Fd())), m.path}, nil
 	})
+	if p == nil {
+		p = b.openSelf()
+	}
 	if p != nil {
 		b.Close()
 		return nil, p
@@ -72,7 +104,7 @@ func Open(in Input) (*Bound, *Problem) {
 // the child closes.
 func (b *Bound) ExtraFiles() []*os.File {
 	var out []*os.File
-	for _, f := range b.Files {
+	for _, f := range b.all() {
 		n := int(f.Fd()) - 3
 		for len(out) <= n {
 			out = append(out, nil)
@@ -82,15 +114,18 @@ func (b *Bound) ExtraFiles() []*os.File {
 	return out
 }
 
+// all are b's files and the ones it keeps for enter.
+func (b *Bound) all() []*os.File { return append(append([]*os.File{}, b.Files...), b.Keep...) }
+
 // Close closes b's files; a nil b has none.
 func (b *Bound) Close() {
 	if b == nil {
 		return
 	}
-	for _, f := range b.Files {
+	for _, f := range b.all() {
 		f.Close()
 	}
-	b.Files = nil
+	b.Files, b.Keep, b.self = nil, nil, nil
 }
 
 // Problems of Open.
@@ -115,9 +150,9 @@ func openat2Problem(err error) *Problem {
 }
 
 // changedProblem is the run refused for m, a bind that changed after
-// layout judged it: why says how (it is or passes through a link now, it is
-// gone, ...).
-func changedProblem(m mount, why string) *Problem {
+// layout judged it, named by path (as written, or its real path): why says
+// how (it is or passes through a link now, it is gone, ...).
+func changedProblem(m mount, path, why string) *Problem {
 	what := "the file "
 	if m.dir {
 		what = "the folder "
@@ -127,7 +162,17 @@ func changedProblem(m mount, why string) *Problem {
 		how = ", which the sandbox opens for writing, "
 	}
 	return &Problem{
-		Reason: what + m.path + how + "changed after Jhon checked it: " + why,
-		Fix:    "run the command again; if it is refused again, a command may be replacing " + m.path + ": find it and stop it",
+		Reason: what + path + how + "changed after Jhon checked it: " + why,
+		Fix:    "run the command again; if it is refused again, a command may be replacing " + path + ": find it and stop it",
+	}
+}
+
+// projectProblem is the run refused for top, the project's top folder as
+// the project's code read it, which is not the folder the project was taken
+// from (Input.ProjectFrom): a folder on its way changed while it was read.
+func projectProblem(top, from, why string) *Problem {
+	return &Problem{
+		Reason: "the project folder " + top + ", which the sandbox opens for writing, " + why,
+		Fix:    "run the command again; if it is refused again, a command may be replacing a folder on the way to " + from + ": find it and stop it",
 	}
 }

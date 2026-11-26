@@ -11,6 +11,11 @@ import (
 // is a temporary folder of the run's own, removed after it, unless a test
 // sets its own; and they run as outside the sandbox (JHON_IN_SANDBOX unset).
 func TestMain(m *testing.M) {
+	// A sandbox the tests start runs this binary as `jhon sandbox enter`
+	// (Bound.Command runs the program that holds Open's descriptors).
+	if len(os.Args) > 2 && os.Args[1] == "sandbox" && os.Args[2] == "enter" {
+		os.Exit(Enter(os.Args[3:]))
+	}
 	state, err := os.MkdirTemp("", "jhon-sandbox-state-")
 	if err != nil {
 		panic(err)
