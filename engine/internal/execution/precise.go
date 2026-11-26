@@ -1,8 +1,6 @@
 package execution
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
@@ -29,8 +27,10 @@ import (
 // code of the projects this one depends on (a library beside it in a
 // monorepo): with the project's own directory as rootdir, a change there
 // would select no test. The record lives in Jhon's cache, one file per
-// repository and project, never in the project. ok is false for any other
-// command, and outside a git repository.
+// repository and project that every worktree of the repository shares
+// (TestmonData), never in the project; a run writes a private copy of it
+// (CheckOut), never the record itself. ok is false for any other command,
+// and outside a git repository.
 //
 // cov says the project runs pytest-cov (PytestCov): testmon refuses to run
 // beside it when branch coverage is on, so the run passes `--no-cov`; a
@@ -59,9 +59,10 @@ func underTestmon(command, top, data, flag string, cov bool) string {
 // with selection off (`--testmon-noselect` deselects nothing and still
 // records the code each test executes): the first run of a project whose
 // record is missing or holds no fingerprints, where narrowing starts. It
-// writes to BuildFile, beside the record, which FinishBuild makes the record
-// only when pytest ran to its end, so a half-written file is never read as
-// one. ok is as Precise's.
+// writes to BuildFile, beside the record and this process's own, which
+// FinishBuild makes the record only when pytest ran to its end, so a
+// half-written file is never read as one, and two first runs at once (two
+// worktrees) never write or remove each other's. ok is as Precise's.
 func Collect(command, top, projectPath string, cov bool) (string, bool) {
 	if _, ok := Precise(command, top, projectPath, cov); !ok {
 		return "", false
@@ -69,51 +70,43 @@ func Collect(command, top, projectPath string, cov bool) (string, bool) {
 	return underTestmon(command, top, BuildFile(TestmonData(top, projectPath)), "--testmon-noselect", cov), true
 }
 
-// BuildFile is where a first run (Collect) writes the record data will be.
-func BuildFile(data string) string { return data + ".building" }
+// BuildFile is where this process's first run (Collect) writes the record
+// data will be: `<data>.<pid>.building`.
+func BuildFile(data string) string { return data + "." + strconv.Itoa(os.Getpid()) + ".building" }
 
 // sqliteBeside are the files sqlite keeps beside a database in WAL mode,
 // which pytest-testmon's is.
 var sqliteBeside = []string{"-wal", "-shm"}
 
-// StartBuild removes what an earlier first run left at data's BuildFile.
-func StartBuild(data string) {
-	for _, suffix := range append([]string{""}, sqliteBeside...) {
-		os.Remove(BuildFile(data) + suffix)
-	}
-}
+// StartBuild removes what an earlier first run of this process left at
+// data's BuildFile.
+func StartBuild(data string) { drop(BuildFile(data)) }
 
 // FinishBuild ends a first run whose command exited with code, nil when it
-// was cut (its deadline, a signal, sh not starting): the file it wrote
-// becomes the record at data when pytest ran to its end, its tests passing
-// (exit 0) or failing (exit 1), and is removed otherwise (2 is pytest
-// interrupted, 3 an internal error, 4 a usage error, 5 no test collected).
-// kept is whether data is now a record that narrows (not RecordNone or
-// RecordUnusable); a kept record clears FirstRunCut.
-func FinishBuild(data string, code *int) (kept bool) {
+// was cut (its deadline, a signal, sh not starting), and whose output w
+// watched (nil when none was): the file it wrote becomes the record at data,
+// atomically, when pytest ran to its end, its tests passing (exit 0) or
+// failing (exit 1), unless its failures are the environment's (refused,
+// Watch.Refusal), and is removed otherwise. kept is whether data is now a
+// record that narrows (not RecordNone or RecordUnusable); a kept record
+// clears FirstRunCut.
+func FinishBuild(data string, code *int, w *Watch) (kept bool, refused string) {
 	tmp := BuildFile(data)
-	if code == nil || *code < 0 || *code > 1 || !project.Exists(tmp) {
-		StartBuild(data)
-		return false
+	defer StartBuild(data)
+	if !ranToEnd(code) || !project.Exists(tmp) {
+		return false, ""
 	}
-	// A write-ahead log pytest left unmerged belongs to the file it is
-	// beside: the old record's goes, the new one's moves with it.
-	for _, suffix := range sqliteBeside {
-		os.Remove(data + suffix)
+	if refused = w.Refusal(); refused != "" {
+		return false, refused
 	}
-	if os.Rename(tmp, data) != nil {
-		StartBuild(data)
-		return false
+	if !publish(tmp, data) {
+		return false, ""
 	}
-	if st, err := os.Stat(tmp + "-wal"); err == nil && st.Size() > 0 {
-		_ = os.Rename(tmp+"-wal", data+"-wal")
-	}
-	StartBuild(data)
 	if s := TestmonRecord(data); s == RecordNone || s == RecordUnusable {
-		return false
+		return false, ""
 	}
 	os.Remove(cutFile(data))
-	return true
+	return true, ""
 }
 
 // cutFile is the marker of a first run that built no record (MarkFirstRunCut).
@@ -136,17 +129,6 @@ func FirstRunCut(data string) (why string, ok bool) {
 		return "", false
 	}
 	return strings.TrimSpace(string(b)), true
-}
-
-// TestmonData is the file holding pytest-testmon's record of the project at
-// projectPath in the repository whose top level is top.
-func TestmonData(top, projectPath string) string {
-	cache := os.Getenv("XDG_CACHE_HOME")
-	if cache == "" || !filepath.IsAbs(cache) {
-		cache = filepath.Join(project.Home(), ".cache")
-	}
-	sum := sha256.Sum256([]byte(top + "\x00" + projectPath))
-	return filepath.Join(cache, "jhon", "testmon", hex.EncodeToString(sum[:8])+".db")
 }
 
 // The states of a testmon record (TestmonRecord).
@@ -186,18 +168,21 @@ func TestmonRecord(data string) string {
 }
 
 // testmonReach prints, for a record and the files named after it: how many
-// tests ran any of the files, how many the record holds, and the seconds
-// each set took when last recorded.
+// tests ran any of the files, how many the record holds, the seconds each
+// set took when last recorded, how many tests it marks failed, and how many
+// of those that ran the files it does not.
 const testmonReach = `import sqlite3, sys
 c = sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True)
 files = sys.argv[2:]
-last = "select t.id, t.duration from test_execution t join (select max(id) id from test_execution group by test_name) l on l.id = t.id"
-tests = dict(c.execute(last).fetchall())
+last = "select t.id, t.duration, t.failed from test_execution t join (select max(id) id from test_execution group by test_name) l on l.id = t.id"
+rows = c.execute(last).fetchall()
+tests = {r[0]: r[1] for r in rows}
+failed = {r[0] for r in rows if r[2]}
 hit = set()
 if files:
     q = "select distinct x.test_execution_id from test_execution_file_fp x join file_fp f on f.id = x.fingerprint_id where f.filename in (" + ",".join("?" * len(files)) + ")"
     hit = {r[0] for r in c.execute(q, files)} & tests.keys()
-print(len(hit), len(tests), sum(tests[i] or 0 for i in hit), sum(d or 0 for d in tests.values()))`
+print(len(hit), len(tests), sum(tests[i] or 0 for i in hit), sum(d or 0 for d in tests.values()), len(failed), len(hit - failed))`
 
 // WideShare is the share of a project's test time past which a narrowed
 // run is wide: it runs about what the PR's CI runs whole anyway.
@@ -215,7 +200,22 @@ const WideSeconds = 600
 type Reach struct {
 	Tests, Total     int
 	Seconds, AllTime float64
+	// Failed is how many tests the record marks failed, which
+	// pytest-testmon runs again whatever changed; Passing how many of Tests
+	// it does not mark failed.
+	Failed, Passing int
 }
+
+// MostlyFailed is whether the record marks most of its tests failed, at
+// least EnvFailureMin: what a run while the test services were down leaves
+// (T255, L1725), and why every run then selects them all.
+func (r Reach) MostlyFailed() bool {
+	return r.Failed >= EnvFailureMin && 2*r.Failed > r.Total
+}
+
+// OnlyFailed is whether every test pytest-testmon would select is one the
+// record marks failed: the change reaches none it marks passing.
+func (r Reach) OnlyFailed() bool { return r.Failed > 0 && r.Passing == 0 }
 
 // Wide is whether the run is wide: at least WideShare of the time, or more
 // than WideSeconds.
@@ -244,15 +244,17 @@ func TestmonReach(data string, files []string) (Reach, bool) {
 		return Reach{}, false
 	}
 	f := strings.Fields(string(out))
-	if len(f) != 4 {
+	if len(f) != 6 {
 		return Reach{}, false
 	}
 	var r Reach
-	var errs [4]error
+	var errs [6]error
 	r.Tests, errs[0] = strconv.Atoi(f[0])
 	r.Total, errs[1] = strconv.Atoi(f[1])
 	r.Seconds, errs[2] = strconv.ParseFloat(f[2], 64)
 	r.AllTime, errs[3] = strconv.ParseFloat(f[3], 64)
+	r.Failed, errs[4] = strconv.Atoi(f[4])
+	r.Passing, errs[5] = strconv.Atoi(f[5])
 	for _, e := range errs {
 		if e != nil {
 			return Reach{}, false

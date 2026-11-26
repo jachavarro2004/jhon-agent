@@ -11,8 +11,6 @@
 package ldd
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -572,15 +570,15 @@ func TestExecutionsAffectedRunsPytestUnderTestmon(t *testing.T) {
 	equal(t, lib(), "whole 0")
 
 	// No record: every test runs once, collecting it (executions_unit_test.go).
-	match(t, command("--affected", "base"), `^mkdir -p '[^']+/jhon/testmon' && TESTMON_DATAFILE='[^']+\.db\.building' uv run --with pytest-testmon --extra dev pytest --testmon-noselect --rootdir=`)
+	match(t, command("--affected", "base"), `^mkdir -p '[^']+/jhon/testmon' && TESTMON_DATAFILE='[^']+\.db\.[0-9]+\.building' uv run --with pytest-testmon --extra dev pytest --testmon-noselect --rootdir=`)
 	equal(t, lib("--affected", "base"), "whole 0")
 	support.Write(t, root, map[string]string{"lib/tests/test_util.py": "def test_x(): pass\n"})
 	notes := strings.Join(run("--affected", "base").Notes, "\n")
-	match(t, notes, `pytest-testmon has no record yet, so every test runs once and becomes it; later runs are narrowed: lib`)
+	match(t, notes, `lib: pytest-testmon has no record of it yet, so all its tests run once \(1 test function in 1 module\) and become its record, under the first-run deadline of 180 min; later runs are narrowed`)
 
-	// A record where the change reaches 1 of 4 tests narrows; 3 of 4 is wide.
-	sum := sha256.Sum256([]byte(root + "\x00lib"))
-	data := filepath.Join(cache, "jhon", "testmon", hex.EncodeToString(sum[:8])+".db")
+	// A record where the change reaches 1 of 4 tests narrows; 3 of 4 is
+	// wide. Every worktree of the repository shares it (T255).
+	data := testmonData(cache, filepath.Join(root, ".git"), "lib")
 	record := func(reached int, seconds float64) {
 		os.Remove(data)
 		os.MkdirAll(filepath.Dir(data), 0o755)

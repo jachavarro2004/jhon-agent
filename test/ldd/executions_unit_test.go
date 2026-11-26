@@ -27,13 +27,15 @@ import (
 
 // fakeUvScript stands in for uv: one line per call in FAKE_UV_LOG (the record
 // it was told to write, then its arguments), a copy of FAKE_UV_RECORD at
-// TESTMON_DATAFILE, a wait of FAKE_UV_SLEEP seconds, and pytest's exit code,
-// FAKE_UV_EXIT, or FAKE_UV_EXIT_WHOLE when set for a call outside
-// pytest-testmon. With FAKE_UV_SAY_FAILED set, a call that fails names a
-// failed test in each module it was given, as pytest's summary does.
+// TESTMON_DATAFILE, FAKE_UV_SAY's lines as its output, a wait of
+// FAKE_UV_SLEEP seconds, and pytest's exit code, FAKE_UV_EXIT, or
+// FAKE_UV_EXIT_WHOLE when set for a call outside pytest-testmon. With
+// FAKE_UV_SAY_FAILED set, a call that fails names a failed test in each
+// module it was given, as pytest's summary does.
 const fakeUvScript = `#!/bin/sh
 printf '%s|%s\n' "${TESTMON_DATAFILE-}" "$*" >> "$FAKE_UV_LOG"
 if [ -n "${TESTMON_DATAFILE-}" ]; then cp "$FAKE_UV_RECORD" "$TESTMON_DATAFILE"; fi
+if [ -n "${FAKE_UV_SAY-}" ]; then printf '%b\n' "$FAKE_UV_SAY"; fi
 if [ -n "${FAKE_UV_SLEEP-}" ]; then sleep "$FAKE_UV_SLEEP"; fi
 code="${FAKE_UV_EXIT:-0}"
 if [ -z "${TESTMON_DATAFILE-}" ] && [ -n "${FAKE_UV_EXIT_WHOLE-}" ]; then code="$FAKE_UV_EXIT_WHOLE"; fi
@@ -48,11 +50,30 @@ exit "$code"
 // and its test module, with the fake uv first on PATH and a cache of its own.
 type pytestProject struct {
 	root string
-	// data is where Jhon keeps lib's pytest-testmon record.
-	data string
+	// data is where Jhon keeps lib's pytest-testmon record, shared by every
+	// worktree of the repository (T255); legacy is where it was kept before,
+	// one per worktree.
+	data, legacy string
+	// made is what the fake uv writes as a run's record.
+	made string
 	log  string
 	env  []string
 }
+
+// testmonData is where Jhon keeps the pytest-testmon record of the project
+// at projectPath in the repository whose git common dir is common, under
+// cache (execution.TestmonData).
+func testmonData(cache, common, projectPath string) string {
+	sum := sha256.Sum256([]byte(common + "\x00" + projectPath))
+	return filepath.Join(cache, "jhon", "testmon", hex.EncodeToString(sum[:8])+".db")
+}
+
+// private is s with a run's private copy of a record (`<record>.<n>.run`)
+// and a first run's file (`<record>.<pid>.building`) named without the
+// number that makes each its own: `<record>.run`, `<record>.building`.
+func private(s string) string { return privateNumber.ReplaceAllString(s, ".db.$1") }
+
+var privateNumber = regexp.MustCompile(`\.db\.[0-9]+\.(run|building)\b`)
 
 func newPytestProject(t *testing.T) *pytestProject {
 	t.Helper()
@@ -83,10 +104,10 @@ c.commit()`
 		t.Fatal(err, string(out))
 	}
 	cache := filepath.Join(scratch, "cache")
-	sum := sha256.Sum256([]byte(root + "\x00lib"))
-	p := &pytestProject{root: root, data: filepath.Join(cache, "jhon", "testmon", hex.EncodeToString(sum[:8])+".db"), log: filepath.Join(scratch, "uv.log")}
+	p := &pytestProject{root: root, data: testmonData(cache, filepath.Join(root, ".git"), "lib"), legacy: testmonData(cache, root, "lib"),
+		made: made, log: filepath.Join(scratch, "uv.log")}
 	p.env = []string{"PATH=" + filepath.Join(scratch, "bin") + string(os.PathListSeparator) + os.Getenv("PATH"),
-		"XDG_CACHE_HOME=" + cache, "FAKE_UV_LOG=" + p.log, "FAKE_UV_RECORD=" + made, "FAKE_UV_EXIT=0", "FAKE_UV_SLEEP="}
+		"XDG_CACHE_HOME=" + cache, "FAKE_UV_LOG=" + p.log, "FAKE_UV_RECORD=" + made, "FAKE_UV_EXIT=0", "FAKE_UV_SLEEP=", "FAKE_UV_SAY="}
 	return p
 }
 
@@ -96,14 +117,15 @@ func (p *pytestProject) jhon(t *testing.T, env []string, args ...string) support
 	return support.Jhon(t, p.root, support.Env(append(append([]string{}, p.env...), env...)...), args...)
 }
 
-// calls are the fake uv's calls so far, oldest first.
+// calls are the fake uv's calls so far, oldest first, a private record
+// named without its number (private).
 func (p *pytestProject) calls(t *testing.T) []string {
 	t.Helper()
 	b, err := os.ReadFile(p.log)
 	if err != nil {
 		return []string{}
 	}
-	return strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
+	return strings.Split(strings.TrimSuffix(private(string(b)), "\n"), "\n")
 }
 
 // plan is a dry run's command for lib's tests, how they are narrowed, and its notes.
@@ -121,7 +143,7 @@ func (p *pytestProject) plan(t *testing.T, args ...string) (command, tests, note
 	}
 	for _, s := range out.Plan {
 		if s.Project == "lib" && s.Kind == "" {
-			command = s.Command
+			command = private(s.Command)
 		}
 	}
 	for _, s := range out.Projects {
@@ -142,7 +164,7 @@ func (p *pytestProject) narrowed() string {
 	return "mkdir -p '" + filepath.Dir(p.data) + "' && TESTMON_DATAFILE='" + p.data + "' uv run --with pytest-testmon --extra dev pytest --testmon --rootdir='" + p.root + "'"
 }
 
-const firstRunNote = `pytest-testmon has no record yet, so every test runs once and becomes it; later runs are narrowed: lib`
+const firstRunNote = `lib: pytest-testmon has no record of it yet, so all its tests run once (1 test function in 1 module) and become its record, under the first-run deadline of 180 min; later runs are narrowed`
 
 // E1: with no usable record, the project's whole test command runs once with
 // pytest-testmon collecting into a file beside Jhon's record, which becomes
@@ -242,7 +264,7 @@ func TestExecutionsPrimeBuildsTheMissingRecords(t *testing.T) {
 	r := p.jhon(t, nil, "executions", "prime", "--timeout", "5")
 	equal(t, r.Code, 0, r.Out())
 	equal(t, p.calls(t), []string{p.data + ".building|run --with pytest-testmon --extra dev pytest --testmon-noselect --rootdir=" + p.root})
-	equal(t, r.Stdout, "==> lib: "+p.collecting()+"\n<== lib: exit 0; its pytest-testmon record is kept\njhon executions prime: 1 of 1 record(s) built\n")
+	equal(t, private(r.Stdout), "jhon executions prime: each first run's deadline is 5 min (--timeout sets another)\n==> lib: "+p.collecting()+"\n<== lib: exit 0; its pytest-testmon record is kept\njhon executions prime: 1 of 1 record(s) built\n")
 	equal(t, exists(p.data), true, "the record")
 	equal(t, exists(filepath.Join(p.root, record)), false, "prime writes no execution record")
 	command, _, _ := p.plan(t, "--affected", "base")
@@ -259,7 +281,7 @@ func TestExecutionsPrimeBuildsTheMissingRecords(t *testing.T) {
 	before := support.Read(t, filepath.Join(q.root, record))
 	r = q.jhon(t, []string{"FAKE_UV_SLEEP=30"}, "executions", "prime", "--timeout", "0.01")
 	equal(t, r.Code, 1, r.Out())
-	equal(t, r.Stdout, "==> lib: "+q.collecting()+"\n<== lib: timeout after 0.01 min; its process group was killed and no record was kept\njhon executions prime: 0 of 1 record(s) built; run it again with a longer `--timeout <minutes>`\n")
+	equal(t, private(r.Stdout), "jhon executions prime: each first run's deadline is 0.01 min (--timeout sets another)\n==> lib: "+q.collecting()+"\n<== lib: timeout after 0.01 min; its process group was killed and no record was kept\njhon executions prime: 0 of 1 record(s) built; run it again with a longer `--timeout <minutes>`\n")
 	equal(t, exists(q.data), false)
 	equal(t, q.jhon(t, nil, "executions", "prime", "--timeout", "5").Code, 0)
 	command, _, notes := q.plan(t, "--affected", "base")
@@ -489,7 +511,7 @@ func TestExecutionsWideRunWithNoTestModuleRunsUnderTestmon(t *testing.T) {
 	before := len(p.calls(t))
 	r := p.jhon(t, nil, "executions", "run", "c1", "--affected", "slice", "--json")
 	equal(t, r.Code, 0, r.Stderr)
-	equal(t, p.calls(t)[before:], []string{p.data + "|run --with pytest-testmon --extra dev pytest --testmon --rootdir=" + p.root}, "uv ran once, under pytest-testmon")
+	equal(t, p.calls(t)[before:], []string{p.data + ".run|run --with pytest-testmon --extra dev pytest --testmon --rootdir=" + p.root}, "uv ran once, under pytest-testmon, on a private copy of the record")
 	var status any
 	for _, e := range testRuns(readRecord(t, p.root)) {
 		if e["project"] == "lib" {
@@ -661,7 +683,7 @@ c.commit()`
 	equal(t, r.Code, 0, r.Out())
 	equal(t, p.calls(t), []string{
 		"|run --extra dev pytest tests/test_new.py",
-		p.data + "|run --with pytest-testmon --extra dev pytest --testmon --rootdir=" + p.root + " tests/test_util.py",
+		p.data + ".run|run --with pytest-testmon --extra dev pytest --testmon --rootdir=" + p.root + " tests/test_util.py",
 	}, "uv ran the new module whole, then the touched one under pytest-testmon")
 
 	// A file pytest-testmon does not track: the touched modules run whole.
@@ -726,7 +748,7 @@ func TestExecutionsWideRunRunsBothPartsWhenTheWholePartFails(t *testing.T) {
 			equal(t, r.Code, 1, r.Out())
 			equal(t, p.calls(t), []string{
 				"|run --extra dev pytest tests/test_new.py",
-				p.data + "|run --with pytest-testmon --extra dev pytest --testmon --rootdir=" + p.root + " tests/test_util.py",
+				p.data + ".run|run --with pytest-testmon --extra dev pytest --testmon --rootdir=" + p.root + " tests/test_util.py",
 			}, "both parts ran")
 			var lib map[string]any
 			for _, e := range executions(readRecord(t, p.root)) {

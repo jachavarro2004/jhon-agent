@@ -104,14 +104,46 @@ member's holds `executions: null` and reads as no run. `jhon deliver check`
 in the member reads its entry (docs/ldd.md). Absent with no member's run.
 
 A uv-run pytest project is narrowed by pytest-testmon, whose record lives
-in `~/.cache/jhon/testmon/`, one file per checkout and project. With no
-record (or one holding no fingerprints) an affected run runs the project's
-whole test command once with `--testmon-noselect`, into `<record>.building`,
-renamed to the record only when pytest ran to its end (exit 0 or 1). A
-first run its deadline cut keeps none and leaves `<record>.cut`: later runs
-run only the test modules the change touched and name `jhon executions
-prime --timeout <minutes>`, which builds every missing record and writes no
-execution record.
+in `~/.cache/jhon/testmon/`, one file per repository and project (T255):
+keyed by the repository's git common dir and the project's path, so every
+worktree of the repository, a new one per change, narrows from the same
+record. When it is missing and the worktree has its own record from
+before (keyed by its top level), that one is copied in once. A run never
+writes the record in place: it runs pytest-testmon on a private copy beside
+it (`<record>.<n>.run`), which replaces the record in one rename only when
+pytest ran to its end (exit 0 or 1); a run cut, interrupted or failing
+inside pytest leaves the record as it was, and of two runs at once the last
+to finish wins (a record of other code only makes pytest-testmon select
+more, never less). With no record (or one holding no fingerprints) an
+affected run runs the project's whole test command once with
+`--testmon-noselect`, into `<record>.<pid>.building`, renamed to the record
+only when pytest ran to its end; the dry run and the run name each such
+project with how many test functions its test modules define, and in
+`--json` its `projects[]` entry carries `first_run: {record, tests,
+modules, deadline_minutes}`. A first run its deadline cut keeps none and
+leaves `<record>.cut`: later runs run only the test modules the change
+touched and name `jhon executions prime --timeout <minutes>`, which builds
+every missing record and writes no execution record.
+
+A run whose failures are the test environment's keeps no record, the
+shared one or a first one, and says the test services may be down: its
+output says a test service refused the connection while tests failed,
+pytest could not collect a test module, or every one of at least 5 tests
+failed and none passed (a unit's RED, a few failing tests, is kept). A
+record that marks most of its tests failed (at least 5), which
+pytest-testmon runs again whatever changed, is named in the dry run and the
+run (`failed_marks: {failed, total}` in `--json`) with `jhon executions
+forget <project>`, which drops the whole record, and the worktree's own
+from before: a test that failed because a service was down recorded only
+the code it ran before failing, so trusting it as passing would select
+less. A first run, and a pytest-testmon run whose selected tests are all
+(or mostly) ones the record marks failed, have a deadline of 180 min
+unless the run names one with `--timeout` (`timeout_minutes` on its
+`plan[]` entry; `jhon executions prime` too): pytest-testmon writes its
+record only at a run's end, so a run cut every time never narrows the
+next. A run cut by its deadline says how far pytest got (`pytest got
+through about 138 of its 577 selected tests (24%)`), and a cut
+pytest-testmon run says the next run selects the same tests again.
 
 With a usable record, a change that reaches half the project's test time or
 more, or that changes a file pytest-testmon does not track, also runs only
