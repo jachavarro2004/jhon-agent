@@ -35,3 +35,6 @@ func dupHigh(f *os.File) (*os.File, error) { return nil, errNotLinux }
 func (b *Bound) openSelf() *Problem {
 	return &Problem{Reason: errNotLinux.Error(), Fix: "none on this system: it needs Linux and bubblewrap"}
 }
+
+// pinnedAs checks nothing off Linux, where the sandbox does not run.
+func pinnedAs(in Input, real, written string) bool { return true }

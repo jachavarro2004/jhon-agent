@@ -747,14 +747,15 @@ func Args(in Input) []string {
 			return []string{"--bind", m.path, m.path}, nil
 		}
 		return []string{"--ro-bind", m.path, m.path}, nil
-	})
+	}, nil)
 	return args
 }
 
 // build is Args with each bind, writable or read-only, given by bind: the
 // path itself (Args) or a descriptor (Open). It stops at the first problem
-// bind gives.
-func build(in Input, bind func(m mount) ([]string, *Problem)) ([]string, *Problem) {
+// bind gives. hide, when not nil, is told of each hidden path and private
+// folder it mounts (Open's expectations for enter).
+func build(in Input, bind func(m mount) ([]string, *Problem), hide func(m mount)) ([]string, *Problem) {
 	mounts, tmpdir := layout(in, true)
 	args := []string{"--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc"}
 	var folders []string
@@ -788,6 +789,9 @@ func build(in Input, bind func(m mount) ([]string, *Problem)) ([]string, *Proble
 			// An empty file: the null device, readable as one (a plain bind
 			// would refuse the read).
 			args = append(args, "--dev-bind", "/dev/null", m.path)
+		}
+		if hide != nil && m.kind != write && m.kind != read {
+			hide(m)
 		}
 	}
 	// A hidden folder turns read-only once what it shows is mounted in it.
@@ -838,16 +842,49 @@ func probeArgs(bind, ro int, tmp string) []string {
 // ProjectFolder is the real path of a folder the caller pins as the project
 // (`jhon sandbox run --project`): absolute, a folder that exists, and not /,
 // the home folder or one above it, as for any writable area.
+//
+// The real path is read through every link, at a moment a concurrent run
+// may have swapped a folder on the way for a link to the home (T248 L4's
+// second verify): it is taken only when it is, by device and inode, the
+// folder the value names as written, opened with no link followed (the
+// home's own way taken, as for any area): a value through a link, or one
+// read during a swap, is refused (pinnedAs). Every caller (run, status,
+// profile, Claude Code's hook) gets the same answer.
 func ProjectFolder(folder string) (real string, ok bool) {
 	if !filepath.IsAbs(folder) {
 		return "", false
 	}
 	real, dir, ok := Disk(folder)
-	if !ok || !dir || real == "/" || project.Within(project.Realish(project.Home()), real) {
+	home := project.Realish(project.Home())
+	if !ok || !dir || real == "/" || project.Within(home, real) {
+		return "", false
+	}
+	if !pinnedAs(Input{Home: home, Env: map[string]string{"HOME": os.Getenv("HOME")}, Stat: Disk}, real, folder) {
 		return "", false
 	}
 	return real, true
 }
+
+// HereProject is whether top, the project the folder this process works in
+// is in as the project's code read it (project.ReadRepo, through every
+// link), is that folder or one above it on the disk, by device and inode
+// (anchorProblem): a swap while it was read names another folder (T248 L4).
+// Where openat2 is missing or refused it says yes: the sandbox cannot run
+// there, and a run fails closed on its own.
+func HereProject(top string) bool {
+	if top == "" {
+		return true
+	}
+	in := Input{Roots: []string{top}, Home: project.Realish(project.Home()), Env: map[string]string{"HOME": os.Getenv("HOME")}, Stat: Disk, ProjectFrom: "."}
+	p := anchorProblem(in)
+	return p == nil || p.Reason == errNoOpenat2.Error() || p.Reason == errOpenat2Refused.Error()
+}
+
+// ProjectProblem is why the project of in is not the one it was taken from
+// (Input.ProjectFrom: the working folder or the --project value as
+// written), nil when it is: what Open checks first, for a line that would
+// run outside the sandbox (T248 L4).
+func (in Input) ProjectProblem() *Problem { return anchorProblem(in) }
 
 // DiskLstat is Input.Lstat on this machine's disk.
 func DiskLstat(path string) (link string, isLink, ok bool) {

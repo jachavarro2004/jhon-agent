@@ -87,6 +87,18 @@ func Open(in Input) (*Bound, *Problem) {
 		}
 		b.expect = append(b.expect, expect)
 		return []string{opt, strconv.Itoa(int(f.Fd())), m.path}, nil
+	}, func(m mount) {
+		// A hidden folder is an empty read-only tmpfs, the private runtime
+		// dir a writable one, a hidden file the null device: bubblewrap
+		// places them by path too (the second verify), so enter checks them.
+		switch {
+		case m.kind == private:
+			b.expect = append(b.expect, m.path+"=tmpfs")
+		case m.dir:
+			b.expect = append(b.expect, m.path+"=tmpfs,ro")
+		default:
+			b.expect = append(b.expect, m.path+"=null")
+		}
 	})
 	if p == nil {
 		p = b.openSelf()

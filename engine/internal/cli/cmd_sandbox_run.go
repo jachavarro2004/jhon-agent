@@ -231,15 +231,17 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 func sandboxSupervised(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string, extra []*os.File) (int, error) {
 	watch := &sandbox.Watch{}
 	errOut := &lastByte{w: os.Stderr}
+	opening := &firstBytes{}
+	outSeen := &firstBytes{}
 	cmd := &exec.Cmd{Path: path, Args: argv, Env: env, Stdin: os.Stdin,
-		Stdout: io.MultiWriter(os.Stdout, watch), Stderr: io.MultiWriter(errOut, watch), WaitDelay: pipeGrace, ExtraFiles: extra}
+		Stdout: io.MultiWriter(os.Stdout, watch, outSeen), Stderr: io.MultiWriter(errOut, watch, opening), WaitDelay: pipeGrace, ExtraFiles: extra}
 	// A caller that gave stdout and stderr one file (2>&1) reads one stream
 	// in the order it was written: the program gets one pipe for both, as
 	// it got the caller's one descriptor before (L1318 c). exec.Cmd gives
 	// one pipe when Stdout and Stderr are the same writer.
 	if sameFile(os.Stdout, os.Stderr) {
 		errOut = &lastByte{w: os.Stdout}
-		both := io.MultiWriter(errOut, watch)
+		both := io.MultiWriter(errOut, watch, opening)
 		cmd.Stdout, cmd.Stderr = both, both
 	}
 	signals := make(chan os.Signal, 4)
@@ -276,6 +278,14 @@ func sandboxSupervised(path string, argv, env []string, profile, failNote, runNo
 	}
 	refused, said := watch.Refused()
 	var notes []string
+	// bubblewrap's own refusal of a folder that changed while it mounted it
+	// (T248 L4's second verify): its line opens the output, the program
+	// never started (nothing on stdout), and bubblewrap exits 1. The line
+	// stays; the note says what it means, and no other note follows.
+	if profile == sandbox.Work && code == 1 && killedBy == 0 && outSeen.len() == 0 && strings.HasPrefix(opening.String(), bwrapRace) {
+		said, failNote, runNote = false, "", ""
+		notes = append(notes, bwrapRaceNote)
+	}
 	if said && code != 0 {
 		notes = append(notes, refusal(refused))
 	}
@@ -345,4 +355,40 @@ func (l *lastByte) last() byte {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.b
+}
+
+// bwrapRace opens bubblewrap's own refusal of a folder that changed while
+// it mounted it, and bwrapRaceNote is what a supervised run adds after it.
+const (
+	bwrapRace     = "bwrap: Race condition binding dirfd"
+	bwrapRaceNote = "jhon sandbox: bubblewrap refused the sandbox because a folder changed while it mounted it, so nothing was run; fix: run the command again"
+)
+
+// firstBytes keeps the first bytes written to it, up to 64.
+type firstBytes struct {
+	mu sync.Mutex
+	b  []byte
+	n  int
+}
+
+func (f *firstBytes) Write(p []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if room := 64 - len(f.b); room > 0 {
+		f.b = append(f.b, p[:min(room, len(p))]...)
+	}
+	f.n += len(p)
+	return len(p), nil
+}
+
+func (f *firstBytes) String() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return string(f.b)
+}
+
+func (f *firstBytes) len() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.n
 }

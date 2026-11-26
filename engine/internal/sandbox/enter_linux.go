@@ -40,9 +40,8 @@ func Enter(args []string) int {
 // "" when it is: / is read-only (the machine's root, bound read-only: not
 // so outside Jhon's sandbox), and each expectation's destination, opened
 // from / with no link followed, is a mount root (its mount is not its
-// parent's), its folder or file is the one the expectation's descriptor
-// holds (device and inode), and it is read-only where the expectation says
-// so.
+// parent's) holding what the expectation says (mountedAsChecked), read-only
+// where it says so.
 func enterProblem(expects []expectation) string {
 	var root syscall.Statfs_t
 	if err := syscall.Statfs("/", &root); err != nil || root.Flags&stRdonly == 0 {
@@ -56,20 +55,42 @@ func enterProblem(expects []expectation) string {
 	return ""
 }
 
-// mountedAsChecked is whether e holds (enterProblem).
+// tmpfsMagic is statfs's type of a tmpfs; nullDevice /dev/null's device
+// number (major 1, minor 3).
+const (
+	tmpfsMagic = 0x01021994
+	nullDevice = 0x103
+)
+
+// mountedAsChecked is whether e holds (enterProblem): for a bind, the
+// destination holds the folder or file of e's descriptor (device and
+// inode); for a hidden folder, an empty tmpfs; for a hidden file, the null
+// device.
 func mountedAsChecked(e expectation) bool {
-	var want syscall.Stat_t
-	if err := syscall.Fstat(e.fd, &want); err != nil {
-		return false
-	}
 	fd, err := openat2(e.dest)
 	if err != nil {
 		return false
 	}
 	defer syscall.Close(fd)
 	var got syscall.Stat_t
-	if err := syscall.Fstat(fd, &got); err != nil || got.Dev != want.Dev || got.Ino != want.Ino {
+	if err := syscall.Fstat(fd, &got); err != nil {
 		return false
+	}
+	switch e.kind {
+	case expectTmpfs:
+		var fs syscall.Statfs_t
+		if got.Mode&syscall.S_IFMT != syscall.S_IFDIR || syscall.Fstatfs(fd, &fs) != nil || fs.Type != tmpfsMagic {
+			return false
+		}
+	case expectNull:
+		if got.Mode&syscall.S_IFMT != syscall.S_IFCHR || got.Rdev != nullDevice {
+			return false
+		}
+	default:
+		var want syscall.Stat_t
+		if err := syscall.Fstat(e.fd, &want); err != nil || got.Dev != want.Dev || got.Ino != want.Ino {
+			return false
+		}
 	}
 	if e.ro {
 		var fs syscall.Statfs_t

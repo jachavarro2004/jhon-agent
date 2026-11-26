@@ -242,3 +242,129 @@ func TestEnterRunsNothingOutsideTheSandbox(t *testing.T) {
 		t.Error("enter ran the program outside the sandbox")
 	}
 }
+
+// hiddenBox is swapBox with a hidden file (the SSH agent's socket) and a
+// hidden folder (a socket folder) in area/, a writable area, and the
+// private runtime dir.
+func hiddenBox(t *testing.T, base string) (in Input, agent, sockets string) {
+	t.Helper()
+	in, shared, _ := swapBox(t, base)
+	area := filepath.Dir(shared)
+	agent, sockets = filepath.Join(area, "ssh", "agent.1"), filepath.Join(area, "run", "tmux-1000")
+	run := filepath.Join(base, "run-user")
+	for _, d := range []string{filepath.Dir(agent), sockets, run} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{agent, filepath.Join(sockets, "default")} {
+		if err := os.WriteFile(f, []byte("SECRET\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	in.AllowWrite = []string{area}
+	in.Env["SSH_AUTH_SOCK"], in.SocketFolders, in.RuntimeDir = agent, []string{sockets}, run
+	return in, agent, sockets
+}
+
+// The hidden paths are what hides them, mounted where they were meant to
+// be: the program runs, and sees none of what they hide.
+func TestEnterRunsWhenTheHiddenPathsAreHidden(t *testing.T) {
+	bwrap, base := realSandbox(t)
+	in, agent, sockets := hiddenBox(t, base)
+	b, p := Open(in)
+	if p != nil {
+		t.Fatalf("Open: %s", p.Reason)
+	}
+	defer b.Close()
+	for _, want := range []string{agent + "=null", sockets + "=tmpfs,ro", in.RuntimeDir + "=tmpfs"} {
+		if !slices.Contains(b.Command([]string{"true"}), want) {
+			t.Errorf("no expectation %s: %v", want, b.Command([]string{"true"}))
+		}
+	}
+	out, errOut, code := enterRun(t, bwrap, b, "sh", "-c", `cat "$1" "$2/default" 2>/dev/null; echo ran`, "sh", agent, sockets)
+	if code != 0 || out != "ran\n" || errOut != "" {
+		t.Errorf("exit %d, stdout %q, stderr %q; want only ran", code, out, errOut)
+	}
+}
+
+// The folder that holds a hidden path, in a writable area, is swapped for a
+// link before bubblewrap hides it: the null device and the tmpfs land where
+// the link leads, and enter runs nothing, so nothing hidden shows.
+func TestEnterRefusesAHiddenPathBubblewrapPlacedElsewhere(t *testing.T) {
+	bwrap, base := realSandbox(t)
+	for _, c := range []struct {
+		name string
+		dir  bool
+	}{{"a hidden file", false}, {"a hidden folder", true}} {
+		t.Run(c.name, func(t *testing.T) {
+			in, agent, sockets := hiddenBox(t, filepath.Join(base, strings.ReplaceAll(c.name, " ", "-")))
+			b, p := Open(in)
+			if p != nil {
+				t.Fatalf("Open: %s", p.Reason)
+			}
+			defer b.Close()
+			path := agent
+			if c.dir {
+				path = sockets
+			}
+			// The decoy holds an entry of the same name, of the same kind.
+			decoy := filepath.Join(filepath.Dir(filepath.Dir(path)), "decoy")
+			if err := os.MkdirAll(decoy, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			var err error
+			if c.dir {
+				err = os.Mkdir(filepath.Join(decoy, filepath.Base(path)), 0o755)
+			} else {
+				err = os.WriteFile(filepath.Join(decoy, filepath.Base(path)), nil, 0o600)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			swap(t, filepath.Dir(path), decoy)
+			out, errOut, code := enterRun(t, bwrap, b, "sh", "-c", `echo ran`)
+			if code != 126 || out != "" || errOut != enterNote(path) {
+				t.Errorf("exit %d, stdout %q, stderr %q; want 126 and %q", code, out, errOut, enterNote(path))
+			}
+		})
+	}
+}
+
+// A pinned project is taken only as the folder its value names, with no
+// link on it (T248 L4's second verify): a value through a link, which a
+// swap during its reading would also be, is refused; the folder itself is
+// taken.
+func TestAPinnedProjectIsTakenOnlyAsWritten(t *testing.T) {
+	_, base := realSandbox(t)
+	proj := filepath.Join(base, "work", "proj")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(base, "work"), filepath.Join(base, "via")); err != nil {
+		t.Fatal(err)
+	}
+	if real, ok := ProjectFolder(proj); !ok || real != proj {
+		t.Errorf("ProjectFolder(%s) = %q, %v; want it", proj, real, ok)
+	}
+	if real, ok := ProjectFolder(filepath.Join(base, "via", "proj")); ok {
+		t.Errorf("ProjectFolder through a link = %q; want a refusal", real)
+	}
+	// The reading's moment: the real path names another folder than the
+	// value, as a swap during EvalSymlinks would make it.
+	other := filepath.Join(base, "other")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	in := Input{Home: filepath.Join(base, "home"), Env: map[string]string{}, Stat: Disk}
+	if pinnedAs(in, other, proj) {
+		t.Error("pinnedAs took a real path that is not the folder written")
+	}
+	if !pinnedAs(in, proj, proj) {
+		t.Error("pinnedAs refused the folder written")
+	}
+	t.Chdir(proj)
+	if !HereProject(proj) || HereProject(other) {
+		t.Errorf("HereProject: %v for the working folder, %v for another; want true, false", HereProject(proj), HereProject(other))
+	}
+}
