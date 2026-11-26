@@ -87,6 +87,11 @@ type Input struct {
 	// Protected are Jhon's own files besides the framework paths under the
 	// home: the settings, and the state folder with the grants and modes.
 	Protected []string
+	// Kept are Jhon's own paths no writable area may let a sandboxed command
+	// replace (KeptProblem's, the caller's keptOwn): a cache or store that
+	// holds one where a command could change it is not bound writable
+	// (holdsKept, T250 A6).
+	Kept []Kept
 	// Telemetry is the telemetry folder, writable inside the read-only share.
 	Telemetry string
 	// Registry is the folder of the registry of running runs (Registry):
@@ -410,11 +415,14 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 	for _, p := range ours {
 		area(p)
 	}
+	var anyPath []mount
 	for _, a := range in.areas() {
 		// A cache or store under the home that holds a PATH folder is not
-		// bound with PATH known (L29, holdsPATH); under any PATH (writable,
-		// mayChange) it still counts as writable.
-		if withPath && a.cache && in.holdsPATH(a.path) != "" {
+		// bound with PATH known (L29, holdsPATH), nor one that holds one of
+		// Jhon's own paths where a command could change it (T250 A6,
+		// holdsKept); under any PATH (writable, mayChange) it still counts as
+		// writable.
+		if withPath && a.cache && (in.holdsPATH(a.path) != "" || in.holdsKept(a.path, &anyPath) != nil) {
 			continue
 		}
 		area(a.path)
@@ -680,6 +688,37 @@ func (in Input) holdsPATH(cache string) string {
 		}
 	}
 	return ""
+}
+
+// holdsKept is the first of in.Kept that cache, a cache or store, holds as
+// written or where its existing part leads, where a sandboxed command may
+// change it with the cache writable (changeable under any PATH: a folder
+// around it renamed; one bound read-only directly inside the cache is a
+// mount point no command moves, S10), so the cache is not bound writable
+// (T250 A6): as L29 does for a cache that holds a PATH folder, but for any
+// cache, in the home or not. nil when it holds none, or is /, the home or a
+// folder above it, which is never bound writable. anyPath keeps the mounts
+// under any PATH (layout without PATH's folders) once read.
+func (in Input) holdsKept(cache string, anyPath *[]mount) *Kept {
+	if !filepath.IsAbs(cache) {
+		return nil
+	}
+	real := realPath(cache, in.Stat)
+	if home := realPath(in.Home, in.Stat); project.Within(home, real) {
+		return nil
+	}
+	for i, k := range in.Kept {
+		if !filepath.IsAbs(k.Path) || !project.Within(filepath.Clean(k.Path), filepath.Clean(cache)) && !project.Within(realPath(k.Path, in.Stat), real) {
+			continue
+		}
+		if *anyPath == nil {
+			*anyPath, _ = layout(in, false)
+		}
+		if changeable(*anyPath, k.Path) {
+			return &in.Kept[i]
+		}
+	}
+	return nil
 }
 
 // lstat is in.Lstat, or with none what in.Stat says: a path whose real path

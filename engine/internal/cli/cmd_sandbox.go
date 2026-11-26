@@ -212,6 +212,11 @@ func sandboxRun(argv []string) (int, error) {
 			// read by its path, is anchored now that nothing moves it
 			// (L1729 B2, L1731), for the project's lines too.
 			kept = in.LineFoldersProblem(program[2], top)
+			// docker loads CLI plugins from its configuration folder (T250
+			// L43d): none a sandboxed command may change.
+			if kept == nil {
+				kept = in.DockerConfigProblem(program[2])
+			}
 			var gate [][2]string
 			if kept == nil {
 				gate = mergeGateEntries(pinned)
@@ -455,6 +460,9 @@ func sandboxInputAt(dir, pinned string) sandbox.Input {
 	in.Telemetry = telemetry.Dir()
 	in.Registry = runRegistry().Dir
 	in.Docker = settings.On("sandbox.docker")
+	// A cache or store that holds one of Jhon's own paths where a sandboxed
+	// command could change it is not bound writable (T250 A6).
+	in.Kept = keptOwn(in)
 	return in
 }
 
@@ -529,7 +537,8 @@ type sandboxState struct {
 	// makes each, or why Jhon will not (sandbox.MissingAllowWrite, T239).
 	MissingAllowWrite []sandbox.MissingFolder `json:"missing_allow_write,omitempty"`
 	// UnusedWriteAreas are the writable areas the sandbox does not bind as
-	// each is or passes through a link (sandbox.UnusedWriteAreas, L28).
+	// each is or passes through a link (sandbox.UnusedWriteAreas, L28), holds
+	// a PATH folder (L29) or holds one of Jhon's own paths (T250 A6).
 	UnusedWriteAreas []sandbox.Unused `json:"unused_write_areas,omitempty"`
 	// RunRefused is why `jhon sandbox run` runs nothing here though the
 	// sandbox can run, on one line with the fix: Jhon's own files where a

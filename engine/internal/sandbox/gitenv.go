@@ -128,19 +128,76 @@ func RepositoryGitConfig(listing string, forced [][2]string) string {
 func RepositoryGitConfigKept(listing string, forced [][2]string) *Problem {
 	fields := strings.Split(listing, "\x00")
 	for i := 0; i+1 < len(fields); i += 2 {
-		scope := fields[i]
-		key, value, _ := strings.Cut(fields[i+1], "\n")
-		switch scope {
-		case "system", "global", "command":
+		if p := repositoryEntryKept(fields[i], fields[i+1], forced); p != nil {
+			return p
+		}
+	}
+	return nil
+}
+
+// ownerScope is whether a scope `git config --show-scope` lists is the
+// owner's (system, global, command), not the repository's.
+func ownerScope(scope string) bool {
+	return scope == "system" || scope == "global" || scope == "command"
+}
+
+// repositoryEntryKept is RepositoryGitConfigKept for one entry, its scope
+// and its `key\nvalue`: nil for one of the owner's scopes.
+func repositoryEntryKept(scope, entry string, forced [][2]string) *Problem {
+	if ownerScope(scope) {
+		return nil
+	}
+	key, value, _ := strings.Cut(entry, "\n")
+	if key == "core.worktree" {
+		return &Problem{Reason: "the repository's configuration sets core.worktree (as a submodule's does), which may put the files git writes outside the repository", Fix: "run the line in the repository that holds it (a submodule's superproject), or yourself in a terminal"}
+	}
+	if safeRepositoryKey(key, value) || slices.ContainsFunc(forced, func(e [2]string) bool { return strings.EqualFold(e[0], key) && e[1] == value }) {
+		return nil
+	}
+	return &Problem{Reason: "the repository's configuration sets " + key + ", which is not among the keys a git line runs outside the sandbox with", Fix: plantedFix}
+}
+
+// GitConfigKept is RepositoryGitConfigKept for the listing of `git config
+// --list --show-scope --show-origin -z` in dir, a folder an outside line
+// works in, which also judges where the owner's keys come from (T250,
+// L43c): the repository's keys as RepositoryGitConfigKept judges them, and
+// for the owner's scopes (system, global, command) the file each key is
+// read from, its origin: one a sandboxed command of in may change
+// (mayChange: an include in the global configuration that names a file in
+// the cache, $GIT_CONFIG_GLOBAL in the project) keeps the line in the
+// sandbox, as that command could set a key that runs a program outside it
+// (core.gitProxy, a filter). A relative origin is taken from dir. Each file
+// is judged once; an origin that is no file (the command line) is not one.
+// A listing that is not whole (a field missing) keeps the line inside too.
+func (in Input) GitConfigKept(listing, dir string, forced [][2]string) *Problem {
+	if listing == "" {
+		return nil
+	}
+	fields := strings.Split(strings.TrimSuffix(listing, "\x00"), "\x00")
+	if len(fields)%3 != 0 {
+		return &Problem{Reason: "git listed its configuration in " + dir + " in a form Jhon cannot read", Fix: terminalFix}
+	}
+	judged := map[string]bool{}
+	for i := 0; i+2 < len(fields); i += 3 {
+		scope, origin, entry := fields[i], fields[i+1], fields[i+2]
+		if !ownerScope(scope) {
+			if p := repositoryEntryKept(scope, entry, forced); p != nil {
+				return p
+			}
 			continue
 		}
-		if key == "core.worktree" {
-			return &Problem{Reason: "the repository's configuration sets core.worktree (as a submodule's does), which may put the files git writes outside the repository", Fix: "run the line in the repository that holds it (a submodule's superproject), or yourself in a terminal"}
-		}
-		if safeRepositoryKey(key, value) || slices.ContainsFunc(forced, func(e [2]string) bool { return strings.EqualFold(e[0], key) && e[1] == value }) {
+		file, isFile := strings.CutPrefix(origin, "file:")
+		if !isFile || judged[file] {
 			continue
 		}
-		return &Problem{Reason: "the repository's configuration sets " + key + ", which is not among the keys a git line runs outside the sandbox with", Fix: plantedFix}
+		judged[file] = true
+		path := file
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(dir, path)
+		}
+		if mayChange(in, path) {
+			return &Problem{Reason: "git's " + scope + " configuration reads " + path + ", a file a sandboxed command may change, where it could name a program git runs outside the sandbox", Fix: "keep git's configuration, and every file it includes, outside the project, /tmp, $TMPDIR, the caches and sandbox.allow_write, or run the line yourself in a terminal"}
+		}
 	}
 	return nil
 }

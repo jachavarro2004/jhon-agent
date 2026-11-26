@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 )
@@ -21,10 +22,22 @@ type Unused struct {
 	// PATHFolder is the PATH folder a cache or store under the home holds,
 	// for which it is not bound writable (L29); "" for a link.
 	PATHFolder string `json:"path_folder,omitempty"`
+	// Kept is the one of Jhon's own paths a cache or store holds where a
+	// sandboxed command could change it, for which it is not bound writable
+	// (T250 A6), and KeptWhat what it is; "" for a link or a PATH folder.
+	Kept     string `json:"kept,omitempty"`
+	KeptWhat string `json:"kept_what,omitempty"`
 }
 
 // Line is what status, doctor and the note on a refused write say of u.
 func (u Unused) Line() string {
+	if u.Kept != "" {
+		fix := "point it at a folder that holds none of Jhon's own files"
+		if strings.HasPrefix(u.Name, "$") {
+			fix = "point " + u.Name + " at a folder that holds none of Jhon's own files"
+		}
+		return u.Name + " " + u.Path + " is not used for writing: it holds " + u.KeptWhat + " (" + u.Kept + "), which a sandboxed command could replace by renaming a folder around it: " + fix
+	}
 	if u.Link == "" {
 		return u.Name + " " + u.Path + " is not used for writing: it holds the PATH folder " + u.PATHFolder + ", where a sandboxed command could put a program run later outside the sandbox: move the tool's bin out of the cache, or take it off PATH"
 	}
@@ -37,7 +50,9 @@ func (u Unused) Line() string {
 
 // UnusedWriteAreas are the writable areas of in, each once, that exist and
 // are or pass through a link, or are a cache or store under the home that
-// holds a PATH folder (L29), so the sandbox binds none of them: the caches,
+// holds a PATH folder (L29), or a cache or store that holds one of Jhon's
+// own paths where a command could change it (holdsKept, T250 A6), so the
+// sandbox binds none of them: the caches,
 // the sandbox.allow_write folders, the toolchains' caches and stores, Jhon's
 // telemetry folder, the scratch roots, $TMPDIR and the project's folders
 // (its roots, <root>-worktrees included, the common dir and the listed
@@ -52,6 +67,7 @@ func UnusedWriteAreas(in Input) []Unused {
 		sources = append(sources, areaSource{"the project's folder", p, false})
 	}
 	var out []Unused
+	var anyPath []mount
 	seen := map[string]bool{}
 	for _, s := range sources {
 		if !filepath.IsAbs(s.path) {
@@ -70,6 +86,10 @@ func UnusedWriteAreas(in Input) []Unused {
 			out = append(out, Unused{Name: s.name, Path: p, Link: link, Real: real})
 		} else if dir := in.holdsPATH(p); s.cache && dir != "" {
 			out = append(out, Unused{Name: s.name, Path: p, Real: real, PATHFolder: dir})
+		} else if s.cache {
+			if k := in.holdsKept(p, &anyPath); k != nil {
+				out = append(out, Unused{Name: s.name, Path: p, Real: real, Kept: k.Path, KeptWhat: k.What})
+			}
 		}
 	}
 	return out
