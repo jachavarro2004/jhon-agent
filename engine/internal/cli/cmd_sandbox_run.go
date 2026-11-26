@@ -342,7 +342,7 @@ func sandboxSupervised(path string, argv, env []string, profile, failNote, runNo
 	// what opens the output is bubblewrap's, and that is its race line,
 	// with its exit 1. The line stays; the note says what it means, and no
 	// other note follows.
-	if profile == sandbox.Work && code == 1 && killedBy == 0 && started != nil && !signalled(started) && strings.HasPrefix(opening.String(), bwrapRace) {
+	if profile == sandbox.Work && code == 1 && killedBy == 0 && started != nil && !signalled(started) && bwrapRaced(opening.String()) {
 		said, failNote, runNote = false, "", ""
 		notes = append(notes, bwrapRaceNote)
 	}
@@ -420,12 +420,24 @@ func (l *lastByte) last() byte {
 	return l.b
 }
 
-// bwrapRace opens bubblewrap's own refusal of a folder that changed while
-// it mounted it, and bwrapRaceNote is what a supervised run adds after it.
-const (
-	bwrapRace     = "bwrap: Race condition binding dirfd"
-	bwrapRaceNote = "jhon sandbox: bubblewrap refused the sandbox because a folder changed while it mounted it, so nothing was run; fix: run the command again"
-)
+// bwrapRaced is whether opening, the first bytes of a run's output, opens
+// bubblewrap's own refusal of a folder that changed while it mounted it:
+// its check of a bind's folder ("Race condition binding dirfd"), or a bind
+// it cannot place because its source or its destination is gone by then
+// ("Can't …: No such file or directory" on that first line, or a folder
+// it hides now a link: "Can't mount on symlink destination"), as bubblewrap
+// turns a descriptor back into its path and places every mount by path
+// (T250: the read-only binds inside the project, whose parent a concurrent
+// run swapped, which Jhon opened a moment before). bwrapRaceNote is what a
+// supervised run adds after one.
+func bwrapRaced(opening string) bool {
+	line, _, _ := strings.Cut(opening, "\n")
+	return strings.HasPrefix(line, "bwrap: Race condition binding dirfd") ||
+		strings.HasPrefix(line, "bwrap: Can't mount on symlink destination ") ||
+		strings.HasPrefix(line, "bwrap: Can't ") && strings.HasSuffix(line, ": No such file or directory")
+}
+
+const bwrapRaceNote = "jhon sandbox: bubblewrap refused the sandbox because a folder changed while it mounted it, so nothing was run; fix: run the command again"
 
 // signalled is whether enter wrote its byte on started (sandbox.Bound.
 // Started) before it became the program: read without waiting, as the run
@@ -438,7 +450,8 @@ func signalled(started *os.File) bool {
 	return n > 0
 }
 
-// firstBytes keeps the first bytes written to it, up to 64.
+// firstBytes keeps the first bytes written to it, up to 4096: bubblewrap's
+// refusal names two paths on its first line (bwrapRaced).
 type firstBytes struct {
 	mu sync.Mutex
 	b  []byte
@@ -447,7 +460,7 @@ type firstBytes struct {
 func (f *firstBytes) Write(p []byte) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if room := 64 - len(f.b); room > 0 {
+	if room := 4096 - len(f.b); room > 0 {
 		f.b = append(f.b, p[:min(room, len(p))]...)
 	}
 	return len(p), nil

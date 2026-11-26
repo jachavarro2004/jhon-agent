@@ -94,7 +94,7 @@ func (e env) run(t *testing.T, cmd string, args []string, extra ...string) suppo
 	goOnce.Do(func() {
 		out, err := exec.Command("go", "env", "GOCACHE", "GOMODCACHE").Output()
 		if v := strings.Split(strings.TrimSpace(string(out)), "\n"); err == nil && len(v) == 2 {
-			goEnv = []string{"GOCACHE=" + v[0], "GOMODCACHE=" + v[1], "GOPROXY=off", "GOTOOLCHAIN=local"}
+			goEnv = []string{"GOCACHE=" + v[0], "GOMODCACHE=" + v[1], "GOPROXY=off", "GOTOOLCHAIN=local", support.GoCacheEnv()}
 		}
 	})
 	overrides := append([]string{"HOME=" + e.home, "PATH=" + e.bin + ":" + os.Getenv("PATH"), "JHON_SYNC_GO_TEST=0",

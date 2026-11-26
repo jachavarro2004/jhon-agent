@@ -175,11 +175,12 @@ func TestAPATHFolderIsReadOnlyInsideAWritableFolder(t *testing.T) {
 }
 
 // The default list holds the toolchains' caches and stores, not the folders
-// with the programs the owner or a runtime runs later (F2).
+// with the programs the owner or a runtime runs later (F2), nor the stores
+// uv, pnpm and bun link into the owner's installs (T250 A5).
 func TestTheDefaultToolFoldersAreCachesAndStores(t *testing.T) {
 	b := newBox(t)
-	closed := []string{"go/bin", ".cargo/bin", ".rustup", ".bun/bin", ".local/share/pnpm", ".local/share/mise/shims", ".local/share/mise/installs", ".local/share/uv", ".local/share/NuGet", ".local/state/mise"}
-	open := []string{"go/pkg", ".cargo/registry", ".cargo/git", ".npm", ".local/share/pnpm/store", ".pnpm-store", ".bun/install/cache", ".gradle", ".m2/repository", ".nuget/packages"}
+	closed := []string{"go/bin", ".cargo/bin", ".rustup", ".bun/bin", ".local/share/pnpm", ".local/share/mise/shims", ".local/share/mise/installs", ".local/share/uv", ".local/share/NuGet", ".local/state/mise", ".local/share/pnpm/store", ".pnpm-store", ".bun/install/cache", ".cache/uv"}
+	open := []string{"go/pkg", ".cargo/registry", ".cargo/git", ".npm", ".gradle", ".m2/repository", ".nuget/packages"}
 	for _, rel := range slices.Concat(closed, open) {
 		mkdirs(t, filepath.Join(b.home, rel))
 	}
@@ -474,7 +475,9 @@ func TestAPinnedProjectStaysTheProjectWhenItsGitEntryIsRemoved(t *testing.T) {
 	pinned := func(script string) support.Result {
 		return support.Jhon(t, nested, b.env, "sandbox", "run", "--project", nested, "--", "sh", "-c", script)
 	}
-	if r := pinned(`rm -rf .git && echo removed`); r.Code != 0 || r.Stdout != "removed\n" || exists(filepath.Join(nested, ".git")) {
+	// Moved, not removed: its hooks folder is a read-only mount point no
+	// command removes (T250 A3), and moving .git aside takes it along.
+	if r := pinned(`mv .git .git-moved && echo removed`); r.Code != 0 || r.Stdout != "removed\n" || exists(filepath.Join(nested, ".git")) {
 		t.Fatalf("removing the nested .git: exit %d, stdout %q, stderr %q", r.Code, r.Stdout, r.Stderr)
 	}
 	r := pinned(`echo x > inside.txt && echo x > ../enclosing.txt`)
@@ -493,7 +496,7 @@ func TestWithoutProjectARemovedGitEntryMakesTheEnclosingRepositoryTheProject(t *
 	if r := b.sh(t, nested, "", `echo x > ../enclosing.txt`); !readOnly(r) || exists(filepath.Join(b.proj, "enclosing.txt")) {
 		t.Fatalf("from the nested repository: exit %d, stderr %q; want the enclosing one read-only", r.Code, r.Stderr)
 	}
-	if r := b.sh(t, nested, "", `rm -rf .git`); r.Code != 0 {
+	if r := b.sh(t, nested, "", `mv .git .git-moved`); r.Code != 0 {
 		t.Fatalf("removing the nested .git: exit %d, stderr %q", r.Code, r.Stderr)
 	}
 	if r := b.sh(t, nested, "", `echo x > ../enclosing.txt`); r.Code != 0 || !exists(filepath.Join(b.proj, "enclosing.txt")) {

@@ -111,6 +111,32 @@ func binaryState() string {
 	return stateFolder
 }
 
+// GoCacheEnv is JHON_GO_CACHE naming one Go cache folder for the whole test
+// binary, the suites' `jhon sync` and `jhon release pack` share (T250): jhon
+// builds with caches of its own under the state folder, and each test's
+// scratch HOME would otherwise compile everything cold, about 1.5 GB each.
+// Like binaryState it lies beside the test binary, in go's work folder,
+// which go test removes when the run ends; jhon makes the module cache's
+// folders writable (-modcacherw), so it can.
+func GoCacheEnv() string {
+	goCacheOnce.Do(func() {
+		if exe, err := os.Executable(); err == nil && strings.Contains(exe, string(filepath.Separator)+"go-build") {
+			dir := filepath.Join(filepath.Dir(exe), "jhon-go-cache")
+			if os.MkdirAll(dir, 0o700) == nil {
+				goCacheFolder = dir
+				return
+			}
+		}
+		goCacheFolder, _ = os.MkdirTemp("", "jhon-test-go-cache-")
+	})
+	return "JHON_GO_CACHE=" + goCacheFolder
+}
+
+var (
+	goCacheOnce   sync.Once
+	goCacheFolder string
+)
+
 // Root is the repository root. Under -trimpath (a release's `go test
 // -trimpath ./...` in `jhon sync`) the source path is module-relative, so the
 // root is found from the test's directory instead: the nearest go.mod above it.

@@ -51,6 +51,9 @@ import (
 func init() {
 	register("sandbox", runSandbox)
 	hook.SandboxInput = sandboxInputAt
+	// sync and pack build jhon with Go caches no sandboxed command of the
+	// folder they run in may change (T250 A8).
+	release.MayChange = func(path string) bool { return sandboxInput("").MayChange(path) }
 }
 
 const sandboxUsage = `usage: jhon sandbox run [--profile work] [--project <folder>] -- <program> [args...]
@@ -266,7 +269,8 @@ func sandboxRun(argv []string) (int, error) {
 		in = sandboxInput(pinned)
 	}
 	// What runs here runs for an agent (T219 S9): git's merge gate judges it.
-	env := append(append(os.Environ(), sandbox.UVToolEnv(in)...), hook.AgentVariable+"=1")
+	// Its installs go to the sandbox's own stores, copied (T250 A5).
+	env := append(sandbox.WithEnv(append(os.Environ(), sandbox.UVToolEnv(in)...), sandbox.StoreEnv(in)), hook.AgentVariable+"=1")
 	refusal := func(path string) string { return sandbox.Refusal(in, path, missing) }
 	// Each bind is opened here, last, with no link followed and a writable
 	// one only through the path its checks judged, and bubblewrap mounts
@@ -360,8 +364,11 @@ func runProblem(in sandbox.Input) (string, *sandbox.Problem) {
 // ownFilesProblem is why the sandbox of in runs nothing while a sandboxed
 // command could change Jhon's settings file or the state folder with the
 // grants and the modes, wherever they are (sandbox-deploy-tools S9, S10):
-// it could turn the sandbox off or grant itself what the guards ask for.
-// nil when it could change neither.
+// it could turn the sandbox off or grant itself what the guards ask for;
+// or while a file of the project's a runtime runs outside the sandbox is a
+// link (sandbox.HookProblem, T250 A3), or a socket it hides lies where a
+// command could rename a folder around it (Input.SocketProblem, T250 WU4).
+// nil when none of these holds.
 func ownFilesProblem(in sandbox.Input) *sandbox.Problem {
 	var p *sandbox.Problem
 	if os.Getenv("JHON_SETTINGS") != "" {
@@ -374,6 +381,16 @@ func ownFilesProblem(in sandbox.Input) *sandbox.Problem {
 	}
 	if p == nil {
 		p = sandbox.KeptProblem(in, keptOwn(in))
+	}
+	// A runtime's file in the project that is a link stays where a command
+	// could point it (T250 A3).
+	if p == nil {
+		p = sandbox.HookProblem(in)
+	}
+	// A socket the sandbox hides that a command could move out of its hide
+	// (T250 WU4).
+	if p == nil {
+		p = in.SocketProblem()
 	}
 	return p
 }

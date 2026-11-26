@@ -135,6 +135,10 @@ func mayChange(in Input, path string) bool {
 	return changeable(mounts, path)
 }
 
+// MayChange is mayChange: whether a sandboxed command of in may change
+// what path names (T250 A8: the Go caches `jhon sync` builds with).
+func (in Input) MayChange(path string) bool { return mayChange(in, path) }
+
 // changeable is mayChange with the mounts under any PATH given.
 func changeable(mounts []mount, path string) bool {
 	// open is whether a command may create, rename or remove an entry in

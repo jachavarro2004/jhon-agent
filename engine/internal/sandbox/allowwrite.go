@@ -323,6 +323,9 @@ func refusal(in Input, path string, missing []MissingFolder) string {
 		return head + "; " + where(m) + ", which the sandbox hides (credentials, session sockets, snapshots): no setting opens it" + stop
 	case m.kind == write:
 		return head + exists + "; " + where(m) + ", a folder the sandbox opens for writing, so the file system itself refused it, not the sandbox: no setting of Jhon's opens it" + stop
+	case m.note != "":
+		// A linked store or a runtime's file (T250 A5, A3): its own reason.
+		return head + exists + "; " + where(m) + ", " + m.note
 	case m.guarded:
 		what := "folders"
 		if !m.dir {
