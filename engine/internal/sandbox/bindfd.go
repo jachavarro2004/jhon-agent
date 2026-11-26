@@ -54,6 +54,25 @@ type Bound struct {
 	expect []string
 	// self is jhon's own program, opened from /proc/self/exe.
 	self *os.File
+	// started is the write end enter signals on once the program is about
+	// to start (Started), nil when no one listens.
+	started *os.File
+}
+
+// Started is a pipe's read end that receives one byte when enter has
+// checked the sandbox and is about to become the program, and nothing when
+// bubblewrap's setup or enter's check stopped first (T248 L11): what tells
+// a run that bubblewrap refused, as no output of the program's can. Its
+// write end goes to enter (Command's --started), kept with b's other files;
+// enter marks it close-on-exec, so the program never holds it.
+func (b *Bound) Started() (*os.File, error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	b.started = w
+	b.Keep = append(b.Keep, w)
+	return r, nil
 }
 
 // Open is Args for in with each bind, writable or read-only, opened with no
@@ -137,7 +156,7 @@ func (b *Bound) Close() {
 	for _, f := range b.all() {
 		f.Close()
 	}
-	b.Files, b.Keep, b.self = nil, nil, nil
+	b.Files, b.Keep, b.self, b.started = nil, nil, nil, nil
 }
 
 // Problems of Open.

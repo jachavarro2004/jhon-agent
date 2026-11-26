@@ -29,8 +29,8 @@ import (
 // bound are the descriptors of bubblewrap's binds (sandbox.Open, T248),
 // nil for a program with none: they reach the program at the numbers its
 // arguments name, and no other descriptor of jhon's does.
-func sandboxProgram(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string, bound *sandbox.Bound) (int, error) {
-	if isTerminal(os.Stdout) || isTerminal(os.Stderr) {
+func sandboxProgram(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string, bound *sandbox.Bound, started *os.File) (int, error) {
+	if !supervisedOutput() {
 		if bound != nil {
 			if err := bound.Inherit(); err != nil {
 				fmt.Fprintf(os.Stderr, "jhon: exec: %s: cannot pass the sandbox's folders: %v\n", argv[0], err)
@@ -46,8 +46,12 @@ func sandboxProgram(path string, argv, env []string, profile, failNote, runNote 
 	if bound != nil {
 		extra = bound.ExtraFiles()
 	}
-	return sandboxSupervised(path, argv, env, profile, failNote, runNote, refusal, extra)
+	return sandboxSupervised(path, argv, env, profile, failNote, runNote, refusal, extra, started)
 }
+
+// supervisedOutput is whether `jhon sandbox run` supervises its program
+// (sandboxSupervised): neither stdout nor stderr is a terminal.
+func supervisedOutput() bool { return !isTerminal(os.Stdout) && !isTerminal(os.Stderr) }
 
 // ownerCredentialHelpers are the owner's credential helpers, the system's
 // then the global ones, as git lists them from those files alone (asked in
@@ -228,13 +232,12 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 //
 // extra are the files the program gets besides the standard three
 // (exec.Cmd.ExtraFiles): bubblewrap's bind descriptors.
-func sandboxSupervised(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string, extra []*os.File) (int, error) {
+func sandboxSupervised(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string, extra []*os.File, started *os.File) (int, error) {
 	watch := &sandbox.Watch{}
 	errOut := &lastByte{w: os.Stderr}
 	opening := &firstBytes{}
-	outSeen := &firstBytes{}
 	cmd := &exec.Cmd{Path: path, Args: argv, Env: env, Stdin: os.Stdin,
-		Stdout: io.MultiWriter(os.Stdout, watch, outSeen), Stderr: io.MultiWriter(errOut, watch, opening), WaitDelay: pipeGrace, ExtraFiles: extra}
+		Stdout: io.MultiWriter(os.Stdout, watch), Stderr: io.MultiWriter(errOut, watch, opening), WaitDelay: pipeGrace, ExtraFiles: extra}
 	// A caller that gave stdout and stderr one file (2>&1) reads one stream
 	// in the order it was written: the program gets one pipe for both, as
 	// it got the caller's one descriptor before (L1318 c). exec.Cmd gives
@@ -279,10 +282,12 @@ func sandboxSupervised(path string, argv, env []string, profile, failNote, runNo
 	refused, said := watch.Refused()
 	var notes []string
 	// bubblewrap's own refusal of a folder that changed while it mounted it
-	// (T248 L4's second verify): its line opens the output, the program
-	// never started (nothing on stdout), and bubblewrap exits 1. The line
-	// stays; the note says what it means, and no other note follows.
-	if profile == sandbox.Work && code == 1 && killedBy == 0 && outSeen.len() == 0 && strings.HasPrefix(opening.String(), bwrapRace) {
+	// (T248 L4's second verify): enter never signalled that the program
+	// starts (started, L11: no output of the program's decides it), so
+	// what opens the output is bubblewrap's, and that is its race line,
+	// with its exit 1. The line stays; the note says what it means, and no
+	// other note follows.
+	if profile == sandbox.Work && code == 1 && killedBy == 0 && started != nil && !signalled(started) && strings.HasPrefix(opening.String(), bwrapRace) {
 		said, failNote, runNote = false, "", ""
 		notes = append(notes, bwrapRaceNote)
 	}
@@ -364,11 +369,21 @@ const (
 	bwrapRaceNote = "jhon sandbox: bubblewrap refused the sandbox because a folder changed while it mounted it, so nothing was run; fix: run the command again"
 )
 
+// signalled is whether enter wrote its byte on started (sandbox.Bound.
+// Started) before it became the program: read without waiting, as the run
+// has ended and the byte, if any, is in the pipe.
+func signalled(started *os.File) bool {
+	if err := started.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		return true
+	}
+	n, _ := started.Read(make([]byte, 1))
+	return n > 0
+}
+
 // firstBytes keeps the first bytes written to it, up to 64.
 type firstBytes struct {
 	mu sync.Mutex
 	b  []byte
-	n  int
 }
 
 func (f *firstBytes) Write(p []byte) (int, error) {
@@ -377,7 +392,6 @@ func (f *firstBytes) Write(p []byte) (int, error) {
 	if room := 64 - len(f.b); room > 0 {
 		f.b = append(f.b, p[:min(room, len(p))]...)
 	}
-	f.n += len(p)
 	return len(p), nil
 }
 
@@ -385,10 +399,4 @@ func (f *firstBytes) String() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return string(f.b)
-}
-
-func (f *firstBytes) len() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.n
 }

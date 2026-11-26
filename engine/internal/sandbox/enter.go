@@ -18,7 +18,7 @@ import (
 // that check and the program, nothing else.
 
 // enterUsage is enter's usage, for arguments it does not take.
-const enterUsage = "usage: jhon sandbox enter [--expect <path>=<fd>|tmpfs|null[,ro]]... -- <program> [args...]\n"
+const enterUsage = "usage: jhon sandbox enter [--started <fd>] [--expect <path>=<fd>|tmpfs|null[,ro]]... -- <program> [args...]\n"
 
 // expectation is one mount enter checks: the path bubblewrap mounted it on
 // (absolute, clean), what it holds, and whether the mount is read-only.
@@ -43,50 +43,65 @@ const (
 // the program.
 func (b *Bound) Command(program []string) []string {
 	out := []string{"--", "/proc/self/fd/" + strconv.Itoa(int(b.self.Fd())), "sandbox", "enter"}
+	if b.started != nil {
+		out = append(out, "--started", strconv.Itoa(int(b.started.Fd())))
+	}
 	for _, e := range b.expect {
 		out = append(out, "--expect", e)
 	}
 	return append(append(out, "--"), program...)
 }
 
-// parseEnter reads enter's arguments: each --expect, then `--` and the
-// program; ok is false for anything else.
-func parseEnter(args []string) (expects []expectation, program []string, ok bool) {
+// parseEnter reads enter's arguments: --started once at most, each
+// --expect, then `--` and the program; ok is false for anything else.
+// started is -1 without --started.
+func parseEnter(args []string) (expects []expectation, program []string, started int, ok bool) {
+	started = -1
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--":
 			if i+1 >= len(args) {
-				return nil, nil, false
+				return nil, nil, -1, false
 			}
-			return expects, args[i+1:], true
+			return expects, args[i+1:], started, true
+		case "--started":
+			if i+1 >= len(args) || started >= 0 {
+				return nil, nil, -1, false
+			}
+			i++
+			fd, err := strconv.Atoi(args[i])
+			if err != nil || fd < 3 {
+				return nil, nil, -1, false
+			}
+			started = fd
 		case "--expect":
 			if i+1 >= len(args) {
-				return nil, nil, false
+				return nil, nil, -1, false
 			}
 			i++
 			v, ro := strings.CutSuffix(args[i], ",ro")
 			k := strings.LastIndexByte(v, '=')
 			if k < 0 {
-				return nil, nil, false
+				return nil, nil, -1, false
 			}
 			dest, what := v[:k], v[k+1:]
 			if !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || dest == "/" {
-				return nil, nil, false
+				return nil, nil, -1, false
 			}
 			e := expectation{dest: dest, kind: what, ro: ro}
 			if what != expectTmpfs && what != expectNull {
 				fd, err := strconv.Atoi(what)
 				if err != nil || fd < 3 {
-					return nil, nil, false
+					return nil, nil, -1, false
 				}
 				e.fd, e.kind = fd, ""
 			}
 			expects = append(expects, e)
 		default:
-			return nil, nil, false
+			return nil, nil, -1, false
 		}
 	}
-	return nil, nil, false
+	return nil, nil, -1, false
 }
 
 // enterRefused is enter's note for dest, a bind that is not the folder
