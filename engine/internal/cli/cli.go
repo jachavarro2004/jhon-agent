@@ -14,6 +14,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/palette"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/release"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/render"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/sandbox"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/telemetry"
 )
@@ -53,6 +54,12 @@ func register(name string, c Command) {
 
 // Run runs one jhon invocation: `hook <name> [args]` or `<command> [args]`.
 func Run(args []string) (int, error) {
+	// `jhon sandbox enter` is the sandbox's own last step (sandbox.Enter,
+	// T248): it does nothing but its check and the exec, before anything
+	// else a command does (the Engram queue, help flags, telemetry).
+	if len(args) > 1 && args[0] == "sandbox" && args[1] == "enter" {
+		return sandbox.Enter(args[2:]), nil
+	}
 	// Outside Jhon's sandbox, first the state records queued inside it
 	// (T222 S1b): the hooks' calls too, so the next tool call saves them.
 	// A hook that reads a payload flushes its cwd's queue once it has read

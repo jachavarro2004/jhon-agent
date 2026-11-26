@@ -49,6 +49,11 @@ type Input struct {
 	// CommonDir is the git common dir: a linked worktree commits through
 	// it, and it is outside the worktree's root.
 	CommonDir string
+	// Main is the main worktree among Roots when it is not Roots[0] (a
+	// linked worktree's), as the project's code reads it: the folder that
+	// holds CommonDir, read through every link (L4). Open binds it only
+	// when it is that folder on the disk.
+	Main string
 	// Worktrees are the repository's other listed worktrees.
 	Worktrees []string
 	// Tmp are the scratch roots: /tmp and $TMPDIR, as written, not where
@@ -94,6 +99,14 @@ type Input struct {
 	// Stat is what path is on disk, through symlinks: its real path and
 	// whether it is a directory; ok is false when it does not exist.
 	Stat func(path string) (real string, dir, ok bool)
+	// ProjectFrom is where the project was taken from, for Open (T248, L4):
+	// "." for the folder this process works in, which Roots[0] is or holds,
+	// or the --project value as written, which Roots[0] is. The project's
+	// own code reads Roots[0] through every link (project.Realish), at a
+	// moment a concurrent run may have swapped a folder on the way, so Open
+	// binds no project folder until Roots[0] is the same folder as this. ""
+	// with Roots refuses a run.
+	ProjectFrom string
 	// Lstat is what path itself is, a link not followed: whether it exists,
 	// and for a link its text. nil takes Stat's answer: a path whose real
 	// path is another is a link to that one (replaceable).
@@ -229,6 +242,12 @@ type mount struct {
 	// guarded is one of Jhon's own or the runtimes' paths, read-only: no
 	// scratch root is bound inside it.
 	guarded bool
+	// written are the paths, as written (the home's own way taken, homed),
+	// whose checks gave a writable area this real path: no link on their
+	// way (linkOn), so each is the real path itself unless a folder on its
+	// way changed between the check and the read of the real path (T248,
+	// L4). A run binds the area only through them (openBind).
+	written []string
 }
 
 // under is rel under the home.
@@ -363,6 +382,7 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 			if old.path == r {
 				m.kind = max(old.kind, m.kind)
 				m.shown, m.sealed, m.guarded = old.shown || m.shown, old.sealed || m.sealed, old.guarded || m.guarded
+				m.written = append(slices.Clone(old.written), m.written...)
 				mounts[i] = m
 				return
 			}
@@ -376,7 +396,7 @@ func layout(in Input, withPath bool) (mounts []mount, tmpdir bool) {
 	// have made a link.
 	area := func(path string) {
 		if in.linkOn(path) == "" {
-			add(path, mount{kind: write})
+			add(path, mount{kind: write, written: []string{in.homed(filepath.Clean(path))}})
 		}
 	}
 	config := in.xdg("XDG_CONFIG_HOME", ".config")
@@ -894,8 +914,14 @@ func Current(cwd, pinned string) Input {
 		repo = project.RepoAt(pinned)
 	}
 	uid := strconv.Itoa(os.Getuid())
+	roots := repo.Roots()
+	main := ""
+	if len(roots) == 4 {
+		// The top, the main worktree, and each one's <root>-worktrees.
+		main = roots[1]
+	}
 	in := Input{
-		Cwd: cwd, Roots: append(repo.Roots(), workspace.DiskRoots(repo)...), CommonDir: repo.Common, Worktrees: repo.Worktrees(),
+		Cwd: cwd, Roots: append(roots, workspace.DiskRoots(repo)...), CommonDir: repo.Common, Main: main, Worktrees: repo.Worktrees(),
 		Tmp: scratchRoots(), Home: project.Realish(project.Home()), Env: map[string]string{},
 		Path:          filepath.SplitList(os.Getenv("PATH")),
 		RuntimeDir:    "/run/user/" + uid,

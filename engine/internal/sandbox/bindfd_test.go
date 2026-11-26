@@ -186,7 +186,7 @@ func TestOpenBindsEveryAreaThroughADescriptor(t *testing.T) {
 		Tmp: []string{filepath.Join(home, "tmp")}, Env: map[string]string{"TMPDIR": filepath.Join(home, "tmp")},
 		Path: []string{filepath.Join(home, "shared", "bin")}, AllowWrite: []string{filepath.Join(home, "shared")},
 		Protected: []string{settingsFile}, Telemetry: filepath.Join(home, ".local", "share", "jhon", "telemetry"),
-		Stat: remembered(Disk), Lstat: DiskLstat,
+		Stat: remembered(Disk), Lstat: DiskLstat, ProjectFrom: proj,
 	}
 	readable := Args(in)
 	b, p := Open(in)
@@ -238,8 +238,10 @@ func TestOpenBindsEveryAreaThroughADescriptor(t *testing.T) {
 	}
 }
 
-// The descriptors reach bubblewrap, which closes them: the program inside
-// has none of them, only its standard three.
+// The descriptors reach bubblewrap, which closes the binds', and enter the
+// ones it checks with and runs from, which it closes: the program inside,
+// started as a run starts it (Command), has none of them, only its
+// standard three.
 func TestTheProgramInsideHoldsNoDescriptorOfTheBinds(t *testing.T) {
 	bwrap, base := realSandbox(t)
 	in, shared, _ := swapBox(t, base)
@@ -251,7 +253,7 @@ func TestTheProgramInsideHoldsNoDescriptorOfTheBinds(t *testing.T) {
 	if len(b.Files) == 0 {
 		t.Fatalf("Open opened no descriptor for %s: %v", shared, b.Args)
 	}
-	cmd := exec.Command(bwrap, append(slices.Clone(b.Args), "--", "sh", "-c", `ls /proc/$$/fd; :`)...)
+	cmd := exec.Command(bwrap, append(slices.Clone(b.Args), b.Command([]string{"sh", "-c", `ls /proc/$$/fd; :`})...)...)
 	cmd.ExtraFiles = b.ExtraFiles()
 	cmd.WaitDelay = 10 * time.Second
 	out, err := cmd.Output()
@@ -312,7 +314,10 @@ func TestInheritKeepsTheDescriptorsAcrossExec(t *testing.T) {
 		}
 		return int(v)
 	}
-	for _, f := range b.Files {
+	if len(b.Keep) != len(b.Files)+1 {
+		t.Errorf("%d descriptors kept for enter for %d binds; want one each and jhon's program", len(b.Keep), len(b.Files))
+	}
+	for _, f := range b.all() {
 		if flags(f)&syscall.FD_CLOEXEC == 0 {
 			t.Errorf("descriptor %d is opened without close-on-exec", f.Fd())
 		}
@@ -320,9 +325,141 @@ func TestInheritKeepsTheDescriptorsAcrossExec(t *testing.T) {
 	if err := b.Inherit(); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range b.Files {
+	for _, f := range b.all() {
 		if flags(f)&syscall.FD_CLOEXEC != 0 {
 			t.Errorf("descriptor %d keeps close-on-exec", f.Fd())
 		}
+	}
+}
+
+// The race the verify found (L4): the checks read the path as written with
+// no link on its way (linkOn), but the real path layout binds was read at
+// another moment, through a parent a concurrent run had swapped for a link
+// to the home. Here Stat answers from that moment: area/shared leads to the
+// home's own shared. The descriptor bound must be reached through the path
+// the checks judged: the run is refused, and the home folder never bound.
+func TestADescriptorIsOnlyBoundWhereThePathTheChecksJudgedLeads(t *testing.T) {
+	_, base := realSandbox(t)
+	in, shared, victim := swapBox(t, base)
+	in.Stat = func(p string) (string, bool, bool) {
+		if p == shared {
+			return victim, true, true
+		}
+		return Disk(p)
+	}
+	b, p := Open(in)
+	if p == nil {
+		defer b.Close()
+		t.Fatalf("Open bound %v; want a refusal", b.Args)
+	}
+	reason := "the folder " + shared + ", which the sandbox opens for writing, changed after Jhon checked it: it is or passes through a link now"
+	fix := "run the command again; if it is refused again, a command may be replacing " + shared + ": find it and stop it"
+	if p.Reason != reason || p.Fix != fix {
+		t.Errorf("Open: %q; fix %q\nwant %q; fix %q", p.Reason, p.Fix, reason, fix)
+	}
+}
+
+// The home's own way stays the owner's (homed): with $HOME written through
+// a link (/home -> /var/home), a writable area spelled under it is checked
+// and opened at the home's real path, and bound.
+func TestAnAreaUnderAHomeReachedThroughItsOwnLinkIsStillBound(t *testing.T) {
+	_, base := realSandbox(t)
+	real := filepath.Join(base, "var", "home", "u")
+	if err := os.MkdirAll(filepath.Join(real, "shared"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(base, "var", "home"), filepath.Join(base, "home")); err != nil {
+		t.Fatal(err)
+	}
+	written := filepath.Join(base, "home", "u")
+	in := Input{Cwd: real, Home: real, AllowWrite: []string{filepath.Join(written, "shared")}, Env: map[string]string{"HOME": written}, Stat: remembered(Disk), Lstat: DiskLstat}
+	b, p := Open(in)
+	if p != nil {
+		t.Fatalf("Open: %s; fix: %s", p.Reason, p.Fix)
+	}
+	defer b.Close()
+	if i := slices.Index(b.Args, "--bind-fd"); i < 0 || b.Args[i+2] != filepath.Join(real, "shared") {
+		t.Errorf("the area is not bound at the home's real path: %v", b.Args)
+	}
+}
+
+// The project's top is read through every link by the project's code, so a
+// parent a concurrent run swapped for a link to the home in that moment
+// names the home's folder, with no link of its own (L4). Open binds no
+// project folder until the top is the folder the project was taken from:
+// the working folder or one above it, or the --project value as written.
+func TestTheProjectIsOnlyBoundWhereItWasTakenFrom(t *testing.T) {
+	_, base := realSandbox(t)
+	home := filepath.Join(base, "home", "u")
+	proj, victim := filepath.Join(home, "work", "sub", "victim"), filepath.Join(home, "victim")
+	for _, d := range []string{filepath.Join(proj, "src"), victim} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(home, "work", "sub"), filepath.Join(home, "sublink")); err != nil {
+		t.Fatal(err)
+	}
+	input := func(top, from string) Input {
+		return Input{Cwd: proj, Home: home, Roots: []string{top}, Env: map[string]string{}, Stat: remembered(Disk), Lstat: DiskLstat, ProjectFrom: from}
+	}
+	t.Chdir(filepath.Join(proj, "src"))
+	for _, c := range []struct {
+		name, top, from, why string
+	}{
+		{"the working folder in the project", proj, ".", ""},
+		{"the pinned project", proj, proj, ""},
+		{"read as the home's folder, from the working folder", victim, ".", "is neither the folder this command runs in nor one that holds it: a folder on its way changed after Jhon read it"},
+		{"read as the home's folder, pinned", victim, proj, "is not the pinned project " + proj + ": a folder on its way changed after Jhon read it"},
+		{"pinned through a link", proj, filepath.Join(home, "sublink", "victim"), "is pinned as " + filepath.Join(home, "sublink", "victim") + ", which is or passes through a link or cannot be opened (too many levels of symbolic links): pass the project's real path to --project"},
+		{"no place it was taken from", proj, "", "was not read from a folder Jhon can check it against"},
+	} {
+		b, p := Open(input(c.top, c.from))
+		switch {
+		case c.why == "" && p != nil:
+			t.Errorf("%s: %s", c.name, p.Reason)
+		case c.why == "" && !slices.Contains(b.Args, c.top):
+			t.Errorf("%s: the project is not bound: %v", c.name, b.Args)
+		case c.why != "" && p == nil:
+			t.Errorf("%s: Open bound %v; want a refusal", c.name, b.Args)
+		case c.why != "" && p.Reason != "the project folder "+c.top+", which the sandbox opens for writing, "+c.why:
+			t.Errorf("%s: %q\nwant the project folder %s, which the sandbox opens for writing, %s", c.name, p.Reason, c.top, c.why)
+		}
+		b.Close()
+	}
+}
+
+// The main worktree of a linked one is read again through every link by the
+// project's code, the folder that holds the common dir (L4): in the race it
+// named the home's folder. Open binds it only when it is that folder.
+func TestTheMainWorktreeIsOnlyBoundWhereTheCommonDirIs(t *testing.T) {
+	_, base := realSandbox(t)
+	home := filepath.Join(base, "home", "u")
+	main, wt, victim := filepath.Join(home, "work", "main"), filepath.Join(home, "work", "wt"), filepath.Join(home, "victim")
+	for _, d := range []string{filepath.Join(main, ".git"), wt, victim} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(wt)
+	input := func(m string) Input {
+		return Input{Cwd: wt, Home: home, Roots: []string{wt, m}, CommonDir: filepath.Join(main, ".git"), Main: m, Env: map[string]string{}, Stat: remembered(Disk), Lstat: DiskLstat, ProjectFrom: "."}
+	}
+	b, p := Open(input(main))
+	if p != nil {
+		t.Fatalf("the main worktree: %s", p.Reason)
+	}
+	if !slices.Contains(b.Args, main) {
+		t.Errorf("the main worktree is not bound: %v", b.Args)
+	}
+	b.Close()
+	b, p = Open(input(victim))
+	want := "the project folder " + victim + ", which the sandbox opens for writing, is not the folder that holds the git common dir " + filepath.Join(main, ".git") + ": a folder on its way changed after Jhon read it"
+	if p == nil {
+		defer b.Close()
+		t.Fatalf("Open bound %v; want a refusal", b.Args)
+	}
+	if p.Reason != want {
+		t.Errorf("%q\nwant %q", p.Reason, want)
 	}
 }

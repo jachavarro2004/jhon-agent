@@ -129,7 +129,7 @@ const sandboxProjectRefused = "--project takes an absolute folder that exists an
 // start to an enclosing repository; without it the project is found by
 // walking up from the working directory.
 func sandboxRun(argv []string) (int, error) {
-	profile, pinned := sandbox.Work, ""
+	profile, pinned, pinnedAs := sandbox.Work, "", ""
 	i := 0
 	for ; i < len(argv) && argv[i] != "--"; i++ {
 		name, value, ok := strings.Cut(argv[i], "=")
@@ -150,6 +150,7 @@ func sandboxRun(argv []string) (int, error) {
 			if pinned, ok = sandbox.ProjectFolder(value); !ok {
 				return sandboxUsageError(sandboxProjectRefused + value)
 			}
+			pinnedAs = value
 		default:
 			return sandboxUsageError("run takes a program after --")
 		}
@@ -228,17 +229,34 @@ func sandboxRun(argv []string) (int, error) {
 	// What runs here runs for an agent (T219 S9): git's merge gate judges it.
 	env := append(append(os.Environ(), sandbox.UVToolEnv(in)...), hook.AgentVariable+"=1")
 	refusal := func(path string) string { return sandbox.Refusal(in, path, missing) }
-	// Each bind is opened here, last, with no link followed, and bubblewrap
-	// mounts the descriptor (sandbox.Open, T248): a folder swapped for a
-	// link after the checks is not followed, and one swapped before refuses
-	// the run, as does a kernel or seccomp filter without openat2.
+	// Each bind is opened here, last, with no link followed and a writable
+	// one only through the path its checks judged, and bubblewrap mounts
+	// the descriptor (sandbox.Open, T248): a folder swapped for a link
+	// after the checks is not followed, and one swapped before refuses the
+	// run, as does a kernel or seccomp filter without openat2.
+	// No descriptor a caller left open reaches bubblewrap or the program,
+	// but the binds' (sandbox.CloseInherited, L4).
+	if err := sandbox.CloseInherited(); err != nil {
+		leave()
+		fmt.Fprintf(os.Stderr, "jhon sandbox: the descriptors this command inherited cannot be closed for the program (%v), so nothing was run; fix: run it again from a shell that leaves no descriptor open\n", err)
+		return sandboxRefused, nil
+	}
+	// The project's top is checked against where it was taken from, the
+	// working folder or the --project value as written (L4).
+	in.ProjectFrom = "."
+	if pinned != "" {
+		in.ProjectFrom = pinnedAs
+	}
 	bound, p := sandbox.Open(in)
 	if p != nil {
 		leave()
 		fmt.Fprintf(os.Stderr, "jhon sandbox: %s, so nothing was run; fix: %s\n", p.Reason, p.Fix)
 		return sandboxRefused, nil
 	}
-	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), argv[i:]...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal, bound)
+	// The program starts through jhon sandbox enter, which checks inside
+	// the sandbox that every bind is the folder checked here, mounted where
+	// it was meant to be (sandbox.Bound.Command, L4).
+	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), bound.Command(program)...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal, bound)
 	bound.Close()
 	leave()
 	return code, err

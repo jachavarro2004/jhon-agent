@@ -705,7 +705,25 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            followed, the mount is the folder checked, and
                            one swapped or gone before the open refuses the
                            run (exit 126, the folder, what changed and the
-                           fix). Without openat2 (Linux before 5.6), or
+                           fix). A writable area is opened only through the
+                           path its checks judged, and the project's top only
+                           once it is the folder the run works in or one
+                           above it (with --project, the folder the value
+                           names, no link on it: pass the real path), both
+                           compared on the disk, not by name; and every
+                           descriptor jhon inherited above 2 is closed for
+                           the program. bubblewrap still resolves each
+                           mount's paths again, so the program starts through
+                           jhon sandbox enter, an internal step bubblewrap
+                           runs from jhon's own program: inside the sandbox
+                           it checks that / is read-only and each mount is
+                           the folder checked (device and inode, a mount
+                           root, read-only where it should be), else runs
+                           nothing and exits 126 (<folder> is not the folder
+                           Jhon checked (it changed while bubblewrap mounted
+                           it), so nothing was run; fix: run the command
+                           again), then becomes the program with its argv
+                           and environment unchanged. Without openat2 (Linux before 5.6), or
                            where a seccomp filter refuses it, run runs
                            nothing and exits 126 with the fix, never binding
                            by path. A cache or store of the default list under
