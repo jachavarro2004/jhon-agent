@@ -129,7 +129,13 @@ var (
 	// stopped before its answer, gave none. The notice opens with the shell's
 	// mark (ShellMark, T194); task_result's answer does not.
 	agentStarted = lazyre.New(`^Started background sub-agent (\S+) \(`)
-	agentEnded   = lazyre.New(`^(?:` + regexp.QuoteMeta(ShellMark) + ` )?Background sub-agent (\S+) \([^)\n]*\) (?:completed|failed)\b`)
+	// A subagent_continue's result names the child session it continued and
+	// the task it runs as (its details carry the task as `task` too):
+	// `Continued sub-agent <child> (<agent>) in the background as <task>.`
+	// (shell/extensions/jhon.ts). That task's answer delivers the call that
+	// launched the child, which its meta file names (toolUseId).
+	agentContinued = lazyre.New(`^Continued sub-agent (\S+) \([^)\n]*\) in the background as (\S+?)\.(?:\s|$)`)
+	agentEnded     = lazyre.New(`^(?:` + regexp.QuoteMeta(ShellMark) + ` )?Background sub-agent (\S+) \([^)\n]*\) (?:completed|failed)\b`)
 )
 
 // startedTask is the background task a subagent call's result says it
@@ -142,6 +148,20 @@ func startedTask(text string, details any) string {
 		return m[1]
 	}
 	return ""
+}
+
+// continuedTask is the child session a subagent_continue's result says it
+// continued and the background task it runs as; "" for none.
+func continuedTask(text string, details any) (child, task string) {
+	m := agentContinued.FindStringSubmatch(text)
+	if m == nil {
+		return "", ""
+	}
+	task = m[2]
+	if id, _ := strProp(details, "task"); id != "" {
+		task = id
+	}
+	return m[1], task
 }
 
 // endedAgent is the background sub-agent task a jhon-tasks.notice or a
@@ -288,6 +308,16 @@ type piRead struct {
 	// resumes are the lines of its piSessionEntry entries that follow a
 	// conversation entry: each is the owner reopening the session.
 	resumes []int
+	// continued are the entries that deliver the answer of a continued
+	// child, by its session id: loadPiSession sets the call they deliver,
+	// the one its meta file names.
+	continued []continuedAnswer
+}
+
+// continuedAnswer is an entry that delivers a continued child's answer.
+type continuedAnswer struct {
+	entry         *Entry
+	child, answer string
 }
 
 // readPiSession validates and normalises one pi session file. A result is
@@ -302,6 +332,16 @@ func readPiSession(file, rel string) piRead {
 	tools := map[string]string{}    // call id → pi tool name
 	var pending []string            // call ids with no result yet, in call order
 	launched := map[string]string{} // background sub-agent task id → the subagent call that started it
+	// background sub-agent task id → the child session a subagent_continue runs again as it
+	continued := map[string]string{}
+	// deliver is what an answer of the background task delivers: its launch, or its continued child's.
+	deliver := func(e *Entry, task, answer string) {
+		if call := launched[task]; call != "" {
+			e.delivers, e.delivery = call, answer
+		} else if child := continued[task]; child != "" {
+			r.continued = append(r.continued, continuedAnswer{e, child, answer})
+		}
+	}
 	commands := map[string]string{}
 	answered := map[string]bool{}
 	type awaited struct {
@@ -388,8 +428,12 @@ func readPiSession(file, rel string) piRead {
 			data := prop(o, "data")
 			// A /reload restarts the extension in the same sitting; an entry
 			// from before the reason was recorded counts as a resume.
+			// A resume starts a new process whose counter hands the task ids out
+			// again: none names an earlier process's launch.
 			if reason, _ := strProp(data, "reason"); len(r.entries) > 0 && reason != "reload" {
 				r.resumes = append(r.resumes, n)
+				clear(launched)
+				clear(continued)
 			}
 			if mode, ok := strProp(data, "mode"); ok && mode != "" {
 				kind, known := piModeKind[mode]
@@ -424,8 +468,8 @@ func readPiSession(file, rel string) piRead {
 						e.job = readJobNotice(text, prop(o, "details"))
 					}
 					// T192 S8: a background sub-agent's answer delivers its launch.
-					if task, answer := endedAgent(text, prop(o, "details")); launched[task] != "" {
-						e.delivers, e.delivery = launched[task], answer
+					if task, answer := endedAgent(text, prop(o, "details")); task != "" {
+						deliver(&e, task, answer)
 					}
 				}
 				r.entries = append(r.entries, &e)
@@ -525,12 +569,19 @@ func readPiSession(file, rel string) piRead {
 			if tool == "subagent" && !isErr {
 				if task := startedTask(shown, prop(msg, "details")); task != "" {
 					launched[task] = id
+					delete(continued, task)
+				}
+			}
+			if tool == "subagent_continue" && !isErr {
+				if child, task := continuedTask(shown, prop(msg, "details")); task != "" {
+					continued[task] = child
+					delete(launched, task)
 				}
 			}
 			// T192 S8: an answer read with task_result (subagent_result before), its notice lost, delivers its launch as the notice would.
 			if (tool == "task_result" || tool == "subagent_result") && !isErr {
-				if task, answer := endedAgent(shown, prop(msg, "details")); launched[task] != "" {
-					e.delivers, e.delivery = launched[task], answer
+				if task, answer := endedAgent(shown, prop(msg, "details")); task != "" {
+					deliver(&e, task, answer)
 				}
 			}
 			mapped, _ := piInput(tool, nil)
@@ -625,6 +676,7 @@ func loadPiSession(mainPath string) (*Session, []AuditError) {
 		}
 	}
 	var subagents []*Subagent
+	launchOf := map[string]string{} // child session id → the call that launched it, as its meta file names it
 	for i, c := range children {
 		r := reads[i+1]
 		errors = append(errors, r.errors...)
@@ -665,9 +717,16 @@ func loadPiSession(mainPath string) (*Session, []AuditError) {
 		}
 		a.change, a.phase, a.root = changeOf(a.LaunchPrompt), phaseOf(a.LaunchPrompt, a.AgentType), rootOf(a)
 		subagents = append(subagents, a)
+		launchOf[c.id] = a.ToolUseID
 	}
 	if len(errors) > 0 {
 		return nil, errors
+	}
+	// T262: a continued child's answer delivers the call that launched it; a child not saved, none.
+	for _, x := range m.continued {
+		if call := launchOf[x.child]; call != "" {
+			x.entry.delivers, x.entry.delivery = call, x.answer
+		}
 	}
 	return newSession(&Session{Runtime: "pi", Version: m.version, SessionID: m.id, Main: mt, Subagents: subagents, SessionKind: m.kinds, Settings: m.agents, Authorizations: m.authorizations, Compactions: m.facts.compactions, Resumes: m.resumes}), nil
 }
