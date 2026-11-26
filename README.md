@@ -177,7 +177,10 @@ open reaches the program. bubblewrap still mounts by path, so the program
 starts through `jhon sandbox enter`, an internal step run from jhon's own
 program, which checks inside the sandbox that each mount is the folder
 Jhon checked (device and inode, a mount root, read-only where it should
-be) and only then becomes the program; a mismatch runs nothing (exit 126).
+be, the hidden paths too) and only then becomes the program; a mismatch
+runs nothing (exit 126). The pinned project (`jhon start`, pi's pin,
+Claude Code's hook) is taken only as the folder it names with no link on
+it, so a swap while it is read pins nothing else.
 Jhon's source checkout, the one `jhon sync` installs from, stays read-only
 unless it is the project itself: a linked worktree of it is another project,
 and writes only its own files (and commits through the checkout's git

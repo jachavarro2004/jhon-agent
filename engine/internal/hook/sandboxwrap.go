@@ -129,7 +129,11 @@ func sandboxWrap(agent string, payload []byte) (updated map[string]json.RawMessa
 	}
 	shell := shellWord(sandboxShell())
 	profile := sandbox.ProfileAt(command, cwd, in.Roots, in.Stat, in.DeployTools)
-	run := shellWord(jhon) + " sandbox run --project " + shellQuote(folder) + " --profile " + profile + " -- " + shell + " -c "
+	// The pinned project goes to the run as the session wrote it, not as it
+	// read here through every link: the run opens that spelling with no
+	// link followed and refuses one a swap changed (T248 L4's second
+	// verify), so a swap while this hook read it pins nothing else.
+	run := shellWord(jhon) + " sandbox run --project " + shellQuote(os.Getenv(sandbox.ProjectEnv)) + " --profile " + profile + " -- " + shell + " -c "
 	line := run + shellQuote(command)
 	// A command that opens with - or + would be read as the shell's options.
 	if strings.HasPrefix(command, "-") || strings.HasPrefix(command, "+") {

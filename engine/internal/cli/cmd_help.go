@@ -716,14 +716,23 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            mount's paths again, so the program starts through
                            jhon sandbox enter, an internal step bubblewrap
                            runs from jhon's own program: inside the sandbox
-                           it checks that / is read-only and each mount is
+                           it checks that / is read-only, each mount is
                            the folder checked (device and inode, a mount
-                           root, read-only where it should be), else runs
+                           root, read-only where it should be) and each
+                           hidden path the empty tmpfs or null device that
+                           hides it, else runs
                            nothing and exits 126 (<folder> is not the folder
                            Jhon checked (it changed while bubblewrap mounted
                            it), so nothing was run; fix: run the command
                            again), then becomes the program with its argv
-                           and environment unchanged. Without openat2 (Linux before 5.6), or
+                           and environment unchanged. When bubblewrap itself
+                           refuses (bwrap: Race condition binding dirfd,
+                           exit 1) a supervised run keeps its line and adds
+                           that a folder changed while it mounted, so nothing
+                           was run. A --project value, the hook's included,
+                           and the project status names are taken only as
+                           the folder they name with no link on it,
+                           compared on the disk by device and inode. Without openat2 (Linux before 5.6), or
                            where a seccomp filter refuses it, run runs
                            nothing and exits 126 with the fix, never binding
                            by path. A cache or store of the default list under

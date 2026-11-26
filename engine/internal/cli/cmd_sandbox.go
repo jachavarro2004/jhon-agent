@@ -176,7 +176,15 @@ func sandboxRun(argv []string) (int, error) {
 		// reads runs, and none starts until it ends (sandbox.Registry, L34,
 		// L37).
 		// A line that ends up in the work profile keeps its PATH.
-		if in := sandboxInput(pinned); sandbox.RunsOutside(sandbox.ThisHost(), in, program) {
+		// Only for the project it was taken from: the working folder or the
+		// --project value as written (sandbox.Input.ProjectProblem, L4);
+		// anything else runs in the sandbox, which refuses it.
+		in := sandboxInput(pinned)
+		in.ProjectFrom = "."
+		if pinned != "" {
+			in.ProjectFrom = pinnedAs
+		}
+		if in.ProjectProblem() == nil && sandbox.RunsOutside(sandbox.ThisHost(), in, program) {
 			leave, refused := enterRegistry(sandbox.KindOutside, sandbox.OutsideAreas(in, program[2]))
 			if refused != "" {
 				fmt.Fprintln(os.Stderr, refused)
@@ -431,7 +439,21 @@ func sourceCheckout(in sandbox.Input) string {
 // directory: the folder that holds `.git` (project.ReadRepo), or "" in no
 // repository. It is what `jhon sandbox status` names and what `jhon start`
 // pins for the session (sandbox.ProjectEnv).
-func sandboxProject() string { return project.ReadRepo(cwd()).Top }
+//
+// The project's code reads the folder through every link, so a concurrent
+// run that swaps a folder on the way at that moment names another one, the
+// home's (T248 L4's second verify): the answer is taken only when it is,
+// by device and inode, this folder or one above it (sandbox.HereProject),
+// read again a few times, else none, so pi and `jhon start` pin nothing
+// rather than a folder the swap chose.
+func sandboxProject() string {
+	for range 5 {
+		if top := project.ReadRepo(cwd()).Top; sandbox.HereProject(top) {
+			return top
+		}
+	}
+	return ""
+}
 
 // sandboxState is `jhon sandbox status --json`: sandbox.mode, whether the
 // sandbox can run here, the reason and the fix when it cannot, and the

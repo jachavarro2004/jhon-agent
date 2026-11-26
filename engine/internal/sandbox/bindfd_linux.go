@@ -349,3 +349,26 @@ func mainProblem(in Input) *Problem {
 	}
 	return nil
 }
+
+// pinnedAs is whether real, a pinned project's real path read through every
+// link, is the folder written names opened with no link followed (in.homed:
+// the home's own way taken), by device and inode (ProjectFolder). Where
+// openat2 is missing or refused it says yes: the sandbox cannot run there,
+// and a run fails closed on its own.
+func pinnedAs(in Input, real, written string) bool {
+	w, err := openNoLink(in.homed(filepath.Clean(written)))
+	if openat2Problem(err) != nil {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	defer w.Close()
+	r, err := openNoLink(real)
+	if err != nil {
+		return false
+	}
+	defer r.Close()
+	var a, b syscall.Stat_t
+	return syscall.Fstat(int(w.Fd()), &a) == nil && syscall.Fstat(int(r.Fd()), &b) == nil && a.Dev == b.Dev && a.Ino == b.Ino
+}

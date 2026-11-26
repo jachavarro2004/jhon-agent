@@ -150,3 +150,26 @@ func TestTheProgramGetsNoTraceOfEnter(t *testing.T) {
 		}
 	}
 }
+
+// bubblewrap's own refusal of a folder that changed while it mounted it
+// (exit 1, "bwrap: Race condition binding dirfd: …"): a supervised run keeps
+// its line and adds what it means. A run whose program printed anything
+// first, or that exits otherwise, gets no such note.
+func TestBubblewrapsOwnRaceRefusalGetsJhonsNote(t *testing.T) {
+	b := newBox(t)
+	const line = "bwrap: Race condition binding dirfd: File exists\n"
+	const note = "jhon sandbox: bubblewrap refused the sandbox because a folder changed while it mounted it, so nothing was run; fix: run the command again\n"
+	for _, c := range []struct {
+		name, script, stdout, stderr string
+	}{
+		{"bubblewrap refused", "echo 'bwrap: Race condition binding dirfd: File exists' >&2; exit 1", "", line + note},
+		{"output came first", "echo out; echo 'bwrap: Race condition binding dirfd: File exists' >&2; exit 1", "out\n", line},
+		{"another exit", "echo 'bwrap: Race condition binding dirfd: File exists' >&2; exit 2", "", line},
+	} {
+		env := t248StandIn(t, b, c.script)
+		r := support.Jhon(t, b.proj, env, "sandbox", "run", "--", "true")
+		if r.Stdout != c.stdout || r.Stderr != c.stderr {
+			t.Errorf("%s: exit %d, stdout %q, stderr %q; want %q, %q", c.name, r.Code, r.Stdout, r.Stderr, c.stdout, c.stderr)
+		}
+	}
+}
