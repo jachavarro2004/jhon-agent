@@ -387,3 +387,19 @@ test("a hung session-brief at a change moment gives up within a few seconds and 
 	assert.deepEqual(s.sent.filter((m) => m.message.customType === FULL_MESSAGE), []);
 	assert.equal(contextLevel(), "lean");
 });
+
+test("T258: tools_more's answers are unchanged off claude-bridge, for one tool and several", async () => {
+	const all = ["read", ...DELEGATION, "jhon_review", "mcp__engram__mem_update"];
+	for (const provider of [undefined, "anthropic", "openai"]) {
+		const policy = new ToolPolicy(true, () => true);
+		policy.setLean(true);
+		const h = moreHost(["read", ...DELEGATION], all);
+		const more = toolsMoreTool(h.host, policy);
+		const ctx = { cwd: "/r", model: provider ? { provider } : undefined };
+		assert.equal((await more.execute("c1", { names: ["jhon_review"] }, undefined, undefined, ctx)).content[0].text, "Enabled: jhon_review (callable from the next step on).", String(provider));
+		const p2 = new ToolPolicy(true, () => true);
+		p2.setLean(true);
+		const two = toolsMoreTool(moreHost(["read", ...DELEGATION], all).host, p2);
+		assert.equal((await two.execute("c2", { names: ["jhon_review", "mcp__engram__mem_update", "read"] }, undefined, undefined, ctx)).content[0].text, "Enabled: jhon_review, mcp__engram__mem_update (callable from the next step on).\nAlready enabled: read.", String(provider));
+	}
+});
