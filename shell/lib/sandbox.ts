@@ -51,8 +51,10 @@
  * effect in a session opened after the change. A refusal from a pin a
  * session start made with the mode on says so: before it is given, and never
  * for a command that may run, the status is asked again, and the refusal
- * names the pin, the mode the setting gives now when it differs, and the
- * reopen that applies it. That read changes only the words, never the
+ * names the pin and, when the mode, the sandbox's ability to run or the
+ * project now differ where it matters, what a new session would pick up and
+ * to ask the owner for one. Refusals that come together share that read, and
+ * reuse it for SANDBOX_READ_REUSE_MS. It changes only the words, never the
  * verdict; where it gives no answer the refusal reads as before. A session
  * start in no git repository with the mode on tells the owner once that
  * every command will be refused, and the two ways out.
@@ -76,6 +78,9 @@ export type SandboxVerdict = { run: "plain" } | { run: "sandbox"; project: strin
 
 /** The tools whose command the model chooses and a shell runs. */
 export const SANDBOXED_TOOLS: readonly string[] = ["bash", BASH_BACKGROUND_TOOL, MONITOR_TOOL];
+
+/** T258: how long a refusal's second read of the status serves the refusals after it, in ms. */
+export const SANDBOX_READ_REUSE_MS = 5_000;
 
 /** The variable that carries a session's pinned project to its guards and its children (`jhon start` sets it; engine: sandbox.ProjectEnv). */
 export const SANDBOX_PROJECT_ENV = "JHON_SANDBOX_PROJECT";
@@ -125,22 +130,25 @@ export function sandboxShown(pin: SandboxPin): SandboxShown {
 
 type ReadPin = Exclude<SandboxPin, { unread: string }>;
 
-/**
- * The refusal of a pin with the mode on, its words opened by `opener` and its
- * own fix passed through `fix`; undefined when the command may run.
- */
-function modeOnRefusal(pin: ReadPin, opener: string, fix: (own: string) => string): string | undefined {
+/** Why a pin with the mode on refuses: the line as it reads with no second read, the reason as of the session's start, and its own fix. */
+type Refused = { line: string; then: string; fix: string };
+
+/** Why a pin with the mode on refuses a command; undefined when the command may run. */
+function modeOnRefused(pin: ReadPin): Refused | undefined {
 	// A probe that timed out is no verdict (T128f slice 8c, L1382, L1383): the
 	// command runs through `jhon sandbox run` as usual, which fails with
 	// bubblewrap's own message if it cannot start.
 	if (!pin.canRun && !pin.timedOut) {
-		return `${opener} the sandbox cannot run here: ${pin.reason || "no reason given"}; the command is refused, never run unsandboxed in silence. Fix: ${fix(pin.fix || "run `jhon doctor`")}`;
+		const reason = pin.reason || "no reason given", fix = pin.fix || "run `jhon doctor`";
+		return { line: `jhon: sandbox.mode is on and the sandbox cannot run here: ${reason}; the command is refused, never run unsandboxed in silence. Fix: ${fix}`, then: `the sandbox could not run here: ${reason}`, fix };
 	}
 	if (pin.project === undefined) {
-		return `${opener} \`jhon sandbox status --json\` names no project to pin, so the command is refused, never run unpinned. Fix: ${fix("run `jhon sync`")}`;
+		const fix = "run `jhon sync`";
+		return { line: `jhon: sandbox.mode is on and \`jhon sandbox status --json\` names no project to pin, so the command is refused, never run unpinned. Fix: ${fix}`, then: "`jhon sandbox status --json` named no project to pin", fix };
 	}
 	if (pin.project === "") {
-		return `${opener} this session is in no git repository, so there is no project to pin and the command is refused, never run unpinned. Fix: ${fix("start the session inside a repository (the owner may run `git init` here and start it again)")}`;
+		const fix = "start the session inside a repository (the owner may run `git init` here and start it again)";
+		return { line: `jhon: sandbox.mode is on and this session is in no git repository, so there is no project to pin and the command is refused, never run unpinned. Fix: ${fix}`, then: "it was in no git repository, so there was no project to pin", fix };
 	}
 	return undefined;
 }
@@ -150,22 +158,43 @@ export function sandboxVerdict(pin: SandboxPin): SandboxVerdict {
 		return { refuse: `jhon: \`jhon sandbox status --json\` gave no answer (${pin.unread}), so whether this command runs in the sandbox is unknown; the command is refused, never run unsandboxed in silence; run \`jhon doctor\`` };
 	}
 	if (pin.mode === "off") return { run: "plain" };
-	const refuse = modeOnRefusal(pin, "jhon: sandbox.mode is on and", (own) => own);
-	if (refuse !== undefined) return { refuse };
+	const refused = modeOnRefused(pin);
+	if (refused) return { refuse: refused.line };
 	return { run: "sandbox", project: pin.project! };
 }
 
+/** A sentence's end: no trailing full stop or space, so one can be added. */
+const unstopped = (s: string) => s.replace(/[.\s]+$/, "");
+
 /**
- * T258: the refusal of a pin a session start made with the mode on, naming
- * the pin, and, when `now` (the mode the setting gives now) differs, that
- * value and the reopen that applies it. Undefined for any other pin, or when
- * the command may run: the verdict stays sandboxVerdict's.
+ * What `now` (the status read again) would give a new session that the pin
+ * `pin` refused for: the mode off; a sandbox that can run, where the pin's
+ * could not; a project to pin, where the pin had none. Undefined when no
+ * such change would.
  */
-export function pinnedRefusal(pin: SandboxPin, now: "on" | "off"): string | undefined {
-	if ("unread" in pin || pin.mode !== "on") return undefined;
-	const differs = now !== pin.mode;
-	const opener = `jhon: this session pinned sandbox.mode ${pin.mode} when it started${differs ? ` (the setting says ${now} now, which applies only to a session opened after the change)` : ""}, and`;
-	return modeOnRefusal(pin, opener, (own) => (differs ? `reopen the session for sandbox.mode ${now} to apply, or ${own}` : own));
+function pickedUpNow(pin: ReadPin, now: ReadPin): string | undefined {
+	if (now.mode !== pin.mode) return `the setting says ${now.mode} now`;
+	const couldNotRun = !pin.canRun && !pin.timedOut;
+	if (couldNotRun) return now.canRun || now.timedOut ? "the sandbox can run here now" : undefined;
+	return !pin.project && now.project && now.project !== pin.project ? `there is a project to pin now (${now.project})` : undefined;
+}
+
+/**
+ * T258: the refusal of a pin a session start made with the mode on: that the
+ * session keeps it, why it refused when it started, and, when `now` (the
+ * status read again) differs where it matters, what a new session would pick
+ * up and to ask the owner for one (the model cannot start it). Undefined for
+ * any other pin, or when the command may run: the verdict stays
+ * sandboxVerdict's.
+ */
+export function pinnedRefusal(pin: SandboxPin, now: SandboxPin): string | undefined {
+	if ("unread" in pin || pin.mode !== "on" || "unread" in now) return undefined;
+	const refused = modeOnRefused(pin);
+	if (!refused) return undefined;
+	const change = pickedUpNow(pin, now);
+	const kept = `jhon: refused. This session started with sandbox.mode ${pin.mode} and keeps it until it ends${change ? `; ${change}, which a new session picks up` : ""}.`;
+	const fix = change ? `ask the owner to start a new session (or ${unstopped(refused.fix)})` : unstopped(refused.fix);
+	return `${kept} When it started, ${unstopped(refused.then)}. Fix: ${fix}.`;
 }
 
 /**
@@ -175,7 +204,7 @@ export function pinnedRefusal(pin: SandboxPin, now: "on" | "off"): string | unde
  */
 export function noRepositoryNote(pin: SandboxPin): string | undefined {
 	if ("unread" in pin || pin.mode !== "on" || (!pin.canRun && !pin.timedOut) || pin.project !== "") return undefined;
-	return "Jhon: this session is in no git repository, so the sandbox (sandbox.mode on) has no project to pin: every command the agent runs (bash, bash_background, monitor, inspect) will be refused. To run them, open the session inside a repository, or set sandbox.mode off (`jhon settings set sandbox.mode off`) and reopen the session.";
+	return "Jhon: no git repository here, so with sandbox.mode on every agent command (bash, bash_background, monitor, inspect) will be refused. Start pi inside a repository, or run `jhon settings set sandbox.mode off` and start a new session.";
 }
 
 /**
@@ -315,13 +344,17 @@ export interface SandboxWiring {
  * marker (AGENT_ENV, T219 S9) and nothing else changes. Where the sandbox
  * cannot run nothing is registered: the gate refuses the call.
  */
-export function wireSandbox(pi: any, o: { jhon: string | undefined; timeoutMs?: number; env?: NodeJS.ProcessEnv }): SandboxWiring {
+export function wireSandbox(pi: any, o: { jhon: string | undefined; timeoutMs?: number; env?: NodeJS.ProcessEnv; clock?: () => number }): SandboxWiring {
 	let asked: Promise<SandboxPin> | undefined;
 	let pinned: SandboxPin | undefined;
-	// T258: where the session's ask ran, whether a session start made it, and the mode the last refusal read.
+	// T258: where the session's ask ran, whether a session start made it, the
+	// refusals' second read (shared while it runs, reused for
+	// SANDBOX_READ_REUSE_MS after it ends) and its answer, a failed one included.
 	let askedIn = "";
 	let askedAtStart = false;
-	let readNow: "on" | "off" | undefined;
+	let reading: { answer: Promise<SandboxPin>; endedAt?: number } | undefined;
+	let readNow: SandboxPin | undefined;
+	const clock = o.clock ?? Date.now;
 	let bashRegistered = false;
 	const OFF: SandboxPin = { mode: "off", canRun: false, reason: "", fix: "", project: undefined };
 	// The environment this process's guards and children inherit (tests give their own).
@@ -333,6 +366,7 @@ export function wireSandbox(pi: any, o: { jhon: string | undefined; timeoutMs?: 
 		const jhon = o.jhon;
 		askedIn = cwd;
 		askedAtStart = atStart;
+		reading = undefined;
 		readNow = undefined;
 		// The earlier session's pin is not this one's: until this ask ends with a pin, none is exported.
 		delete env[SANDBOX_PROJECT_ENV];
@@ -356,15 +390,25 @@ export function wireSandbox(pi: any, o: { jhon: string | undefined; timeoutMs?: 
 	/**
 	 * T258: the refusal as given, for a pin a session start made with the mode
 	 * on: the status asked again (here only, never for a command that may run)
-	 * to name the pin and what the setting says now; with no answer, as before.
+	 * to name the pin and what a new session would pick up; with no answer, as
+	 * before. Each ask starts a sandbox probe that may take the whole timeout,
+	 * so refusals that come together share one read, and the refusals in the
+	 * SANDBOX_READ_REUSE_MS after it ends take its answer.
 	 */
 	const refusal = async (pin: SandboxPin, refuse: string): Promise<string> => {
 		const jhon = o.jhon;
 		if (!jhon || !askedAtStart || "unread" in pin || pin.mode !== "on") return refuse;
-		const now = await readSandboxStatus({ jhon }, askedIn, o.timeoutMs, inherited);
-		if ("unread" in now) return refuse;
-		readNow = now.mode;
-		return pinnedRefusal(pin, now.mode) ?? refuse;
+		if (!reading || (reading.endedAt !== undefined && clock() - reading.endedAt >= SANDBOX_READ_REUSE_MS)) {
+			const read: { answer: Promise<SandboxPin>; endedAt?: number } = { answer: readSandboxStatus({ jhon }, askedIn, o.timeoutMs, inherited) };
+			read.answer = read.answer.then((now) => {
+				read.endedAt = clock();
+				// A failed read clears the words an earlier one left (a job past the gate reads them).
+				if (reading === read) readNow = now;
+				return now;
+			});
+			reading = read;
+		}
+		return pinnedRefusal(pin, await reading.answer) ?? refuse;
 	};
 
 	const registerBash = () => {
