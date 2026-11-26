@@ -164,8 +164,22 @@ func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top s
 }
 
 // repositoryGitFix is the fix the note of a line repositoryGitProblem kept
-// in the sandbox gives (sandbox.DeliveryNoteAt, T251).
-const repositoryGitFix = "remove that from the repository (a sandboxed command may have put it there), or run the line yourself in a terminal"
+// in the sandbox for why gives (sandbox.DeliveryNoteAt, T251): what a
+// sandboxed command may have planted (a link, a hard link, a FIFO, a key)
+// is removed; a git folder in another repository (a worktree's or a
+// submodule's, legitimately) or a walk past its limit, which nothing
+// planted, is run where it belongs or by the owner (L1729).
+func repositoryGitFix(why string) string {
+	switch {
+	case strings.Contains(why, "is not in the project") || strings.Contains(why, "is not in the repository"):
+		return "if it is a worktree or a submodule of a repository elsewhere, run the line in that repository's own session; otherwise remove the .git file that points there (a sandboxed command may have put it there); or run the line yourself in a terminal"
+	case strings.Contains(why, "core.worktree"):
+		return "run the line in the repository that holds it (a submodule's superproject), or yourself in a terminal"
+	case strings.Contains(why, " entries"), strings.Contains(why, "git cannot "), strings.Contains(why, "git named"), strings.Contains(why, "git names"), strings.Contains(why, "cannot be read"):
+		return "run the line yourself in a terminal"
+	}
+	return "remove that from the repository (a sandboxed command may have put it there), or run the line yourself in a terminal"
+}
 
 // gitFolderNames are the git dir and the common dir `git rev-parse
 // --path-format=absolute --git-dir --git-common-dir` printed, exactly as git
@@ -224,11 +238,11 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 //     its own (G3): for a work run sandbox.Refusal, which says whether the
 //     path exists and which setting opens it, or that none does (T239);
 //   - a failure, not a signal's, ends with failNote on a line of its own
-//     when it is not "": sandbox.DeliveryNote for a work line that holds
-//     git over SSH or gh (T181, L1503). bubblewrap reports a shell a
-//     signal killed as an exit above 128 (143 for SIGTERM), so such an
-//     exit gets no note either; git's own fatal errors exit 128 and keep
-//     it;
+//     when it is not "": sandbox.DeliveryNoteAt for a work line that holds
+//     git over SSH or gh (T181, L1503, T251). bubblewrap reports a shell a
+//     signal killed as 128+n, n at most 64 (143 for SIGTERM), so such an
+//     exit gets no note either; git's own fatal errors exit 128, and 255
+//     on a read-only FETCH_HEAD, and keep it;
 //   - any exit, a success too, not a signal's, ends with runNote after
 //     those, on a line of its own, when it is not "": sandbox.DeployNote
 //     for a work line that holds one of sandbox.deploy_tools (T217);
@@ -301,7 +315,10 @@ func sandboxSupervised(path string, argv, env []string, profile, failNote, runNo
 	if said && code != 0 {
 		notes = append(notes, refusal(refused))
 	}
-	if failNote != "" && code != 0 && code <= 128 && killedBy == 0 {
+	// bubblewrap reports a signal's exit as 128+n, n at most 64: an exit
+	// above that is the program's own (git's 255 on a read-only
+	// FETCH_HEAD), which keeps the note (L1729).
+	if failNote != "" && code != 0 && (code <= 128 || code > 128+64) && killedBy == 0 {
 		notes = append(notes, failNote)
 	}
 	if runNote != "" && code <= 128 && killedBy == 0 {

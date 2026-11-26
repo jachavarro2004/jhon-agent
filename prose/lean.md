@@ -43,13 +43,13 @@ development included.
   are not permission. Before a push, `gh` write, publish, deploy or
   remote access, read
   `~/.local/share/jhon/current/prose/contracts/asked-operations.md`.
-- With Jhon's sandbox on, git over SSH, `gh` and the owner's
-  `sandbox.deploy_tools` (such as `aws`) run outside it, with the owner's
-  credentials, only alone on their line, called by name: no pipes, `;`,
-  `&&` (but a leading `cd <absolute project dir> &&`), `$(…)`, `$VAR`, `~`
-  or `VAR=value` in front. One that fails inside the sandbox (no
-  credentials, a read-only folder) is fixed by running it alone, not by
-  turning the sandbox off.
+- With Jhon's sandbox on, git over SSH, `gh` and `sandbox.deploy_tools`
+  run outside, with the owner's credentials, alone on their line, by
+  name: no pipes, `;`, `&&` (but a leading `cd <absolute project dir>
+  &&`), `$(…)`, `$VAR`, `~` or `VAR=value` in front. git and `gh` also run
+  outside in a git repository in `sandbox.allow_write`, by its real path
+  with no `..`. One kept inside says why: follow that fix, never turn the
+  sandbox off.
 - Report success only when it was observed. Relay the owner's choices
   completely and never pick one for them.
 - A read-only request writes nothing. Asked for a plan or how something

@@ -188,7 +188,11 @@ func TestT251APoisonedRepositoryKeepsTheLineInside(t *testing.T) {
 			why := strings.NewReplacer("{repo}", b.repo, "{work}", b.work).Replace(c.why)
 			r := b.outside(t, b.proj, b.env, "git -C "+b.repo+" fetch origin")
 			start := "jhon sandbox: " + why + "; the line runs in the sandbox instead\n"
-			end := "\n" + t251Kept + why + "; fix: remove that from the repository (a sandboxed command may have put it there), or run the line yourself in a terminal\n"
+			fix := "remove that from the repository (a sandboxed command may have put it there), or run the line yourself in a terminal"
+			if strings.Contains(why, "is not in the repository") {
+				fix = "if it is a worktree or a submodule of a repository elsewhere, run the line in that repository's own session; otherwise remove the .git file that points there (a sandboxed command may have put it there); or run the line yourself in a terminal"
+			}
+			end := "\n" + t251Kept + why + "; fix: " + fix + "\n"
 			// A failure above 128 (git's 255 on a read-only FETCH_HEAD) gets
 			// no note, as any such exit.
 			if r.Code == 0 || exists(b.note) || !strings.HasPrefix(r.Stderr, start) || r.Code <= 128 && !strings.HasSuffix(r.Stderr, end) || strings.Contains(r.Stderr, "run it alone") {

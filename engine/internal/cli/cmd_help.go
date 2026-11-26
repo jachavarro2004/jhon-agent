@@ -877,7 +877,8 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            it: <why>; fix: <fix> (its git works in a folder
                            neither in the project nor in a git repository
                            inside a sandbox.allow_write folder, a link on
-                           the way, a check below refused it); any exit but
+                           the way, a check below refused it; a line
+                           already alone is told what it holds); any exit but
                            a signal's, a success too, of a line that holds
                            one of sandbox.deploy_tools ends after those
                            with one line, <tool> runs outside the sandbox
@@ -948,8 +949,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            it outside the sandbox, and one whose git
                            folder names, as git prints them, are not
                            exactly two absolute paths with no white space
-                           around them. Such a line says why on stderr
-                           first.
+                           around them, and one whose working folder is not,
+                           by device and inode, the folder its path names,
+                           inside its root (moved after Jhon read it). Such
+                           a line says why on stderr first.
                            A caller whose
                            stdout and stderr are one file (2>&1) gets the
                            program's output as one stream, in its order. In the
@@ -975,8 +978,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            or inside one git repository in a
                            sandbox.allow_write folder the sandbox opens for
                            writing, named with no link on the way, which
-                           then counts as the project for git and gh (not
-                           for docker or sandbox.deploy_tools)
+                           then counts as the project for git and gh, run
+                           in it or named there (not for docker or
+                           sandbox.deploy_tools), with no .. in its folders
+                           (a project folder's .. may not follow a link)
                            (the working directory, a leading cd <folder> &&
                            whose folder has no .. part, its -C folders and
                            a clone's new folder), or gh with a listed

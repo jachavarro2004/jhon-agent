@@ -198,11 +198,18 @@ the project):
 `git -C <repo> fetch`, `cd <repo> && git pull`, a push run in it, all run
 outside the sandbox with the same checks the project's lines get (its git
 configuration, its git folders, the clean PATH, the wait for sandboxed
-commands below), once the repository is named with no link on the way and
-is, with no link followed, the folder Jhon judged; a line that works in two
-repositories, or in one the sandbox does not open for writing, stays
-inside. A line kept inside for any reason but its shape ends, when it
-fails, with that reason and what you can do (`git over SSH and gh ran in
+commands below), once the repository is named with no link and no `..` on
+the way and is, with no link followed, the folder Jhon judged; gh run in
+the repository is its line too. A line that works in two repositories, or
+in one the sandbox does not open for writing, stays inside, and so does a
+project line whose folder goes up with `..` after a link (git goes up from
+where the link leads). Any line that runs outside runs only in the folder
+Jhon checked: if the folder it runs in was moved and another put at its
+path after Jhon read it, it stays inside. An `allow_write` folder that is a
+link counts for nothing; the note says to set the real folder. A line kept
+inside for any reason but its shape ends, when it fails (git's exit 255 on
+a read-only folder included), with that reason and what you can do, and
+one that is already alone is not told to run alone (`git over SSH and gh ran in
 the sandbox, not outside it: <folder> is neither in the project (<project>)
 nor in a git repository inside a sandbox.allow_write folder; fix: …`). A line
 of docker or docker-compose, the owner's deployment tool, also runs outside

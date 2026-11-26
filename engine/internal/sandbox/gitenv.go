@@ -124,7 +124,7 @@ func RepositoryGitConfig(listing string, forced [][2]string) string {
 			continue
 		}
 		if key == "core.worktree" {
-			return "the repository's configuration sets core.worktree, which would move the files git writes outside the project"
+			return "the repository's configuration sets core.worktree (as a submodule's does), which may put the files git writes outside the repository"
 		}
 		if safeRepositoryKey(key, value) || slices.ContainsFunc(forced, func(e [2]string) bool { return strings.EqualFold(e[0], key) && e[1] == value }) {
 			continue
