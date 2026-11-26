@@ -1564,6 +1564,23 @@ test("/jhon-ldd sends the agent the LDD prompt for its arguments, steering while
   assert.deepEqual((await ldd.getArgumentCompletions("ar")).map((item: any) => item.value), ["archive"]);
 });
 
+// T8f: only pi's print and json modes wait for the run a command starts; in the terminal and in RPC it returns once sent.
+test("/jhon-ldd in the terminal and in RPC returns as soon as its prompt is sent, steering while the agent works, as before T8f", async () => {
+  const dir = agentDir();
+  const sent: Array<{ text: string; options: any }> = [];
+  const { commands } = loadedWith(dir, { PI_CODING_AGENT_DIR: dir }, { sendUserMessage: (text: string, options: any) => sent.push({ text, options }) });
+  const skill = readFileSync(join(REPO, "runtimes", "claude-code", "plugin", "skills", "jhon-ldd", "SKILL.md"), "utf8");
+  const late = Symbol("late");
+  for (const ctx of [{ mode: "tui", isIdle: () => true }, { mode: "rpc", isIdle: () => false }]) {
+    const returned = await Promise.race([commands.get("jhon-ldd").handler("status", ctx), new Promise((resolve) => setTimeout(() => resolve(late), 50))]);
+    assert.notEqual(returned, late, ctx.mode);
+  }
+  assert.deepEqual(sent, [
+    { text: lddPrompt(skill, "status"), options: undefined },
+    { text: lddPrompt(skill, "status"), options: { deliverAs: "steer" } },
+  ]);
+});
+
 // odd/tasks/jhon-studio.md S3: /jhon:video exists only while integrations.studio is on.
 test("with integrations.studio off, the default, nothing about video is registered; a child never has it", async (t) => {
   useMemorySettings(t);
