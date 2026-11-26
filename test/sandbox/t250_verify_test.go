@@ -133,3 +133,26 @@ func TestGitPlantedInAnotherRepositorysPATHFolderNeverRuns(t *testing.T) {
 		t.Errorf("the git planted in another repository ran outside the sandbox: %q", data)
 	}
 }
+
+// The verify of 1459cc1 (odd/probes250v2/tests.md): its B1 regression,
+// verbatim. Its B2 test pinned a mount the round-3 decision dropped;
+// TestGitHooksAreWritableInside (t250b_test.go) pins what stands.
+
+// WU4 (b): a socket in a writable area that itself lies in another writable
+// area is pinned only in the inner one, so a run renames the folders around
+// it in the outer area and the next run reads the socket under the new name.
+func TestASocketInNestedWritableAreasCannotBeMovedAndRead(t *testing.T) {
+	b := newBox(t)
+	inner := filepath.Join(b.tmp, "a", "inner")
+	support.Write(t, filepath.Join(inner, "x"), map[string]string{"agent.sock": "AGENT-SECRET"})
+	b.settings(t, "schema = 1\n\n[sandbox]\nallow_write = [\""+inner+"\"]\n")
+	env := append(slices.Clone(b.env), "SSH_AUTH_SOCK="+filepath.Join(inner, "x", "agent.sock"))
+	if r := support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c",
+		`mv "$1/a/inner" "$1/a/i2"; mv "$1/a" "$1/b"; echo done`, "sh", b.tmp); r.Stdout != "done\n" {
+		t.Fatalf("the renaming run: exit %d, stdout %q, stderr %q", r.Code, r.Stdout, r.Stderr)
+	}
+	r := support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c", `grep -rs AGENT-SECRET "$1"`, "sh", b.tmp)
+	if strings.Contains(r.Stdout, "AGENT-SECRET") {
+		t.Errorf("a later run reached the socket: stdout %q", r.Stdout)
+	}
+}

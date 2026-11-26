@@ -71,8 +71,11 @@ func TestArgsOfTheWorkProfile(t *testing.T) {
 		" --bind /home/u/project /home/u/project" +
 		" --perms 0700 --tmpfs /run/user/1000" +
 		" --tmpfs /home/u/.config/gh" +
+		// The project has no .claude or .pi: an empty read-only one each
+		// (T250 B3).
+		" --tmpfs /home/u/project/.claude --tmpfs /home/u/project/.pi" +
 		" --bind /home/u/.local/share/jhon/telemetry /home/u/.local/share/jhon/telemetry" +
-		" --remount-ro /home/u/.ssh --remount-ro /home/u/.config/gh" +
+		" --remount-ro /home/u/.ssh --remount-ro /home/u/.config/gh --remount-ro /home/u/project/.claude --remount-ro /home/u/project/.pi" +
 		" --unsetenv SSH_AUTH_SOCK" +
 		" --setenv JHON_IN_SANDBOX 1" +
 		" --unshare-pid --die-with-parent --chdir /home/u/project"

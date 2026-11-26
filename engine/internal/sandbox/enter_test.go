@@ -268,9 +268,7 @@ func hiddenBox(t *testing.T, base string) (in Input, agent, sockets string) {
 }
 
 // The hidden paths are what hides them, mounted where they were meant to
-// be: the program runs, and sees none of what they hide. In a writable area
-// each is hidden at its topmost folder there (T250 WU4), area/ssh and
-// area/run, which no command can rename.
+// be: the program runs, and sees none of what they hide.
 func TestEnterRunsWhenTheHiddenPathsAreHidden(t *testing.T) {
 	bwrap, base := realSandbox(t)
 	in, agent, sockets := hiddenBox(t, base)
@@ -279,7 +277,7 @@ func TestEnterRunsWhenTheHiddenPathsAreHidden(t *testing.T) {
 		t.Fatalf("Open: %s", p.Reason)
 	}
 	defer b.Close()
-	for _, want := range []string{filepath.Dir(agent) + "=tmpfs,ro", filepath.Dir(sockets) + "=tmpfs,ro", in.RuntimeDir + "=tmpfs"} {
+	for _, want := range []string{agent + "=null", sockets + "=tmpfs,ro", in.RuntimeDir + "=tmpfs"} {
 		if !slices.Contains(b.Command([]string{"true"}), want) {
 			t.Errorf("no expectation %s: %v", want, b.Command([]string{"true"}))
 		}
@@ -291,9 +289,8 @@ func TestEnterRunsWhenTheHiddenPathsAreHidden(t *testing.T) {
 }
 
 // The folder that holds a hidden path, in a writable area, is swapped for a
-// link before bubblewrap hides it. Since T250 WU4 that folder is the hide
-// itself (the topmost folder in the area): bubblewrap refuses to mount on
-// the link, or enter runs nothing, so nothing hidden shows.
+// link before bubblewrap hides it: the null device and the tmpfs land where
+// the link leads, and enter runs nothing, so nothing hidden shows.
 func TestEnterRefusesAHiddenPathBubblewrapPlacedElsewhere(t *testing.T) {
 	bwrap, base := realSandbox(t)
 	for _, c := range []struct {
@@ -327,9 +324,13 @@ func TestEnterRefusesAHiddenPathBubblewrapPlacedElsewhere(t *testing.T) {
 			}
 			swap(t, filepath.Dir(path), decoy)
 			out, errOut, code := enterRun(t, bwrap, b, "sh", "-c", `echo ran`)
-			refused := code == 126 && errOut == enterNote(filepath.Dir(path)) || code == 1 && strings.HasPrefix(errOut, "bwrap: Can't mount on symlink destination "+filepath.Dir(path)+"\n")
-			if !refused || out != "" {
-				t.Errorf("exit %d, stdout %q, stderr %q; want nothing run, refused by enter or by bubblewrap", code, out, errOut)
+			// Since T250 round 3 the folder that holds the hidden path is
+			// pinned (bound onto itself through its descriptor), so
+			// bubblewrap may refuse that bind first, in its own words.
+			byEnter := code == 126 && (errOut == enterNote(path) || errOut == enterNote(filepath.Dir(path)))
+			byBwrap := code == 1 && strings.HasPrefix(errOut, "bwrap: ")
+			if !(byEnter || byBwrap) || out != "" {
+				t.Errorf("exit %d, stdout %q, stderr %q; want nothing run: 126 and %q, or bubblewrap's refusal", code, out, errOut, enterNote(path))
 			}
 		})
 	}

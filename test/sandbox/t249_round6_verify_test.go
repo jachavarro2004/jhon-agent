@@ -64,7 +64,7 @@ func TestRound6CommonDirNamesAreJudgedAsGitReadsThem(t *testing.T) {
 // folder git uses.
 func TestRound6GitFileNamesAreJudgedAsGitReadsThem(t *testing.T) {
 	gitFile := func(tail, format string) string {
-		return `t=` + tail + ` && g="$PWD/g$t" && cp -a .git "$g" && mkdir -p g && cp -a .git/. g/ && mv .git "$PWD/.git-moved" && printf '` + format + `' "$g" > .git` +
+		return `t=` + tail + ` && g="$PWD/g$t" && cp -a .git "$g" && mkdir -p g && cp -a .git/. g/ && rm -rf .git && printf '` + format + `' "$g" > .git` +
 			` && mkdir -p "$g/logs/refs/remotes/origin" && ln -sfn "$HOME/.bashrc" "$g/logs/refs/remotes/origin/main" && ln -sfn "$HOME/.bashrc" "$g/FETCH_HEAD" && ln -sfn "$HOME/.bashrc" "$g/logs/HEAD"` +
 			` && git config user.name 'x; echo injected; #'`
 	}
@@ -77,8 +77,8 @@ func TestRound6GitFileNamesAreJudgedAsGitReadsThem(t *testing.T) {
 		"no final newline":                     gitFile(`" x"`, `gitdir: %s`),
 		"trailing slash":                       gitFile(`" x"`, `gitdir: %s/\n`),
 		"dot-dot segments":                     gitFile(`" x"`, `gitdir: %s/../g x\n`),
-		"gitdir in $TMPDIR":                    `g="$TMPDIR/g" && cp -a .git "$g" && mv .git "$PWD/.git-moved" && printf 'gitdir: %s\n' "$g" > .git && ln -sfn "$HOME/.bashrc" "$g/FETCH_HEAD" && mkdir -p "$g/logs/refs/remotes/origin" && ln -sfn "$HOME/.bashrc" "$g/logs/refs/remotes/origin/main"`,
-		"gitdir whose commondir is in $TMPDIR": `c="$TMPDIR/c" && cp -a .git "$c" && mkdir -p g && cp -a .git/. g/ && mv .git "$PWD/.git-moved" && printf 'gitdir: %s\n' "$PWD/g" > .git && printf '%s\n' "$c" > g/commondir && ln -sfn "$HOME/.bashrc" "$c/FETCH_HEAD" && mkdir -p "$c/logs/refs/remotes/origin" && ln -sfn "$HOME/.bashrc" "$c/logs/refs/remotes/origin/main"`,
+		"gitdir in $TMPDIR":                    `g="$TMPDIR/g" && cp -a .git "$g" && rm -rf .git && printf 'gitdir: %s\n' "$g" > .git && ln -sfn "$HOME/.bashrc" "$g/FETCH_HEAD" && mkdir -p "$g/logs/refs/remotes/origin" && ln -sfn "$HOME/.bashrc" "$g/logs/refs/remotes/origin/main"`,
+		"gitdir whose commondir is in $TMPDIR": `c="$TMPDIR/c" && cp -a .git "$c" && mkdir -p g && cp -a .git/. g/ && rm -rf .git && printf 'gitdir: %s\n' "$PWD/g" > .git && printf '%s\n' "$c" > g/commondir && ln -sfn "$HOME/.bashrc" "$c/FETCH_HEAD" && mkdir -p "$c/logs/refs/remotes/origin" && ln -sfn "$HOME/.bashrc" "$c/logs/refs/remotes/origin/main"`,
 	}
 	for name, plant := range cases {
 		for _, line := range []string{"git fetch origin", "git pull --ff-only"} {

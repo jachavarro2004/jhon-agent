@@ -78,7 +78,7 @@ func Pack(r Roots, o *Out, ver, outDir string) int {
 		fmt.Fprintf(o.E, "%s\n", out)
 		return o.Die(fmt.Sprintf("release %s failed to build %s; nothing was packed", commit, Binary))
 	}
-	if out, ok := SourceChecks(stage, r.Source); !ok {
+	if out, ok := SourceChecks(stage, r.Source, commit); !ok {
 		fmt.Fprintf(o.E, "%s\n", out)
 		return o.Die(fmt.Sprintf("release %s failed its Go tests or validation; nothing was packed", commit))
 	}

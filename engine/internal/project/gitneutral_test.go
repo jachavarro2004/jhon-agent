@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -116,5 +117,15 @@ func TestJhonsOwnGitRunsNoProgramTheRepositoryNames(t *testing.T) {
 	c.Env = append(GitReadEnv(), "GIT_AUTHOR_EMAIL=o@example.invalid")
 	if out, err := c.Output(); err != nil || !strings.HasPrefix(string(out), "owner ") {
 		t.Errorf("the owner's GIT_CONFIG_COUNT entries: %q %v", out, err)
+	}
+}
+
+// T250: every git command that may run a filter driver is among
+// filterCommands, `mv` included (it cleans the moved path through the index).
+func TestFilterCommandsHoldEveryCommandThatRunsAFilter(t *testing.T) {
+	for _, c := range []string{"mv", "rm", "status", "diff", "archive", "add"} {
+		if !slices.Contains(filterCommands, c) {
+			t.Errorf("git %s may run a filter driver and is not among filterCommands", c)
+		}
 	}
 }

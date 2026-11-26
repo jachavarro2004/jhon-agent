@@ -11,7 +11,8 @@ import (
 // (${XDG_STATE_HOME:-~/.local/state}/jhon/install.json), and a record left at
 // the legacy ~/.cache/jhon/install.json is moved there. So HOME is a
 // temporary folder of the run's own, removed after it, XDG_STATE_HOME is
-// unset (each test's home holds its own state folder), and the tests run as
+// unset (each test's home holds its own state folder), JHON_GO_CACHE too
+// (their Go work folder is their own), and the tests run as
 // outside the sandbox (JHON_IN_SANDBOX unset).
 func TestMain(m *testing.M) {
 	tmp, err := os.MkdirTemp("", "jhon-release-home-")
@@ -24,8 +25,15 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv("HOME", home)
 	os.Unsetenv("XDG_STATE_HOME")
+	// A sync or pack that runs these tests names its own Go cache folder
+	// (JHON_GO_CACHE) and works in that folder's work folder: the tests use
+	// their own, and remove only theirs.
+	os.Unsetenv("JHON_GO_CACHE")
 	os.Unsetenv("JHON_IN_SANDBOX")
 	code := m.Run()
+	// go's work folder for this run's state folder (goWork), kept across
+	// runs by design, is this run's to remove.
+	os.RemoveAll(goWorkPath(goState()))
 	os.RemoveAll(tmp)
 	os.Exit(code)
 }
