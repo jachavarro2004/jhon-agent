@@ -56,7 +56,7 @@ func codeOf(name, index, value string) ([]*Command, error) {
 		r := &reader{src: value}
 		r.document(value)
 		return r.cmds, r.err
-	case commandVars[name] || gitConfigValue.MatchString(name):
+	case commandVars[name] || commandVarName.MatchString(name) || gitConfigValue.MatchString(name):
 		return commandValue(name, value)
 	case name == "GIT_CONFIG_PARAMETERS":
 		var out []*Command
@@ -79,6 +79,17 @@ func codeOf(name, index, value string) ([]*Command, error) {
 var commandVars = set("GIT_EXTERNAL_DIFF", "GIT_PAGER", "PAGER", "GIT_EDITOR", "EDITOR", "VISUAL", "GIT_SSH", "GIT_SSH_COMMAND",
 	"GIT_ASKPASS", "SSH_ASKPASS", "SUDO_ASKPASS", "GIT_SEQUENCE_EDITOR", "GIT_PROXY_COMMAND", "LESSOPEN", "LESSCLOSE", "MANPAGER")
 
+// commandVarName is a variable named the way programs name the one whose
+// value they run (T257, the list's second break after T228 L8): a pager,
+// an editor, a browser or an askpass helper (SYSTEMD_PAGER, GH_PAGER,
+// KUBE_EDITOR, BROWSER, GH_BROWSER), or a command (FZF_DEFAULT_COMMAND,
+// FZF_CTRL_T_COMMAND, *_CMD), whatever program reads it.
+var commandVarName = lazyre.New(`(?i)(?:PAGER|EDITOR|VISUAL|BROWSER|ASKPASS)$|_(?:COMMAND|CMD)$`)
+
+// browserList is a browser variable: a list of commands split at `:`
+// (xdg-open, python's webbrowser), each run with the address.
+var browserList = lazyre.New(`(?i)BROWSER$`)
+
 var (
 	// gitConfigValue is GIT_CONFIG_VALUE_n.
 	gitConfigValue = lazyre.New(`^GIT_CONFIG_VALUE_\d+$`)
@@ -89,6 +100,17 @@ var (
 // commandValue is the commands value runs as the command line of the
 // variable name, nil when it does not parse.
 func commandValue(name, value string) ([]*Command, error) {
+	if browserList.MatchString(name) && strings.Contains(value, ":") {
+		var out []*Command
+		for _, v := range strings.Split(value, ":") {
+			more, err := commandValue("", v)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, more...)
+		}
+		return out, nil
+	}
 	value = strings.TrimLeft(strings.TrimSpace(value), "|!")
 	cmds, err := Parse(value)
 	if err != nil {

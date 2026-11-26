@@ -17,8 +17,13 @@ var (
 	CodeWrite = lazyre.New(strings.Join([]string{
 		`open\([^)]*['"][wax+]`, perlOpenWrite, `\.write`, `writeFile`, `appendFile`, `>>`, `\bprint\s*\{`, `unlink`, `\brm(?:Sync|dir|dirSync)?\s*\(`,
 		`rmtree`, `\bremove\s*\(`, `\brename`, `copyFile`, `cpSync`, `\bcp\s*\(`, `symlink`, `truncate`, `FileUtils\.`, `File\.delete`,
-		`shutil\.(?:move|copy)`, `\bmkdir`,
+		`shutil\.(?:move|copy)`, `\bmkdir`, EditorDelete,
 	}, "|"))
+	// EditorDelete is an editor's own delete: vim's and nvim's delete() and
+	// vim.fs.rm, libuv's fs_rmdir, emacs's delete-directory and delete-file
+	// (T257). A method `.delete(` is not one: it is as often a map's or an
+	// HTTP client's.
+	EditorDelete = `(?:^|[^.\w]|\bfn\.)delete\s*\(|\bdelete-(?:directory|file)\b|\bvim\.fs\.rm\b|\bfs_rmdir\b`
 	// FileWrite is code that writes, deletes or moves a file, whatever path
 	// it names (T94b, L667): an open for writing, a file API that writes,
 	// a filesystem module's delete, move or copy. A generic `.write(`,
@@ -39,8 +44,10 @@ var (
 	// perlOpenWrite is perl's open for writing: `open(F, ">path")`,
 	// `open my $fh, '>', $p`, `>>`, `+<` and `+>` included.
 	perlOpenWrite = `\bopen\s*\(?\s*(?:my\s+)?[$\w]+\s*,\s*['"]\s*(?:\+?>|\+<)`
-	codeString    = lazyre.New(`'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|` + "`((?:[^`\\\\]|\\\\.)*)`")
-	escapedChar   = lazyre.New(`\\(.)`)
+	codeString    = lazyre.New(`'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|` + "`((?:[^`\\\\]|\\\\.)*)`|" +
+		// A word list: perl's qw(…) (any of its usual brackets or a slash), ruby's %w[…] and %W[…] (T257).
+		`\bqw\s*(?:\(([^)]*)\)|\[([^\]]*)\]|\{([^}]*)\}|<([^>]*)>|/([^/]*)/)|%[wW](?:\[([^\]]*)\]|\(([^)]*)\)|\{([^}]*)\})`)
+	escapedChar = lazyre.New(`\\(.)`)
 )
 
 // CodeWrites is whether inline code names a path isTarget accepts and writes or deletes something.
@@ -52,11 +59,16 @@ func CodeWrites(code string, isTarget func(string) bool) bool {
 func CodeStrings(code string) []string {
 	var out []string
 	for _, m := range codeString.FindAllStringSubmatchIndex(code, -1) {
-		for g := 1; g <= 3; g++ {
-			if m[2*g] >= 0 {
-				out = append(out, escapedChar.ReplaceAllString(code[m[2*g]:m[2*g+1]], "$1"))
-				break
+		for g := 1; 2*g < len(m); g++ {
+			if m[2*g] < 0 {
+				continue
 			}
+			if g <= 3 {
+				out = append(out, escapedChar.ReplaceAllString(code[m[2*g]:m[2*g+1]], "$1"))
+			} else {
+				out = append(out, strings.Fields(code[m[2*g]:m[2*g+1]])...)
+			}
+			break
 		}
 	}
 	return out

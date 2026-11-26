@@ -327,7 +327,7 @@ var (
 	rootReads   = set("ls", "cat", "head", "tail", "stat", "id", "whoami", "journalctl", "dmesg", "df", "du", "lsblk", "lsof", "ss", "ps", "true", "test")
 	escalate    = set("sudo", "doas")
 	deviceOK    = set("/dev/null", "/dev/stdout", "/dev/stderr")
-	codeDelete  = lazyre.New(`unlink|\brm(?:Sync|dir|dirSync)?\s*\(|rmtree|os\.remove|\bremove\s*\(|FileUtils\.rm|File\.delete`)
+	codeDelete  = lazyre.New(`unlink|\brm(?:Sync|dir|dirSync)?\s*\(|rmtree|os\.remove|\bremove\s*\(|FileUtils\.rm|File\.delete|` + sh.EditorDelete)
 	grantScript = lazyre.New(`(?:^|/)src/grant\.ts$`)
 	tsRunners   = set("node", "nodejs", "bun", "deno", "tsx", "ts-node")
 	// xargsDestroy are the programs that delete, overwrite or re-permission
@@ -650,6 +650,7 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	case name == "git":
 		out = append(out, judgeGit(args, dir, ctx, vars, env, 0)...)
 		out = append(out, judgeGitConfigEnv(args, env, ctx, vars, st, depth, route, p.Envv)...)
+		out = append(out, judgeGitConfigFiles(args, env, ctx, vars, st, depth, route, p.Envv)...)
 	case name == "gh":
 		out = append(out, judgeGh(args)...)
 	case slices.Contains([]string{"docker", "podman", "docker-compose", "podman-compose"}, name):

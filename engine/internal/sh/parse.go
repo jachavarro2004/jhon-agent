@@ -25,6 +25,10 @@ type Redirect struct {
 	Op, N, Target string
 	Body          *string
 	Quoted        bool
+	// From is the command whose output a `< <(…)` process substitution
+	// gives (nil when it is not one, or when the substitution is no single
+	// command, T257).
+	From *Command
 }
 
 // A Command is one simple command.
@@ -50,6 +54,10 @@ type Command struct {
 	// forward to its host (ForwardCommand, T228 L12): the connection the git
 	// command already makes.
 	Forward bool
+	// Procs are the `<(…)` process substitutions among its words, in their
+	// order: each the command whose output the file it names gives, nil when
+	// the substitution is no single command (T257).
+	Procs []*Command
 }
 
 // subshells numbers every subshell read, so that no two share a Scope entry.
@@ -74,6 +82,9 @@ type reader struct {
 	loops []Loop
 	// scope is the subshells the reader is inside.
 	scope []int64
+	// procs are the `<(…)` substitutions of the words read since the last
+	// simple command (Command.Procs).
+	procs []*Command
 	err   error
 }
 
@@ -127,14 +138,33 @@ func (r *reader) nested(ss []*syntax.Stmt) {
 // substitution reads the statements of a substitution, in a subshell of
 // their own when sub is set.
 func (r *reader) substitution(ss []*syntax.Stmt, sub bool) {
-	pipe, opaque, piped, prefix := r.pipe, r.pipeOpaque, r.piped, r.prefix
-	r.pipe, r.pipeOpaque, r.piped, r.prefix = nil, false, false, nil
+	pipe, opaque, piped, prefix, procs := r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs
+	r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs = nil, false, false, nil, nil
 	if sub {
 		r.subshell(ss)
 	} else {
 		r.stmts(ss)
 	}
-	r.pipe, r.pipeOpaque, r.piped, r.prefix = pipe, opaque, piped, prefix
+	r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs = pipe, opaque, piped, prefix, procs
+}
+
+// procSubst reads a process substitution in a subshell of its own, as
+// nested does, and returns the command whose output the file it names
+// gives: its one statement's simple command (a pipeline's last), nil for
+// any other (T257).
+func (r *reader) procSubst(x *syntax.ProcSubst) *Command {
+	pipe, opaque, piped, prefix, procs := r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs
+	r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs = nil, false, false, nil, nil
+	r.scope = append(r.scope, subshells.Add(1))
+	var from *Command
+	for _, s := range x.Stmts {
+		if c := r.stmt(s); len(x.Stmts) == 1 {
+			from = c
+		}
+	}
+	r.scope = r.scope[:len(r.scope)-1]
+	r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs = pipe, opaque, piped, prefix, procs
+	return from
 }
 
 // cmdSubst reads a command substitution. A bash 5.3 funsub (`${ …; }`,
@@ -165,7 +195,8 @@ func (r *reader) emit(s *syntax.Stmt, words []string, redirects []*Redirect) *Co
 		end = max(end, rd.End().Offset())
 	}
 	c := &Command{Words: words, Redirects: redirects, Raw: strings.TrimSpace(r.src[s.Pos().Offset():end]), Loops: append([]Loop(nil), r.loops...),
-		Scope: append([]int64(nil), r.scope...)}
+		Scope: append([]int64(nil), r.scope...), Procs: r.procs}
+	r.procs = nil
 	if r.piped {
 		c.PipeFrom, c.PipeOpaque = r.pipe, r.pipeOpaque
 		r.pipe, r.pipeOpaque, r.piped = nil, false, false
@@ -399,9 +430,10 @@ func (r *reader) parts(ps []syntax.WordPart, dq bool) string {
 			r.walk(x)
 			b.WriteString("$((…))")
 		case *syntax.ProcSubst:
-			r.nested(x.Stmts)
+			from := r.procSubst(x)
 			if x.Op == syntax.CmdIn {
 				b.WriteString("<(…)")
+				r.procs = append(r.procs, from)
 			} else {
 				b.WriteString(">(…)")
 			}
@@ -463,6 +495,7 @@ func quotedWord(w *syntax.Word) bool {
 func (r *reader) redirects(rs []*syntax.Redirect) []*Redirect {
 	var out []*Redirect
 	for _, rd := range rs {
+		n := len(r.procs)
 		red := &Redirect{Op: rd.Op.String(), Target: r.word(rd.Word)}
 		if rd.N != nil {
 			red.N = rd.N.Value
@@ -471,6 +504,13 @@ func (r *reader) redirects(rs []*syntax.Redirect) []*Redirect {
 			if _, ok := rd.Word.Parts[0].(*syntax.ProcSubst); ok {
 				red.Target = "(…)" // a process substitution is no file
 			}
+		}
+		// A `<(…)` the redirection reads is its input, not a word (T257).
+		if len(r.procs) == n+1 {
+			if red.Target == "(…)" {
+				red.From = r.procs[n]
+			}
+			r.procs = r.procs[:n]
 		}
 		if rd.Op == syntax.Hdoc || rd.Op == syntax.DashHdoc {
 			red.Quoted = quotedWord(rd.Word)

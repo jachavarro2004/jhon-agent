@@ -341,6 +341,9 @@ func StdinOf(c *Command) *Feed {
 			}
 		case r.Op == "<<<":
 			feed = text(r.Target + "\n")
+		case r.Op == "<" && r.Target == "(…)":
+			// `< <(…)`: the substitution's output (T257).
+			feed = procFeed(r.From)
 		case r.Op == "<" || r.Op == "<>":
 			if r.Target == "/dev/null" {
 				feed = text("")
@@ -364,6 +367,15 @@ func StdinOf(c *Command) *Feed {
 }
 
 var echoFlags = lazyre.New(`^-[neE]+$`)
+
+// procFeed is the file a `<(…)` process substitution names, read as its
+// command's output (outputOf); opaque when it is no single command (T257).
+func procFeed(from *Command) *Feed {
+	if from == nil {
+		return &Feed{Opaque: "a process substitution"}
+	}
+	return outputOf(from)
+}
 
 // outputOf is the output of a pipe's producer, as StdinOf states it.
 func outputOf(p *Command) *Feed {
@@ -466,12 +478,62 @@ type Program struct {
 	Scope []int64
 	// Forward marks a program of a transport's plain forward (Command.Forward).
 	Forward bool
+	// Input is the text the program is given to read that the reader sees:
+	// its standard input's, and each `<(…)` file's among its words (T257).
+	Input []string
 }
 
-// Opts are what programs reads beyond the words: the standard input and the variables set before.
+// Opts are what programs reads beyond the words: the standard input, the
+// files the `<(…)` among the words name (Command.Procs, in their order) and
+// the variables set before.
 type Opts struct {
-	Feed *Feed
-	Envv map[string]string
+	Feed  *Feed
+	Procs []*Feed
+	Envv  map[string]string
+}
+
+// procMarker is how a word shows a `<(…)` process substitution.
+const procMarker = "<(…)"
+
+// inputs is the text opts gives a program to read, where the reader sees it.
+func inputs(opts Opts) []string {
+	var out []string
+	for _, f := range append([]*Feed{opts.Feed}, opts.Procs...) {
+		if f != nil && f.Text != nil && strings.TrimSpace(*f.Text) != "" {
+			out = append(out, *f.Text)
+		}
+	}
+	return out
+}
+
+// procScript is how a program reads its own program from a `<(…)` file
+// among w, as StdinRole names it with that word read as /dev/stdin (`bash
+// <(…)`, `source <(…)`, `python3 <(…)`, `make -f <(…)`), with that file's
+// feed; "" when it reads none (T257). The words'
+// substitutions are matched to procs by their order, and only when every
+// one is there.
+func procScript(name string, w []string, procs []*Feed) (string, *Feed) {
+	n := 0
+	for _, a := range w {
+		n += strings.Count(a, procMarker)
+	}
+	if n == 0 || n != len(procs) || StdinRole(name, w) != "" {
+		return "", nil
+	}
+	k := 0
+	for i, a := range w {
+		if a != procMarker {
+			k += strings.Count(a, procMarker)
+			continue
+		}
+		read := slices.Clone(w)
+		read[i] = "/dev/stdin"
+		if role := StdinRole(name, read); role != "" {
+			return role, procs[k]
+		}
+		k++
+	}
+	return "", nil
 }
 
 func str(s string) *string { return &s }
@@ -536,9 +598,9 @@ func programs(words, via, env []string, opts Opts) (ps []Program, self *Program,
 // readPrograms reads the programs of the words w (IFS split, assignments
 // taken): name is the first word's base name and route its route.
 func readPrograms(w []string, name string, route, env []string, envv map[string]string, opts Opts) ([]Program, error) {
-	self := Program{Argv: w, Via: route, Env: env, Envv: envv, Name: name}
+	self := Program{Argv: w, Via: route, Env: env, Envv: envv, Name: name, Input: inputs(opts)}
 	sub := func(extra string) []string { return append(slices.Clone(route), extra) }
-	inner := Opts{Feed: opts.Feed, Envv: envv}
+	inner := Opts{Feed: opts.Feed, Procs: opts.Procs, Envv: envv}
 	if name == "command" && (at(w, 1) == "-v" || at(w, 1) == "-V") {
 		return []Program{self}, nil
 	}
@@ -807,9 +869,16 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 		self.Code = str(strings.Join(code, "\n"))
 		return []Program{self}, nil
 	}
-	if opts.Feed != nil {
-		if role := StdinRole(name, w); role != "" {
-			feed := opts.Feed
+	// A script read from a `<(…)` file is read as one read on the input (T257).
+	feed, role := opts.Feed, ""
+	if feed != nil {
+		role = StdinRole(name, w)
+	}
+	if r, f := procScript(name, w, opts.Procs); r != "" {
+		role, feed = r, f
+	}
+	if feed != nil {
+		if role != "" {
 			if feed.Text == nil {
 				self.StdinOpaque = feed.Opaque
 				return []Program{self}, nil
@@ -867,6 +936,10 @@ var (
 func CommandPrograms(c *Command, via, env []string, opts Opts) ([]Program, error) {
 	if f := StdinOf(c); f != nil {
 		opts.Feed = f
+	}
+	opts.Procs = nil
+	for _, from := range c.Procs {
+		opts.Procs = append(opts.Procs, procFeed(from))
 	}
 	ps, err := Programs(c.Words, via, env, opts)
 	redirects := c.Redirects
