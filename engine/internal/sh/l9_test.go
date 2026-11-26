@@ -20,7 +20,7 @@ func TestSSHCommands(t *testing.T) {
 		if err != nil || len(cmds) != 1 {
 			t.Fatalf("Parse(%q): %v", line, err)
 		}
-		if got := SSHCommands(cmds[0].Words); !reflect.DeepEqual(got, want) {
+		if got, err := SSHCommands(cmds[0].Words); err != nil || !reflect.DeepEqual(got, want) {
 			t.Errorf("SSHCommands(%q) = %q, want %q", line, got, want)
 		}
 	}
