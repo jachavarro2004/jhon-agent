@@ -93,13 +93,13 @@ func TestPiResumeForgetsTheEarlierTaskIDs(t *testing.T) {
 
 // piBudgetNotice is the shell's notice a pi child hears past its context
 // budget (shell/lib/child-budget.ts childBudgetNotice), riding a tool
-// result's content as its own text part, which the reader joins to the output.
+// result's content as its own text part (pheard).
 const piBudgetNotice = "Context budget: this sub-agent's context is at 91K tokens, past its 80K-token budget. Wrap up: finish the step in hand, then return what you found as path:line evidence and decisions, not raw output, and what remains."
 
 // S2: a sub-agent that stopped at its context budget did not finish its
 // part: it is unfinished, and a fresh launch after it is a relaunch.
 func TestPiAgentAtItsContextBudgetIsUnfinished(t *testing.T) {
-	heard := pbash("uv run pytest -q", "3 passed"+piBudgetNotice)
+	heard := pheard("uv run pytest -q", "3 passed", piBudgetNotice)
 	checkpoint := "Checkpoint at the context notice: tasks 1.1-1.2 done (a.txt:4); 1.3 remains."
 	x := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("jhon-builder", sliceTask("1.1"), checkpoint, heard),
 		psub("jhon-builder", sliceTask("1.3"), "done")), chg)
@@ -118,7 +118,7 @@ func TestPiAgentAtItsContextBudgetIsUnfinished(t *testing.T) {
 	eq(t, "continued after the notice: unfinished", c.Unfinished, 0)
 
 	// The read budget's reminder, appended after it, leaves it the result's end.
-	read := pbash("rg -n x src", "a.txt:1:x"+piBudgetNotice+"Read budget: 13 lookups, 120000 bytes without CodeGraph. codegraph_explore returns the source of a symbol already read; read only the lines you change; prefer the read tool with offset/limit over cat/sed through bash.")
+	read := pheard("rg -n x src", "a.txt:1:x", piBudgetNotice, t263ReadBudget)
 	r := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub("jhon-builder", sliceTask("1.1"), checkpoint, read)), chg)
 	eq(t, "the notice, then the read budget: unfinished", r.Unfinished, 1)
 	// A legacy name of a builder (a *-worker) checkpoints too.
@@ -131,7 +131,7 @@ func TestPiAgentAtItsContextBudgetIsUnfinished(t *testing.T) {
 // return what you found"), which is its finished part, and a checker or a
 // review facet has no such instruction.
 func TestPiOnlyABuilderStopsAtItsContextBudget(t *testing.T) {
-	heard := pbash("rg -n x src", "a.txt:1:x"+piBudgetNotice)
+	heard := pheard("rg -n x src", "a.txt:1:x", piBudgetNotice)
 	for _, agent := range []string{"jhon-scout", "jhon-checker", "prism-safety"} {
 		x := outcomeOf(piAudit(t, pstart("tui"), puser("go"), psub(agent, sliceTask("1.1"), "found it (a.txt:1)", heard),
 			psub(agent, sliceTask("1.2"), "found it (a.txt:2)")), chg)

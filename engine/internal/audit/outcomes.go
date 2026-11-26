@@ -385,18 +385,33 @@ func capRefused(text string) bool {
 // budgetNotice is the notice a pi child hears once its context is past its
 // budget (shell/lib/child-budget.ts childBudgetNotice, since T122), which the
 // shell appends to a tool result as its last text part, before only the read
-// budget's reminder (childReads, `Read budget: …`) when both are due. Only a
-// result that ends so carries it: the same words inside a result (a file
-// read, a grep) are data.
+// budget's reminder (childReads, `Read budget: …`) when both are due, each a
+// text part of its own after the tool's output. Only a result that ends so
+// carries it (appendedNotice): the same words inside a result (a file read,
+// a grep) or at the end of a tool's own output (echo -n, a file with no
+// trailing newline) are data.
 var budgetNotice = lazyre.New(`Context budget: this sub-agent's context is at \d+K tokens, past its \d+K-token budget\. ` +
 	`Wrap up: finish the step in hand, then return what you found as path:line evidence and decisions, not raw output, and what remains\.` +
-	`(?:Read budget: \d+ lookups, \d+ bytes without [^\n]*)?$`)
+	`(Read budget: \d+ lookups, \d+ bytes without [^\n]*)?$`)
+
+// appendedNotice is whether the shell appended the budget notice to r: the
+// notice, and the read budget's reminder after it when there is one, each
+// a text part of its own after the tool's output.
+func appendedNotice(r ToolResult) bool {
+	if len(r.parts) == 0 || !strings.Contains(r.Shown, "Context budget: ") {
+		return false
+	}
+	loc := budgetNotice.FindStringSubmatchIndex(r.Shown)
+	return loc != nil && slices.Contains(r.parts, loc[0]) && (loc[2] < 0 || slices.Contains(r.parts, loc[2]))
+}
 
 // checkpoints is the agents told to stop at the budget notice and return
 // what is done and what remains (prose/agents/jhon-builder.md): a
 // builder-type agent, as the shell's read budget names one
 // (shell/lib/child-budget.ts readBudgetKind). A scout returns what it found
 // there, its finished part; a checker or a review facet is told nothing.
+// The retired jd-fix-agent, a builder in the read budget until T172 removed
+// it, is not one: it never ran on pi (T263).
 var checkpoints = lazyre.New(`-(?:builder|worker)$`)
 
 // atContextBudget is whether the agent stopped at its context budget: a
@@ -413,7 +428,7 @@ func atContextBudget(a *Subagent) bool {
 			heard = false // a continue's message starts a new run
 		}
 		for _, r := range e.ToolResults {
-			if strings.Contains(r.Text, "Context budget: ") && budgetNotice.MatchString(r.Text) {
+			if appendedNotice(r) {
 				heard = true
 			}
 		}
@@ -438,9 +453,10 @@ func capped(a *Subagent) bool {
 // stoppedShort is a result that says the agent stopped short at its turn
 // cap, or the note a pi parent's result ended with before T155 when its
 // child stopped at its context cap (shell/lib/child-budget.ts capNote at
-// 3118fbc: `[jhon: <agent> stopped at its sub-agent context cap; …]`), in
-// its bracketed form only: an answer that mentions the words is no stop.
-var stoppedShort = lazyre.New(ci(`\bmax(?:imum)?[ -]?turns\b|\bturn (?:cap|limit)\b|\[jhon: \S+ stopped at its sub-agent context cap;`))
+// 3118fbc: `[jhon: worker stopped at its sub-agent context cap; …]`), in
+// its bracketed form with an agent's name only: an answer that mentions the
+// words, or quotes the form with a placeholder for the name, is no stop.
+var stoppedShort = lazyre.New(ci(`\bmax(?:imum)?[ -]?turns\b|\bturn (?:cap|limit)\b|\[jhon: [a-z0-9][a-z0-9_-]* stopped at its sub-agent context cap;`))
 
 // jhonRefusal is one of Jhon's own refusal lines, quoted in a result or not,
 // by the exact prefix it is printed with (T224 S2): a guard's
@@ -461,9 +477,10 @@ func stopped(result string) bool {
 
 // relaunches is the launches among agents (one change's) that follow, for
 // the same agent type, one that stopped short: no result delivered, a
-// result reporting its turn cap or a refusal, or a stop at its context
-// budget (atContextBudget). Continuing that agent with
-// SendMessage keeps its context; a fresh launch reads everything again.
+// result reporting its turn cap or a refusal, a stop at its context
+// budget (atContextBudget), or a last continue that never answered.
+// Continuing that agent with SendMessage keeps its context; a fresh launch
+// reads everything again.
 func relaunches(s *Session, agents []*Subagent) int {
 	start := func(a *Subagent) string {
 		if len(a.Entries) == 0 {
@@ -485,7 +502,7 @@ func relaunches(s *Session, agents []*Subagent) int {
 		if prev == nil {
 			continue
 		}
-		if index, result := completion(s, prev); index < 0 || stopped(result) || atContextBudget(prev) {
+		if index, result := completion(s, prev); index < 0 || stopped(result) || atContextBudget(prev) || prev.unanswered {
 			n++
 		}
 	}
@@ -596,7 +613,7 @@ func computeOutcomes(s *Session, ev evidence) *Outcomes {
 			if slices.Contains(planning, a.phase) && started(a) > firstVerify {
 				c.Replans++
 			}
-			if index, _ := completion(s, a); index < 0 || capped(a) || atContextBudget(a) {
+			if index, _ := completion(s, a); index < 0 || capped(a) || atContextBudget(a) || a.unanswered {
 				c.Unfinished++
 			}
 		}

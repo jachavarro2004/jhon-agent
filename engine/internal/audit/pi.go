@@ -312,12 +312,37 @@ type piRead struct {
 	// child, by its session id: loadPiSession sets the call they deliver,
 	// the one its meta file names.
 	continued []continuedAnswer
+	// continues are the runs its subagent_continue calls started in the
+	// background, in order, each with whether its answer arrived.
+	continues []continueRun
 }
 
 // continuedAnswer is an entry that delivers a continued child's answer.
 type continuedAnswer struct {
 	entry         *Entry
 	child, answer string
+}
+
+// continueRun is a continued child's run in the background.
+type continueRun struct {
+	child    string
+	answered bool
+}
+
+// textStarts is where each text part of a result's content after the first
+// starts in its text (contentText); nil for one part or none.
+func textStarts(content []any) []int {
+	var starts []int
+	at, n := 0, 0
+	for _, p := range content {
+		if t, ok := strProp(p, "text"); ok {
+			if n > 0 {
+				starts = append(starts, at)
+			}
+			at, n = at+len(t), n+1
+		}
+	}
+	return starts
 }
 
 // readPiSession validates and normalises one pi session file. A result is
@@ -332,14 +357,15 @@ func readPiSession(file, rel string) piRead {
 	tools := map[string]string{}    // call id → pi tool name
 	var pending []string            // call ids with no result yet, in call order
 	launched := map[string]string{} // background sub-agent task id → the subagent call that started it
-	// background sub-agent task id → the child session a subagent_continue runs again as it
-	continued := map[string]string{}
+	// background sub-agent task id → the run of r.continues a subagent_continue started as it
+	continued := map[string]int{}
 	// deliver is what an answer of the background task delivers: its launch, or its continued child's.
 	deliver := func(e *Entry, task, answer string) {
 		if call := launched[task]; call != "" {
 			e.delivers, e.delivery = call, answer
-		} else if child := continued[task]; child != "" {
-			r.continued = append(r.continued, continuedAnswer{e, child, answer})
+		} else if k, ok := continued[task]; ok {
+			r.continues[k].answered = true
+			r.continued = append(r.continued, continuedAnswer{e, r.continues[k].child, answer})
 		}
 	}
 	commands := map[string]string{}
@@ -428,10 +454,13 @@ func readPiSession(file, rel string) piRead {
 			data := prop(o, "data")
 			// A /reload restarts the extension in the same sitting; an entry
 			// from before the reason was recorded counts as a resume.
-			// A resume starts a new process whose counter hands the task ids out
-			// again: none names an earlier process's launch.
-			if reason, _ := strProp(data, "reason"); len(r.entries) > 0 && reason != "reload" {
-				r.resumes = append(r.resumes, n)
+			// A resume starts a new process, and a /reload a new extension that
+			// stopped every task of the one before (session_shutdown): either
+			// hands the task ids out again, and none names an earlier launch.
+			if reason, _ := strProp(data, "reason"); len(r.entries) > 0 {
+				if reason != "reload" {
+					r.resumes = append(r.resumes, n)
+				}
 				clear(launched)
 				clear(continued)
 			}
@@ -574,7 +603,8 @@ func readPiSession(file, rel string) piRead {
 			}
 			if tool == "subagent_continue" && !isErr {
 				if child, task := continuedTask(shown, prop(msg, "details")); task != "" {
-					continued[task] = child
+					continued[task] = len(r.continues)
+					r.continues = append(r.continues, continueRun{child: child})
 					delete(launched, task)
 				}
 			}
@@ -593,7 +623,7 @@ func readPiSession(file, rel string) piRead {
 			case blocked || (guarded && piGuardMessage.MatchString(js.Trim(shown))):
 				text = "PreToolUse:" + mapped + " hook error: [pi tool_call]: " + js.Trim(shown)
 			}
-			e.ToolResults = []ToolResult{{ID: id, IsError: isErr, Text: text, Shown: shown}}
+			e.ToolResults = []ToolResult{{ID: id, IsError: isErr, Text: text, Shown: shown, parts: textStarts(parts)}}
 			r.entries = append(r.entries, &e)
 		}
 	}
@@ -727,6 +757,14 @@ func loadPiSession(mainPath string) (*Session, []AuditError) {
 		if call := launchOf[x.child]; call != "" {
 			x.entry.delivers, x.entry.delivery = call, x.answer
 		}
+	}
+	// T263: a child whose last continue never answered did not finish its part.
+	cut := map[string]bool{}
+	for _, c := range m.continues {
+		cut[c.child] = !c.answered
+	}
+	for _, a := range subagents {
+		a.unanswered = cut[a.Agent]
 	}
 	return newSession(&Session{Runtime: "pi", Version: m.version, SessionID: m.id, Main: mt, Subagents: subagents, SessionKind: m.kinds, Settings: m.agents, Authorizations: m.authorizations, Compactions: m.facts.compactions, Resumes: m.resumes}), nil
 }
