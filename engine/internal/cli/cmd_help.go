@@ -472,10 +472,12 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            ldd-state/<change>) to Engram from the main
                            worktree and moves any other entry to
                            engram-queue/refused/ (the newest 100 kept), never
-                           saved, its name quoted on stderr; no link on the
+                           saved, its name quoted on stderr (records first,
+                           at most 32 refused per flush); no link on the
                            way is followed (the common dir is opened with
                            openat2 RESOLVE_NO_SYMLINKS; without it, before
-                           Linux 5.6, the queue is not read)
+                           Linux 5.6, or where a seccomp filter refuses it,
+                           the queue is not read)
   jhon executions run [<change>] [--affected [<base-ref>]] [--timeout <minutes>] [--jobs <n>] [--force] [--dry-run] [--json]
                            with no change named, the one jhon status selects
                            on the branch (its first line says which); run each

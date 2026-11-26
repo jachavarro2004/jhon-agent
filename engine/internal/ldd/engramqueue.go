@@ -48,11 +48,12 @@ import (
 // rename, removal and the refused/ folder are relative to those
 // descriptors, never to a path. Engram runs in the main worktree, opened
 // the same way and entered through its descriptor. Without openat2 (Linux
-// before 5.6) the queue fails closed: nothing is read, written or saved.
+// before 5.6), or where a seccomp filter refuses openat2 (EPERM), the queue
+// fails closed: nothing is read, written or saved.
 
 // queueMaxFile is the largest queued record, in bytes; queueBatch the most
-// records one flush reads; refusedMax the most entries refused/ keeps;
-// FlushDeadline bounds one flush's saves.
+// records one flush saves, and the most entries it refuses; refusedMax the
+// most entries refused/ keeps; FlushDeadline bounds one flush's saves.
 const (
 	queueMaxFile  = 64 << 10
 	queueBatch    = 32
@@ -86,15 +87,20 @@ type queuedState struct {
 type Refusal struct{ Name, Why string }
 
 // FlushReport is what one flush did: the changes whose records it saved,
-// the entries it refused, how many records it left for the next flush, and
-// why Engram did not take one ("" when it took all).
+// the entries it refused, how many records (entries named as one) it left
+// for the next flush, and why it did not save them all ("" when it did).
 type FlushReport struct {
 	Saved   []string
 	Refused []Refusal
 	Left    int
 	Failed  string
+	// EngramAsked is whether Failed is Engram's own answer: it was asked to
+	// save a record and did not take it. Otherwise the flush stopped before
+	// asking it (no time left, no engram, no main worktree).
+	EngramAsked bool
 	// Closed is why the queue was not opened at all, failing closed: this
-	// kernel has no openat2 (ErrNoOpenat2).
+	// kernel has no openat2 (ErrNoOpenat2), or a seccomp filter refuses it
+	// (ErrOpenat2Refused).
 	Closed string
 }
 
@@ -128,6 +134,12 @@ const (
 // ErrNoOpenat2 is the queue failing closed on a kernel with no openat2.
 var ErrNoOpenat2 = errors.New("this kernel has no openat2 (Linux 5.6 or newer), which the Engram queue needs to follow no link")
 
+// ErrOpenat2Refused is the queue failing closed where openat2 answers
+// EPERM: a seccomp filter refuses it (an older container profile answers
+// so a syscall it does not know). The queue is not at fault, and nothing
+// in it is discarded.
+var ErrOpenat2Refused = errors.New("openat2 is refused here (operation not permitted: a seccomp filter, as a container's, blocks it), which the Engram queue needs to follow no link")
+
 // OpenCommonDir opens the folder path names, absolute, as an O_PATH
 // descriptor, with no link in any of its components followed (openat2,
 // RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS). A test replaces it.
@@ -154,6 +166,8 @@ func openNoLink(path string) (int, error) {
 	switch {
 	case err == syscall.ENOSYS:
 		return -1, ErrNoOpenat2
+	case err == syscall.EPERM:
+		return -1, ErrOpenat2Refused
 	case err == syscall.ELOOP || err == syscall.ENOTDIR || err == syscall.EXDEV:
 		return -1, errors.New(path + " is reached through a link or is not a folder")
 	case err != nil:
@@ -166,8 +180,8 @@ func openNoLink(path string) (int, error) {
 // common dir with no link in its path (openNoLink), then jhon/ and
 // engram-queue/ each relative to the one before, with no link followed;
 // with create, jhon/ and engram-queue/ are made where missing. An error
-// wraps fs.ErrNotExist where a folder is missing, and is ErrNoOpenat2
-// where the kernel cannot open the common dir so.
+// wraps fs.ErrNotExist where a folder is missing, and is ErrNoOpenat2 or
+// ErrOpenat2Refused where the common dir cannot be opened so.
 func openQueueFd(queue string, create bool) (int, error) {
 	at := filepath.Dir(filepath.Dir(queue))
 	fd, err := openNoLink(at)
@@ -320,12 +334,16 @@ func queueState(top string, s ChangeState) (string, error) {
 // FlushEngramQueue saves the records queued in root's repository to Engram,
 // outside Jhon's sandbox only (inside it does nothing): at most queueBatch
 // of them, oldest first, each from the main worktree. A well-formed record
-// is saved and removed; any other entry is moved to refused/ and reported;
-// a write left half-done for a minute is removed; a record Engram does not
-// take stays for the next flush, and stops this one. FlushDeadline bounds
-// it all, the listing and the removals too: past it the flush stops and
-// leaves the rest for the next one. A queue reached through a link is
-// reported and not read; without openat2 the queue is not opened (Closed).
+// is saved and removed; any other entry is moved to refused/ and reported,
+// at most queueBatch of them per flush, the rest left for the next; the
+// entries named as a record come first, the others after, so no entry
+// sorted before a record keeps it from being saved (T227). A write left
+// half-done for a minute is removed; a record Engram does not take stays
+// for the next flush, and stops its saves. FlushDeadline bounds it all,
+// the listing and the removals too: past it the flush stops and leaves the
+// rest for the next one. A queue reached through a link is reported and
+// not read; without openat2, or where a seccomp filter refuses it, the
+// queue is not opened (Closed).
 func FlushEngramQueue(root string) FlushReport {
 	var r FlushReport
 	if sandbox.Inside() {
@@ -341,7 +359,7 @@ func FlushEngramQueue(root string) FlushReport {
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return r
-	case errors.Is(err, ErrNoOpenat2):
+	case errors.Is(err, ErrNoOpenat2), errors.Is(err, ErrOpenat2Refused):
 		r.Closed = err.Error()
 		return r
 	case err != nil:
@@ -354,8 +372,10 @@ func FlushEngramQueue(root string) FlushReport {
 		r.Failed = err.Error()
 		return r
 	}
+	records := slices.DeleteFunc(slices.Clone(names), func(n string) bool { return !queueName.MatchString(n) })
+	others := slices.DeleteFunc(names, queueName.MatchString)
 	if !time.Now().Before(deadline) {
-		r.Failed, r.Left = noTime, len(names)
+		r.Failed, r.Left = noTime, len(records)
 		return r
 	}
 	bin := EngramBin()
@@ -374,40 +394,58 @@ func FlushEngramQueue(root string) FlushReport {
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
-	rfd, read := -1, 0
+	rfd := -1
 	defer func() {
 		if rfd >= 0 {
 			capRefused(rfd, deadline)
 			syscall.Close(rfd)
 		}
 	}()
-	for _, name := range names {
+	// refuse moves name to refused/ and reports it, while this flush has
+	// refused fewer than queueBatch entries; past that it leaves name for
+	// the next flush and is false.
+	refuse := func(name, why string) bool {
+		if len(r.Refused) == queueBatch {
+			return false
+		}
+		if rfd < 0 {
+			rfd = refusedFd(qfd)
+		}
+		if rfd >= 0 {
+			syscall.Renameat(qfd, name, rfd, name)
+		}
+		r.Refused = append(r.Refused, Refusal{name, why})
+		return true
+	}
+	for _, name := range records {
 		if r.Failed == "" && !time.Now().Before(deadline) {
 			r.Failed = noTime
 		}
-		if read == queueBatch || r.Failed != "" {
+		if len(r.Saved) == queueBatch || r.Failed != "" {
 			r.Left++
 			continue
 		}
-		read++
 		rec, change, why := readQueued(qfd, name, main)
 		if why != "" {
-			if rfd < 0 {
-				rfd = refusedFd(qfd)
-			}
-			if rfd >= 0 {
-				syscall.Renameat(qfd, name, rfd, name)
-			}
-			r.Refused = append(r.Refused, Refusal{name, why})
+			refuse(name, why)
 			continue
 		}
 		if stderr, err := engramSave(ctx, bin, dir, rec.Title, rec.Content, rec.Topic); err != nil {
-			r.Failed = saveFailure(ctx, err, stderr, FlushDeadline)
+			r.Failed, r.EngramAsked = saveFailure(ctx, err, stderr, FlushDeadline), true
 			r.Left++
 			continue
 		}
 		syscall.Unlinkat(qfd, name)
 		r.Saved = append(r.Saved, change)
+	}
+	// The entries named as no record, refused by their name alone.
+	for _, name := range others {
+		if !time.Now().Before(deadline) {
+			break
+		}
+		if _, _, why := readQueued(qfd, name, main); !refuse(name, why) {
+			break
+		}
 	}
 	return r
 }
@@ -425,8 +463,12 @@ func refusedFd(qfd int) int {
 	return fd
 }
 
+// lstatRefused is lstatAt for capRefused's ages; a test slows it.
+var lstatRefused = lstatAt
+
 // capRefused removes the oldest entries of refused/ beyond refusedMax,
-// until deadline.
+// until deadline: past it, it looks at no further entry's age (T227) and
+// removes nothing more.
 func capRefused(rfd int, deadline time.Time) {
 	names, err := namesAt(rfd, deadline)
 	if err != nil || len(names) <= refusedMax {
@@ -438,8 +480,11 @@ func capRefused(rfd int, deadline time.Time) {
 	}
 	var all []aged
 	for _, n := range names {
+		if time.Now().After(deadline) {
+			return
+		}
 		at := time.Time{}
-		if fi, err := lstatAt(rfd, n); err == nil {
+		if fi, err := lstatRefused(rfd, n); err == nil {
 			at = fi.ModTime()
 		}
 		all = append(all, aged{n, at})

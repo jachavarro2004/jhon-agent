@@ -120,17 +120,27 @@ func TestSaveStateQueuesOnAReadOnlyEngram(t *testing.T) {
 }
 
 // A queue that cannot be written leaves the note, with the folder and why.
+// T227 (d): the note quotes the queue's path and the error, inside the
+// sandbox and out (a linked worktree's common dir is a path a sandboxed
+// command wrote).
 func TestSaveStateSaysWhenTheQueueCannotBeWritten(t *testing.T) {
 	root := gitRepoT(t)
 	home := sandboxedEngram(t, true)
 	if err := os.Symlink(t.TempDir(), filepath.Join(root, ".git", "jhon")); err != nil {
 		t.Fatal(err)
 	}
+	link := fmt.Sprintf("%q", filepath.Join(root, ".git", "jhon")+" is a link or not a folder")
 	got := SaveState(root, ChangeState{Change: "c1", Phase: "verify"})
 	want := "jhon: the state of c1 was not saved to Engram (Jhon's sandbox keeps Engram's folder " + filepath.Join(home, ".engram") +
-		" read-only, and the queue " + queueOf(root) + " could not be written: " + filepath.Join(root, ".git", "jhon") + " is a link or not a folder; fix: run jhon doctor); the verify stands"
+		" read-only, and the queue " + fmt.Sprintf("%q", queueOf(root)) + " could not be written: " + link + "; fix: run jhon doctor); the verify stands"
 	if got != want {
-		t.Errorf("\n got %q\nwant %q", got, want)
+		t.Errorf("inside\n got %q\nwant %q", got, want)
+	}
+	sandboxedEngram(t, false)
+	got = SaveState(root, ChangeState{Change: "c1", Phase: "verify"})
+	want = "jhon: the state of c1 was not saved to Engram (" + readOnly + "; the queue " + fmt.Sprintf("%q", queueOf(root)) + " could not be written: " + link + "; fix: run jhon doctor); the verify stands"
+	if got != want {
+		t.Errorf("outside\n got %q\nwant %q", got, want)
 	}
 }
 
@@ -493,7 +503,7 @@ func TestTheQueueFailsClosedWithoutOpenat2(t *testing.T) {
 	OpenCommonDir = func(string) (int, error) { return -1, syscall.ENOSYS }
 	home := os.Getenv("HOME")
 	if got, want := SaveState(root, ChangeState{Change: "c2", Phase: "verify"}), "jhon: the state of c2 was not saved to Engram (Jhon's sandbox keeps Engram's folder "+filepath.Join(home, ".engram")+
-		" read-only, and the queue "+queueOf(root)+" could not be written: "+ErrNoOpenat2.Error()+"; fix: run jhon doctor); the verify stands"; got != want {
+		" read-only, and the queue "+fmt.Sprintf("%q", queueOf(root))+" could not be written: "+fmt.Sprintf("%q", ErrNoOpenat2.Error())+"; fix: run jhon doctor); the verify stands"; got != want {
 		t.Errorf("SaveState\n got %q\nwant %q", got, want)
 	}
 	t.Setenv("JHON_IN_SANDBOX", "")
@@ -527,5 +537,112 @@ func TestAFlushStopsAtItsDeadline(t *testing.T) {
 	r := FlushEngramQueue(root)
 	if len(r.Refused) != 0 || r.Failed != "no time left within "+FlushDeadline.String() || len(queuedFiles(t, root)) != 20 {
 		t.Errorf("report %+v, queue %d", r, len(queuedFiles(t, root)))
+	}
+}
+
+// openat2Refused is the queue failing closed where a seccomp filter
+// refuses openat2.
+const openat2Refused = "openat2 is refused here (operation not permitted: a seccomp filter, as a container's, blocks it), which the Engram queue needs to follow no link"
+
+// T227 (a): an openat2 a seccomp filter refuses (EPERM, as an older
+// container profile answers a syscall it does not know) fails closed as a
+// kernel with no openat2 does: nothing read, refused or saved, and the
+// queue is never called a link.
+func TestAnOpenat2RefusedBySeccompFailsClosed(t *testing.T) {
+	root := gitRepoT(t)
+	sandboxedEngram(t, true)
+	SaveState(root, ChangeState{Change: "c1", Phase: "verify"})
+	was := OpenCommonDir
+	t.Cleanup(func() { OpenCommonDir = was })
+	OpenCommonDir = func(string) (int, error) { return -1, syscall.EPERM }
+	if fd, err := openQueueFd(queueOf(root), false); err == nil || err.Error() != openat2Refused {
+		t.Errorf("openQueueFd = %d, %v; want %q", fd, err, openat2Refused)
+	}
+	if note := SaveState(root, ChangeState{Change: "c2", Phase: "verify"}); strings.Contains(note, "a link or not a folder") || !strings.Contains(note, openat2Refused) {
+		t.Errorf("SaveState note %q", note)
+	}
+	t.Setenv("JHON_IN_SANDBOX", "")
+	bin, calls := recordingEngram(t, "")
+	t.Setenv("JHON_ENGRAM", bin)
+	r := FlushEngramQueue(root)
+	if r.Closed != openat2Refused || len(r.Saved)+len(r.Refused) != 0 || r.Failed != "" || len(queuedFiles(t, root)) != 1 {
+		t.Errorf("report %+v, queue %q", r, queuedFiles(t, root))
+	}
+	if _, err := os.Stat(calls); !os.IsNotExist(err) {
+		t.Errorf("engram was called: %v", err)
+	}
+	if _, _, err := EngramQueueCounts(root); err == nil || err.Error() != openat2Refused {
+		t.Errorf("counts: %v", err)
+	}
+}
+
+// T227 (c): capRefused looks at no further entry of refused/ once the
+// flush's deadline has passed, and then removes none.
+func TestCapRefusedStopsAtItsDeadline(t *testing.T) {
+	root := gitRepoT(t)
+	refused := filepath.Join(queueOf(root), "refused")
+	for i := range 150 {
+		write(t, filepath.Join(refused, fmt.Sprintf("r%03d", i)), "x")
+	}
+	rfd, err := syscall.Open(refused, dirFlags, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(rfd)
+	was := lstatRefused
+	t.Cleanup(func() { lstatRefused = was })
+	stats := 0
+	lstatRefused = func(dirfd int, name string) (os.FileInfo, error) {
+		stats++
+		time.Sleep(20 * time.Millisecond)
+		return was(dirfd, name)
+	}
+	capRefused(rfd, time.Now().Add(100*time.Millisecond))
+	if stats > 20 {
+		t.Errorf("%d entries of refused/ looked at, past a 100 ms deadline at 20 ms each", stats)
+	}
+	if entries, _ := os.ReadDir(refused); len(entries) != 150 {
+		t.Errorf("refused/ holds %d entries, want the 150 untouched", len(entries))
+	}
+}
+
+// T227 (e): entries sorted before a record do not starve it. The records
+// are saved first; one flush refuses at most queueBatch entries and leaves
+// the rest, which are no records, for the next.
+func TestEntriesSortedFirstDoNotStarveARecord(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		// make writes the i-th entry that sorts before the record.
+		make func(t *testing.T, queue string, i int)
+	}{
+		{"names of another shape", func(t *testing.T, queue string, i int) {
+			write(t, filepath.Join(queue, fmt.Sprintf("0junk-%02d", i)), "x")
+		}},
+		{"forged records", func(t *testing.T, queue string, i int) {
+			write(t, filepath.Join(queue, fmt.Sprintf("20261123T1200%02d.000000000Z-c9.json", i)), "{}")
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			root := gitRepoT(t)
+			sandboxedEngram(t, true)
+			SaveState(root, ChangeState{Change: "c1", Phase: "verify"})
+			for i := range 40 {
+				c.make(t, queueOf(root), i)
+			}
+			t.Setenv("JHON_IN_SANDBOX", "")
+			bin, _ := recordingEngram(t, "")
+			t.Setenv("JHON_ENGRAM", bin)
+			r := FlushEngramQueue(root)
+			if !slices.Equal(r.Saved, []string{"c1"}) || len(r.Refused) != queueBatch || r.Left != 0 || r.Failed != "" {
+				t.Errorf("first flush: saved %q, %d refused, %d left, failed %q; want c1 saved, %d refused, none left", r.Saved, len(r.Refused), r.Left, r.Failed, queueBatch)
+			}
+			if files := queuedFiles(t, root); len(files) != 40-queueBatch {
+				t.Errorf("queue holds %d entries after the first flush, want %d", len(files), 40-queueBatch)
+			}
+			r = FlushEngramQueue(root)
+			if len(r.Saved) != 0 || len(r.Refused) != 40-queueBatch || r.Left != 0 || len(queuedFiles(t, root)) != 0 {
+				t.Errorf("second flush %+v, queue %q", r, queuedFiles(t, root))
+			}
+		})
 	}
 }
