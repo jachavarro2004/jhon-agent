@@ -202,7 +202,10 @@ type Inner struct {
 	Strings []string
 	// Docs are texts whose substitutions it runs (print -P's prompt expansion).
 	Docs []string
-	Self bool
+	// Transport are the command lines an ssh transport runs on this machine;
+	// the programs of one that is a plain forward are marked Forward (T228 L12).
+	Transport []string
+	Self      bool
 }
 
 // runs is what the runner name, its words w, runs (Inner); ok is false for
@@ -374,6 +377,14 @@ func runnerPrograms(name string, w []string, self Program, sub func(string) []st
 			return nil, true, err
 		}
 		out = append(out, ps...)
+	}
+	for _, t := range in.Transport {
+		ps, err := JudgeString(t, sub(name), env, inner)
+		if err != nil {
+			return nil, true, err
+		}
+		forward := ForwardCommand(t)
+		out = append(out, with(ps, func(p *Program) { p.Forward = p.Forward || forward })...)
 	}
 	for _, d := range in.Docs {
 		for _, c := range documentCommands(d) {
@@ -707,9 +718,13 @@ func gitRuns(w []string) (Inner, bool, error) {
 sub:
 	rest := w[min(k, len(w)):]
 	for _, kv := range settings {
-		strs, err := GitSetting(kv, rest)
+		strs, transport, err := GitSetting(kv, rest)
 		if err != nil {
 			return Inner{}, true, err
+		}
+		if transport {
+			in.Transport = append(in.Transport, strs...)
+			continue
 		}
 		for _, v := range strs {
 			value(v)
@@ -768,7 +783,7 @@ sub:
 			}
 		}
 	}
-	if len(in.Strings) == 0 && len(in.Words) == 0 {
+	if len(in.Strings) == 0 && len(in.Words) == 0 && len(in.Transport) == 0 {
 		return Inner{}, false, nil
 	}
 	return in, true, nil
@@ -781,22 +796,22 @@ sub:
 // no git command has its name, with the arguments after it (its `!`
 // dropped; one with none is a git command line); a credential helper's
 // `!` dropped; for an ssh command, what ssh runs on this machine
-// (SSHCommands, whose error makes the line unreadable). A value that does
-// not parse runs nothing the reader can tell.
-func GitSetting(kv string, rest []string) ([]string, error) {
+// (SSHCommands, whose error makes the line unreadable), which transport
+// marks as the connection git makes (T228 L12). A value that does not
+// parse runs nothing the reader can tell.
+func GitSetting(kv string, rest []string) (cmds []string, transport bool, err error) {
 	key, v, ok := strings.Cut(kv, "=")
 	name, isAlias := strings.CutPrefix(strings.ToLower(key), "alias.")
-	var out []string
 	add := func(s string) {
 		if _, err := Parse(s); err == nil && strings.TrimSpace(s) != "" {
-			out = append(out, s)
+			cmds = append(cmds, s)
 		}
 	}
 	switch {
 	case !ok || !gitCommandKey.MatchString(key):
 	case isAlias:
 		if name != at(rest, 0) || gitCommands[name] {
-			return nil, nil
+			return nil, false, nil
 		}
 		args := strings.Join(rest[min(1, len(rest)):], " ")
 		if sc, shell := strings.CutPrefix(v, "!"); shell {
@@ -809,16 +824,16 @@ func GitSetting(kv string, rest []string) ([]string, error) {
 		if f, err := Parse(v); err == nil && len(f) == 1 && sshProgram(at(f[0].Words, 0)) {
 			vals, err := SSHCommands(f[0].Words)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			for _, o := range vals {
 				add(o)
 			}
-			return out, nil
+			return cmds, true, nil
 		}
 		add(v)
 	}
-	return out, nil
+	return cmds, false, nil
 }
 
 // gitCommandOptions are git's options whose value it runs as a command:

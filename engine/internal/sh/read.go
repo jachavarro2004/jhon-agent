@@ -464,6 +464,8 @@ type Program struct {
 	Raw         *string
 	// Scope is the subshells it runs in, outermost first (Command.Scope).
 	Scope []int64
+	// Forward marks a program of a transport's plain forward (Command.Forward).
+	Forward bool
 }
 
 // Opts are what programs reads beyond the words: the standard input and the variables set before.
@@ -881,6 +883,7 @@ func CommandPrograms(c *Command, via, env []string, opts Opts) ([]Program, error
 		if len(c.Scope) > 0 {
 			p.Scope = append(slices.Clone(c.Scope), p.Scope...)
 		}
+		p.Forward = p.Forward || c.Forward
 	}), err
 }
 

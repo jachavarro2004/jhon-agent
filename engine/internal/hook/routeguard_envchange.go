@@ -307,7 +307,7 @@ func envUnwrapped(words []string, depth int) string {
 		}
 		return ""
 	}
-	for _, s := range in.Strings {
+	for _, s := range append(append([]string{}, in.Strings...), in.Transport...) {
 		if depth < 4 {
 			if why := envChangeIn(s, depth+1); why != "" {
 				return why

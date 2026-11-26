@@ -41,10 +41,10 @@ func TestSSHGrammar(t *testing.T) {
 		}
 	}
 	// --config-env takes two words too; GitSetting reads a key's value.
-	if got, _ := GitSetting("core.sshCommand=ssh -vo ProxyCommand=a", nil); !reflect.DeepEqual(got, []string{"a"}) {
+	if got, transport, _ := GitSetting("core.sshCommand=ssh -vo ProxyCommand=a", nil); !transport || !reflect.DeepEqual(got, []string{"a"}) {
 		t.Errorf("GitSetting(core.sshCommand) = %q", got)
 	}
-	if got, _ := GitSetting("alias.y=!a b", []string{"y", "c"}); !reflect.DeepEqual(got, []string{"a b c"}) {
+	if got, transport, _ := GitSetting("alias.y=!a b", []string{"y", "c"}); transport || !reflect.DeepEqual(got, []string{"a b c"}) {
 		t.Errorf("GitSetting(alias) = %q", got)
 	}
 	if got, _ := route(t, "git --config-env core.pager=X log"); !strings.Contains(strings.Join(got, "\n"), "| git --config-env core.pager=X log") {

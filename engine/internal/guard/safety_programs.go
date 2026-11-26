@@ -1422,6 +1422,12 @@ func judgeOutward(name string, args []string, env map[string]string) []Finding {
 			}
 			return nil
 		}
+		// An SSM session (a shell, an SSH or a port-forwarding session) is a
+		// connection to the host, as ssh is, not a change to the account
+		// (T228 L12); send-command and every other write stay deploy.
+		if first == "ssm" && at(ops, 1) == "start-session" {
+			return A("remote", "aws ssm start-session")
+		}
 		if first == "deploy" || (len(ops) > 1 && slices.ContainsFunc(ops[1:], func(o string) bool { return awsWriteOp.MatchString(o) || o == "deploy" })) {
 			return A("deploy", "aws "+undefinedOr(first, hasFirst))
 		}
