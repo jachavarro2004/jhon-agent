@@ -4,6 +4,7 @@ import (
 	"fmt"
 	lddlayout "github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
@@ -15,6 +16,9 @@ import (
 // `jhon executions run <change>`. It came before that change's RED, the
 // first such run that failed, or before its record,
 // openspec/changes/<change>/tasks.md, written after it: once per change.
+// Only a write inside the change's project roots and their worktrees
+// (changeRoots, and the directory the write ran in) is change code: a
+// helper under /tmp, $TMPDIR, or another folder is not (T254).
 // A change never run to a RED in the transcript is not read: nothing names
 // it there. A write through Bash is not read. The code edits between a
 // change's RED and its GREEN, a later run of it that passes, are its own
@@ -97,37 +101,71 @@ func behaviourFile(file string) bool {
 	return true
 }
 
+// inProject is whether p, absolute, lies in one of roots; with no root
+// known, every path does.
+func inProject(p string, roots ...[]string) bool {
+	known := false
+	for _, rs := range roots {
+		known = known || len(rs) > 0
+		if slices.ContainsFunc(rs, func(r string) bool { _, in := under(p, r); return in || p == r }) {
+			return true
+		}
+	}
+	return !known
+}
+
 func checkEditBeforeRed(s *Session, emit emitFunc) {
 	type edit struct {
-		tool, file string
-		line       int
+		tool, file, cwd string
+		line            int
 	}
+	roots := map[string][]string{} // change → its roots
+	trees := map[string][]string{} // a write's directory → it in each worktree of its repository
 	for _, t := range s.transcripts() {
-		var first *edit
-		hand := 0                   // the line of a failing hand-run test before first, or 0
+		var edits []edit            // the behaviour edits since the last RED or GREEN
+		hand := 0                   // the line of the first failing hand-run test since then, or 0
 		runs := map[string]string{} // tool use id → change
 		cmds := map[string]string{} // tool use id → its command
 		tests := map[string]bool{}  // tool use id of a hand-run test
 		red := map[string]bool{}
 		open := "" // the change whose RED came and whose GREEN has not
 		reported := map[string]bool{}
-		report := func(change, why string, line, handLine int) {
-			if reported[change] {
+		// firstOf is the first of edits inside change's project, or nil.
+		firstOf := func(change string) *edit {
+			rs, ok := roots[change]
+			if !ok {
+				rs = changeRoots(s, change)
+				roots[change] = rs
+			}
+			for i := range edits {
+				cwd := normalizeRoot(edits[i].cwd)
+				if _, ok := trees[cwd]; !ok && edits[i].cwd != "" {
+					trees[cwd] = worktreesOf(cwd)
+				}
+				if inProject(absolute(edits[i].file, edits[i].cwd), rs, trees[cwd]) {
+					return &edits[i]
+				}
+			}
+			return nil
+		}
+		report := func(change, why string, line int) {
+			first := firstOf(change)
+			if reported[change] || first == nil {
 				return
 			}
 			reported[change] = true
 			severity, message := "violation", fmt.Sprintf("%s %s changes code of %s before its %s (line %d): the RED test and the record the change needs come before the first behaviour-changing edit (contracts/ldd.md, contracts/tdd.md)",
 				first.tool, first.file, change, why, line)
-			if handLine > 0 {
+			if hand > 0 && hand <= first.line {
 				severity = "suspect"
-				message += fmt.Sprintf("; the failing test ran by hand at line %d, not through `jhon executions run`", handLine)
+				message += fmt.Sprintf("; the failing test ran by hand at line %d, not through `jhon executions run`", hand)
 			}
 			emit(emitted{check: "edit-before-red", severity: severity, transcript: t.File, line: first.line, agent: t.Agent, agentType: t.AgentType,
 				evidence: short(first.tool+" "+first.file, 120), message: message})
 		}
 		for _, e := range t.Entries {
 			for _, r := range e.ToolResults {
-				if tests[r.ID] && first == nil && hand == 0 && handRed(r) {
+				if tests[r.ID] && hand == 0 && handRed(r) {
 					hand = e.Line
 				}
 				change, ok := runs[r.ID]
@@ -139,16 +177,14 @@ func checkEditBeforeRed(s *Session, emit emitFunc) {
 					// The change's GREEN: its own edits since its RED were
 					// its implementation, the next change's first edit is
 					// read afresh.
-					first, hand, open = nil, 0, ""
+					edits, hand, open = nil, 0, ""
 				}
 				if red[change] || !failed {
 					continue
 				}
 				red[change] = true
-				if first != nil {
-					report(change, "RED, the first failing `jhon executions run "+change+"`", e.Line, hand)
-				}
-				first, hand, open = nil, 0, change
+				report(change, "RED, the first failing `jhon executions run "+change+"`", e.Line)
+				edits, hand, open = nil, 0, change
 			}
 			for _, u := range e.ToolUses {
 				if c, ok := strProp(u.Input, "command"); ok && (u.Name == "Bash" || u.Name == "bash") {
@@ -166,11 +202,11 @@ func checkEditBeforeRed(s *Session, emit emitFunc) {
 				if (u.Name != "Edit" && u.Name != "Write" && u.Name != "edit" && u.Name != "write") || file == "" {
 					continue
 				}
-				if m := recordOf.FindStringSubmatch(file); m != nil && first != nil {
-					report(m[1], "record openspec/changes/"+m[1]+"/tasks.md", e.Line, 0)
+				if m := recordOf.FindStringSubmatch(file); m != nil {
+					report(m[1], "record openspec/changes/"+m[1]+"/tasks.md", e.Line)
 				}
-				if first == nil && behaviourFile(file) {
-					first = &edit{u.Name, file, e.Line}
+				if behaviourFile(file) {
+					edits = append(edits, edit{u.Name, file, e.Cwd, e.Line})
 				}
 			}
 		}

@@ -1,6 +1,8 @@
 package audit
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -59,4 +61,51 @@ func TestEditBeforeRedFindingJSON(t *testing.T) {
 			t.Errorf("%s not in %s", want, s)
 		}
 	}
+}
+
+// A write outside the change's project and its worktrees is not change code
+// (T254, L1721): a helper the main agent writes under /tmp, under $TMPDIR, or
+// in another folder before the change's record and RED is no edit before it.
+func TestEditBeforeRedOutsideTheProject(t *testing.T) {
+	write := func(file string) step {
+		return step{kind: "tool", tool: "Write", input: obj("file_path", file, "content", "print(1)\n"), result: "ok"}
+	}
+	record := step{kind: "tool", tool: "Write", input: obj("file_path", testRoot+"/openspec/changes/"+acme+"/tasks.md", "content", "## Intent\nDelivers: x\n"), result: "ok"}
+	runRed := step{kind: "bash", text: "jhon executions run " + acme, result: "1 failed", isError: true}
+	tmpdir := t.TempDir()
+	for _, p := range []string{"/tmp/helper.py", "/tmp/jhon-1/scripts/helper.sh", tmpdir + "/helper.py", "/srv/other/tools/helper.py", "/work/p-other/src/helper.py"} {
+		eq(t, p+" before the record and RED", len(findingsOf(t, "edit-before-red", user("go"), write(p), record, runRed)), 0)
+		eq(t, p+" before RED", len(findingsOf(t, "edit-before-red", user("go"), write(p), runRed)), 0)
+	}
+	// A helper outside, then the project's code before RED: that code is the edit.
+	f := findingsOf(t, "edit-before-red", user("go"), write("/tmp/helper.py"), write(testRoot+"/svca/src/totals.py"), runRed)
+	wouldBe(t, f)
+	if !strings.Contains(f[0].Message, "Write "+testRoot+"/svca/src/totals.py changes code of acme-totals before its RED") {
+		t.Errorf("message: %s", f[0].Message)
+	}
+	// A write inside the project before the record is still reported.
+	f = findingsOf(t, "edit-before-red", user("go"), write(testRoot+"/svca/src/helper.py"), record, runRed)
+	wouldBe(t, f)
+	if !strings.Contains(f[0].Message, "Write "+testRoot+"/svca/src/helper.py changes code of acme-totals before its record openspec/changes/acme-totals/tasks.md") {
+		t.Errorf("message: %s", f[0].Message)
+	}
+}
+
+// A write in a linked worktree of the change's project still counts; one in
+// another repository beside it does not (T254).
+func TestEditBeforeRedInAWorktree(t *testing.T) {
+	repo, lane := repoWithWorktree(t)
+	other := filepath.Join(filepath.Dir(repo), "other")
+	must(t, os.MkdirAll(other, 0o755))
+	gitT(t, other, "init", "-q")
+	d := delegate("d01", "jhon-builder", acme, writeCall(lane+"/svca/src/totals.py"), red(acme))
+	d.root = repo
+	f := findingsOf(t, "edit-before-red", user("go"), d)
+	wouldBe(t, f)
+	if !strings.Contains(f[0].Message, "Write "+lane+"/svca/src/totals.py changes code of acme-totals before its RED") {
+		t.Errorf("message: %s", f[0].Message)
+	}
+	d = delegate("d01", "jhon-builder", acme, writeCall(other+"/src/totals.py"), red(acme))
+	d.root = repo
+	eq(t, "another repository", len(findingsOf(t, "edit-before-red", user("go"), d)), 0)
 }
