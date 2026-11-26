@@ -374,7 +374,9 @@ func runProblem(in sandbox.Input) (string, *sandbox.Problem) {
 // grants and the modes, wherever they are (sandbox-deploy-tools S9, S10):
 // it could turn the sandbox off or grant itself what the guards ask for;
 // or while a file of the project's a runtime runs outside the sandbox is a
-// link (sandbox.HookProblem, T250 A3). nil when none of these holds.
+// link (sandbox.HookProblem, T250 A3), or a variable names a socket the
+// sandbox hides through a link a command could repoint
+// (sandbox.SocketLinkProblem). nil when none of these holds.
 func ownFilesProblem(in sandbox.Input) *sandbox.Problem {
 	var p *sandbox.Problem
 	if os.Getenv("JHON_SETTINGS") != "" {
@@ -392,6 +394,10 @@ func ownFilesProblem(in sandbox.Input) *sandbox.Problem {
 	// could point it (T250 A3).
 	if p == nil {
 		p = sandbox.HookProblem(in)
+	}
+	// A socket variable through a link a command could repoint (T250).
+	if p == nil {
+		p = sandbox.SocketLinkProblem(in)
 	}
 	return p
 }

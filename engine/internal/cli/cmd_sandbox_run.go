@@ -61,28 +61,17 @@ func supervisedOutput() bool { return !isTerminal(os.Stdout) && !isTerminal(os.S
 // line adds back after it resets the repository's (T128g, L1306). The git
 // is the first on PATH, which sandbox.RunsOutside found trusted.
 func ownerCredentialHelpers() [][2]string {
-	git, err := exec.LookPath("git")
-	if err != nil {
-		return nil
+	return sandbox.Helpers(helperListing(project.OwnerGitConfig(`^credential\..*helper$`)))
+}
+
+// helperListing is entries as `git config --get-regexp` lists them, one
+// `<key> <value>` per line, for sandbox.Helpers.
+func helperListing(entries [][2]string) string {
+	var b strings.Builder
+	for _, e := range entries {
+		b.WriteString(e[0] + " " + e[1] + "\n")
 	}
-	var env []string
-	for _, kv := range os.Environ() {
-		k, _, _ := strings.Cut(kv, "=")
-		if k == "GIT_DIR" || k == "GIT_WORK_TREE" || k == "GIT_CONFIG_PARAMETERS" || strings.HasPrefix(k, "GIT_CONFIG_COUNT") || strings.HasPrefix(k, "GIT_CONFIG_KEY_") || strings.HasPrefix(k, "GIT_CONFIG_VALUE_") {
-			continue
-		}
-		env = append(env, kv)
-	}
-	var out [][2]string
-	for _, scope := range []string{"--system", "--global"} {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		cmd := exec.CommandContext(ctx, git, "config", scope, "--get-regexp", `^credential\..*helper$`)
-		cmd.Dir, cmd.Env = "/", env
-		listing, _ := cmd.Output()
-		cancel()
-		out = append(out, sandbox.Helpers(string(listing))...)
-	}
-	return out
+	return b.String()
 }
 
 // gitListingLimit bounds the configuration repositoryGitConfigSafe reads

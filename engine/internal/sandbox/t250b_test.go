@@ -282,3 +282,76 @@ func TestAMissingClaudeOrPiFolderInARootIsAnEmptyReadOnlyFolder(t *testing.T) {
 		t.Errorf("a session in worktree b:\n%s", strings.Join(args, " "))
 	}
 }
+
+// T250 (the re-verify of 5e9b12e): the note on a worktree the sandbox keeps
+// in place offers the fix that works: `git worktree remove <w>` while git
+// still knows the worktree, only `rm -r <w>` once git dropped its record.
+func TestThePinnedWorktreesNoteOffersTheFixThatWorks(t *testing.T) {
+	_, home, proj, in := t250Disk(t)
+	w := filepath.Join(home, "project-worktrees", "w")
+	for _, d := range []string{filepath.Join(w, ".claude"), filepath.Join(home, "project-worktrees")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(w, ".claude", "settings.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(w, ".git"), []byte("gitdir: "+filepath.Join(proj, ".git", "worktrees", "w")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	in.Roots = []string{proj, filepath.Join(home, "project-worktrees")}
+	in.Worktrees = []string{w}
+	note := Refusal(in, w, nil)
+	if !strings.Contains(note, "remove it outside the sandbox, in a terminal: git worktree remove "+w+"; no setting opens it") {
+		t.Errorf("with git's record: %q", note)
+	}
+	if err := os.Remove(filepath.Join(w, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	note = Refusal(in, w, nil)
+	if !strings.Contains(note, "rm -r "+w) || strings.Contains(note, "git worktree remove "+w) {
+		t.Errorf("with git's record gone: %q", note)
+	}
+}
+
+// T250 (the re-verify of 5e9b12e, advisory): a socket variable whose path
+// passes through a link in a folder sandboxed commands write is refused: a
+// command could point the link elsewhere, and the next run would hide that
+// path and leave the socket shown. A link elsewhere (one the home keeps
+// read-only) is the owner's and passes.
+func TestASocketVariableThroughALinkInAWritableAreaRefusesTheRun(t *testing.T) {
+	base, home, _, in := t250Disk(t)
+	tmp := filepath.Join(base, "scratch")
+	real := filepath.Join(tmp, "real")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(real, "agent.sock"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	in.AllowWrite = []string{tmp}
+	in.Env["SSH_AUTH_SOCK"] = filepath.Join(link, "agent.sock")
+	p := SocketLinkProblem(in)
+	want := "$SSH_AUTH_SOCK names " + filepath.Join(link, "agent.sock") + ", which passes through the link " + link + " in a folder sandboxed commands may write, so a command could point it elsewhere and the sandbox would hide the wrong path"
+	if p == nil || p.Reason != want || p.Fix != "set SSH_AUTH_SOCK to the socket's real path ("+filepath.Join(real, "agent.sock")+")" {
+		t.Errorf("SocketLinkProblem = %+v, want %q", p, want)
+	}
+	// The real path, and a link the home keeps read-only, pass.
+	in.Env["SSH_AUTH_SOCK"] = filepath.Join(real, "agent.sock")
+	if p := SocketLinkProblem(in); p != nil {
+		t.Errorf("the real path: %+v", p)
+	}
+	homeLink := filepath.Join(home, ".ssh-agent")
+	if err := os.Symlink(real, homeLink); err != nil {
+		t.Fatal(err)
+	}
+	in.Env["SSH_AUTH_SOCK"] = filepath.Join(homeLink, "agent.sock")
+	if p := SocketLinkProblem(in); p != nil {
+		t.Errorf("a link in the read-only home: %+v", p)
+	}
+}

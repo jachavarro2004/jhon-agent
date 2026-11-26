@@ -322,7 +322,11 @@ func refusal(in Input, path string, missing []MissingFolder) string {
 	case m.sealed && !m.shown:
 		return head + "; " + where(m) + ", which the sandbox hides (credentials, session sockets, snapshots): no setting opens it" + stop
 	case m.pin && m.path == real:
-		return head + exists + "; " + where(m) + ", " + pinNote
+		return head + exists + "; " + where(m) + ", " + pinNote + ": " + in.worktreeFix(real) + "; no setting opens it"
+	case m.note == hookNote && m.path == real && slices.Contains(in.Worktrees, filepath.Dir(real)):
+		// The mount itself, named as busy when git removes the worktree
+		// that holds it.
+		return head + exists + "; " + where(m) + ", " + hookNote + "; the worktree " + filepath.Dir(real) + " that holds it is kept in place: " + in.worktreeFix(filepath.Dir(real))
 	case m.kind == write:
 		return head + exists + "; " + where(m) + ", a folder the sandbox opens for writing, so the file system itself refused it, not the sandbox: no setting of Jhon's opens it" + stop
 	case m.note != "":
