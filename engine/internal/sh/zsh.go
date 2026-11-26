@@ -42,7 +42,12 @@ var codeTables = set("functions", "aliases", "galiases", "saliases", "dis_functi
 // codeOf is the commands an assignment of value to name (at index, for an
 // array or a table) runs later (T228 L2): PROMPT_COMMAND's value, and a
 // zsh function's or alias's entry, run as a command line; a prompt's
-// substitutions run as it is expanded. nil for any other.
+// substitutions run as it is expanded. A command variable's value
+// (commandVars, L8) runs as a command line too, read when it parses, its
+// `|` (LESSOPEN) or `!` (a git alias) dropped, and an ssh one's ssh left
+// to the program that runs it; a git configuration the environment gives
+// (GIT_CONFIG_VALUE_n, GIT_CONFIG_PARAMETERS) is read as a command,
+// whatever its key. nil for any other.
 func codeOf(name, index, value string) ([]*Command, error) {
 	switch {
 	case name == "PROMPT_COMMAND" || codeTables[name] && index != "":
@@ -51,8 +56,44 @@ func codeOf(name, index, value string) ([]*Command, error) {
 		r := &reader{src: value}
 		r.document(value)
 		return r.cmds, r.err
+	case commandVars[name] || gitConfigValue.MatchString(name):
+		return commandValue(name, value), nil
+	case name == "GIT_CONFIG_PARAMETERS":
+		var out []*Command
+		for _, m := range gitConfigParameter.FindAllStringSubmatch(value, -1) {
+			out = append(out, commandValue(name, m[1])...)
+		}
+		return out, nil
 	}
 	return nil, nil
+}
+
+// commandVars are the variables whose value a program runs as a command
+// line: git's (GIT_EXTERNAL_DIFF, GIT_PAGER, GIT_EDITOR, GIT_SSH,
+// GIT_SSH_COMMAND, GIT_ASKPASS, GIT_SEQUENCE_EDITOR, GIT_PROXY_COMMAND),
+// and the pager, editor and helper of git, man, crontab, less and the rest.
+var commandVars = set("GIT_EXTERNAL_DIFF", "GIT_PAGER", "PAGER", "GIT_EDITOR", "EDITOR", "VISUAL", "GIT_SSH", "GIT_SSH_COMMAND",
+	"GIT_ASKPASS", "SSH_ASKPASS", "SUDO_ASKPASS", "GIT_SEQUENCE_EDITOR", "GIT_PROXY_COMMAND", "LESSOPEN", "LESSCLOSE", "MANPAGER")
+
+var (
+	// gitConfigValue is GIT_CONFIG_VALUE_n.
+	gitConfigValue = lazyre.New(`^GIT_CONFIG_VALUE_\d+$`)
+	// gitConfigParameter is one 'key'='value' of GIT_CONFIG_PARAMETERS.
+	gitConfigParameter = lazyre.New(`'[^']*'='([^']*)'`)
+)
+
+// commandValue is the commands value runs as the command line of the
+// variable name, nil when it does not parse.
+func commandValue(name, value string) []*Command {
+	value = strings.TrimLeft(strings.TrimSpace(value), "|!")
+	cmds, err := Parse(value)
+	if err != nil {
+		return nil
+	}
+	if strings.Contains(name, "SSH") {
+		cmds = slices.DeleteFunc(cmds, func(c *Command) bool { b := Base(at(c.Words, 0)); return b == "ssh" || b == "scp" })
+	}
+	return cmds
 }
 
 // assigned reads what an assignment runs later (codeOf), and an assignment
@@ -121,6 +162,17 @@ func literal(w *syntax.Word) (string, bool) {
 	return b.String(), true
 }
 
+// documentCommands is the commands of the substitutions of s, read as a
+// here-document's (document); nil when it does not parse.
+func documentCommands(s string) []*Command {
+	r := &reader{src: s}
+	r.document(s)
+	if r.err != nil {
+		return nil
+	}
+	return r.cmds
+}
+
 // document reads the substitutions of s, text read as a here-document's
 // (quotes are no quotes there: a substitution inside them is read too).
 func (r *reader) document(s string) {
@@ -162,24 +214,50 @@ func (r *reader) extGlob(x *syntax.ExtGlob) {
 // qualifiers reads the code a glob's parenthesised group pat runs as zsh
 // qualifiers (qualifierCodes): each e string and +command is read as the
 // command line it is, and judged as it is judged bare (T228 L6: zsh runs
-// `!(tests)`'s e string `t`, which is no removal). A group whose qualifiers
-// an expansion may supply is a GlobCode command, glob as written.
+// `!(tests)`'s e string `t`, which is no removal); its quotes are the
+// shell's (L8: `e:'sh -c "…"':` stays a shell running a string). A group
+// whose qualifiers an expansion may supply is a GlobCode command, glob as
+// written.
 func (r *reader) qualifiers(pat, glob string) {
-	codes, dynamic := qualifierCodes(pat)
-	if dynamic {
+	q := qualifierCodes(pat)
+	if q.dynamic {
 		r.globCode(glob)
 		return
 	}
-	for _, c := range codes {
-		cmds, err := Parse(c)
-		if err != nil {
-			if r.err == nil {
-				r.err = &Unreadable{Why: "the code of the glob qualifier " + glob + ": " + err.Error()}
+	// A reading that does not parse (a quote one reading cuts) is left out;
+	// code no reading parses is unreadable.
+	read, texts := false, false
+	seen := map[string]bool{}
+	for _, readings := range q.codes {
+		for _, c := range readings {
+			texts = true
+			cmds, err := Parse(c)
+			if err != nil {
+				continue
 			}
-			return
+			read = true
+			// Readings that agree add their commands once.
+			for _, cmd := range cmds {
+				if k := strings.Join(cmd.Words, "\x00"); !seen[k] {
+					seen[k] = true
+					r.cmds = append(r.cmds, cmd)
+				}
+			}
 		}
-		r.cmds = append(r.cmds, cmds...)
 	}
+	if texts && !read && r.err == nil {
+		r.err = &Unreadable{Why: "the code of the glob qualifier " + glob + " does not parse"}
+	}
+}
+
+// globRewrites is whether the qualifiers of a glob's group pat may make its
+// matches other names than the files it matches (T228 L8): a P word, a
+// modifier (:h, :a, :s, :r, :e, :t, …), a +command, an e string that does
+// more than test (it may set REPLY or reply), or qualifiers an expansion
+// supplies. A removal of such a glob has a target the guard cannot resolve.
+func globRewrites(pat string) bool {
+	q := qualifierCodes(pat)
+	return q.dynamic || q.rewrite
 }
 
 // globCode adds a GlobCode command for glob.
@@ -274,37 +352,144 @@ func (r *reader) globSubstParts(parts []syntax.WordPart) {
 	r.globSubst(lits)
 }
 
-// qualifierCodes is the code pat, the text of a glob's parenthesised
-// group, runs as a zsh qualifier list: each closed e string's text and
-// each +command's name (also as an o or O sort); dynamic is set when an
-// expansion in it may supply its qualifiers (zsh reads the expanded text
-// as qualifiers), so its code cannot be told. An unquoted `|` outside any
-// nested group or expansion makes it an alternation, unless it opens with
-// `#q`. The list is read as zsh's glob.c reads it, quotes removed: the
-// other qualifiers' arguments are skipped (f's mode, u's and g's id, P's
-// word, a range, a subscript), and the modifiers after `:` run none. A
-// character zsh refuses is skipped and the reading goes on, which can only
-// find more code.
-func qualifierCodes(pat string) (codes []string, dynamic bool) {
+// A qualifierList is what a glob's parenthesised group runs as a zsh
+// qualifier list (qualifierCodes).
+type qualifierList struct {
+	// codes are the code it runs, each as the texts it may be read as.
+	codes [][]string
+	// dynamic is set when an expansion in it, outside its code, may supply
+	// its qualifiers (zsh reads the expanded text as qualifiers).
+	dynamic bool
+	// rewrite is set when its matches may become other names (globRewrites).
+	rewrite bool
+}
+
+// qualifierCodes reads pat, the text of a glob's parenthesised group, as a
+// zsh qualifier list: each closed e string's code and each +command's name
+// (also as an o or O sort). An unquoted `|` outside any nested group or
+// expansion makes it an alternation, unless it opens with `#q`. The list
+// is read as zsh's glob.c reads it: the other qualifiers' arguments are
+// skipped (f's mode, u's and g's id, P's word, a range, a subscript). It is
+// read twice, which can only find more code: with the quotes removed, as
+// zsh compares the characters (its code taken from the text as written, so
+// a quoted string in it stays one), and with a quoted delimiter skipped
+// (`*(e-'rm -rf ~'-)`, its code as written and with its outer quotes off).
+func qualifierCodes(pat string) qualifierList {
+	var out qualifierList
 	explicit := strings.HasPrefix(pat, "#q")
 	if !explicit && alternation(pat) {
-		return nil, false
-	}
-	if strings.ContainsAny(pat, "$`") {
-		return nil, true
+		return out
 	}
 	if explicit {
 		pat = pat[2:]
 	}
-	// Read with the quotes removed, as zsh compares the characters, and
-	// with a quoted delimiter skipped (`*(e-'rm -rf ~'-)`), which can only
-	// find more code: both readings' code is read.
-	for _, c := range append(scanQualifiers(dequote(pat), delimited, nil), scanQualifiers(pat, quotedDelimited, dequote)...) {
-		if !slices.Contains(codes, c) {
-			codes = append(codes, c)
+	q, at := dequoteMap(pat)
+	plain := scanQualifiers(q, delimited, func(i, j int) string { return pat[at[i] : at[j-1]+1] })
+	// The same code with its quotes and escapes removed, as zsh may read
+	// `e:rm -rf\ ~:`: one more reading, never in place of the others.
+	bare := scanQualifiers(q, delimited, func(i, j int) string { return q[i:j] })
+	raw := scanQualifiers(pat, quotedDelimited, func(i, j int) string { return pat[i:j] })
+	// Text outside the code an expansion may turn into qualifiers.
+	rest := pat
+	for _, c := range raw.codes {
+		rest = strings.Replace(rest, c.text, "", 1)
+	}
+	out.dynamic = strings.ContainsAny(rest, "$`")
+	out.rewrite = plain.rewrite || raw.rewrite
+	seen := map[string]bool{}
+	for _, c := range append(append(plain.codes, raw.codes...), bare.codes...) {
+		// Code quoted whole (`e:'…':`) is the text inside its quotes.
+		texts := []string{c.text}
+		if n := len(c.text); n >= 2 && (c.text[0] == '\'' || c.text[0] == '"') && c.text[n-1] == c.text[0] {
+			texts = []string{c.text[1 : n-1]}
+		}
+		var fresh []string
+		for _, t := range texts {
+			if !seen[t] {
+				seen[t] = true
+				fresh = append(fresh, t)
+			}
+			if !c.sort && !pureTest(t) {
+				out.rewrite = true
+			}
+			// A command the code computes (`$(echo rm) -rf ~`) cannot be told: as an expansion's qualifiers.
+			if computedProgram(t) {
+				out.dynamic = true
+			}
+		}
+		if fresh != nil {
+			out.codes = append(out.codes, fresh)
 		}
 	}
-	return codes, false
+	return out
+}
+
+// computedProgram is whether code runs a program its words compute: a
+// command whose program word holds an expansion or a substitution.
+func computedProgram(code string) bool {
+	cmds, err := Parse(code)
+	if err != nil {
+		return false
+	}
+	for _, c := range cmds {
+		k := 0
+		for k < len(c.Words) && Assignment.MatchString(c.Words[k]) {
+			k++
+		}
+		if k < len(c.Words) && strings.ContainsAny(c.Words[k], "$`…") {
+			return true
+		}
+	}
+	return false
+}
+
+// pureTests are the commands an e string may run and still leave REPLY
+// and reply as they are: a test (`[[ … ]]` runs none).
+var pureTests = set("test", "[", "true", "false", ":")
+
+// pureTest is whether code only tests: it parses, and each of its
+// commands is a pureTests one that names no REPLY or reply assignment.
+func pureTest(code string) bool {
+	cmds, err := Parse(code)
+	if err != nil {
+		return false
+	}
+	for _, c := range cmds {
+		if len(c.Words) == 0 || !pureTests[c.Words[0]] {
+			return false
+		}
+		for _, w := range c.Words {
+			if replyWord.MatchString(w) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// replyWord is an assignment to REPLY or reply.
+var replyWord = lazyre.New(`^(?:REPLY|reply)(?:\[.*\])?\+?=`)
+
+// dequoteMap is s with its quotes removed and each backslash escape read,
+// and for each of its bytes the index in s it comes from.
+func dequoteMap(s string) (string, []int) {
+	var b strings.Builder
+	var at []int
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\'', '"':
+		case '\\':
+			if i+1 < len(s) {
+				i++
+				b.WriteByte(s[i])
+				at = append(at, i)
+			}
+		default:
+			b.WriteByte(s[i])
+			at = append(at, i)
+		}
+	}
+	return b.String(), at
 }
 
 // quotedDelimited is delimited with the quoted text in q skipped.
@@ -340,12 +525,22 @@ func quotedDelimited(q string, i int) (int, bool) {
 	return i, false
 }
 
-// scanQualifiers is the code of the qualifier list q (qualifierCodes),
-// its delimited arguments found by delim and its code passed through clean.
-func scanQualifiers(q string, delim func(string, int) (int, bool), clean func(string) string) (codes []string) {
-	if clean == nil {
-		clean = func(s string) string { return s }
-	}
+// A qcode is a piece of code a qualifier list runs, and whether it is a sort key.
+type qcode struct {
+	text string
+	sort bool
+}
+
+// A qscan is one reading of a qualifier list: its code, and whether a P
+// word, a modifier or a +command may make its matches other names.
+type qscan struct {
+	codes   []qcode
+	rewrite bool
+}
+
+// scanQualifiers reads the qualifier list q: its delimited arguments found
+// by delim, its code's text taken by text from q's indices.
+func scanQualifiers(q string, delim func(string, int) (int, bool), text func(i, j int) string) (out qscan) {
 	delimited := delim
 	num := func(i int) int {
 		for i < len(q) && q[i] >= '0' && q[i] <= '9' {
@@ -360,19 +555,22 @@ func scanQualifiers(q string, delim func(string, int) (int, bool), clean func(st
 		return num(i)
 	}
 	// code reads the e string or +command at i (after its e or +), the index after it.
-	code := func(c byte, i int) int {
+	code := func(c byte, i int, sort bool) int {
 		if c == '+' {
 			j := i
 			for j < len(q) && identChar(q[j]) {
 				j++
 			}
 			if j > i {
-				codes = append(codes, clean(q[i:j]))
+				out.codes = append(out.codes, qcode{text(i, j), sort})
+				out.rewrite = out.rewrite || !sort
 			}
 			return j
 		}
 		if j, ok := delimited(q, i); ok {
-			codes = append(codes, clean(q[i+1:j-1]))
+			if j-1 > i+1 {
+				out.codes = append(out.codes, qcode{text(i+1, j-1), sort})
+			}
 			return j
 		}
 		return i
@@ -382,13 +580,15 @@ func scanQualifiers(q string, delim func(string, int) (int, bool), clean func(st
 		i++
 		switch c {
 		case ':':
-			return codes
+			// Modifiers: they rewrite each match (:h, :a, :s/…/…/, …).
+			out.rewrite = out.rewrite || i < len(q)
+			return out
 		case 'e', '+':
-			i = code(c, i)
+			i = code(c, i, false)
 		case 'o', 'O':
 			if i < len(q) {
 				if q[i] == 'e' || q[i] == '+' {
-					i = code(q[i], i+1)
+					i = code(q[i], i+1, true)
 				} else {
 					i++
 				}
@@ -402,6 +602,7 @@ func scanQualifiers(q string, delim func(string, int) (int, bool), clean func(st
 				i = j
 			}
 		case 'P':
+			out.rewrite = true
 			if j, ok := delimited(q, i); ok {
 				i = j
 			}
@@ -429,7 +630,7 @@ func scanQualifiers(q string, delim func(string, int) (int, bool), clean func(st
 			}
 		}
 	}
-	return codes
+	return out
 }
 
 // delimited is the index after a delimited argument that starts at i,
@@ -481,24 +682,6 @@ func modeSpec(q string, i int) int {
 // identChar is a character of a +command's name: a letter, a digit or `_`.
 func identChar(c byte) bool {
 	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
-}
-
-// dequote is s with its quotes removed and each backslash escape read.
-func dequote(s string) string {
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '\'', '"':
-		case '\\':
-			if i+1 < len(s) {
-				i++
-				b.WriteByte(s[i])
-			}
-		default:
-			b.WriteByte(s[i])
-		}
-	}
-	return b.String()
 }
 
 // alternation is whether pat holds an unquoted `|` outside any nested

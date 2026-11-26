@@ -31,6 +31,26 @@ func TestEnvChangeReadsWhatTheLineRuns(t *testing.T) {
 	}
 }
 
+// T228 L7b: the re-verify's lines: a -c after other options, and a
+// program the check has no reading of given such a command as a string.
+func TestEnvChangeL7Gaps(t *testing.T) {
+	for _, line := range []string{
+		"bash -c -e 'unset JHON_AGENT'", "nix-shell --run 'unset JHON_AGENT'", "nix-shell --run 'unset JHON_AGENT; git status'",
+		"conda run env -i git status", "tmux new -d 'env -i git status'", "entr -s 'unset JHON_AGENT'",
+	} {
+		if envChange(line) == "" {
+			t.Errorf("%s: not found", line)
+		}
+	}
+	for _, line := range []string{
+		"echo 'unset JHON_AGENT'", "grep -r 'env -i' .", "nix-shell --run 'go test ./...'", "conda run python x.py", "bash -c -e 'git status'",
+	} {
+		if why := envChange(line); why != "" {
+			t.Errorf("%s: refused: %s", line, why)
+		}
+	}
+}
+
 // T228 L5: the verifier's lines the env-change check missed.
 func TestEnvChangeL5Gaps(t *testing.T) {
 	for _, line := range []string{

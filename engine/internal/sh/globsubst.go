@@ -90,8 +90,8 @@ func GlobSubstOn(name string, args []string) string {
 				if on(n) || n == "emulate" && (mode(v) || computed(v)) {
 					return label
 				}
-			case !strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "+"), strings.HasPrefix(a, "-") && strings.Contains(a, "c"):
-				// The options end at -c's string or the script.
+			case !strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "+"):
+				// The options end at -c's string or the script; options may follow -c.
 				return ""
 			}
 		}

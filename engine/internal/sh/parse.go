@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -273,6 +274,10 @@ func (r *reader) walk(n syntax.Node) {
 		case *syntax.Word:
 			// zsh's `$~name` in a word the walk reaches: an array's, a loop's, a default word's (T228 L5).
 			r.globSubstParts(y.Parts)
+			// A subscript's substitution in a quoted word ([[ -v 'a[$(…)]' ]], T228 L8).
+			if v, ok := literal(y); ok {
+				r.subscripts(v)
+			}
 		case *syntax.ParamExp:
 			r.paramExp(y)
 		}
@@ -331,7 +336,26 @@ func (r *reader) word(w *syntax.Word) string {
 	if w == nil {
 		return ""
 	}
-	return r.parts(w.Parts, false)
+	v := r.parts(w.Parts, false)
+	r.subscripts(v)
+	return v
+}
+
+// arithSubscript is a name with a subscript that holds a substitution:
+// `a[$(…)]`, `a[`…`]`.
+var arithSubscript = lazyre.New("[A-Za-z_][A-Za-z0-9_]*\\[([^\\]]*(?:\\$\\(|`)[^\\]]*)\\]")
+
+// subscripts reads the substitutions in a subscript a word's text holds,
+// quoted or not (T228 L8): bash evaluates such a subscript as arithmetic
+// wherever the text is used as a name or a number (test -v, [ -v, printf
+// -v, kill -l, declare -i, $((x)), [[ $x -eq 0 ]]), running them. A
+// subscript that does not parse runs nothing the reader can tell.
+func (r *reader) subscripts(v string) {
+	for _, m := range arithSubscript.FindAllStringSubmatch(v, -1) {
+		if !strings.Contains(m[1], "$(…)") && !strings.Contains(m[1], "`…`") {
+			r.cmds = append(r.cmds, documentCommands(m[1])...)
+		}
+	}
 }
 
 func (r *reader) parts(ps []syntax.WordPart, dq bool) string {
@@ -380,6 +404,11 @@ func (r *reader) parts(ps []syntax.WordPart, dq bool) string {
 			// A parameter expansion or an extended glob, as written.
 			r.walk(x)
 			b.WriteString(r.text(x))
+			// A glob whose qualifiers may rename its matches names what the
+			// reader cannot tell (T228 L8): a substitution's marker says so.
+			if g, ok := x.(*syntax.ExtGlob); ok && globRewrites(g.Pattern.Value) {
+				b.WriteString("$(…)")
+			}
 		}
 	}
 	return b.String()
