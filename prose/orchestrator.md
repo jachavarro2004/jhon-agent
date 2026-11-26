@@ -121,8 +121,7 @@ The session's last context part states the project's rules from
 `openspec/config.yaml`; they and the contracts outrank every memory: one
 that contradicts them is stale; correct it, never follow it.
 **When the change has a tasks.md**, check a task's box there once done.
-A live task list is optional: when you keep one,
-{{runtime:track-slice}}, and it never disagrees with tasks.md.
+For multi-step work, {{runtime:track-slice}}; it never disagrees with tasks.md.
 
 ## Proportion
 

@@ -21,6 +21,9 @@ func TestBookkeepingRidesWithWork(t *testing.T) {
 			// L716: every job, sub-agent and sleep goes in the background.
 			"Every job that may outlast a few seconds runs in the background too ({{runtime:background-jobs}}), its wait condition inside the command; never `sleep` in the foreground.",
 			"Never wait idly: do other in-scope work, or end the turn and resume on the notice.",
+			// L1736: the owner made the live task list required for multi-step
+			// work, so the orchestrator agrees with routing.md.
+			"For multi-step work, {{runtime:track-slice}}; it never disagrees with tasks.md.",
 		},
 		"contracts/engram.md": {
 			"Save once per completed request, batched with other tool calls, never per fix or event, and before the final answer;",
@@ -34,7 +37,7 @@ func TestBookkeepingRidesWithWork(t *testing.T) {
 	gone := map[string][]string{
 		"contracts/routing.md": {"The todo list may still hold quick sub-steps.", "that file is the list", "never copy its tasks into the todo list"},
 		"contracts/engram.md":  {"Save before writing the final answer"},
-		"orchestrator.md":      {"then `mem_context`, and"},
+		"orchestrator.md":      {"then `mem_context`, and", "A live task list is optional"},
 	}
 	for p, ws := range wants {
 		s := read(p)
