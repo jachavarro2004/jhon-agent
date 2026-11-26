@@ -96,6 +96,9 @@ var sqliteBeside = []string{"-wal", "-shm"}
 // FinishBuild.
 func StartBuild(data string) {
 	endBuild(data)
+	// The records' folder may not be there yet on a fresh cache: without it
+	// hold() gets ENOENT and the first run would keep no lock (L1730).
+	_ = os.MkdirAll(filepath.Dir(data), 0o755)
 	sweep(filepath.Dir(data))
 	if lock, err := hold(BuildFile(data)); err == nil {
 		builds.Store(BuildFile(data), lock)
