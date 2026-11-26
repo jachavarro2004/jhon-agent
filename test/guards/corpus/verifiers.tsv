@@ -428,7 +428,7 @@ safety-guard	Bash	"git --config-env=core.pager=PAGER log"	allow	none	T228	-	veri
 safety-guard	Bash	"GIT_SSH_COMMAND='ssh -46AaCfGgKkMNnqsTtVvXxYyZoProxyCommand=rm\\ -rf\\ ~' git fetch"	refuse	none	T228	-	verify: every ssh flag bundled before o
 safety-guard	Bash	"GIT_SSH_COMMAND='ssh -vl x -oProxyCommand=\"rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: a valued letter takes its own word, -o follows
 safety-guard	Bash	"GIT_SSH_COMMAND='ssh h -vo ProxyCommand=\"rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: ssh reads options again after its host
-safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o \"Proxy\\\"Command\\\"=rm -rf ~\"' git fetch"	ask	none	T228	-	verify: quotes inside the keyword, which ssh removes
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o \"Proxy\\\"Command\\\"=rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: quotes inside the keyword, which ssh removes; read as the ProxyCommand it is and refused (T228 L15)
 safety-guard	Bash	"GIT_SSH_COMMAND='scp -3o ProxyCommand=\"rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: scp's grammar
 safety-guard	Bash	"export X=less; X='rm -rf ~'; git --config-env=core.pager=X log"	refuse	none	T228	-	verify: a reassignment after export is git's value
 safety-guard	Bash	"Y='rm -rf ~'; X=\"${Y}\" git --config-env=core.pager=X log"	refuse	none	T228	-	verify: a value built from another variable on the line
@@ -482,3 +482,44 @@ safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"cloudflared access ssh
 safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"corkscrew proxy 8080 %h %p\"' git fetch"	allow	none	T228	-	L14 preserve: corkscrew
 safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"aws ssm start-session --target %h --document-name AWS-StartPortForwardingSession\"' git fetch"	allow	none	T228	-	L14 preserve: an SSM port forward
 safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"autossh -M 0 -W %h:%p b\"' git fetch"	allow	none	T228	-	L14 preserve: an autossh forward
+# T228 L14 re-verify (7359faa): quoted ssh keywords, SSM document spellings, socat quoted commas, ncat abbreviations; two rows of the earlier set
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"ssh -W %h:%p -D 0.0.0.0:1080 b\"' git fetch"	ask	none	T228	-	verify: a listener on every interface is no forward
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"nc -X 5 -x proxy:1080 %h %p\"' git fetch"	allow	none	T228	-	verify: a SOCKS-proxied nc forward
+safety-guard	Bash	"GIT_SSH_COMMAND=$'ssh -o ProxyCommand=\"ssh -W %h:%p -o \\'PermitLocal\\\\\"Command\\\\\" yes\\' -o \\'Local\\\\\"Command\\\\\" curl x\\' b\"' git fetch"	ask	none	T228	-	verify: ssh accepts a keyword ending in a quoted part
+safety-guard	Bash	"GIT_SSH_COMMAND=$'ssh -o ProxyCommand=\"ssh -W %h:%p -o \\'Forward\\\\\"Agent\\\\\" yes\\' b\"' git fetch"	ask	none	T228	-	verify: same, ForwardAgent
+safety-guard	Bash	"aws ssm start-session --target i-1 --document AWS-StartInteractiveCommand"	ask	none	T228	-	verify: the CLI takes a shortened --document-name (deploy, not remote)
+safety-guard	Bash	"aws ssm start-session --target i-1 --document-name AWS-StartSSHSession --document-name AWS-StartInteractiveCommand"	ask	none	T228	-	verify: the last --document-name wins (deploy)
+safety-guard	Bash	"aws ssm start-session --target i-1 --cli-input-json file://in.json"	ask	none	T228	-	verify: --cli-input-json may name any document (deploy)
+safety-guard	Bash	"socat - 'EXEC:\"rm -rf ~\",pty'"	refuse	none	T228	-	verify: socat runs a quoted EXEC command followed by options
+safety-guard	Bash	"socat - 'EXEC:\"rm -rf ~ x,y\"'"	refuse	none	T228	-	verify: a comma inside EXEC's quotes is no separator
+safety-guard	Bash	"socat - 'SYSTEM:\"echo a,b; rm -rf ~\"'"	refuse	none	T228	-	verify: same, SYSTEM
+safety-guard	Bash	"ncat --sh-exe 'rm -rf ~' h 1"	refuse	none	T228	-	verify: ncat takes a unique prefix of --sh-exec
+safety-guard	Bash	"ncat --ex='rm -rf ~' h 1"	refuse	none	T228	-	verify: same, --exec
+# T228 L15: one canonical ssh keyword reader; SSM spellings fail closed; socat quotes and groups, ncat prefixes; socat and nc file writes
+safety-guard	Bash	"GIT_SSH_COMMAND=$'ssh -o \\'Local\"Command\" rm -rf ~\\' -o \\'PermitLocal\"Command\" yes\\'' git fetch"	refuse	none	T228	-	L15 B1: a LocalCommand keyword ending in quotes is read
+safety-guard	Bash	"GIT_SSH_COMMAND=$'ssh -o \\'\"KnownHostsCommand\"=rm -rf ~\\'' git fetch"	refuse	none	T228	-	L15 B1: a quoted KnownHostsCommand keyword is read
+safety-guard	Bash	"git -c core.sshCommand=$'ssh -o \\'proxy\"command\" rm -rf ~\\'' fetch"	refuse	none	T228	-	L15 B1: same through core.sshCommand
+safety-guard	Bash	"GIT_SSH_COMMAND=$'ssh -o ProxyCommand=\"ssh -W %h:%p -o \\'Send\\\\\"Env\\\\\" TOKEN\\' b\"' git fetch"	ask	none	T228	-	L15 B1: a quoted SendEnv keyword is no forward's
+safety-guard	Bash	"GIT_SSH_COMMAND=$'ssh -o ProxyCommand=\"ssh -W %h:%p -o \\'Strict\\\\\"HostKeyChecking\\\\\" no\\' b\"' git fetch"	ask	none	T228	-	L15 B1: any keyword written with a quote is no forward's
+safety-guard	Bash	"GIT_SSH_COMMAND=$'ssh -o ProxyCommand=\"ssh -W %h:%p -o StrictHostKeyChecking=no -o \\'ServerAliveInterval 30\\' b\"' git fetch"	allow	none	T228	-	L15 preserve: ordinary keys stay a forward
+safety-guard	Bash	"aws ssm start-session --target i-1 --document-nam AWS-StartInteractiveCommand"	ask	none	T228	-	L15 B2: a prefix of --document-name is read
+safety-guard	Bash	"aws ssm start-session --target i-1 --cli-input-yaml file://in.yaml"	ask	none	T228	-	L15 B2: --cli-input-yaml may name any document (deploy)
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"aws ssm start-session --target %h --cli-input-yaml file://x.yaml\"' git fetch"	ask	none	T228	-	L15 B2: no forward with --cli-input-yaml
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"aws ssm start-session --target %h --document AWS-StartSSHSession --parameters portNumber=%p\"' git fetch"	allow	none	T228	-	L15 preserve: a shortened SSH document stays a forward
+safety-guard	Bash	"socat - 'exec:\"rm -rf ~\",pty'"	refuse	none	T228	-	L15 B3: lowercase exec with a quoted command and options
+safety-guard	Bash	"socat - 'SYSTEM:echo [a,b]; rm -rf ~'"	refuse	none	T228	-	L15 B3: socat keeps a comma inside brackets
+safety-guard	Bash	"socat - 'SYSTEM:echo a\\,b; rm -rf ~'"	refuse	none	T228	-	L15 B3: socat keeps an escaped comma
+safety-guard	Bash	"ncat --sh 'rm -rf ~' h 1"	refuse	none	T228	-	L15 B3: ncat takes a prefix of --sh-exec
+safety-guard	Bash	"ncat --exe 'rm -rf ~' h 1"	refuse	none	T228	-	L15 B3: same, --exec
+safety-guard	Bash	"socat - 'SYSTEM:echo a,b'"	allow	none	T228	-	L15 preserve: a harmless SYSTEM with options
+safety-guard	Bash	"ncat --ssl h 443"	allow	none	T228	-	L15 preserve: ncat --ssl is no --sh-exec
+safety-guard	Bash	"socat - CREATE:.git/hooks/pre-commit"	refuse	none	T228	-	L15 item 4: socat CREATE writes its file
+safety-guard	Bash	"socat - OPEN:.git/hooks/post-merge,creat,trunc"	refuse	none	T228	-	L15 item 4: socat OPEN with creat or trunc writes its file
+safety-guard	Bash	"socat TCP:h:1 GOPEN:.git/hooks/pre-push,trunc"	refuse	none	T228	-	L15 item 4: socat GOPEN with trunc writes its file
+safety-guard	Bash	"socat - /dev/sda,trunc"	refuse	none	T228	-	L15 item 4: a bare path is GOPEN
+safety-guard	Bash	"socat -lf .git/hooks/pre-commit - TCP:h:1"	refuse	none	T228	-	L15 item 4: socat -lf writes its log
+safety-guard	Bash	"ncat -x .git/hooks/pre-commit h 1"	refuse	none	T228	-	L15 item 4: ncat -x writes its hex dump
+safety-guard	Bash	"ncat --out=.git/hooks/pre-commit h 1"	refuse	none	T228	-	L15 item 4: ncat --output by prefix
+safety-guard	Bash	"socat -u OPEN:.git/config STDOUT"	allow	none	T228	-	L15 preserve: an address socat -u only reads
+safety-guard	Bash	"socat - /dev/ttyUSB0,raw,echo=0"	allow	none	T228	-	L15 preserve: a serial line opened with no trunc
+safety-guard	Bash	"ncat -o notes.txt h 1"	allow	none	T228	-	L15 preserve: a dump file in the project

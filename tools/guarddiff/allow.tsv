@@ -1710,7 +1710,7 @@ verifiers.tsv:424	safety-guard	allow	refuse	hole T228 L10 (found on 498b176, re-
 verifiers.tsv:428	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): every ssh flag bundled before o
 verifiers.tsv:429	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): a valued letter takes its own word, -o follows
 verifiers.tsv:430	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): ssh reads options again after its host
-verifiers.tsv:431	safety-guard	allow	ask	hole T228 L12 (re-verify mwx6phap of 5fb10e8): quotes inside the keyword, which ssh removes
+verifiers.tsv:431	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): quotes inside the keyword, which ssh removes; T228 L15: the canonical keyword reader reads it as ProxyCommand
 verifiers.tsv:432	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): scp's grammar
 verifiers.tsv:433	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): a reassignment after export is git's value
 verifiers.tsv:434	safety-guard	allow	refuse	hole T228 L12 (re-verify mwx6phap of 5fb10e8): a value built from another variable on the line
@@ -1744,3 +1744,29 @@ verifiers.tsv:471	safety-guard	allow	refuse	hole T228 L14 (re-verify mwx8wkt2 of
 verifiers.tsv:472	safety-guard	allow	refuse	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 blocker: socat EXEC: with options runs its command
 verifiers.tsv:473	safety-guard	allow	refuse	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 blocker: nc -c runs its command
 verifiers.tsv:474	safety-guard	allow	refuse	hole T228 L14 (re-verify mwx8wkt2 of eea3f04): L14 blocker: ncat --sh-exec runs its command
+verifiers.tsv:486	safety-guard	allow	ask	hole T228 L15 (re-verify mwxajz2p of 7359faa): a listener on every interface is no forward
+verifiers.tsv:488	safety-guard	allow	ask	hole T228 L15 (re-verify mwxajz2p of 7359faa): ssh accepts a keyword ending in a quoted part
+verifiers.tsv:489	safety-guard	allow	ask	hole T228 L15 (re-verify mwxajz2p of 7359faa): same, ForwardAgent
+verifiers.tsv:493	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): socat runs a quoted EXEC command followed by options
+verifiers.tsv:494	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): a comma inside EXEC's quotes is no separator
+verifiers.tsv:495	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): same, SYSTEM
+verifiers.tsv:496	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): ncat takes a unique prefix of --sh-exec
+verifiers.tsv:497	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): same, --exec
+verifiers.tsv:499	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B1: a LocalCommand keyword ending in quotes is read
+verifiers.tsv:500	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B1: a quoted KnownHostsCommand keyword is read
+verifiers.tsv:501	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B1: same through core.sshCommand
+verifiers.tsv:502	safety-guard	allow	ask	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B1: a quoted SendEnv keyword is no forward's
+verifiers.tsv:503	safety-guard	allow	ask	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B1: any keyword written with a quote is no forward's
+verifiers.tsv:507	safety-guard	allow	ask	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B2: no forward with --cli-input-yaml
+verifiers.tsv:509	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B3: lowercase exec with a quoted command and options
+verifiers.tsv:510	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B3: socat keeps a comma inside brackets
+verifiers.tsv:511	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B3: socat keeps an escaped comma
+verifiers.tsv:512	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B3: ncat takes a prefix of --sh-exec
+verifiers.tsv:513	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 B3: same, --exec
+verifiers.tsv:516	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 item 4: socat CREATE writes its file
+verifiers.tsv:517	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 item 4: socat OPEN with creat or trunc writes its file
+verifiers.tsv:518	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 item 4: socat GOPEN with trunc writes its file
+verifiers.tsv:519	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 item 4: a bare path is GOPEN
+verifiers.tsv:520	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 item 4: socat -lf writes its log
+verifiers.tsv:521	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 item 4: ncat -x writes its hex dump
+verifiers.tsv:522	safety-guard	allow	refuse	hole T228 L15 (re-verify mwxajz2p of 7359faa): L15 item 4: ncat --output by prefix

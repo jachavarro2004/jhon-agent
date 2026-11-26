@@ -29,28 +29,48 @@ var sshGetopt = map[string]string{
 // KnownHostsCommand (RemoteCommand runs on the host; ProxyJump runs ssh).
 var sshCommandOptions = []string{"proxycommand", "localcommand", "knownhostscommand"}
 
-// sshKeyword is an -o option's name as ssh reads it: the text up to `=`,
-// a space or a tab, one pair of quotes around it removed, case-folded; and
-// its value, the rest after the separators.
-func sshKeyword(v string) (key, val string) {
-	v = strings.TrimLeft(v, " \t")
-	if len(v) > 0 && (v[0] == '"' || v[0] == '\'') {
-		if end := strings.IndexByte(v[1:], v[0]); end >= 0 {
-			key, val = v[1:1+end], v[2+end:]
-			return strings.ToLower(key), strings.TrimSpace(strings.TrimLeft(val, " \t="))
-		}
-	}
-	i := strings.IndexAny(v, "= \t")
-	if i < 0 {
-		return strings.ToLower(v), ""
-	}
-	return strings.ToLower(v[:i]), strings.TrimSpace(strings.TrimLeft(v[i:], " \t="))
+// sshCanon is the one form an ssh keyword is compared in (T228 L15: the
+// keyword's spelling broke three times, so the class is closed once):
+// every quote and backslash removed and the case folded. ssh reads a
+// keyword that is, or ends in, a quoted part (`Local"Command"`,
+// `"ForwardAgent"`), so a keyword is canonicalized before any comparison:
+// by SSHCommands, by the forward's denied keys and by the backstop alike.
+func sshCanon(s string) string {
+	return strings.ToLower(strings.NewReplacer("\"", "", "'", "", "\\", "").Replace(s))
 }
 
-// sshNamesCommand is whether a word, case-folded with its quotes and
-// backslashes removed, names one of sshCommandOptions.
+// sshKeyword is an -o option's keyword as ssh reads it, canonical
+// (sshCanon): the text up to the first `=`, space or tab outside quotes
+// (a backslash taking the next character); its value, the rest after the
+// separators; and quoted, whether the keyword as written held a quote or a
+// backslash.
+func sshKeyword(v string) (key, val string, quoted bool) {
+	v = strings.TrimLeft(v, " \t")
+	end, q := len(v), byte(0)
+scan:
+	for i := 0; i < len(v); i++ {
+		switch c := v[i]; {
+		case q != 0:
+			if c == q {
+				q = 0
+			}
+		case c == '"' || c == '\'':
+			q = c
+		case c == '\\':
+			i++
+		case c == '=' || c == ' ' || c == '\t':
+			end = i
+			break scan
+		}
+	}
+	raw := v[:end]
+	return sshCanon(raw), strings.TrimSpace(strings.TrimLeft(v[end:], " \t=")), strings.ContainsAny(raw, "\"'\\")
+}
+
+// sshNamesCommand is whether a word, canonical (sshCanon), names one of
+// sshCommandOptions.
 func sshNamesCommand(w string) bool {
-	n := strings.ToLower(strings.NewReplacer("\"", "", "'", "", "\\", "").Replace(w))
+	n := sshCanon(w)
 	for _, o := range sshCommandOptions {
 		if strings.Contains(n, o) {
 			return true
@@ -78,7 +98,7 @@ func SSHCommands(w []string) ([]string, error) {
 	var out []string
 	resolved := map[int]bool{}
 	option := func(k int, v string) {
-		key, val := sshKeyword(v)
+		key, val, _ := sshKeyword(v)
 		// PermitLocalCommand names LocalCommand in its own name, and runs nothing.
 		if key == "permitlocalcommand" && !sshNamesCommand(val) {
 			resolved[k] = true
@@ -285,8 +305,10 @@ func sshForward(w []string) bool {
 			case 'J':
 				jump = true
 			case 'o':
-				key, _ := sshKeyword(v)
-				if sshForwardDenied[key] {
+				// A keyword written with a quote or a backslash is never a
+				// forward's (T228 L15), whatever it reads as.
+				key, _, quoted := sshKeyword(v)
+				if quoted || sshForwardDenied[key] {
 					return false
 				}
 				jump = jump || key == "proxyjump"
@@ -385,18 +407,27 @@ func socatForward(w []string) bool {
 var ssmConnectionDocuments = set("AWS-StartSSHSession", "AWS-StartPortForwardingSession", "AWS-StartPortForwardingSessionToRemoteHost")
 
 // SSMConnection is whether aws ssm start-session's arguments args name no
-// document, or one of ssmConnectionDocuments (T228 L14): a session that
-// only connects, as ssh does. Any other document (AWS-StartInteractiveCommand,
-// AWS-StartNonInteractiveCommand, one that runs a shell script, a custom
-// one) runs a command.
+// document, or one of ssmConnectionDocuments (T228 L14, L15): a session
+// that only connects, as ssh does. Any other document
+// (AWS-StartInteractiveCommand, AWS-StartNonInteractiveCommand, one that
+// runs a shell script, a custom one) runs a command. It fails closed as the
+// CLI reads its options: any prefix of --document-name names the document
+// (`--document`, `--docu=…`), the last one wins, and --cli-input-json or
+// --cli-input-yaml (or a prefix) may name any document, so it is none.
 func SSMConnection(args []string) bool {
+	doc, named := "", false
 	for k, a := range args {
+		n, v, eq := strings.Cut(a, "=")
 		switch {
-		case a == "--document-name":
-			return ssmConnectionDocuments[at(args, k+1)]
-		case strings.HasPrefix(a, "--document-name="):
-			return ssmConnectionDocuments[a[len("--document-name="):]]
+		case len(n) < 3 || !strings.HasPrefix(n, "--"):
+		case len(n) >= len("--cli-i") && (strings.HasPrefix("--cli-input-json", n) || strings.HasPrefix("--cli-input-yaml", n)):
+			return false
+		case strings.HasPrefix("--document-name", n):
+			if !eq {
+				v = at(args, k+1)
+			}
+			doc, named = v, true
 		}
 	}
-	return true
+	return !named || ssmConnectionDocuments[doc]
 }
