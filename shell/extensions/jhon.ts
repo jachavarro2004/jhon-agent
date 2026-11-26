@@ -96,6 +96,7 @@ import { reviewRenderers } from "../lib/ui/review-card.ts";
 import { createWorktree, sameRepoWorktree, worktreeNote } from "../lib/worktree.ts";
 import { completeWord, lddChanges, PROFILE_ACTIONS } from "../lib/ui/jhon-commands.ts";
 import { LDD_SKILL, lddCompletions, lddPrompt } from "../lib/ldd-command.ts";
+import { commandPrompts } from "../lib/command-prompt.ts";
 import { STUDIO_SETTING, VIDEO_DESCRIPTION, offForSession, studioSkill, videoPrompt } from "../lib/studio-command.ts";
 import { ModelChoice, settingsDefaults, UNCHOSEN_ENDED, UNCHOSEN_HINT, UNCHOSEN_NO, UNCHOSEN_YES, unchosenQuestion } from "../lib/model-choice.ts";
 import { JhonPanel, jhonPanelKey, modelsOffered, registryModels, type ProfilesData, type View } from "../lib/ui/jhon-panel.ts";
@@ -743,6 +744,8 @@ export default function jhon(pi: any): void {
   if (!child) {
     // Each view its own /jhon:<option> (L194): the LDD detail, as alt+j, and the grants;
     // the permission mode changes only in Customize → Permissions (L214).
+    // T8f: a command's prompt runs as a typed one; under `pi -p` the command waits for its run (lib/command-prompt.ts).
+    const sendPrompt = commandPrompts(pi);
     pi.registerCommand("jhon:status", {
       description: "The LDD status of the session's change, or the one named",
       getArgumentCompletions: (prefix: string) => completeWord(lddChanges(process.cwd()), prefix),
@@ -758,7 +761,7 @@ export default function jhon(pi: any): void {
         try { skill = readFileSync(LDD_SKILL, "utf8"); } catch (error) { return void ctx?.ui?.notify?.(`jhon-ldd: ${LDD_SKILL} cannot be read (${(error as Error).message}); run \`jhon sync\``, "error"); }
         // As a typed prompt: while the agent works it steers the turn, as Enter
         // on the old template did; a prompt pi refuses (a compaction running) is said once.
-        try { pi.sendUserMessage(lddPrompt(skill, String(args ?? "")), ctx?.isIdle?.() === false ? { deliverAs: "steer" } : undefined); }
+        try { await sendPrompt(ctx, lddPrompt(skill, String(args ?? ""))); }
         catch (error) { ctx?.ui?.notify?.(`jhon-ldd: ${(error as Error).message}; run it again when pi is ready`, "warning"); }
       },
     });
@@ -770,7 +773,7 @@ export default function jhon(pi: any): void {
       handler: async (args: string, ctx: any) => {
         const skill = await studioSkill();
         if ("error" in skill) return void ctx?.ui?.notify?.(`jhon:video: ${skill.error}; run \`jhon doctor\`, or turn it off with \`jhon settings set ${STUDIO_SETTING} false\``, "error");
-        try { pi.sendUserMessage(videoPrompt(skill.text, String(args ?? "")), ctx?.isIdle?.() === false ? { deliverAs: "steer" } : undefined); }
+        try { await sendPrompt(ctx, videoPrompt(skill.text, String(args ?? ""))); }
         catch (error) { ctx?.ui?.notify?.(`jhon:video: ${(error as Error).message}; run it again when pi is ready`, "warning"); }
       },
     });
