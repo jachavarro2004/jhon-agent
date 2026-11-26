@@ -404,3 +404,13 @@ safety-guard	Bash	"conda run node -e 'require(\"child_process\").execSync(\"rm -
 safety-guard	Bash	"sh <(echo 'rm -rf ~')"	allow	none	T228	known	L8: outside this round (computed or written script, or code the bare interpreter line allows)
 safety-guard	Bash	"echo 'rm -rf ~' > x.sh && sh x.sh"	allow	none	T228	known	L8: outside this round (computed or written script, or code the bare interpreter line allows)
 safety-guard	Bash	"echo cm0gLXJmIH4K | base64 -d | sh"	allow	none	T228	known	L8: outside this round (computed or written script, or code the bare interpreter line allows)
+# T228 L9 (re-verify mwx439vt): an ssh value is no exemption, and git's command keys.
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: ssh runs its ProxyCommand; an ssh value is no exemption
+safety-guard	Bash	"git -c core.sshCommand='ssh -o ProxyCommand=\"rm -rf ~\"' fetch"	refuse	none	T228	-	verify: same through -c
+safety-guard	Bash	"git -c core.gitProxy='rm -rf ~' fetch git://x/y"	refuse	none	T228	-	verify: git runs core.gitProxy for git:// remotes
+safety-guard	Bash	"git -c core.alternateRefsCommand='rm -rf ~' fetch ."	refuse	none	T228	-	verify: git runs core.alternateRefsCommand
+safety-guard	Bash	"git -c remote.origin.uploadpack='rm -rf ~' fetch origin"	refuse	none	T228	-	verify: a remote's uploadpack is the command git runs
+safety-guard	Bash	"git -c sendemail.sendmailcmd='rm -rf ~' send-email x"	refuse	none	T228	-	verify: send-email runs sendmailcmd
+safety-guard	Bash	"git -c web.browser=x -c browser.x.cmd='rm -rf ~' help -w log"	refuse	none	T228	-	verify: git help -w runs browser.<tool>.cmd
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o IdentitiesOnly=yes' git fetch"	allow	none	T228	-	verify: an ordinary ssh value stays allowed
+safety-guard	Bash	"git -c core.sshCommand='ssh -v' fetch"	allow	none	T228	-	verify: same through -c

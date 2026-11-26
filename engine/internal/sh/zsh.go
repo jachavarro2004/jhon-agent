@@ -90,10 +90,66 @@ func commandValue(name, value string) []*Command {
 	if err != nil {
 		return nil
 	}
-	if strings.Contains(name, "SSH") {
-		cmds = slices.DeleteFunc(cmds, func(c *Command) bool { b := Base(at(c.Words, 0)); return b == "ssh" || b == "scp" })
+	if !strings.Contains(name, "SSH") {
+		return cmds
 	}
-	return cmds
+	// An ssh command is the transport git runs anyway: what it runs on its
+	// own is read in its place (T228 L9).
+	var out []*Command
+	for _, c := range cmds {
+		if !sshProgram(at(c.Words, 0)) {
+			out = append(out, c)
+			continue
+		}
+		for _, o := range SSHCommands(c.Words) {
+			if more, err := Parse(o); err == nil {
+				out = append(out, more...)
+			}
+		}
+	}
+	return out
+}
+
+// sshProgram is whether w names ssh, scp or sftp.
+func sshProgram(w string) bool {
+	b := Base(w)
+	return b == "ssh" || b == "scp" || b == "sftp"
+}
+
+// sshCommandOptions are ssh's options whose value it runs as a command on
+// this machine: ProxyCommand, LocalCommand (with PermitLocalCommand) and
+// KnownHostsCommand (RemoteCommand runs on the host; ProxyJump runs ssh).
+var sshCommandOptions = set("proxycommand", "localcommand", "knownhostscommand")
+
+// SSHCommands is the commands an ssh, scp or sftp command line runs on
+// this machine through its -o options (`-o ProxyCommand=…`, `-oKey=…`,
+// `-o 'Key …'`, any case); `none` runs none, and a -F file is not read
+// (T228 L9).
+func SSHCommands(w []string) []string {
+	var out []string
+	for k := 1; k < len(w); k++ {
+		v := ""
+		switch a := w[k]; {
+		case a == "-o":
+			k++
+			v = at(w, k)
+		case strings.HasPrefix(a, "-o"):
+			v = a[2:]
+		default:
+			continue
+		}
+		v = strings.TrimSpace(v)
+		// `Key=value` or `Key value`, whichever separator comes first.
+		i := strings.IndexAny(v, "= \t")
+		if i < 0 {
+			continue
+		}
+		key, val := v[:i], strings.TrimSpace(strings.TrimLeft(v[i:], "= \t"))
+		if sshCommandOptions[strings.ToLower(key)] && val != "" && !strings.EqualFold(val, "none") {
+			out = append(out, val)
+		}
+	}
+	return out
 }
 
 // assigned reads what an assignment runs later (codeOf), and an assignment

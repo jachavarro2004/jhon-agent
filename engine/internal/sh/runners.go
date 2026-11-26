@@ -650,9 +650,24 @@ func expectRuns(seen []opt, run bool) ([]string, error) {
 }
 
 // gitCommandKey is a git configuration key whose value is a command git runs.
-var gitCommandKey = lazyre.New(`(?i)^(?:alias\..+|core\.(?:pager|editor|fsmonitor|askpass|sshcommand)|diff\.(?:external|.+\.(?:textconv|command))|` +
-	`merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|pager\..+|sequence\.editor|credential\.(?:.+\.)?helper|` +
-	`gpg\.(?:.+\.)?program|uploadpack\.packobjectshook|interactive\.difffilter|(?:merge|diff)tool\..+\.cmd)$`)
+//
+// From git-config(1), the keys whose value git runs (T228 L9): core.pager,
+// core.editor, core.askPass, core.fsmonitor (a hook command),
+// core.sshCommand, core.gitProxy, core.alternateRefsCommand, diff.external
+// and a diff driver's command and textconv, a merge driver, a filter's
+// clean, smudge and process, pager.<cmd>, sequence.editor, a credential
+// helper, gpg.program and gpg.<format>.program, gpg's ssh
+// defaultKeyCommand, uploadpack's packObjectsHook, interactive.diffFilter,
+// a difftool's or mergetool's cmd and path, man.<tool>.cmd and path,
+// browser.<tool>.cmd and path (web.browser, help -w), a remote's uploadpack
+// and receivepack, sendemail's sendmailCmd, toCmd, ccCmd, headerCmd and
+// smtpServer (a path), instaweb.httpd, and a submodule's update `!command`.
+// core.hooksPath is a folder, not a command: the hooks in it are files.
+var gitCommandKey = lazyre.New(`(?i)^(?:alias\..+|core\.(?:pager|editor|fsmonitor|askpass|sshcommand|gitproxy|alternaterefscommand)|` +
+	`diff\.(?:external|.+\.(?:textconv|command))|merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|pager\..+|sequence\.editor|` +
+	`credential\.(?:.+\.)?helper|gpg\.(?:.+\.)?program|gpg\.ssh\.defaultkeycommand|uploadpack\.packobjectshook|interactive\.difffilter|` +
+	`(?:merge|diff)tool\..+\.(?:cmd|path)|(?:man|browser)\..+\.(?:cmd|path)|remote\..+\.(?:uploadpack|receivepack)|` +
+	`sendemail\.(?:.+\.)?(?:sendmailcmd|tocmd|cccmd|headercmd|smtpserver)|instaweb\.httpd|submodule\..+\.update)$`)
 
 // gitRuns reads the commands git runs from its own words (T228 L5): a -c
 // value of a key whose value is a command (gitCommandKey: core.pager,
@@ -707,9 +722,13 @@ sub:
 				value(strings.TrimSpace("git " + v + " " + args))
 			}
 		default:
-			// A credential helper's `!`; an ssh command that is ssh is the transport git runs anyway.
+			// A credential helper's `!`. An ssh command is the transport git
+			// runs anyway: what it runs on its own is read in its place (T228 L9).
 			v = strings.TrimPrefix(v, "!")
-			if strings.Contains(strings.ToLower(key), "ssh") && (Base(at(strings.Fields(v), 0)) == "ssh") {
+			if f, err := Parse(v); err == nil && len(f) == 1 && sshProgram(at(f[0].Words, 0)) {
+				for _, o := range SSHCommands(f[0].Words) {
+					value(o)
+				}
 				continue
 			}
 			value(v)
