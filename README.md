@@ -174,8 +174,8 @@ A writable folder is opened only through the path Jhon checked, the
 project only once it is the folder the command runs in (or the one
 `--project` names, with no link on it), and no descriptor the caller left
 open reaches the program. bubblewrap still mounts by path, so the program
-starts through `jhon sandbox enter`, an internal step run from jhon's own
-program, which checks inside the sandbox that each mount is the folder
+starts through a hidden internal step of jhon's (`sandbox enter`), run
+from jhon's own program, which checks inside the sandbox that each mount is the folder
 Jhon checked (device and inode, a mount root, read-only where it should
 be, the hidden paths too) and only then becomes the program; a mismatch
 runs nothing (exit 126). The pinned project (`jhon start`, pi's pin,
