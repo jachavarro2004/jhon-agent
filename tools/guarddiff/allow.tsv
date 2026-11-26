@@ -1693,3 +1693,10 @@ verifiers.tsv:395	safety-guard	allow	refuse	hole T228 L8 (found on 1e64095, re-v
 verifiers.tsv:396	safety-guard	allow	ask	hole T228 L8 (found on 1e64095, re-verify mwx1k255): a blocker the class rule, the qualifier reading or git's command variables now read
 verifiers.tsv:397	safety-guard	allow	ask	hole T228 L8 (found on 1e64095, re-verify mwx1k255): a blocker the class rule, the qualifier reading or git's command variables now read
 verifiers.tsv:398	safety-guard	allow	ask	hole T228 L8 (found on 1e64095, re-verify mwx1k255): a blocker the class rule, the qualifier reading or git's command variables now read
+verifiers.tsv:408	safety-guard	allow	refuse	hole T228 L9 (found on 6b63c24, re-verify mwx439vt): ssh runs its ProxyCommand; an ssh value is no exemption
+verifiers.tsv:409	safety-guard	allow	refuse	hole T228 L9 (found on 6b63c24, re-verify mwx439vt): same through -c
+verifiers.tsv:410	safety-guard	allow	refuse	hole T228 L9 (found on 6b63c24, re-verify mwx439vt): git runs core.gitProxy for git:// remotes
+verifiers.tsv:411	safety-guard	allow	refuse	hole T228 L9 (found on 6b63c24, re-verify mwx439vt): git runs core.alternateRefsCommand
+verifiers.tsv:412	safety-guard	allow	refuse	hole T228 L9 (found on 6b63c24, re-verify mwx439vt): a remote's uploadpack is the command git runs
+verifiers.tsv:413	safety-guard	allow	refuse	hole T228 L9 (found on 6b63c24, re-verify mwx439vt): send-email runs sendmailcmd
+verifiers.tsv:414	safety-guard	allow	refuse	hole T228 L9 (found on 6b63c24, re-verify mwx439vt): git help -w runs browser.<tool>.cmd
