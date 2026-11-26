@@ -113,7 +113,7 @@ func TestTheProjectsHookFilesCannotBePlantedInside(t *testing.T) {
 	}
 	// The note says how to change one: with the agent's own file tools.
 	r := b.sh(t, b.proj, "", `echo '{}' > "$PWD/.mcp.json"`)
-	note := "the sandbox refused a write to " + filepath.Join(b.proj, ".mcp.json") + ", which exists; it is " + filepath.Join(b.proj, ".mcp.json") + ", a file a runtime runs outside the sandbox (Claude Code's settings, hooks and MCP servers, pi's settings and extensions), read-only by design: change it with the agent's own file tools (write, edit), which run outside the sandbox, never with a shell command, and remove a worktree that holds one outside the sandbox, in a terminal (git worktree remove <worktree>, or rm -r <worktree> when git removed the rest); no setting opens it\n"
+	note := "the sandbox refused a write to " + filepath.Join(b.proj, ".mcp.json") + ", which exists; it is " + filepath.Join(b.proj, ".mcp.json") + ", a file a runtime runs outside the sandbox (Claude Code's settings, hooks and MCP servers, pi's settings and extensions), read-only by design: change it with the agent's own file tools (write, edit), which run outside the sandbox, never with a shell command; no setting opens it\n"
 	if !readOnly(r) || !strings.HasSuffix(r.Stderr, note) {
 		t.Errorf("a write to .mcp.json: exit %d, stderr %q; want it refused, ending with %q", r.Code, r.Stderr, note)
 	}
@@ -165,10 +165,16 @@ func TestTheProjectsHookFilesCannotBePlantedInside(t *testing.T) {
 		t.Errorf("git worktree remove of a worktree with no hook file: exit %d, stdout %q, stderr %q; want it removed", r.Code, r.Stdout, r.Stderr)
 	}
 	// git removes what it can and its record, and fails on the pinned
-	// folder: the note names the folder and the fix outside.
+	// folder: the note names the folder and, as git no longer knows the
+	// worktree, only the fix that still works (git worktree remove would
+	// say "is not a working tree").
 	r = b.sh(t, b.proj, "", `git worktree remove --force `+wt+` && echo removed`)
-	if r.Code == 0 || !exists(filepath.Join(wt, ".claude", "settings.json")) || !strings.Contains(r.Stderr, "it is "+wt+", a folder the sandbox keeps where it is") || !strings.Contains(r.Stderr, "rm -r <worktree>") {
-		t.Errorf("git worktree remove of a worktree that holds .claude: exit %d, stdout %q, stderr %q; want it refused with the note", r.Code, r.Stdout, r.Stderr)
+	if r.Code == 0 || !exists(filepath.Join(wt, ".claude", "settings.json")) || !strings.Contains(r.Stderr, "it is "+wt+", a folder the sandbox keeps where it is") ||
+		!strings.Contains(r.Stderr, "git has already removed the rest of the worktree and its record, so git worktree remove no longer knows it: remove what is left outside the sandbox, in a terminal: rm -r "+wt+"; no setting opens it") || strings.Contains(r.Stderr, "git worktree remove "+wt) {
+		t.Errorf("git worktree remove of a worktree that holds .claude: exit %d, stdout %q, stderr %q; want it refused with the rm -r note only", r.Code, r.Stdout, r.Stderr)
+	}
+	if r := support.Run(t, support.Cmd{Args: []string{"git", "-C", b.proj, "worktree", "list"}, Env: support.Env()}); strings.Contains(r.Stdout, wt) {
+		t.Errorf("git still lists the worktree: %q", r.Stdout)
 	}
 	if err := os.RemoveAll(wt); err != nil || exists(wt) {
 		t.Errorf("outside the sandbox what is left is removed: %v", err)
@@ -325,5 +331,30 @@ func TestTheSandboxsOwnStoreCannotBeSwappedForTheRealOne(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(real); len(entries) != 0 {
 		t.Errorf("the real store was written: %v", entries)
+	}
+}
+
+// T250 (the re-verify of 5e9b12e, advisory): $SSH_AUTH_SOCK through a link
+// in $TMPDIR, which a run could point at an empty folder (`ln -sfn empty
+// $TMPDIR/link`) so the next run hides that and shows the socket: nothing
+// runs, and the note gives the real path to set.
+func TestASocketThroughALinkInAWritableAreaRefusesTheRun(t *testing.T) {
+	b := newBox(t)
+	support.Write(t, filepath.Join(b.tmp, "real"), map[string]string{"agent.sock": "AGENT-SECRET"})
+	link := filepath.Join(b.tmp, "link")
+	if err := os.Symlink(filepath.Join(b.tmp, "real"), link); err != nil {
+		t.Fatal(err)
+	}
+	env := append(slices.Clone(b.env), "SSH_AUTH_SOCK="+filepath.Join(link, "agent.sock"))
+	r := support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c", `ln -sfn "$1" "$2"; echo ran`, "sh", filepath.Join(b.tmp, "empty"), link)
+	want := "jhon sandbox: $SSH_AUTH_SOCK names " + filepath.Join(link, "agent.sock") + ", which passes through the link " + link + " in a folder sandboxed commands may write, so a command could point it elsewhere and the sandbox would hide the wrong path, so nothing was run; fix: set SSH_AUTH_SOCK to the socket's real path (" + filepath.Join(b.tmp, "real", "agent.sock") + ")\n"
+	if r.Code != 126 || r.Stdout != "" || r.Stderr != want {
+		t.Errorf("exit %d, stdout %q, stderr %q; want 126 and %q", r.Code, r.Stdout, r.Stderr, want)
+	}
+	// With the real path, the run goes and the socket stays hidden.
+	env = append(slices.Clone(b.env), "SSH_AUTH_SOCK="+filepath.Join(b.tmp, "real", "agent.sock"))
+	r = support.Jhon(t, b.proj, env, "sandbox", "run", "--", "sh", "-c", `cat "$1"; echo ran`, "sh", filepath.Join(b.tmp, "real", "agent.sock"))
+	if r.Code != 0 || r.Stdout != "ran\n" {
+		t.Errorf("with the real path: exit %d, stdout %q, stderr %q", r.Code, r.Stdout, r.Stderr)
 	}
 }

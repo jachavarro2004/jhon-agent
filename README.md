@@ -309,7 +309,19 @@ tracking branches that rewrite it), so a command can still set
 runs outside the sandbox. Jhon's own git, which runs outside it (sync, the
 doctor, `jhon archive`, the hooks' reads of the repository), runs none of
 them: no fsmonitor, hook, filter, pager, editor, external diff, textconv or ssh
-command the configuration names. A `sandbox.allow_write` folder that does not exist yet is
+command the configuration names. `jhon publish`'s push is the one that runs
+a hook, and only committed code: the hooks folder `core.hooksPath` names
+inside the repository, reached with no link, each of its hook files tracked
+at HEAD and unmodified (as `tools/git-hooks` in Jhon's own checkout); a
+hook anywhere else (the git folder's hooks, a folder outside the
+repository, a changed or untracked hook file) stops the publish with the
+key, where it is set and the fix, and nothing is pushed. The push also
+runs no ssh command, askpass, credential helper or receive-pack program the
+repository names, only your own from the system and global configuration.
+A variable that names a socket the sandbox hides (`SSH_AUTH_SOCK`, a bus or
+container address) through a link in a folder sandboxed commands write
+stops every sandboxed command, with the real path to set: a command could
+point the link elsewhere. A `sandbox.allow_write` folder that does not exist yet is
 created before the next sandboxed command starts, outside the sandbox, so
 you need not make it by hand: only under the home, with no link followed,
 never in or around a path the sandbox hides or keeps read-only (the

@@ -3,6 +3,7 @@
 package project
 
 import (
+	"context"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Resolve is path.resolve(base, p): p made absolute against base, cleaned.
@@ -184,7 +186,7 @@ func IsClaudeSettings(abs string) bool {
 // filters' names in, so a command that may run a filter (filterCommands: a
 // status, a diff, an archive) runs through ReadGitCmd instead.
 func GitReadEnv() []string {
-	return withGitConfig(append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_PAGER=cat"), neutralGit())
+	return WithGitConfig(append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_PAGER=cat"), neutralGit())
 }
 
 // ReadGitCmd is the command ReadGit runs: git in dir, without inherited
@@ -206,7 +208,7 @@ func ReadGitCmd(dir string, args ...string) *exec.Cmd {
 		}
 	}
 	if len(args) == 0 || args[0] != "config" {
-		env = withGitConfig(append(env, "GIT_PAGER=cat"), append(neutralGit(), gitFilters(dir, args)...))
+		env = WithGitConfig(append(env, "GIT_PAGER=cat"), append(neutralGit(), gitFilters(dir, args)...))
 	}
 	cmd.Env = env
 	return cmd
@@ -283,10 +285,10 @@ func gitFilters(dir string, args []string) [][2]string {
 	return keys
 }
 
-// withGitConfig is env with entries given as GIT_CONFIG_KEY_<n> and
+// WithGitConfig is env with entries given as GIT_CONFIG_KEY_<n> and
 // GIT_CONFIG_VALUE_<n> after the env's own GIT_CONFIG_COUNT entries (none
 // when the count is not a number), and the count raised to cover them.
-func withGitConfig(env []string, entries [][2]string) []string {
+func WithGitConfig(env []string, entries [][2]string) []string {
 	n := 0
 	for _, kv := range env {
 		if v, ok := strings.CutPrefix(kv, "GIT_CONFIG_COUNT="); ok {
@@ -310,6 +312,46 @@ func withGitConfig(env []string, entries [][2]string) []string {
 		out = append(out, "GIT_CONFIG_KEY_"+strconv.Itoa(n+i)+"="+e[0], "GIT_CONFIG_VALUE_"+strconv.Itoa(n+i)+"="+e[1])
 	}
 	return append(out, "GIT_CONFIG_COUNT="+strconv.Itoa(n+len(entries)))
+}
+
+// OwnerGitConfig are the entries of the owner's own git configuration, the
+// system's then the global ones, whose keys match pattern (a `git config
+// --get-regexp` pattern), as git lists them from those files alone: asked
+// in / with no repository variable, at most 5 s each. Those files lie where
+// no sandboxed command may write (the sandbox keeps the home read-only and
+// refuses a line whose global configuration includes one it may change), so
+// a key set there is the owner's choice, which a line that neutralises the
+// repository's keys adds back after them. git lists each key in lower case,
+// and an empty value alone.
+func OwnerGitConfig(pattern string) [][2]string {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return nil
+	}
+	var env []string
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		if k == "GIT_DIR" || k == "GIT_WORK_TREE" || k == "GIT_CONFIG_PARAMETERS" || strings.HasPrefix(k, "GIT_CONFIG_COUNT") || strings.HasPrefix(k, "GIT_CONFIG_KEY_") || strings.HasPrefix(k, "GIT_CONFIG_VALUE_") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	var out [][2]string
+	for _, scope := range []string{"--system", "--global"} {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cmd := exec.CommandContext(ctx, git, "config", scope, "--get-regexp", pattern)
+		cmd.Dir, cmd.Env = "/", env
+		listing, _ := cmd.Output()
+		cancel()
+		for _, line := range strings.Split(string(listing), "\n") {
+			if line == "" {
+				continue
+			}
+			k, v, _ := strings.Cut(line, " ")
+			out = append(out, [2]string{k, v})
+		}
+	}
+	return out
 }
 
 // gitConfigIndex is the n of GIT_CONFIG_KEY_<n> or GIT_CONFIG_VALUE_<n>.

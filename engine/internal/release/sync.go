@@ -596,8 +596,14 @@ func Publish(r Roots, o *Out) int {
 			o.Warn(remote + " not configured, skipped")
 			continue
 		}
+		// Outside the sandbox: no program the repository names runs, and a
+		// hook only when it is committed code (pushCmd, T250).
+		push, refused := pushCmd(r.Source, remote, branch)
+		if refused != "" {
+			return o.Die(refused)
+		}
 		fmt.Fprintf(o.W, "pushing %s to %s...\n", branch, remote)
-		if Run(exec.Command("git", "-C", r.Source, "push", remote, branch)) != 0 {
+		if Run(push) != 0 {
 			return o.Die("push to " + remote + " failed")
 		}
 	}

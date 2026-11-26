@@ -444,14 +444,30 @@ type mount struct {
 	pin bool
 }
 
+// worktreeFix is how to move or remove folder, which the sandbox keeps in
+// place, outside it: for one of the repository's other worktrees,
+// `git worktree remove <w>` while git still knows it (its .git file is
+// there), and only `rm -r <w>` once git dropped its record (git worktree
+// remove drops the record, then stops on the folder the sandbox keeps, and
+// a second one says "is not a working tree").
+func (in Input) worktreeFix(folder string) string {
+	if !slices.Contains(in.Worktrees, folder) {
+		return "move or remove it outside the sandbox, in a terminal"
+	}
+	if _, err := os.Lstat(filepath.Join(folder, ".git")); err == nil {
+		return "remove it outside the sandbox, in a terminal: git worktree remove " + folder
+	}
+	return "git has already removed the rest of the worktree and its record, so git worktree remove no longer knows it: remove what is left outside the sandbox, in a terminal: rm -r " + folder
+}
+
 // storeNote and hookNote are what a write refused in a linked store or in a
 // file a runtime runs outside the sandbox says (T250 A5, A3): the store's
 // with the stop, a hook file's with how to change it, as the agent's own
 // file tools run outside the sandbox.
 const (
 	storeNote = "a package store whose files your installs outside the sandbox share, read-only by design: installs inside use the sandbox's own ($UV_CACHE_DIR, pnpm's store-dir, $BUN_INSTALL_CACHE_DIR), and no setting opens it; that is a stop: tell the owner the path and why, never write it elsewhere"
-	hookNote  = "a file a runtime runs outside the sandbox (Claude Code's settings, hooks and MCP servers, pi's settings and extensions), read-only by design: change it with the agent's own file tools (write, edit), which run outside the sandbox, never with a shell command, and remove a worktree that holds one outside the sandbox, in a terminal (git worktree remove <worktree>, or rm -r <worktree> when git removed the rest); no setting opens it"
-	pinNote   = "a folder the sandbox keeps where it is, as it holds, or lies on the way to, a file a runtime runs outside the sandbox (.claude, .pi, .mcp.json), a socket the sandbox hides or the sandbox's own store, so no command moves or removes it from inside: move or remove it outside the sandbox, in a terminal (a worktree: git worktree remove <worktree>, or, when git removed the rest and its record already, rm -r <worktree>); no setting opens it"
+	hookNote  = "a file a runtime runs outside the sandbox (Claude Code's settings, hooks and MCP servers, pi's settings and extensions), read-only by design: change it with the agent's own file tools (write, edit), which run outside the sandbox, never with a shell command; no setting opens it"
+	pinNote   = "a folder the sandbox keeps where it is, as it holds, or lies on the way to, a file a runtime runs outside the sandbox (.claude, .pi, .mcp.json), a socket the sandbox hides or the sandbox's own store, so no command moves or removes it from inside"
 )
 
 // under is rel under the home.
@@ -499,6 +515,54 @@ func (in Input) socketPaths() []string {
 		out = append(out, in.containerHosts()...)
 	}
 	return append(out, in.Env["SSH_AUTH_SOCK"])
+}
+
+// SocketLinkProblem is why the sandbox of in runs nothing while a variable
+// names a socket the sandbox hides through a link in a folder a sandboxed
+// command may write (T250, the re-verify of 5e9b12e): the sandbox hides the
+// path the link leads to when a run starts, and a command could point the
+// link elsewhere, so the next run would hide that and leave the socket
+// shown. A bind cannot be put on a link, so the run is refused, with the
+// real path to set. A link no command may change (the home's own) passes.
+// nil when no variable does so.
+func SocketLinkProblem(in Input) *Problem {
+	named := [][2]string{{"SSH_AUTH_SOCK", in.Env["SSH_AUTH_SOCK"]}}
+	for _, bus := range []string{"DBUS_SESSION_BUS_ADDRESS", "DBUS_SYSTEM_BUS_ADDRESS"} {
+		if path, ok := strings.CutPrefix(in.Env[bus], "unix:path="); ok {
+			path, _, _ = strings.Cut(path, ",")
+			named = append(named, [2]string{bus, path})
+		}
+	}
+	if !in.Docker {
+		for _, v := range []string{"DOCKER_HOST", "CONTAINER_HOST"} {
+			for _, h := range (Input{Env: map[string]string{v: in.Env[v]}}).containerHosts() {
+				named = append(named, [2]string{v, h})
+			}
+		}
+	}
+	var mounts []mount
+	for _, n := range named {
+		if !filepath.IsAbs(n[1]) {
+			continue
+		}
+		link := in.linkOn(n[1])
+		if link == "" {
+			continue
+		}
+		if mounts == nil {
+			mounts, _ = layout(in, false)
+		}
+		// A command replaces the link where its folder is writable, or
+		// moves that folder.
+		if !writableTop(filepath.Dir(link), mounts) && !changeable(mounts, filepath.Dir(link)) {
+			continue
+		}
+		return &Problem{
+			Reason: "$" + n[0] + " names " + n[1] + ", which passes through the link " + link + " in a folder sandboxed commands may write, so a command could point it elsewhere and the sandbox would hide the wrong path",
+			Fix:    "set " + n[0] + " to the socket's real path (" + realPath(n[1], in.Stat) + ")",
+		}
+	}
+	return nil
 }
 
 // DockerContexts are the endpoints the docker CLI's contexts name: the
