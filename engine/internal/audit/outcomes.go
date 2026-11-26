@@ -456,7 +456,7 @@ func capped(a *Subagent) bool {
 // 3118fbc: `[jhon: worker stopped at its sub-agent context cap; …]`), in
 // its bracketed form with an agent's name only: an answer that mentions the
 // words, or quotes the form with a placeholder for the name, is no stop.
-var stoppedShort = lazyre.New(ci(`\bmax(?:imum)?[ -]?turns\b|\bturn (?:cap|limit)\b|\[jhon: [a-z0-9][a-z0-9_-]* stopped at its sub-agent context cap;`))
+var stoppedShort = lazyre.New(ci(`\bmax(?:imum)?[ -]?turns\b|\bturn (?:cap|limit)\b|\[jhon: [A-Za-z0-9][A-Za-z0-9_.-]* stopped at its sub-agent context cap;`))
 
 // jhonRefusal is one of Jhon's own refusal lines, quoted in a result or not,
 // by the exact prefix it is printed with (T224 S2): a guard's
