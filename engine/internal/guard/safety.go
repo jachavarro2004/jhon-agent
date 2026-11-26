@@ -646,6 +646,7 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	switch {
 	case name == "git":
 		out = append(out, judgeGit(args, dir, ctx, vars, env, 0)...)
+		out = append(out, judgeGitConfigEnv(args, env, ctx, vars, st, depth, route, p.Envv)...)
 	case name == "gh":
 		out = append(out, judgeGh(args)...)
 	case slices.Contains([]string{"docker", "podman", "docker-compose", "podman-compose"}, name):

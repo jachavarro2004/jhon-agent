@@ -696,7 +696,8 @@ func gitRuns(w []string) (Inner, bool, error) {
 			settings = append(settings, at(w, k))
 		case strings.HasPrefix(a, "-c") && len(a) > 2:
 			settings = append(settings, a[2:])
-		case a == "-C" || a == "--git-dir" || a == "--work-tree" || a == "--namespace":
+		case GitValueGlobals[a]:
+			// -C, --git-dir, --config-env and the rest take the next word (T228 L10).
 			k++
 		case strings.HasPrefix(a, "-"):
 		default:
@@ -706,31 +707,11 @@ func gitRuns(w []string) (Inner, bool, error) {
 sub:
 	rest := w[min(k, len(w)):]
 	for _, kv := range settings {
-		key, v, ok := strings.Cut(kv, "=")
-		name, isAlias := strings.CutPrefix(strings.ToLower(key), "alias.")
-		switch {
-		case !ok || !gitCommandKey.MatchString(key):
-		case isAlias:
-			// An alias runs only when it is the subcommand, and never in place of a git command.
-			if name != at(rest, 0) || gitCommands[name] {
-				continue
-			}
-			args := strings.Join(rest[1:], " ")
-			if s, shell := strings.CutPrefix(v, "!"); shell {
-				value(strings.TrimSpace(s + " " + args))
-			} else {
-				value(strings.TrimSpace("git " + v + " " + args))
-			}
-		default:
-			// A credential helper's `!`. An ssh command is the transport git
-			// runs anyway: what it runs on its own is read in its place (T228 L9).
-			v = strings.TrimPrefix(v, "!")
-			if f, err := Parse(v); err == nil && len(f) == 1 && sshProgram(at(f[0].Words, 0)) {
-				for _, o := range SSHCommands(f[0].Words) {
-					value(o)
-				}
-				continue
-			}
+		strs, err := GitSetting(kv, rest)
+		if err != nil {
+			return Inner{}, true, err
+		}
+		for _, v := range strs {
 			value(v)
 		}
 	}
@@ -791,6 +772,53 @@ sub:
 		return Inner{}, false, nil
 	}
 	return in, true, nil
+}
+
+// GitSetting is the command lines a git configuration setting kv
+// (key=value, from -c, --config-env or the environment) runs, for a git
+// command line whose subcommand and arguments are rest: none for a key
+// gitCommandKey does not name; an alias only where it is the subcommand and
+// no git command has its name, with the arguments after it (its `!`
+// dropped; one with none is a git command line); a credential helper's
+// `!` dropped; for an ssh command, what ssh runs on this machine
+// (SSHCommands, whose error makes the line unreadable). A value that does
+// not parse runs nothing the reader can tell.
+func GitSetting(kv string, rest []string) ([]string, error) {
+	key, v, ok := strings.Cut(kv, "=")
+	name, isAlias := strings.CutPrefix(strings.ToLower(key), "alias.")
+	var out []string
+	add := func(s string) {
+		if _, err := Parse(s); err == nil && strings.TrimSpace(s) != "" {
+			out = append(out, s)
+		}
+	}
+	switch {
+	case !ok || !gitCommandKey.MatchString(key):
+	case isAlias:
+		if name != at(rest, 0) || gitCommands[name] {
+			return nil, nil
+		}
+		args := strings.Join(rest[min(1, len(rest)):], " ")
+		if sc, shell := strings.CutPrefix(v, "!"); shell {
+			add(strings.TrimSpace(sc + " " + args))
+		} else {
+			add(strings.TrimSpace("git " + v + " " + args))
+		}
+	default:
+		v = strings.TrimPrefix(v, "!")
+		if f, err := Parse(v); err == nil && len(f) == 1 && sshProgram(at(f[0].Words, 0)) {
+			vals, err := SSHCommands(f[0].Words)
+			if err != nil {
+				return nil, err
+			}
+			for _, o := range vals {
+				add(o)
+			}
+			return out, nil
+		}
+		add(v)
+	}
+	return out, nil
 }
 
 // gitCommandOptions are git's options whose value it runs as a command:

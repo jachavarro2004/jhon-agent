@@ -57,11 +57,15 @@ func codeOf(name, index, value string) ([]*Command, error) {
 		r.document(value)
 		return r.cmds, r.err
 	case commandVars[name] || gitConfigValue.MatchString(name):
-		return commandValue(name, value), nil
+		return commandValue(name, value)
 	case name == "GIT_CONFIG_PARAMETERS":
 		var out []*Command
 		for _, m := range gitConfigParameter.FindAllStringSubmatch(value, -1) {
-			out = append(out, commandValue(name, m[1])...)
+			more, err := commandValue(name, m[1])
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, more...)
 		}
 		return out, nil
 	}
@@ -84,72 +88,36 @@ var (
 
 // commandValue is the commands value runs as the command line of the
 // variable name, nil when it does not parse.
-func commandValue(name, value string) []*Command {
+func commandValue(name, value string) ([]*Command, error) {
 	value = strings.TrimLeft(strings.TrimSpace(value), "|!")
 	cmds, err := Parse(value)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	if !strings.Contains(name, "SSH") {
-		return cmds
+		return cmds, nil
 	}
 	// An ssh command is the transport git runs anyway: what it runs on its
-	// own is read in its place (T228 L9).
+	// own is read in its place (T228 L9, L10).
 	var out []*Command
 	for _, c := range cmds {
 		if !sshProgram(at(c.Words, 0)) {
 			out = append(out, c)
 			continue
 		}
-		for _, o := range SSHCommands(c.Words) {
-			if more, err := Parse(o); err == nil {
-				out = append(out, more...)
-			}
+		more, err := sshRunsCommands(c.Words)
+		if err != nil {
+			return nil, err
 		}
+		out = append(out, more...)
 	}
-	return out
+	return out, nil
 }
 
 // sshProgram is whether w names ssh, scp or sftp.
 func sshProgram(w string) bool {
 	b := Base(w)
 	return b == "ssh" || b == "scp" || b == "sftp"
-}
-
-// sshCommandOptions are ssh's options whose value it runs as a command on
-// this machine: ProxyCommand, LocalCommand (with PermitLocalCommand) and
-// KnownHostsCommand (RemoteCommand runs on the host; ProxyJump runs ssh).
-var sshCommandOptions = set("proxycommand", "localcommand", "knownhostscommand")
-
-// SSHCommands is the commands an ssh, scp or sftp command line runs on
-// this machine through its -o options (`-o ProxyCommand=…`, `-oKey=…`,
-// `-o 'Key …'`, any case); `none` runs none, and a -F file is not read
-// (T228 L9).
-func SSHCommands(w []string) []string {
-	var out []string
-	for k := 1; k < len(w); k++ {
-		v := ""
-		switch a := w[k]; {
-		case a == "-o":
-			k++
-			v = at(w, k)
-		case strings.HasPrefix(a, "-o"):
-			v = a[2:]
-		default:
-			continue
-		}
-		v = strings.TrimSpace(v)
-		// `Key=value` or `Key value`, whichever separator comes first.
-		i := strings.IndexAny(v, "= \t")
-		if i < 0 {
-			continue
-		}
-		key, val := v[:i], strings.TrimSpace(strings.TrimLeft(v[i:], "= \t"))
-		if sshCommandOptions[strings.ToLower(key)] && val != "" && !strings.EqualFold(val, "none") {
-			out = append(out, val)
-		}
-	}
-	return out
 }
 
 // assigned reads what an assignment runs later (codeOf), and an assignment

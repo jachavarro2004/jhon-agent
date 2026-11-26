@@ -414,3 +414,13 @@ safety-guard	Bash	"git -c sendemail.sendmailcmd='rm -rf ~' send-email x"	refuse	
 safety-guard	Bash	"git -c web.browser=x -c browser.x.cmd='rm -rf ~' help -w log"	refuse	none	T228	-	verify: git help -w runs browser.<tool>.cmd
 safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o IdentitiesOnly=yes' git fetch"	allow	none	T228	-	verify: an ordinary ssh value stays allowed
 safety-guard	Bash	"git -c core.sshCommand='ssh -v' fetch"	allow	none	T228	-	verify: same through -c
+# T228 L9 re-verify (498b176): ssh option bundling, a quoted option name, --config-env with its variable on the line
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -vo ProxyCommand=\"rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: ssh reads -o bundled after other flags
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -4oProxyCommand=\"rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: same, value attached
+safety-guard	Bash	"git -c core.sshCommand='ssh -qo ProxyCommand=\"rm -rf ~\"' fetch"	refuse	none	T228	-	verify: same through -c
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o \"\\\"ProxyCommand\\\"=rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: ssh strips quotes from an option name
+safety-guard	Bash	"X='rm -rf ~' git --config-env=remote.origin.uploadpack=X fetch origin"	refuse	none	T228	-	verify: --config-env takes the key's value from a variable set on the line
+safety-guard	Bash	"X='rm -rf ~' git --config-env=core.sshCommand=X fetch"	refuse	none	T228	-	verify: same, core.sshCommand
+safety-guard	Bash	"export X='rm -rf ~'; git --config-env=core.pager=X log"	refuse	none	T228	-	verify: same, exported
+safety-guard	Bash	"GIT_SSH_COMMAND='ssh -vvv -o IdentitiesOnly=yes' git fetch"	allow	none	T228	-	verify: ordinary bundled flags stay allowed
+safety-guard	Bash	"git --config-env=core.pager=PAGER log"	allow	none	T228	-	verify: an ordinary --config-env stays allowed
