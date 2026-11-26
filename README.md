@@ -260,9 +260,10 @@ include) is read only from files no sandboxed command may change: an include
 from the cache, the project or `/tmp` keeps the line inside, as a command
 could set a key there that runs a program (`core.gitProxy`, a filter). A
 folder whose `.git` git refuses to read (a format it does not know) keeps the
-line inside too, and a pull runs outside only when no `.gitattributes` in
-its work tree is anything but a regular file: git would wait forever on a
-pipe there. A line whose
+line inside too, and a pull (or `gh pr merge --delete-branch`, which
+checks out and pulls the default branch) runs outside only when no
+`.gitattributes` or `.gitignore` in its work tree is anything but a regular
+file: git would wait forever on a pipe there. A line whose
 git folders lie outside the project, or hold a link, a hard-linked file git
 writes (`FETCH_HEAD`, a reflog, a ref) or a FIFO, socket or device, or are
 named with white space around them (git keeps it, a trimmed name would be

@@ -302,3 +302,54 @@ func TestACacheVariableThatHoldsJhonsReleaseIsNotBoundWritable(t *testing.T) {
 		t.Errorf("$GOMODCACHE %s: exit %d, stdout %q, stderr %q; want it writable", mod, r.Code, r.Stdout, r.Stderr)
 	}
 }
+
+// L43a for gh (the T250 verify): `gh pr merge --delete-branch` checks out
+// and pulls the default branch where it runs, so its work tree is walked as
+// a pull's. GitHub is not reached: a fake gh shows whether the line ran
+// outside, which pins the folder selection end to end. A merge that keeps
+// the branch touches no work tree and runs outside with the pipe there.
+func TestAGhMergeThatDeletesTheBranchIsWalkedAsAPull(t *testing.T) {
+	b := newBox(t)
+	note := filepath.Join(b.base, "gh-ran")
+	script(t, filepath.Join(b.base, "gh-bin", "gh"), "#!/bin/sh\necho \"$*\" >> "+note+"\n")
+	prependPath(&b, filepath.Join(b.base, "gh-bin"))
+	fifo := filepath.Join(b.proj, ".gitignore")
+	if err := syscall.Mkfifo(fifo, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{"gh pr merge 5 --squash --delete-branch", "gh pr merge 5 -sd"} {
+		os.Remove(note)
+		r, finished := unsandboxedWithin(t, b, 60*time.Second, line)
+		if !finished || exists(note) || !strings.Contains(r.Stderr, "jhon sandbox: "+fifo+" is not a regular file, and git would wait on it when it checks out a file in its folder; the line runs in the sandbox instead\n") {
+			t.Errorf("%s: finished %v, ran outside %v, stderr %q; want it kept inside for the pipe", line, finished, exists(note), r.Stderr)
+		}
+	}
+	// Preserve: a merge that keeps the branch runs outside, pipe or not.
+	os.Remove(note)
+	if r := b.unsandboxed(t, b.env, "gh pr merge 5 --squash"); r.Code != 0 || !exists(note) {
+		t.Errorf("gh pr merge 5 --squash: exit %d, stderr %q, ran outside %v; want it run outside", r.Code, r.Stderr, exists(note))
+	}
+	if err := os.Remove(fifo); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(note)
+	if r := b.unsandboxed(t, b.env, "gh pr merge 5 --squash --delete-branch"); r.Code != 0 || !exists(note) {
+		t.Errorf("gh pr merge --delete-branch with no pipe: exit %d, stderr %q, ran outside %v; want it run outside", r.Code, r.Stderr, exists(note))
+	}
+}
+
+// Preserve (T250 verify): a gh merge that deletes the branch, run with
+// --repo from a folder in no repository, has no work tree to walk and runs
+// outside, as it did before the walk.
+func TestAGhMergeOutsideAnyRepositoryStillRunsOutside(t *testing.T) {
+	b := newBox(t)
+	note := filepath.Join(b.base, "gh-ran")
+	script(t, filepath.Join(b.base, "gh-bin", "gh"), "#!/bin/sh\necho \"$*\" >> "+note+"\n")
+	prependPath(&b, filepath.Join(b.base, "gh-bin"))
+	plain := filepath.Join(b.base, "plain")
+	mkdirs(t, plain)
+	r := support.Jhon(t, plain, b.env, "sandbox", "run", "--project", b.proj, "--profile", "unsandboxed", "--", realShell(t, "sh"), "-c", "gh pr merge 5 -R o/r --squash --delete-branch")
+	if r.Code != 0 || !exists(note) || strings.Contains(r.Stderr, "runs in the sandbox instead") {
+		t.Errorf("exit %d, stderr %q, ran outside %v; want it run outside", r.Code, r.Stderr, exists(note))
+	}
+}

@@ -188,18 +188,31 @@ func TestDockerConfigFoldersACommandMayChangeKeepTheLineInside(t *testing.T) {
 	}
 }
 
-// L43a: the folders a pull works in, and the walk of its work tree: a
-// .gitattributes that is not a regular file anywhere in it, but in a git
-// folder, which GitFolderProblem walks.
+// L43a: the folders a pull works in, gh's merge that deletes the branch
+// among them (gh then checks out and pulls the default branch where it
+// runs), and the walk of its work tree: a .gitattributes or a .gitignore
+// that is not a regular file anywhere in it, but in a git folder, which
+// GitFolderProblem walks; each said for what it is.
 func TestAPullsWorkTreeHoldsNoGitattributesGitWouldWaitOn(t *testing.T) {
-	if got, want := PullFolders("git fetch && git -C a pull && git pull -q && git -C /p pull", "/p"), []string{"/p/a", "/p"}; !slices.Equal(got, want) {
-		t.Errorf("PullFolders = %v, want %v", got, want)
-	}
-	if got, want := PullFolders("cd sub && git pull --ff-only", "/p"), []string{"/p/sub"}; !slices.Equal(got, want) {
-		t.Errorf("PullFolders = %v, want %v", got, want)
-	}
-	if got := PullFolders("git fetch", "/p"); got != nil {
-		t.Errorf("PullFolders of a fetch = %v, want none", got)
+	for _, c := range []struct {
+		line string
+		want []string
+	}{
+		{"git fetch && git -C a pull && git pull -q && git -C /p pull", []string{"/p/a", "/p"}},
+		{"cd sub && git pull --ff-only", []string{"/p/sub"}},
+		{"git fetch", nil},
+		{"gh pr merge 5 --squash --delete-branch", []string{"/p"}},
+		{"cd sub && gh pr merge 5 -d --squash", []string{"/p/sub"}},
+		{"gh pr merge 5 -sd", []string{"/p"}},
+		{"gh pr merge --delete-branch=true 5", []string{"/p"}},
+		{"gh pr merge 5 --squash", nil},
+		{"gh pr merge 5 --delete-branch=false", nil},
+		{"gh pr view 5 --json title", nil},
+		{"gh pr list --delete-branch", nil},
+	} {
+		if got := PullFolders(c.line, "/p"); !slices.Equal(got, c.want) {
+			t.Errorf("PullFolders(%q) = %v, want %v", c.line, got, c.want)
+		}
 	}
 	top, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -210,29 +223,36 @@ func TestAPullsWorkTreeHoldsNoGitattributesGitWouldWaitOn(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(top, "a", ".gitattributes"), []byte("* text\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := syscall.Mkfifo(filepath.Join(top, ".git", "info", ".gitattributes"), 0o644); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{".gitattributes", ".gitignore"} {
+		if err := os.WriteFile(filepath.Join(top, "a", name), []byte("*.o\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Mkfifo(filepath.Join(top, ".git", "info", name), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if p := WorkTreeProblem(top); p != nil {
-		t.Errorf("a work tree with a regular .gitattributes: %+v", p)
+		t.Errorf("a work tree with a regular .gitattributes and .gitignore: %+v", p)
 	}
-	for _, bad := range []string{filepath.Join(top, "a", "b", ".gitattributes"), filepath.Join(top, "c", ".gitattributes")} {
-		if strings.HasPrefix(bad, filepath.Join(top, "a")) {
-			if err := syscall.Mkfifo(bad, 0o644); err != nil {
+	for _, name := range []string{".gitattributes", ".gitignore"} {
+		pipe, link, folder := filepath.Join(top, "a", "b", name), filepath.Join(top, "c", name), filepath.Join(top, "a", "b", name)
+		for _, c := range []struct {
+			bad, want string
+			make      func(string) error
+		}{
+			{pipe, pipe + " is not a regular file, and git would wait on it when it checks out a file in its folder", func(p string) error { return syscall.Mkfifo(p, 0o644) }},
+			{link, link + " is a link, not a regular file: git does not read it (it warns), but a git before 2.32 follows it, to a pipe it would wait on too", func(p string) error { return os.Symlink(filepath.Join(top, "a", name), p) }},
+			{folder, folder + " is not a regular file, which git cannot read as one", func(p string) error { return os.Mkdir(p, 0o755) }},
+		} {
+			if err := c.make(c.bad); err != nil {
 				t.Fatal(err)
 			}
-		} else if err := os.Symlink(filepath.Join(top, "a", ".gitattributes"), bad); err != nil {
-			t.Fatal(err)
-		}
-		want := bad + " is not a regular file, and git would wait on it when it checks out a file in its folder"
-		if p := WorkTreeProblem(top); p == nil || p.Reason != want || p.Fix != plantedFix {
-			t.Errorf("WorkTreeProblem = %+v, want %q", p, want)
-		}
-		if err := os.Remove(bad); err != nil {
-			t.Fatal(err)
+			if p := WorkTreeProblem(top); p == nil || p.Reason != c.want || p.Fix != plantedFix {
+				t.Errorf("WorkTreeProblem = %+v, want %q", p, c.want)
+			}
+			if err := os.Remove(c.bad); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	if p := WorkTreeProblem("rel"); p == nil {
