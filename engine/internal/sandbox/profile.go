@@ -855,13 +855,19 @@ func DeliveryNoteAt(h Host, in Input, argv []string, kept *Problem) string {
 
 // alone is whether line runs one program, after a leading `cd <folder> &&`
 // (leadingCd): one command, no pipe, no list, no substitution, nothing in
-// the background.
+// the background. What git or gh runs from its own words (an option's
+// program such as --upload-pack, a configured command, an alias; the guard
+// reads them since T228) is something the line holds, not a command beside
+// it, so it is not counted.
 func alone(line string) bool {
 	cmds, err := sh.Parse(line)
 	programs, err2 := sh.JudgeString(line, nil, nil, sh.Opts{})
 	if err != nil || err2 != nil || !foreground(line) {
 		return false
 	}
+	programs = slices.DeleteFunc(programs, func(p sh.Program) bool {
+		return slices.ContainsFunc(p.Via, func(v string) bool { b := sh.Base(v); return b == "git" || b == "gh" })
+	})
 	n := 0
 	for _, c := range cmds {
 		if len(c.Words) > 0 {
