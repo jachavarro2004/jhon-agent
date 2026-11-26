@@ -105,11 +105,15 @@ function moreHost(active: string[], all: string[]) {
 	return { host, entries, active: () => now };
 }
 
-test("tools_more says a tool the session already has is enabled, and on claude-bridge that it reaches the model at the next prompt", async () => {
+// T258: on claude-bridge a tool enabled mid-turn is available, but only from the next prompt; the answer says so.
+const BRIDGE_ONE = " On claude-bridge the tool list is read when a prompt starts, so it is available but reaches the model only from the next prompt: its absence from this prompt's tools does not make it unavailable.";
+const BRIDGE_MANY = " On claude-bridge the tool list is read when a prompt starts, so they are available but reach the model only from the next prompt: their absence from this prompt's tools does not make them unavailable.";
+
+test("tools_more says a tool the session already has is enabled, and on claude-bridge that it is available from the next prompt", async () => {
 	const all = ["read", ...DELEGATION, "jhon_review", "mcp__engram__mem_update"];
 	for (const [provider, said] of [
 		["anthropic", "Already enabled: subagent."],
-		["claude-bridge", "Already enabled: subagent. On claude-bridge the tool list is read when a prompt starts, so it reaches the model at the next prompt."],
+		["claude-bridge", `Already enabled: subagent.${BRIDGE_ONE}`],
 	] as const) {
 		// S2: after the full switch the tool is active and no longer deferred.
 		const full = moreHost(all, all);
@@ -128,8 +132,10 @@ test("tools_more says a tool the session already has is enabled, and on claude-b
 		const listed = (await more.execute("c2", {}, undefined, undefined, ctx)).content[0].text;
 		assert.equal(listed, "Deferred tools (enable with names):\n- jhon_review: jhon_review does one thing.\n- mcp__engram__mem_update: mcp__engram__mem_update does one thing.", provider);
 		const mixed = (await more.execute("c3", { names: ["jhon_review", "monitor", "task_list", "nope"] }, undefined, undefined, ctx)).content[0].text;
-		const again = provider === "claude-bridge" ? " On claude-bridge the tool list is read when a prompt starts, so they reach the model at the next prompt." : "";
-		assert.equal(mixed, `Enabled: jhon_review (callable from the next step on).\nAlready enabled: monitor, task_list.${again}\nUnknown or not deferred: nope.`, provider);
+		const again = provider === "claude-bridge" ? BRIDGE_MANY : "";
+		// Enabled during the turn: on claude-bridge not from the next step but from the next prompt.
+		const enabled = provider === "claude-bridge" ? `Enabled: jhon_review.${BRIDGE_ONE}` : "Enabled: jhon_review (callable from the next step on).";
+		assert.equal(mixed, `${enabled}\nAlready enabled: monitor, task_list.${again}\nUnknown or not deferred: nope.`, provider);
 		assert.deepEqual(h.active(), ["read", ...DELEGATION, "jhon_review"], provider);
 		assert.deepEqual(h.entries, [["jhon-tools-more", { names: ["jhon_review"] }]], provider);
 	}
