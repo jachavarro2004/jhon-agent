@@ -9,7 +9,8 @@ import (
 	"testing"
 )
 
-// B2 (L1729): once the line is in the registry, the folder this process
+// B2 (L1729), through LineFoldersProblem (L1731): once the line is in the
+// registry, the folder this process
 // works in must be the folder its path names, opened with no link
 // followed, and inside the root that path lies in: a folder moved aside
 // with a copy put at its path (the repository's or a project subfolder,
@@ -33,7 +34,7 @@ func TestT251XTheWorkingFolderIsAnchored(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Chdir(c.cwd)
 			in := Input{Cwd: c.cwd, Roots: []string{proj}, CommonDir: filepath.Join(proj, ".git"), Home: base, Stat: Disk, Lstat: DiskLstat}
-			if p := in.CwdProblem(c.top); p != nil {
+			if p := in.LineFoldersProblem("git fetch", c.top); p != nil {
 				t.Fatalf("in place: %v", p)
 			}
 			aside := c.cwd + "-aside"
@@ -44,7 +45,7 @@ func TestT251XTheWorkingFolderIsAnchored(t *testing.T) {
 			if err := os.MkdirAll(filepath.Join(c.cwd, ".git"), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			p := in.CwdProblem(c.top)
+			p := in.LineFoldersProblem("git fetch", c.top)
 			if want := "the folder this line runs in, " + c.cwd + ", changed after Jhon read it: "; p == nil || !strings.HasPrefix(p.Reason, want) {
 				t.Errorf("moved aside with a copy at its path: %v; want a problem opening with %q", p, want)
 			}

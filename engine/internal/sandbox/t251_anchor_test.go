@@ -9,11 +9,11 @@ import (
 	"testing"
 )
 
-// T251 with T248's anchors: once in the registry, the second repository is
-// opened with no link followed and must be, by device and inode, the folder
-// Jhon judged, and each folder in it the line's git works in must be
-// inside it on the disk; a repository or a folder swapped for a link is
-// refused, and the project's line (no repository) checks nothing here.
+// T251 with T248's anchors, through the one path every folder of a line
+// takes (LineFoldersProblem, L1731): once in the registry, the second
+// repository and each folder in it the line's git works in are opened with
+// no link followed and walked up to the repository's top; a repository or
+// a folder swapped for a link is refused.
 func TestT251RepositoryProblemAnchorsTheRepository(t *testing.T) {
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -26,12 +26,10 @@ func TestT251RepositoryProblemAnchorsTheRepository(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	t.Chdir(base)
 	in := Input{Cwd: base, Home: base, Stat: Disk, Lstat: DiskLstat}
-	if p := in.RepositoryProblem("", "git fetch"); p != nil {
-		t.Errorf("the project's line: %v", p)
-	}
 	for _, line := range []string{"git -C " + b + " fetch", "git -C " + b + "/sub pull", "cd " + b + " && git push"} {
-		if p := in.RepositoryProblem(b, line); p != nil {
+		if p := in.LineFoldersProblem(line, b); p != nil {
 			t.Errorf("%q: %v", line, p)
 		}
 	}
@@ -39,7 +37,7 @@ func TestT251RepositoryProblemAnchorsTheRepository(t *testing.T) {
 	if err := os.Symlink(elsewhere, filepath.Join(b, "out")); err != nil {
 		t.Fatal(err)
 	}
-	if p := in.RepositoryProblem(b, "git -C "+b+"/out fetch"); p == nil || !strings.HasPrefix(p.Reason, "the repository "+b+" changed after Jhon read it: "+filepath.Join(b, "out")+" is or passes through a link") {
+	if p := in.LineFoldersProblem("git -C "+b+"/out fetch", b); p == nil || !strings.HasPrefix(p.Reason, "the folder "+filepath.Join(b, "out")+" git -C names changed after Jhon read it: it is or passes through a link now") {
 		t.Errorf("a folder of b swapped for a link: %v", p)
 	}
 	// b itself swapped for a link to another folder.
@@ -49,7 +47,7 @@ func TestT251RepositoryProblemAnchorsTheRepository(t *testing.T) {
 	if err := os.Symlink(elsewhere, b); err != nil {
 		t.Fatal(err)
 	}
-	if p := in.RepositoryProblem(b, "git -C "+b+" fetch"); p == nil || !strings.HasPrefix(p.Reason, "the repository "+b+" changed after Jhon read it: "+b+" cannot be opened with no link followed") {
+	if p := in.LineFoldersProblem("git -C "+b+" fetch", b); p == nil || !strings.HasPrefix(p.Reason, "the repository "+b+" changed after Jhon read it: it is or passes through a link now") {
 		t.Errorf("b swapped for a link: %v", p)
 	}
 }

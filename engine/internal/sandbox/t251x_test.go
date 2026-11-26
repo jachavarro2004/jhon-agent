@@ -48,9 +48,9 @@ func TestT251XADotDotKeepsARepositoryLineInside(t *testing.T) {
 	}
 	h := host("linux", t251xDisk, nil)
 	for line, want := range map[string]string{
-		"git -C /home/u/work/x/../b fetch origin": keptPrefix + "/home/u/work/x/../b goes up with `..`, and a line outside the sandbox works in a repository only by a path with no `..` (git goes up from where a link on the way leads, not from the path as written); fix: name its real path (/home/u/.cache/q/b) instead",
+		"git -C /home/u/work/x/../b fetch origin": keptPrefix + "/home/u/work/x/../b goes up with `..`, and a line outside the sandbox works in a repository only by a path with no `..` (git goes up from where a link on the way leads, not from the path as written); fix: it leads to /home/u/.cache/q/b, which is neither in the project nor in a git repository a line outside the sandbox may work in, so run the line yourself in a terminal",
 		"git -C /home/u/work/b/../b fetch":        keptPrefix + "/home/u/work/b/../b goes up with `..`, and a line outside the sandbox works in a repository only by a path with no `..` (git goes up from where a link on the way leads, not from the path as written); fix: name its real path (/home/u/work/b) instead",
-		"git -C /home/u/project/x/../sub fetch":   keptPrefix + "/home/u/project/x/../sub goes up with `..` after the link /home/u/project/x, so git would work in /home/u/.cache/q/sub, not where the path says; fix: name the real path (/home/u/.cache/q/sub) instead",
+		"git -C /home/u/project/x/../sub fetch":   keptPrefix + "/home/u/project/x/../sub goes up with `..` after the link /home/u/project/x, so git would work in /home/u/.cache/q/sub, not where the path says; fix: it leads to /home/u/.cache/q/sub, which is neither in the project nor in a git repository a line outside the sandbox may work in, so run the line yourself in a terminal",
 	} {
 		if got := DeliveryNoteAt(h, t251xInput(project, "/home/u/work"), []string{"/usr/bin/bash", "-c", line}, nil); got != want {
 			t.Errorf("DeliveryNoteAt(%q) =\n %q\nwant\n %q", line, got, want)

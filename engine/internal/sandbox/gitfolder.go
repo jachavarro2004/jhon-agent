@@ -41,29 +41,41 @@ func (in Input) GitFolderProblem(gitDir, commonDir string) string {
 	for _, p := range in.ownFolders() {
 		own = append(own, realPath(p, in.Stat))
 	}
-	return gitFolderWalk(gitDir, commonDir, own, "the project")
+	why, _ := gitFolderWalk(gitDir, commonDir, own, "the project")
+	return why
 }
+
+// The kinds of problem gitFolderWalk finds, which decide the fix a kept
+// line's note gives (L1731 N1: by the problem's identity, never by its
+// words).
+const (
+	walkFine      = iota
+	walkElsewhere // a git folder outside the project or the repository
+	walkPlanted   // a link, a hard link, a FIFO, a socket or a device
+	walkTooBig    // past maxGitFolderEntries
+	walkUnread    // a folder that cannot be read, a name that is not absolute
+)
 
 // gitFolderWalk is GitFolderProblem's check of gitDir and commonDir, which
 // must lie in one of own (real paths), whose name whose says ("the
-// project", "the repository <top>", T251).
-func gitFolderWalk(gitDir, commonDir string, own []string, whose string) string {
+// project", "the repository <top>", T251), with the problem's kind.
+func gitFolderWalk(gitDir, commonDir string, own []string, whose string) (string, int) {
 	walked := 0
 	for _, dir := range []string{gitDir, commonDir} {
 		if !filepath.IsAbs(dir) {
-			return "git names no absolute git folder (" + dir + ")"
+			return "git names no absolute git folder (" + dir + ")", walkUnread
 		}
 		dir = filepath.Clean(dir)
 		if real, err := filepath.EvalSymlinks(dir); err != nil || !within(real, own) {
-			return "the repository's git folder " + dir + " is not in " + whose
+			return "the repository's git folder " + dir + " is not in " + whose, walkElsewhere
 		}
-		problem := ""
+		problem, kind := "", walkPlanted
 		err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
 			if walked++; walked > maxGitFolderEntries {
-				problem = "the repository's git folders hold more than " + strconv.Itoa(maxGitFolderEntries) + " entries"
+				problem, kind = "the repository's git folders hold more than "+strconv.Itoa(maxGitFolderEntries)+" entries", walkTooBig
 				return fs.SkipAll
 			}
 			if d.Type()&fs.ModeSymlink != 0 {
@@ -93,14 +105,14 @@ func gitFolderWalk(gitDir, commonDir string, own []string, whose string) string 
 			return nil
 		})
 		if problem != "" {
-			return problem
+			return problem, kind
 		}
 		if err != nil && !errors.Is(err, fs.SkipAll) {
-			return "the repository's git folder " + dir + " cannot be read (" + err.Error() + ")"
+			return "the repository's git folder " + dir + " cannot be read (" + err.Error() + ")", walkUnread
 		}
 		if gitDir == commonDir {
 			break
 		}
 	}
-	return ""
+	return "", walkFine
 }

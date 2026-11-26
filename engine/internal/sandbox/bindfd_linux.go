@@ -8,8 +8,6 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
-
-	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 )
 
 // openHow is openat2's struct open_how.
@@ -31,12 +29,16 @@ const (
 // A rename racing the walk (EAGAIN) is tried again a few times. A test
 // replaces it.
 var openat2 = func(path string) (int, error) {
+	return openat2Rel(strings.TrimPrefix(filepath.Clean(path), "/"))
+}
+
+// openat2Rel is openat2 of rel, a path from the root as written.
+func openat2Rel(rel string) (int, error) {
 	root, err := syscall.Open("/", oPath|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		return -1, err
 	}
 	defer syscall.Close(root)
-	rel := strings.TrimPrefix(filepath.Clean(path), "/")
 	if rel == "" {
 		rel = "."
 	}
@@ -310,162 +312,113 @@ func anchorProblem(in Input) *Problem {
 	return projectProblem(top, ".", "is neither the folder this command runs in nor one that holds it: a folder on its way changed after Jhon read it")
 }
 
-// RepositoryProblem is why top, the git repository inside a
-// sandbox.allow_write folder a line that runs outside the sandbox works in
-// (Outside, T251), is not the folder Jhon judged, nil when it is or top is
-// "" (the project's line, which ProjectProblem anchors). Called once the
-// line is in the registry, so no sandboxed command that can write the
-// repository runs: top, opened with no link followed (in.homed: the home's
-// own way taken), is by device and inode the folder its path names read
-// through every link, and each folder in top the line's git works in
-// (GitFolders), opened with no link followed, is top or a folder inside it,
-// walked up through ".." (T248's anchors, L4). Where openat2 is missing or
-// refused the line stays inside, as a run fails closed there.
-func (in Input) RepositoryProblem(top, line string) *Problem {
-	if top == "" {
-		return nil
-	}
-	changed := func(path, why string) *Problem {
-		return &Problem{Reason: "the repository " + top + " changed after Jhon read it: " + path + " " + why, Fix: "run the line again; if it is refused again, a command may be replacing a folder on the way to " + top + ": find it and stop it"}
-	}
-	f, err := openNoLink(in.homed(top))
-	if p := openat2Problem(err); p != nil {
-		return p
-	}
+// foldersProblem is why one of folders is not the folder Jhon judged, nil
+// when each is (L1729 B2, L1731): its `..` parts pass dotDotProblem again
+// (a folder on its way may be a link now); its path, as written, opens with
+// no link followed (openWritten), else the line stays inside, but a
+// missing folder git only changes into, which git refuses; the folder the
+// process runs in is, by device and inode, the one its path names; and
+// walking up from it through ".." reaches its root, by device and inode.
+// Where openat2 is missing or refused the line stays inside, as a run
+// fails closed there.
+func (in Input) foldersProblem(folders []lineFolder) *Problem {
+	dot, err := syscall.Open(".", oPath|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
 	if err != nil {
-		return changed(top, "cannot be opened with no link followed ("+err.Error()+")")
+		return &Problem{Reason: "the folder this line runs in cannot be opened (" + err.Error() + ")", Fix: "run the line from a folder that exists"}
 	}
-	defer f.Close()
-	var want, named syscall.Stat_t
-	if syscall.Fstat(int(f.Fd()), &want) != nil || syscall.Stat(top, &named) != nil || named.Dev != want.Dev || named.Ino != want.Ino {
-		return changed(top, "is not the folder its path names")
+	defer syscall.Close(dot)
+	var here syscall.Stat_t
+	if err := syscall.Fstat(dot, &here); err != nil {
+		return &Problem{Reason: "the folder this line runs in cannot be read (" + err.Error() + ")", Fix: "run the line from a folder that exists"}
 	}
-	for _, d := range GitFolders(line, in.Cwd) {
-		dir := in.homed(filepath.Clean(d))
-		if !project.Within(dir, top) {
-			continue
+	roots := map[string]syscall.Stat_t{}
+	for _, f := range folders {
+		if !filepath.IsAbs(f.written) {
+			return changedFolder(f, "it is not an absolute path")
 		}
-		g, err := openNoLink(dir)
+		if p := in.dotDotProblem(f.written, f.strict); p != nil {
+			return changedFolder(f, p.Reason)
+		}
+		fd, err := openWritten(in.homedWritten(f.written))
+		if p := openat2Problem(err); p != nil {
+			return p
+		}
 		if err != nil {
-			return changed(dir, "is or passes through a link, or cannot be opened ("+err.Error()+")")
-		}
-		cur, err := fcntl(int(g.Fd()), syscall.F_DUPFD_CLOEXEC, 3)
-		g.Close()
-		if err != nil {
-			return changed(dir, "cannot be read ("+err.Error()+")")
-		}
-		inside := false
-		for range strings.Count(strings.TrimPrefix(dir, top), "/") + 1 {
-			var st syscall.Stat_t
-			if syscall.Fstat(cur, &st) != nil {
-				break
+			if f.missing && (errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ENOTDIR)) {
+				continue
 			}
-			if st.Dev == want.Dev && st.Ino == want.Ino {
-				inside = true
-				break
-			}
-			up, err := syscall.Openat(cur, "..", oPath|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
-			syscall.Close(cur)
-			if err != nil {
-				cur = -1
-				break
-			}
-			cur = up
+			return changedFolder(f, "it is or passes through a link now, or cannot be opened ("+err.Error()+")")
 		}
-		if cur >= 0 {
-			syscall.Close(cur)
-		}
-		if !inside {
-			return changed(dir, "is not inside it on the disk")
+		p := in.folderInRoot(f, fd, here, roots)
+		syscall.Close(fd)
+		if p != nil {
+			return p
 		}
 	}
 	return nil
 }
 
-// CwdProblem is why the folder this process works in is not the one Jhon
-// judged, in.Cwd, nil when it is (L1729 B2): every check of a line that
-// runs outside the sandbox reads the folder by its path, while the line's
-// programs run in the folder the process is in, which a sandboxed command
-// may have moved aside (putting a clean copy at its path) after Jhon read
-// it. Called once the line is in the registry, so nothing moves it again:
-// "." must be, by device and inode, in.Cwd opened with no link followed
-// (the home's own way taken), and, when in.Cwd lies in one of the
-// project's roots or in top (the git repository inside a
-// sandbox.allow_write folder the line works in, "" for none), walking up
-// from "." through ".." must reach that root. It holds for the project's
-// lines too: a project subfolder was never anchored (pre-existing at
-// bf705e0).
-func (in Input) CwdProblem(top string) *Problem {
-	changed := func(why string) *Problem {
-		return &Problem{Reason: "the folder this line runs in, " + in.Cwd + ", changed after Jhon read it: " + why, Fix: "run the line again; if it is refused again, a command may be moving " + in.Cwd + " or a folder on its way: find it and stop it"}
+// folderInRoot is foldersProblem's check of f opened as fd: the folder
+// the process runs in (here) when f is it, and f inside its root, walked up
+// through ".."; roots keeps each root's device and inode once read. It
+// closes no descriptor it was given.
+func (in Input) folderInRoot(f lineFolder, fd int, here syscall.Stat_t, roots map[string]syscall.Stat_t) *Problem {
+	var st syscall.Stat_t
+	if err := syscall.Fstat(fd, &st); err != nil {
+		return changedFolder(f, "it cannot be read ("+err.Error()+")")
 	}
-	if !filepath.IsAbs(in.Cwd) {
-		return changed("it is not an absolute path")
+	if f.here && (st.Dev != here.Dev || st.Ino != here.Ino) {
+		return changedFolder(f, "the line would run in another folder than its path names (one moved aside, with another put at its path)")
 	}
-	cwd := in.homed(filepath.Clean(in.Cwd))
-	dot, err := syscall.Open(".", oPath|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
-	if err != nil {
-		return changed("it cannot be opened (" + err.Error() + ")")
-	}
-	defer syscall.Close(dot)
-	f, err := openNoLink(cwd)
-	if p := openat2Problem(err); p != nil {
-		return p
-	}
-	if err != nil {
-		return changed("its path is or passes through a link now, or is gone (" + err.Error() + ")")
-	}
-	defer f.Close()
-	var here, named syscall.Stat_t
-	if syscall.Fstat(dot, &here) != nil || syscall.Fstat(int(f.Fd()), &named) != nil || here.Dev != named.Dev || here.Ino != named.Ino {
-		return changed("the line would run in another folder than its path names (one moved aside, with another put at its path)")
-	}
-	root := ""
-	for _, r := range append(in.ownRoots(), top) {
-		if r == "" || !filepath.IsAbs(r) {
-			continue
-		}
-		if r = in.homed(filepath.Clean(r)); project.Within(cwd, r) && len(r) > len(root) {
-			root = r
-		}
-	}
-	if root == "" {
+	if f.root == "" {
 		return nil
 	}
-	r, err := openNoLink(root)
-	if p := openat2Problem(err); p != nil {
-		return p
+	want, ok := roots[f.root]
+	if !ok {
+		r, err := openNoLink(f.root)
+		if p := openat2Problem(err); p != nil {
+			return p
+		}
+		if err != nil {
+			return changedFolder(f, f.root+", the folder that holds it, is or passes through a link now, or is gone ("+err.Error()+")")
+		}
+		err = syscall.Fstat(int(r.Fd()), &want)
+		r.Close()
+		if err != nil {
+			return changedFolder(f, f.root+" cannot be read ("+err.Error()+")")
+		}
+		roots[f.root] = want
 	}
+	cur, err := fcntl(fd, syscall.F_DUPFD_CLOEXEC, 3)
 	if err != nil {
-		return changed(root + ", the folder that holds it, is or passes through a link now, or is gone (" + err.Error() + ")")
+		return changedFolder(f, "it cannot be read ("+err.Error()+")")
 	}
-	defer r.Close()
-	var want syscall.Stat_t
-	if syscall.Fstat(int(r.Fd()), &want) != nil {
-		return changed(root + " cannot be read")
-	}
-	cur, err := fcntl(dot, syscall.F_DUPFD_CLOEXEC, 3)
-	if err != nil {
-		return changed("it cannot be read (" + err.Error() + ")")
-	}
-	for range strings.Count(strings.TrimPrefix(cwd, root), "/") + 1 {
-		var st syscall.Stat_t
-		if syscall.Fstat(cur, &st) != nil {
+	depth := strings.Count(strings.TrimPrefix(in.homed(filepath.Clean(f.written)), f.root), "/")
+	for range depth + 1 {
+		var at syscall.Stat_t
+		if syscall.Fstat(cur, &at) != nil {
 			break
 		}
-		if st.Dev == want.Dev && st.Ino == want.Ino {
+		if at.Dev == want.Dev && at.Ino == want.Ino {
 			syscall.Close(cur)
 			return nil
 		}
 		up, err := syscall.Openat(cur, "..", oPath|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
 		syscall.Close(cur)
 		if err != nil {
-			return changed("it cannot be walked up to " + root + " (" + err.Error() + ")")
+			return changedFolder(f, "it cannot be walked up to "+f.root+" ("+err.Error()+")")
 		}
 		cur = up
 	}
 	syscall.Close(cur)
-	return changed("it is not inside " + root + " on the disk")
+	return changedFolder(f, "it is not inside "+f.root+" on the disk")
+}
+
+// openWritten opens path, absolute, as the kernel reaches it as written
+// (nothing cleaned, so a `..` takes the parent of where the part before it
+// is), with no link on the way followed: openat2's descriptor.
+func openWritten(path string) (int, error) {
+	return openat2Rel(strings.TrimLeft(path, "/"))
 }
 
 // mainProblem is why in.Main, the main worktree of a linked one as the
