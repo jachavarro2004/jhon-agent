@@ -382,6 +382,92 @@ func (in Input) RepositoryProblem(top, line string) *Problem {
 	return nil
 }
 
+// CwdProblem is why the folder this process works in is not the one Jhon
+// judged, in.Cwd, nil when it is (L1729 B2): every check of a line that
+// runs outside the sandbox reads the folder by its path, while the line's
+// programs run in the folder the process is in, which a sandboxed command
+// may have moved aside (putting a clean copy at its path) after Jhon read
+// it. Called once the line is in the registry, so nothing moves it again:
+// "." must be, by device and inode, in.Cwd opened with no link followed
+// (the home's own way taken), and, when in.Cwd lies in one of the
+// project's roots or in top (the git repository inside a
+// sandbox.allow_write folder the line works in, "" for none), walking up
+// from "." through ".." must reach that root. It holds for the project's
+// lines too: a project subfolder was never anchored (pre-existing at
+// bf705e0).
+func (in Input) CwdProblem(top string) *Problem {
+	changed := func(why string) *Problem {
+		return &Problem{Reason: "the folder this line runs in, " + in.Cwd + ", changed after Jhon read it: " + why, Fix: "run the line again; if it is refused again, a command may be moving " + in.Cwd + " or a folder on its way: find it and stop it"}
+	}
+	if !filepath.IsAbs(in.Cwd) {
+		return changed("it is not an absolute path")
+	}
+	cwd := in.homed(filepath.Clean(in.Cwd))
+	dot, err := syscall.Open(".", oPath|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return changed("it cannot be opened (" + err.Error() + ")")
+	}
+	defer syscall.Close(dot)
+	f, err := openNoLink(cwd)
+	if p := openat2Problem(err); p != nil {
+		return p
+	}
+	if err != nil {
+		return changed("its path is or passes through a link now, or is gone (" + err.Error() + ")")
+	}
+	defer f.Close()
+	var here, named syscall.Stat_t
+	if syscall.Fstat(dot, &here) != nil || syscall.Fstat(int(f.Fd()), &named) != nil || here.Dev != named.Dev || here.Ino != named.Ino {
+		return changed("the line would run in another folder than its path names (one moved aside, with another put at its path)")
+	}
+	root := ""
+	for _, r := range append(in.ownRoots(), top) {
+		if r == "" || !filepath.IsAbs(r) {
+			continue
+		}
+		if r = in.homed(filepath.Clean(r)); project.Within(cwd, r) && len(r) > len(root) {
+			root = r
+		}
+	}
+	if root == "" {
+		return nil
+	}
+	r, err := openNoLink(root)
+	if p := openat2Problem(err); p != nil {
+		return p
+	}
+	if err != nil {
+		return changed(root + ", the folder that holds it, is or passes through a link now, or is gone (" + err.Error() + ")")
+	}
+	defer r.Close()
+	var want syscall.Stat_t
+	if syscall.Fstat(int(r.Fd()), &want) != nil {
+		return changed(root + " cannot be read")
+	}
+	cur, err := fcntl(dot, syscall.F_DUPFD_CLOEXEC, 3)
+	if err != nil {
+		return changed("it cannot be read (" + err.Error() + ")")
+	}
+	for range strings.Count(strings.TrimPrefix(cwd, root), "/") + 1 {
+		var st syscall.Stat_t
+		if syscall.Fstat(cur, &st) != nil {
+			break
+		}
+		if st.Dev == want.Dev && st.Ino == want.Ino {
+			syscall.Close(cur)
+			return nil
+		}
+		up, err := syscall.Openat(cur, "..", oPath|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+		syscall.Close(cur)
+		if err != nil {
+			return changed("it cannot be walked up to " + root + " (" + err.Error() + ")")
+		}
+		cur = up
+	}
+	syscall.Close(cur)
+	return changed("it is not inside " + root + " on the disk")
+}
+
 // mainProblem is why in.Main, the main worktree of a linked one as the
 // project's code read it (through every link, at its own moment), is not the
 // folder that holds the common dir, nil when it is or there is none (L4):

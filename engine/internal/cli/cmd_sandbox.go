@@ -205,6 +205,11 @@ func sandboxRun(argv []string) (int, error) {
 			path := os.Getenv("PATH")
 			os.Setenv("PATH", sandbox.OutsidePath(in))
 			kept = in.RepositoryProblem(top, program[2])
+			if kept == nil {
+				// The folder the line runs in, which the checks read by its
+				// path (L1729 B2), for the project's lines too.
+				kept = in.CwdProblem(top)
+			}
 			var gate [][2]string
 			if kept == nil {
 				gate = mergeGateEntries(pinned)
@@ -212,7 +217,7 @@ func sandboxRun(argv []string) (int, error) {
 					gate = mergeGateEntries(top)
 				}
 				if why := repositoryGitProblem(in, program[2], gate, top); why != "" {
-					kept = &sandbox.Problem{Reason: why, Fix: repositoryGitFix}
+					kept = &sandbox.Problem{Reason: why, Fix: repositoryGitFix(why)}
 				}
 			}
 			if kept == nil {

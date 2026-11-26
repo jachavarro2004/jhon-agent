@@ -837,9 +837,41 @@ func DeliveryNoteAt(h Host, in Input, argv []string, kept *Problem) string {
 				return keptNote + p.Line()
 			}
 		}
+		// A line that is alone already is kept inside for what it holds,
+		// not for its company (L1729).
+		for _, line := range lines {
+			if DeliveryNote([]string{argv[0], "-c", line}) != "" && alone(line) {
+				return aloneNote
+			}
+		}
 	}
 	return deliveryNote
 }
+
+// alone is whether line runs one program, after a leading `cd <folder> &&`
+// (leadingCd): one command, no pipe, no list, no substitution, nothing in
+// the background.
+func alone(line string) bool {
+	cmds, err := sh.Parse(line)
+	programs, err2 := sh.JudgeString(line, nil, nil, sh.Opts{})
+	if err != nil || err2 != nil || !foreground(line) {
+		return false
+	}
+	n := 0
+	for _, c := range cmds {
+		if len(c.Words) > 0 {
+			n++
+		}
+	}
+	if _, ok := leadingCd(line); ok && len(programs) > 0 && programs[0].Argv[0] == "cd" {
+		n, programs = n-1, programs[1:]
+	}
+	return n == 1 && len(programs) == 1
+}
+
+// aloneNote is DeliveryNoteAt's note of a line that is alone but kept
+// inside for what it holds.
+const aloneNote = keptNote + "the line is alone, but holds an option, a word the shell would still rewrite ($, a backtick, ~, a glob or brace), a redirect to a file, or a subcommand that never runs outside the sandbox; fix: run git's fetch, pull, push, ls-remote, clone or remote update, or gh's own commands, with only their usual options and literal words, or run the line yourself in a terminal"
 
 // keptNote opens DeliveryNoteAt's note of a line kept inside for a reason
 // other than its shape.

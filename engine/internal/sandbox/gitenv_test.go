@@ -199,7 +199,7 @@ func TestRepositoryGitConfigAllowsOnlyTheAllowlist(t *testing.T) {
 			t.Errorf("%q stays outside", e)
 		}
 	}
-	if why := RepositoryGitConfig(entry("local", "core.worktree", "/home/u"), nil); why != "the repository's configuration sets core.worktree, which would move the files git writes outside the project" {
+	if why := RepositoryGitConfig(entry("local", "core.worktree", "/home/u"), nil); why != "the repository's configuration sets core.worktree (as a submodule's does), which may put the files git writes outside the repository" {
 		t.Errorf("core.worktree: %q", why)
 	}
 	if why := RepositoryGitConfig(entry("local", "http.cookiefile", "/x"), nil); why != "the repository's configuration sets http.cookiefile, which is not among the keys a git line runs outside the sandbox with" {

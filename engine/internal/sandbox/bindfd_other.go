@@ -45,5 +45,8 @@ func (in Input) RepositoryProblem(top, line string) *Problem {
 	return &Problem{Reason: errNotLinux.Error(), Fix: "none on this system: it needs Linux and bubblewrap"}
 }
 
+// CwdProblem checks nothing off Linux, where the sandbox does not run.
+func (in Input) CwdProblem(top string) *Problem { return nil }
+
 // pinnedAs checks nothing off Linux, where the sandbox does not run.
 func pinnedAs(in Input, real, written string) bool { return true }
