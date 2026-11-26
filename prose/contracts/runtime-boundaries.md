@@ -9,8 +9,7 @@ action. Report it verbatim; an executor returns it as its blocker.
   interpreter, another tool, another worktree, or a delegate asked to do what
   the refusal prevented are all the same bypass.
 - **A form the same authority allows is not another way.** When a refusal
-  concerns only the form and the same authority allows another form for the
-  same effect, using the allowed form is compliance, not a bypass.
+  concerns only the form, using the allowed form is compliance, not a bypass.
 - **A refusal is not a failure.** An operational error (a missing file, `git`
   exiting 128) is handled as an error.
 - **Record the refusal, never the way around it**, in Engram, a report, or an

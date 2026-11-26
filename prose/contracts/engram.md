@@ -11,8 +11,8 @@ times out (note the failure briefly). A small change (`jhon status` says so)
 saves nothing.
 
 **Prompt capture.** Pass `capture_prompt: false` only for automated saves
-(LDD step output, caches, registries); leave it unset for human and
-proactive saves. Omit the field if the schema lacks it.
+(LDD step output, caches, registries); leave it unset for every other
+save. Omit the field if the schema lacks it.
 
 **Lifecycle.** `active` memories may be used. A `needs_review` memory is
 stale context: tell the user and verify it against current evidence before

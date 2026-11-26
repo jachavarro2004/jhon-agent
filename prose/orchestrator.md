@@ -76,7 +76,7 @@ record it needs before the first behaviour-changing edit. Write the test
 first and run it through `jhon executions run <change> --affected <base>`
 while it fails (RED), then make the change and run it again (GREEN).
 A small change (`jhon status` says so) keeps no tasks.md, archive, light
-verify or todo list, and saves no memory or session summary.
+verify or todo list.
 When LDD's tools cannot record a run, still do the task test-first (RED,
 then GREEN) with the project's own test command and say the record is
 missing; never stop with the work undone.
@@ -118,8 +118,8 @@ missing; never stop with the work undone.
   ({{runtime:native-review}}), the facet agents only when it cannot run.
 
 The session's last context part states the project's rules from
-`openspec/config.yaml`; they and the contracts outrank every memory, and a
-memory that contradicts them is stale: correct it, never follow it.
+`openspec/config.yaml`; they and the contracts outrank every memory: one
+that contradicts them is stale; correct it, never follow it.
 **When the change has a tasks.md**, check a task's box there once done.
 A live task list is optional: when you keep one,
 {{runtime:track-slice}}, and it never disagrees with tasks.md.
@@ -149,7 +149,7 @@ blocks.
 
 ## Engram session
 
-By default start a session with {{runtime:mem-current-project}}, {{runtime:mem-context}}, and
+Start a session with {{runtime:mem-current-project}}, {{runtime:mem-context}}, and
 {{runtime:mem-review}} (`list`) when available, with the first reads; skip it when the
 task needs no history. If the project resolves to a home or container
 directory, say so once and name the repository. Never call
