@@ -18,7 +18,7 @@ const stRdonly = 0x1
 // code: 2 for arguments it does not take, 126 when the sandbox is not what
 // Jhon checked, and bubblewrap's 1 when the program cannot start.
 func Enter(args []string) int {
-	expects, program, ok := parseEnter(args)
+	expects, program, started, ok := parseEnter(args)
 	if !ok {
 		os.Stderr.WriteString(enterUsage)
 		return 2
@@ -32,6 +32,12 @@ func Enter(args []string) int {
 	if err := CloseInherited(); err != nil {
 		fmt.Fprintf(os.Stderr, "jhon sandbox: the descriptors of the sandbox's check cannot be closed for the program (%v), so nothing was run; fix: run the command again\n", err)
 		return 126
+	}
+	// The run learns that the sandbox was set up and checked: one byte on
+	// --started, now close-on-exec like the rest, so the program never
+	// holds it (Bound.Started). A run gone already is no reason to stop.
+	if started >= 0 {
+		syscall.Write(started, []byte{1})
 	}
 	return execvp(program)
 }

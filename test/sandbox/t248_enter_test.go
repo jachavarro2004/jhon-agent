@@ -152,9 +152,10 @@ func TestTheProgramGetsNoTraceOfEnter(t *testing.T) {
 }
 
 // bubblewrap's own refusal of a folder that changed while it mounted it
-// (exit 1, "bwrap: Race condition binding dirfd: …"): a supervised run keeps
-// its line and adds what it means. A run whose program printed anything
-// first, or that exits otherwise, gets no such note.
+// (exit 1, "bwrap: Race condition binding dirfd: …", and enter never
+// started the program): a supervised run keeps its line and adds what it
+// means. One that exits otherwise gets no such note, nor does a program
+// that printed the line itself (TestT248V3AProgramsOwnRaceLineGetsNoNothingWasRunNote).
 func TestBubblewrapsOwnRaceRefusalGetsJhonsNote(t *testing.T) {
 	b := newBox(t)
 	const line = "bwrap: Race condition binding dirfd: File exists\n"
@@ -163,7 +164,6 @@ func TestBubblewrapsOwnRaceRefusalGetsJhonsNote(t *testing.T) {
 		name, script, stdout, stderr string
 	}{
 		{"bubblewrap refused", "echo 'bwrap: Race condition binding dirfd: File exists' >&2; exit 1", "", line + note},
-		{"output came first", "echo out; echo 'bwrap: Race condition binding dirfd: File exists' >&2; exit 1", "out\n", line},
 		{"another exit", "echo 'bwrap: Race condition binding dirfd: File exists' >&2; exit 2", "", line},
 	} {
 		env := t248StandIn(t, b, c.script)

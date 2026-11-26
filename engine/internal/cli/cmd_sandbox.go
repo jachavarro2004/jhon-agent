@@ -195,7 +195,7 @@ func sandboxRun(argv []string) (int, error) {
 			gate := mergeGateEntries(pinned)
 			why := repositoryGitProblem(in, program[2], gate)
 			if why == "" {
-				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), gate...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil, nil)
+				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), gate...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil, nil, nil)
 				leave()
 				return code, err
 			}
@@ -264,7 +264,19 @@ func sandboxRun(argv []string) (int, error) {
 	// The program starts through jhon sandbox enter, which checks inside
 	// the sandbox that every bind is the folder checked here, mounted where
 	// it was meant to be (sandbox.Bound.Command, L4).
-	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), bound.Command(program)...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal, bound)
+	// A supervised run learns from enter whether the program started
+	// (sandbox.Bound.Started, L11), not from what the program printed.
+	var started *os.File
+	if supervisedOutput() {
+		if started, err = bound.Started(); err != nil {
+			bound.Close()
+			leave()
+			fmt.Fprintf(os.Stderr, "jhon sandbox: the sandbox's start cannot be watched (%v), so nothing was run; fix: run the command again\n", err)
+			return sandboxRefused, nil
+		}
+		defer started.Close()
+	}
+	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), bound.Command(program)...), env, profile, sandbox.DeliveryNote(program), sandbox.DeployNote(program, in.DeployTools), refusal, bound, started)
 	bound.Close()
 	leave()
 	return code, err

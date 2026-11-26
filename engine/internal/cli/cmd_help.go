@@ -729,7 +729,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            refuses (bwrap: Race condition binding dirfd,
                            exit 1) a supervised run keeps its line and adds
                            that a folder changed while it mounted, so nothing
-                           was run. A --project value, the hook's included,
+                           was run: only when jhon sandbox enter never
+                           signalled (on a pipe the program never holds)
+                           that the program starts, never from the
+                           program's own output. A --project value, the hook's included,
                            and the project status names are taken only as
                            the folder they name with no link on it,
                            compared on the disk by device and inode. Without openat2 (Linux before 5.6), or

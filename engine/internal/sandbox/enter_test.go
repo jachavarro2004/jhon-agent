@@ -368,3 +368,58 @@ func TestAPinnedProjectIsTakenOnlyAsWritten(t *testing.T) {
 		t.Errorf("HereProject: %v for the working folder, %v for another; want true, false", HereProject(proj), HereProject(other))
 	}
 }
+
+// byteIn is whether r holds a byte, read without waiting long.
+func byteIn(t *testing.T, r *os.File) bool {
+	t.Helper()
+	if err := r.SetReadDeadline(time.Now().Add(50 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	n, _ := r.Read(make([]byte, 1))
+	return n > 0
+}
+
+// enter signals on --started once it checked the sandbox and is about to
+// become the program, and the program does not hold that descriptor; when
+// it refuses, or bubblewrap stops first, nothing arrives (T248 L11): what
+// a run decides "nothing was run" from, never the program's output.
+func TestEnterSignalsOnlyWhenTheProgramStarts(t *testing.T) {
+	bwrap, base := realSandbox(t)
+	in, _, _ := swapBox(t, filepath.Join(base, "runs"))
+	b, p := Open(in)
+	if p != nil {
+		t.Fatalf("Open: %s", p.Reason)
+	}
+	r, err := b.Started()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, errOut, code := enterRun(t, bwrap, b, "sh", "-c", `ls /proc/$$/fd | tr '\n' ' '; echo 'bwrap: Race condition binding dirfd: File exists' >&2; exit 1`)
+	if code != 1 || out != "0 1 2 " || !byteIn(t, r) {
+		t.Errorf("exit %d, stdout %q, stderr %q; want the program's exit 1, descriptors 0 1 2 and the byte", code, out, errOut)
+	}
+	r.Close()
+	b.Close()
+
+	in, shared, _ := swapBox(t, filepath.Join(base, "refused"))
+	if b, p = Open(in); p != nil {
+		t.Fatalf("Open: %s", p.Reason)
+	}
+	defer b.Close()
+	if r, err = b.Started(); err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	swap(t, filepath.Dir(shared), in.Home)
+	if _, errOut, code := enterRun(t, bwrap, b, "true"); code != 126 || byteIn(t, r) {
+		t.Errorf("a refused sandbox: exit %d, stderr %q, a byte %v; want 126 and none", code, errOut, byteIn(t, r))
+	}
+	// --started takes a descriptor of 3 or above, once.
+	for _, args := range [][]string{{"--started", "1", "--", "true"}, {"--started", "4", "--started", "5", "--", "true"}, {"--started", "x", "--", "true"}} {
+		cmd := exec.Command(os.Args[0], append([]string{"sandbox", "enter"}, args...)...)
+		_ = cmd.Run()
+		if cmd.ProcessState.ExitCode() != 2 {
+			t.Errorf("%v: exit %d; want 2", args, cmd.ProcessState.ExitCode())
+		}
+	}
+}
