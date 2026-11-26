@@ -446,11 +446,12 @@ func runExecutions(argv []string) (int, error) {
 		scope, selection, scopeReasons = s.Scope, s.Selected, append(scopeReasons, s.Reasons...)
 		// A changed shared project that fills the selection with its
 		// dependents is said, with the slice's base when the run measured
-		// from further back (T253, L1721).
+		// from further back (T253, L1721): never a base the given one
+		// descends from, which would select more (L1728).
 		for _, span := range dependentSpans(s.Selected) {
-			n := fmt.Sprintf("the selection spans the %d projects that depend on %s (%s), which changed since %s", len(span.dependents), span.project, listShort(span.dependents), sinceShown)
+			n := fmt.Sprintf("%s, which changed since %s, brings %d projects into the selection only as its dependents (%s)", span.project, sinceShown, len(span.dependents), listShort(span.dependents))
 			if base != nil {
-				if start, ok := ldd.SliceBase(top, change); ok && start != revParse(top, *base) {
+				if start, ok := ldd.SliceBase(root, change); ok && !isAncestor(top, start, revParse(top, *base)) {
 					n += "; a slice's run measures from the commit the slice started from: `--affected " + start[:min(12, len(start))] + "`"
 				}
 			}
@@ -1276,13 +1277,20 @@ func unitSince(root, top, change, workingTree string) (m measured, note string) 
 	if last := execution.LastPassOf(root, change); last != nil {
 		if files, outside, ok := execution.ChangedBetween(root, last.WorkingTree, workingTree); ok {
 			m.files, m.outside, m.since, m.shown = files, outside, last.WorkingTree, "the change's last passing run"
-			return m, unit + "what changed since the change's last passing run (" + last.Timestamp + ") is selected; a slice's close takes `--affected <base>`"
+			// A pass older than the slice's start selects what earlier
+			// slices changed too: said, with the narrower base (L1728).
+			past := ""
+			if start, ok := ldd.SliceBase(root, change); ok && reachesPast(root, files, start) {
+				short := start[:min(12, len(start))]
+				past = ", which reaches back past the commit the slice in progress started from (" + short + "): `--affected " + short + "` selects only what this slice changed"
+			}
+			return m, unit + "what changed since the change's last passing run (" + last.Timestamp + ") is selected" + past + "; a slice's close takes `--affected <base>`"
 		}
 		why = "the tree of the change's last passing run is no longer in git"
 	}
 	from := "the change's base (" + label + ")"
 	m.since, m.shown = label, "the change's base, "+label
-	if start, ok := ldd.SliceBase(top, change); ok && start != commit {
+	if start, ok := ldd.SliceBase(root, change); ok && start != commit {
 		short := start[:min(12, len(start))]
 		commit, m.commit = start, start
 		m.since, m.shown = start, "the commit the slice in progress started from, "+short
@@ -1347,6 +1355,26 @@ func dependentSpans(selected []execution.Selected) []span {
 		}
 	}
 	return out
+}
+
+// reachesPast is whether files, what changed since a passing run, hold a
+// project file that did not change since the commit start: the run would
+// select more than what changed since start. The change's own record is
+// left out (layout.Ignored).
+func reachesPast(root string, files []string, start string) bool {
+	since, _, msg := execution.ChangedSince(root, start)
+	if msg != "" {
+		return false
+	}
+	return slices.ContainsFunc(files, func(f string) bool {
+		return !layout.For(root).Ignored(f) && !slices.Contains(since, f)
+	})
+}
+
+// isAncestor is whether the commit a is b or an ancestor of it in the
+// repository at top: measuring from a selects at least what b does.
+func isAncestor(top, a, b string) bool {
+	return project.ReadGitCmd(top, "merge-base", "--is-ancestor", a, b).Run() == nil
 }
 
 // revParse is the commit ref names in the repository at top, or ref itself

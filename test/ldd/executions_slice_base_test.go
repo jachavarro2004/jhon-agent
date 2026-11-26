@@ -91,15 +91,16 @@ func TestExecutionsBaselessAffectedFallsBackToTheChangesBase(t *testing.T) {
 }
 
 // T253: a selection a changed shared project fills with its dependents
-// says so, even from the right base; a run that measured from further back
-// than the slice's start (the default branch) names the slice's base.
+// says so, counting the projects it brought in, even from the right base; a
+// run that measured from further back than the slice's start (the default
+// branch) names the slice's base, and only then.
 func TestExecutionsSaysWhenASharedProjectDragsItsDependentsIn(t *testing.T) {
 	t.Parallel()
 	root, slice2 := slicedWorkspace(t)
 	r := jhonGit(t, root, "executions", "run", "c1", "--affected", "main", "--dry-run", "--json")
 	equal(t, r.Code, 0, r.Out())
 	notes := strings.Join(notesOf(t, r.Stdout), "\n")
-	match(t, notes, `(?m)^`+regexp.QuoteMeta("the selection spans the 2 projects that depend on lib (app, tool), which changed since main; a slice's run measures from the commit the slice started from: `--affected "+slice2[:12]+"`")+`$`)
+	match(t, notes, `(?m)^`+regexp.QuoteMeta("lib, which changed since main, brings 2 projects into the selection only as its dependents (app, tool); a slice's run measures from the commit the slice started from: `--affected "+slice2[:12]+"`")+`$`)
 
 	// From the slice's own base, lib changed in this slice: said, with no
 	// other base to name.
@@ -107,12 +108,49 @@ func TestExecutionsSaysWhenASharedProjectDragsItsDependentsIn(t *testing.T) {
 	r = jhonGit(t, root, "executions", "run", "c1", "--affected", slice2, "--dry-run", "--json")
 	equal(t, r.Code, 0, r.Out())
 	notes = strings.Join(notesOf(t, r.Stdout), "\n")
-	match(t, notes, `(?m)^`+regexp.QuoteMeta("the selection spans the 2 projects that depend on lib (app, tool), which changed since "+slice2)+`$`)
+	match(t, notes, `(?m)^`+regexp.QuoteMeta("lib, which changed since "+slice2+", brings 2 projects into the selection only as its dependents (app, tool)")+`$`)
+
+	// A base past the slice's start is never told to measure from the
+	// slice's start, which would select more (L1728 B2).
+	support.Git(t, root, "commit", "-qam", "slice 3, part 1")
+	support.Write(t, root, map[string]string{"lib/index.js": "module.exports = 7;\n"})
+	r = jhonGit(t, root, "executions", "run", "c1", "--affected", "HEAD", "--dry-run", "--json")
+	equal(t, r.Code, 0, r.Out())
+	notes = strings.Join(notesOf(t, r.Stdout), "\n")
+	match(t, notes, `(?m)^`+regexp.QuoteMeta("lib, which changed since HEAD, brings 2 projects into the selection only as its dependents (app, tool)")+`$`)
+	noMatch(t, notes, `measures from the commit the slice started from`)
 
 	// One dependent is no span.
 	one := nodeWorkspace(t, map[string]string{"tool/package.json": `{"name":"tool"}`})
 	support.Write(t, one, map[string]string{"lib/index.js": "module.exports = 3;\n"})
 	r = jhonGit(t, one, "executions", "run", "c1", "--affected", "base", "--dry-run", "--json")
 	equal(t, r.Code, 0, r.Out())
-	noMatch(t, strings.Join(notesOf(t, r.Stdout), "\n"), `spans`)
+	noMatch(t, strings.Join(notesOf(t, r.Stdout), "\n"), `brings`)
+}
+
+// T253 (L1728): a unit's run whose last passing run is older than the
+// slice's start selects more than the slice changed: said, with the slice's
+// base as the narrower run.
+func TestExecutionsBaselessAffectedSaysAPassOlderThanTheSliceIsWider(t *testing.T) {
+	t.Parallel()
+	root := nodeWorkspace(t, map[string]string{"openspec/changes/c1/tasks.md": threeSlices(0)})
+	support.Git(t, root, "checkout", "-q", "-b", "feat")
+	support.Write(t, root, map[string]string{"app/index.js": "require('lib'); // 1\n"})
+	equal(t, jhonGit(t, root, "executions", "run", "c1", "--affected", "--json").Code, 0, "a pass before slice 1 closed")
+	support.Write(t, root, map[string]string{"lib/index.js": "module.exports = 3;\n", "openspec/changes/c1/tasks.md": threeSlices(1)})
+	support.Git(t, root, "commit", "-qam", "slice 1")
+	support.Write(t, root, map[string]string{"other/index.js": "module.exports = 4;\n", "openspec/changes/c1/tasks.md": threeSlices(2)})
+	support.Git(t, root, "commit", "-qam", "slice 2")
+	slice2 := strings.TrimSpace(support.Git(t, root, "rev-parse", "HEAD"))
+	support.Write(t, root, map[string]string{"other/index.js": "module.exports = 5;\n"})
+	r := jhonGit(t, root, "executions", "run", "c1", "--affected", "--dry-run", "--json")
+	equal(t, r.Code, 0, r.Out())
+	match(t, strings.Join(notesOf(t, r.Stdout), "\n"), `(?m)^a unit's run \(--affected with no base\): what changed since the change's last passing run \([^)]+\) is selected, which reaches back past the commit the slice in progress started from \(`+slice2[:12]+`\): `+"`--affected "+slice2[:12]+"`"+` selects only what this slice changed; a slice's close takes `+"`--affected <base>`"+`$`)
+
+	// A pass inside the slice is narrower: nothing to say.
+	equal(t, jhonGit(t, root, "executions", "run", "c1", "--affected", "--json").Code, 0)
+	support.Write(t, root, map[string]string{"other/index.js": "module.exports = 6;\n"})
+	r = jhonGit(t, root, "executions", "run", "c1", "--affected", "--dry-run", "--json")
+	equal(t, r.Code, 0, r.Out())
+	noMatch(t, strings.Join(notesOf(t, r.Stdout), "\n"), `reaches back`)
 }

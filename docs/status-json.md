@@ -117,11 +117,15 @@ it (`<record>.<pid>-<n>.run`), which replaces the record in one rename only when
 pytest ran to its end (exit 0 or 1); a run cut, interrupted or failing
 inside pytest leaves the record as it was, and of two runs at once the last
 to finish wins (a record of other code only makes pytest-testmon select
-more, never less). The record is 0644 whichever file it came from. A copy
-or first-run file a killed jhon left beside the records is swept by the
-next run when its process is gone or it is over a day old. With no record (or one holding no fingerprints) an
+more, never less). The record is 0644 whichever file it came from. A run
+holds a lock on `<file>.lock` beside each file of its own while it runs;
+the next run sweeps a copy or first-run file whose lock nobody holds (a
+killed jhon's, the kernel having let it go), never one whose lock is held,
+whatever its age or the pid in its name (a sandboxed jhon, in its own pid
+namespace, sees the lock as a host run does), and a file with no lock (a
+jhon's from before) only once it is over a day old. With no record (or one holding no fingerprints) an
 affected run runs the project's whole test command once with
-`--testmon-noselect`, into `<record>.<pid>.building`, renamed to the record
+`--testmon-noselect`, into `<record>.<pid>-<n>.building`, renamed to the record
 only when pytest ran to its end; the dry run and the run name each such
 project with how many test functions its test modules define, and in
 `--json` its `projects[]` entry carries `first_run: {record, tests,

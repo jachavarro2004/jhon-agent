@@ -570,7 +570,7 @@ func TestExecutionsAffectedRunsPytestUnderTestmon(t *testing.T) {
 	equal(t, lib(), "whole 0")
 
 	// No record: every test runs once, collecting it (executions_unit_test.go).
-	match(t, command("--affected", "base"), `^mkdir -p '[^']+/jhon/testmon' && TESTMON_DATAFILE='[^']+\.db\.[0-9]+\.building' uv run --with pytest-testmon --extra dev pytest --testmon-noselect --rootdir=`)
+	match(t, command("--affected", "base"), `^mkdir -p '[^']+/jhon/testmon' && TESTMON_DATAFILE='[^']+\.db\.[0-9]+-[0-9]+\.building' uv run --with pytest-testmon --extra dev pytest --testmon-noselect --rootdir=`)
 	equal(t, lib("--affected", "base"), "whole 0")
 	support.Write(t, root, map[string]string{"lib/tests/test_util.py": "def test_x(): pass\n"})
 	notes := strings.Join(run("--affected", "base").Notes, "\n")
