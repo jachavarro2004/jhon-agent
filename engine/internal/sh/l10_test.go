@@ -16,6 +16,7 @@ func TestSSHGrammar(t *testing.T) {
 		`ssh -qCo 'ProxyCommand a'`:                                  {"a"},
 		`ssh -o '"ProxyCommand"=a'`:                                  {"a"},
 		`ssh -o "'proxycommand' a"`:                                  {"a"},
+		`ssh -o 'Proxy"Command"=a'`:                                  {"a"}, // T228 L15: ssh reads a keyword ending in quotes
 		"ssh -o 'PROXYCOMMAND\ta'":                                   {"a"},
 		`ssh -p 22 -i k -o LocalCommand=b -o PermitLocalCommand=yes`: {"b"},
 		`ssh host -o KnownHostsCommand=c`:                            {"c"},
@@ -34,7 +35,7 @@ func TestSSHGrammar(t *testing.T) {
 	}
 	// A word that names a command option outside the grammar's reading.
 	for _, line := range []string{`ssh -l proxycommand host`, `ssh -o SetEnv=X=localcommand`, `ssh host echo KnownHostsCommand`,
-		`ssh -o 'Proxy"Command"=a'`, `ssh -o PermitLocalCommand=localcommand`, `ssh -- -o ProxyCommand=a`} {
+		`ssh -o PermitLocalCommand=localcommand`, `ssh -- -o ProxyCommand=a`} {
 		cmds, _ := Parse(line)
 		if _, err := SSHCommands(cmds[0].Words); !errors.As(err, new(*Unreadable)) {
 			t.Errorf("SSHCommands(%q) reads it: %v", line, err)
