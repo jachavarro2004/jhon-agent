@@ -106,9 +106,12 @@ const gitListingLimit = 4 << 20
 //     no repository (gh's, a deploy tool's) has none, when its listing
 //     shows no repository scope and Jhon's own reader finds no `.git` entry
 //     there or above it (project.ReadRepo, T250 L43b);
-//   - for a git pull, the work tree `git rev-parse --show-toplevel` names
-//     holds no .gitattributes that is not a regular file, which git would
-//     wait on (sandbox.WorkTreeProblem, T250 L43a).
+//   - for a git pull, and a gh pr merge that deletes the branch
+//     (sandbox.PullFolders), the work tree `git rev-parse --show-toplevel`
+//     names holds no .gitattributes or .gitignore that is not a regular
+//     file, which git would wait on (sandbox.WorkTreeProblem, T250 L43a);
+//     a folder in no repository (git fails there, and Jhon's reader finds
+//     no `.git`) has no work tree to walk.
 //
 // A listing or a rev-parse that fails, times out or is too long is a
 // problem too. With no git on PATH the line can run none, and needs no
@@ -187,6 +190,12 @@ func repositoryGitProblem(in sandbox.Input, line string, gate [][2]string, top s
 	for _, dir := range sandbox.PullFolders(line, in.Cwd) {
 		top, err := run("-C", dir, "rev-parse", "--show-toplevel")
 		if err != nil {
+			// A folder in no repository has no work tree to check out in
+			// (gh pr merge --repo run elsewhere); one where Jhon's own
+			// reader finds a `.git` has, as for the git folders (L43b).
+			if project.ReadRepo(dir).Top == "" {
+				continue
+			}
 			return owner("git cannot name the work tree in " + dir + " (" + err.Error() + ")")
 		}
 		name, ok := strings.CutSuffix(top, "\n")
