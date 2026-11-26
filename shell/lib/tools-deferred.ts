@@ -124,13 +124,26 @@ interface ToolsHost {
 const text = (t: string) => ({ content: [{ type: "text", text: t }], details: {} });
 
 /**
- * T192 S4: the answer for requested tools the session already has. On
- * claude-bridge, which reads the tool list only when a prompt starts, a tool
- * that joined mid-prompt reaches the model at the next prompt.
+ * T258: on claude-bridge, which reads the tool list only when a prompt
+ * starts, a tool that joined mid-prompt is available, but reaches the model
+ * only from the next prompt; said so the model does not call it unavailable.
+ * Empty for any other provider.
  */
+function nextPrompt(names: readonly string[], provider: string | undefined): string {
+	if (provider !== CLAUDE_BRIDGE) return "";
+	const one = names.length === 1;
+	return ` On claude-bridge the tool list is read when a prompt starts, so ${one ? "it is" : "they are"} available but ${one ? "reaches" : "reach"} the model only from the next prompt: ${one ? "its" : "their"} absence from this prompt's tools does not make ${one ? "it" : "them"} unavailable.`;
+}
+
+/** T192 S4: the answer for requested tools the session already has; on claude-bridge, that they reach the model from the next prompt (T258). */
 export function alreadyEnabled(names: readonly string[], provider: string | undefined): string {
-	const next = provider === CLAUDE_BRIDGE ? ` On claude-bridge the tool list is read when a prompt starts, so ${names.length === 1 ? "it reaches" : "they reach"} the model at the next prompt.` : "";
-	return `Already enabled: ${names.join(", ")}.${next}`;
+	return `Already enabled: ${names.join(", ")}.${nextPrompt(names, provider)}`;
+}
+
+/** The answer for tools tools_more just enabled: callable from the next step, or on claude-bridge from the next prompt (T258). */
+function justEnabled(names: readonly string[], provider: string | undefined): string {
+	const next = nextPrompt(names, provider);
+	return next ? `Enabled: ${names.join(", ")}.${next}` : `Enabled: ${names.join(", ")} (callable from the next step on).`;
 }
 
 /** tools_more: lists the deferred tools, or enables named ones for the rest of the session. */
@@ -158,7 +171,7 @@ export function toolsMoreTool(pi: ToolsHost, policy: ToolPolicy) {
 				pi.setActiveTools?.([...active, ...ok.filter((n) => !active.includes(n))]);
 				pi.appendEntry?.(TOOLS_MORE_ENTRY, { names: ok });
 			}
-			return text([ok.length ? `Enabled: ${ok.join(", ")} (callable from the next step on).` : "", has.length ? alreadyEnabled(has, ctx?.model?.provider) : "", bad.length ? `Unknown or not deferred: ${bad.join(", ")}.` : ""].filter(Boolean).join("\n"));
+			return text([ok.length ? justEnabled(ok, ctx?.model?.provider) : "", has.length ? alreadyEnabled(has, ctx?.model?.provider) : "", bad.length ? `Unknown or not deferred: ${bad.join(", ")}.` : ""].filter(Boolean).join("\n"));
 		},
 	};
 }

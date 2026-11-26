@@ -66,6 +66,10 @@ if (args[0] === "sandbox" && args[1] === "run") {
 process.exit(2);
 `;
 
+// T258: the mode is pinned when a session starts; a refusal says so, and what the setting says now when it differs.
+const PINNED_NO_REPOSITORY = "jhon: this session pinned sandbox.mode on when it started, and this session is in no git repository, so there is no project to pin and the command is refused, never run unpinned. Fix: start the session inside a repository (the owner may run `git init` here and start it again)";
+const PINNED_CANNOT = "jhon: this session pinned sandbox.mode on when it started, and the sandbox cannot run here: bubblewrap is not installed; the command is refused, never run unsandboxed in silence. Fix: install bubblewrap (pacman -S bubblewrap)";
+
 type Call = { args: string[]; cwd: string };
 interface Fake { bin: string; calls(): Call[]; runs(): Call[]; asks(): Call[]; set(status: Status | { fails: string }): void }
 
@@ -289,7 +293,7 @@ function suite(): void {
 		const out = scratch(t, "jhon-sbx-jobs-");
 		registerBackgroundTasks(pi as any, { env: {}, outputDir: () => out, sandbox: sandbox.jobOperations });
 		await fire("session_start", {}, ctxAt(d));
-		const refusal = "jhon: sandbox.mode is on and the sandbox cannot run here: bubblewrap is not installed; the command is refused, never run unsandboxed in silence. Fix: install bubblewrap (pacman -S bubblewrap)";
+		const refusal = PINNED_CANNOT;
 		for (const tool of ["bash", "bash_background", "monitor"]) assert.equal(await sandbox.gate(tool, d), refusal, tool);
 		// Tools that run no command of the model's are not its business.
 		for (const tool of ["read", "write", "task_stop", "m365_read"]) assert.equal(await sandbox.gate(tool, d), undefined, tool);
@@ -320,7 +324,7 @@ function suite(): void {
 			const host = fakePi();
 			const refused = wireSandbox(host.pi, { jhon: other.bin });
 			await host.fire("session_start", {}, ctxAt(d));
-			assert.match((await refused.gate("bash", d)) ?? "", /^jhon: sandbox\.mode is on and the sandbox cannot run here: bubblewrap did not start a sandbox within 5s/);
+			assert.match((await refused.gate("bash", d)) ?? "", /^jhon: this session pinned sandbox\.mode on when it started, and the sandbox cannot run here: bubblewrap did not start a sandbox within 5s/);
 			assert.equal(host.tools.has("bash"), false);
 			assert.deepEqual(other.runs(), []);
 		}
@@ -346,6 +350,74 @@ function suite(): void {
 		const none = wireSandbox(fakePi().pi, { jhon: undefined });
 		assert.equal(await none.gate("bash", d), undefined);
 		assert.equal(none.jobOperations(undefined), undefined);
+		assert.deepEqual(fake.runs(), []);
+	});
+
+	const PINNED_NOW_OFF_NO_REPOSITORY = "jhon: this session pinned sandbox.mode on when it started (the setting says off now, which applies only to a session opened after the change), and this session is in no git repository, so there is no project to pin and the command is refused, never run unpinned. Fix: reopen the session for sandbox.mode off to apply, or start the session inside a repository (the owner may run `git init` here and start it again)";
+
+	test("T258: a refusal names the session's pin, the setting now when it differs and to reopen the session; the setting is read again only for a refusal, and never lets the command run", async (t) => {
+		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);
+		const bare = scratch(t, "jhon-sbx-bare-");
+		const { pi, tools, fire } = fakePi();
+		const sandbox = wireSandbox(pi, { jhon: fake.bin, env: {} });
+		await fire("session_start", {}, ctxAt(bare));
+		// The owner sets sandbox.mode off mid-session: the pin still refuses, and says why.
+		fake.set(OFF);
+		for (const tool of ["bash", "bash_background", "monitor"]) assert.equal(await sandbox.gate(tool, bare), PINNED_NOW_OFF_NO_REPOSITORY, tool);
+		assert.deepEqual(await sandbox.startArgv("git", ["status"], bare), { refuse: PINNED_NOW_OFF_NO_REPOSITORY }, "inspect");
+		assert.throws(() => sandbox.jobOperations(undefined), { message: PINNED_NOW_OFF_NO_REPOSITORY }, "a job past the gate: the line the gate just gave");
+		assert.deepEqual(fake.asks().map((c) => c.args), Array(5).fill(["sandbox", "status", "--json"]), "asked at the start, then once per refusal built");
+		assert.equal(tools.has("bash"), false, "the read did not register a bash");
+		// The setting still says on: the pin is named, nothing more.
+		fake.set(ON);
+		assert.equal(await sandbox.gate("bash", bare), PINNED_NO_REPOSITORY);
+		// The setting cannot be read: today's line.
+		fake.set({ fails: "settings.toml is not readable" });
+		const NO_REPOSITORY_TODAY = "jhon: sandbox.mode is on and this session is in no git repository, so there is no project to pin and the command is refused, never run unpinned. Fix: start the session inside a repository (the owner may run `git init` here and start it again)";
+		assert.equal(await sandbox.gate("bash", bare), NO_REPOSITORY_TODAY);
+		assert.deepEqual(fake.runs(), [], "nothing ran");
+		// A sandbox that cannot run: its reason, and its own fix after the reopen.
+		const cannot = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), CANNOT);
+		const d = project(t);
+		const host = fakePi();
+		const wiring = wireSandbox(host.pi, { jhon: cannot.bin, env: {} });
+		await host.fire("session_start", {}, ctxAt(d));
+		cannot.set(OFF);
+		assert.equal(await wiring.gate("bash", d), "jhon: this session pinned sandbox.mode on when it started (the setting says off now, which applies only to a session opened after the change), and the sandbox cannot run here: bubblewrap is not installed; the command is refused, never run unsandboxed in silence. Fix: reopen the session for sandbox.mode off to apply, or install bubblewrap (pacman -S bubblewrap)");
+		assert.deepEqual(cannot.runs(), []);
+		// A command that may run reads nothing again.
+		const ok = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);
+		const passing = wireSandbox(fakePi().pi, { jhon: ok.bin, env: {} });
+		await passing.start(d);
+		for (const tool of ["bash", "bash_background", "monitor", "bash"]) assert.equal(await passing.gate(tool, d), undefined, tool);
+		assert.equal(ok.asks().length, 1);
+	});
+
+	test("T258: a session in no git repository says once, at its start, that commands will be refused and the two ways out", async (t) => {
+		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);
+		const bare = scratch(t, "jhon-sbx-bare-"), d = project(t);
+		const NOTE = "Jhon: this session is in no git repository, so the sandbox (sandbox.mode on) has no project to pin: every command the agent runs (bash, bash_background, monitor, inspect) will be refused. To run them, open the session inside a repository, or set sandbox.mode off (`jhon settings set sandbox.mode off`) and reopen the session.";
+		const session = async (status: Status, cwd: string, env: NodeJS.ProcessEnv = {}) => {
+			fake.set(status);
+			const notes: unknown[] = [];
+			const { pi, fire } = fakePi();
+			const sandbox = wireSandbox(pi, { jhon: fake.bin, env });
+			const ctx = { ...ctxAt(cwd), ui: { setStatus: () => {}, notify: (text: string, level: string) => notes.push([text, level]) } };
+			await fire("session_start", {}, ctx);
+			return { notes, sandbox };
+		};
+		const bareOn = await session(ON, bare);
+		assert.deepEqual(bareOn.notes, [[NOTE, "warning"]]);
+		// Said once: the refusals that follow add no note.
+		await bareOn.sandbox.gate("bash", bare);
+		await bareOn.sandbox.gate("monitor", bare);
+		assert.equal(bareOn.notes.length, 1);
+		assert.deepEqual((await session(TIMED_OUT, bare)).notes, [[NOTE, "warning"]], "a probe that timed out pins as on");
+		// Any other session says nothing at its start.
+		assert.deepEqual((await session(ON, d)).notes, [], "in a repository");
+		assert.deepEqual((await session(OFF, bare)).notes, [], "the mode off");
+		assert.deepEqual((await session(CANNOT, bare)).notes, [], "a sandbox that cannot run: its reason is the status bar's");
+		assert.deepEqual((await session(ON, bare, { JHON_PI_CHILD: "1" })).notes, [], "a sub-agent: its parent said it");
 		assert.deepEqual(fake.runs(), []);
 	});
 
@@ -384,7 +456,7 @@ function suite(): void {
 			assert.deepEqual(await fire("tool_call", { toolName, toolCallId: "c1", input: { command: "echo GUARD-REFUSES" } }, ctxAt(d)), { block: true, reason: "safety-guard: refused: GUARD-REFUSES" }, toolName);
 			// Let through by the guards: the sandbox's refusal.
 			const r = await fire("tool_call", { toolName, toolCallId: "c2", input: { command: "echo fine" } }, ctxAt(d));
-			assert.match(r?.reason ?? "", /^jhon: sandbox\.mode is on and the sandbox cannot run here: bubblewrap is not installed; .* Fix: install bubblewrap/, toolName);
+			assert.match(r?.reason ?? "", /^jhon: this session pinned sandbox\.mode on when it started, and the sandbox cannot run here: bubblewrap is not installed; .* Fix: install bubblewrap/, toolName);
 		}
 		// The guard read the command as the model wrote it, never a wrapped one.
 		assert.equal(fake.calls().some((c) => c.args[0] === "hook" && c.args.includes("sandbox")), false);
@@ -434,7 +506,7 @@ function suite(): void {
 		const d = project(t);
 		const made = join(d, "made-by-inspect");
 		for (const [status, refusal] of [
-			[CANNOT, "jhon: sandbox.mode is on and the sandbox cannot run here: bubblewrap is not installed; the command is refused, never run unsandboxed in silence. Fix: install bubblewrap (pacman -S bubblewrap)"],
+			[CANNOT, PINNED_CANNOT],
 			[{ fails: "settings.toml: broken" }, "jhon: `jhon sandbox status --json` gave no answer (jhon sandbox: settings.toml: broken), so whether this command runs in the sandbox is unknown; the command is refused, never run unsandboxed in silence; run `jhon doctor`"],
 		] as const) {
 			const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);
@@ -738,7 +810,7 @@ function childSuite(): void {
 		assert.deepEqual(offEnv, {});
 	});
 
-	const NO_REPOSITORY = "jhon: sandbox.mode is on and this session is in no git repository, so there is no project to pin and the command is refused, never run unpinned. Fix: start the session inside a repository (the owner may run `git init` here and start it again)";
+	const NO_REPOSITORY = PINNED_NO_REPOSITORY;
 
 	test("G1: a session that ends with no pin takes the earlier session's project out of the environment, and a child started from it is refused", { skip: !bash && "needs /bin/bash" }, async (t) => {
 		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);
@@ -762,13 +834,14 @@ function childSuite(): void {
 		const child = fakePi();
 		const childWiring = wireSandbox(child.pi, { jhon: fake.bin, env: childEnvironment });
 		await child.fire("session_start", {}, ctxAt(bare));
-		assert.deepEqual(fake.asks()[2], { args: ["sandbox", "status", "--json"], cwd: bare });
+		// T258: the parent's two refusals above each asked again, to name the pin; then the child's start.
+		assert.deepEqual(fake.asks().slice(2), Array(3).fill({ args: ["sandbox", "status", "--json"], cwd: bare }));
 		assert.equal(await childWiring.gate("bash", bare), NO_REPOSITORY);
 		assert.equal(child.tools.has("bash"), false, "the child registered no sandboxed bash");
 		assert.deepEqual(await childWiring.startArgv("git", ["status"], bare), { refuse: NO_REPOSITORY });
 		assert.throws(() => childWiring.jobOperations(undefined), { message: NO_REPOSITORY });
 		assert.deepEqual(fake.runs(), [], "nothing ran");
-		assert.equal(fake.asks().length, 3);
+		assert.equal(fake.asks().length, 7, "each session start once, and each refusal given once more (T258)");
 	});
 
 	test("G1: every session start that ends with no pin clears it: the status cannot be read, the sandbox cannot run here, the mode is off", async (t) => {
@@ -779,8 +852,8 @@ function childSuite(): void {
 		const wiring = wireSandbox(top.pi, { jhon: fake.bin, env });
 		const shapes: [string, Status | { fails: string }, string | undefined][] = [
 			["the status cannot be read", { fails: "cannot read the settings" }, "jhon: `jhon sandbox status --json` gave no answer (jhon sandbox: cannot read the settings), so whether this command runs in the sandbox is unknown; the command is refused, never run unsandboxed in silence; run `jhon doctor`"],
-			["the sandbox cannot run here", CANNOT, "jhon: sandbox.mode is on and the sandbox cannot run here: bubblewrap is not installed; the command is refused, never run unsandboxed in silence. Fix: install bubblewrap (pacman -S bubblewrap)"],
-			["the status names no project", { mode: "on", can_run: true, reason: "", fix: "" }, "jhon: sandbox.mode is on and `jhon sandbox status --json` names no project to pin, so the command is refused, never run unpinned. Fix: run `jhon sync`"],
+			["the sandbox cannot run here", CANNOT, PINNED_CANNOT],
+			["the status names no project", { mode: "on", can_run: true, reason: "", fix: "" }, "jhon: this session pinned sandbox.mode on when it started, and `jhon sandbox status --json` names no project to pin, so the command is refused, never run unpinned. Fix: run `jhon sync`"],
 			["the mode is off", OFF, undefined],
 		];
 		for (const [name, status, refusal] of shapes) {

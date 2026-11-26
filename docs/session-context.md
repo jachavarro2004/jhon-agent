@@ -109,9 +109,13 @@ starts, so a tool held back at the start would stay out of reach for the
 rest of that prompt.
 
 `tools_more` asked for a tool the session already has answers
-`Already enabled: <names>.`; on claude-bridge it adds `On claude-bridge the
-tool list is read when a prompt starts, so it reaches the model at the next
-prompt.`
+`Already enabled: <names>.`, and for a tool it enables
+`Enabled: <names> (callable from the next step on).`. On claude-bridge a
+tool enabled during a turn reaches the model only at the next prompt, so
+both answers end with `On claude-bridge the tool list is read when a prompt
+starts, so it is available but reaches the model only from the next prompt:
+its absence from this prompt's tools does not make it unavailable.` (`they
+are … them` for several), and the enabled one drops the next-step note.
 
 These stay available too: `todo`, `ask_user`, `inspect` and codegraph. A lean
 session gets no todo start rule and no start nudge, and the todo tool's
