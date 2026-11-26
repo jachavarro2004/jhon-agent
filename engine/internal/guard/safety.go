@@ -26,13 +26,16 @@ type Ctx struct {
 	// line is `rm $(mktemp -d)` (T64c).
 	scratch  map[string]string
 	mktempRm bool
-	// trapAction is the action of the line's one cleanup trap (trapExit,
-	// T228 L2), and trapScratch the scratch folders it removes.
-	trapAction  string
-	trapScratch map[string]string
+	// trapWord is the action word of the line's one cleanup trap as the
+	// reader reads it, trapAction the action judged in its place and
+	// trapScratch the scratch folders it removes (trapExit, T228 L2, L5).
+	trapWord, trapAction string
+	trapScratch          map[string]string
 	// targets, when set, collects each program the walk judges, with the
 	// root it acts on (Targets, T140).
 	targets *[]Target
+	// noClass turns the class rule off while it judges a candidate (classFinding).
+	noClass bool
 }
 
 // State is what a command line changes as it is read: the directory ("" when
@@ -192,7 +195,7 @@ func unreadableAsk(err error) Finding {
 // Classify is the findings of a command line run in ctx.Cwd.
 func Classify(command string, ctx *Ctx) []Finding {
 	ctx.scratch, ctx.mktempRm = scratchVars(command, ctx), mktempRm(command)
-	ctx.trapAction, ctx.trapScratch = trapExit(command, ctx)
+	ctx.trapWord, ctx.trapAction, ctx.trapScratch = trapExit(command, ctx)
 	st := &State{Dir: ctx.Cwd, Links: &Links{}}
 	out := classify(command, ctx, 0, st)
 	// An rm of a mktemp -d folder assigned after `&&` names the safe form (scratchHint, T224 L5).
@@ -204,7 +207,7 @@ func Classify(command string, ctx *Ctx) []Finding {
 		}
 	}
 	ctx.scratch, ctx.mktempRm = nil, false
-	ctx.trapAction, ctx.trapScratch = "", nil
+	ctx.trapWord, ctx.trapAction, ctx.trapScratch = "", "", nil
 	// A file the write reader finds the line writing (curl -o, go build -o) is
 	// refused when it is a credentials file, as judgeWrite's targets are (L1368).
 	if !slices.ContainsFunc(out, func(f Finding) bool { return f.Level == "deny" && strings.Contains(f.Why, "which the owner handles") }) {
@@ -490,6 +493,10 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	// zsh's GLOB_SUBST turned on (T228 L2).
 	if l := sh.GlobSubstOn(name, args); l != "" {
 		out = append(out, deny(l, globSubstWhy))
+	}
+	// A program the guard has no reading of, given a command it would refuse or ask (T228 L6).
+	if f := classFinding(p, name, args, ctx, vars, st, depth); f != nil {
+		out = append(out, *f)
 	}
 	// xargs deleting or overwriting operands the guard cannot see (`find … |
 	// xargs rm -rf`) is the destructive core: asked, as in v0.3.7.
@@ -1332,7 +1339,7 @@ func judgeCommand(c *sh.Command, ctx *Ctx, vars map[string]string, st *State, de
 	// The line's cleanup trap removes its scratch folders as a removal at
 	// the line's end would (trapExit, T228 L2).
 	if depth == 0 && len(c.Scope) == 0 && ctx.trapAction != "" && at(c.Words, 0) == "trap" &&
-		(at(c.Words, 1) == ctx.trapAction || at(c.Words, 1) == "--" && at(c.Words, 2) == ctx.trapAction) {
+		(at(c.Words, 1) == ctx.trapWord || at(c.Words, 1) == "--" && at(c.Words, 2) == ctx.trapWord) {
 		scratch, action := ctx.scratch, ctx.trapAction
 		ctx.scratch, ctx.trapAction = ctx.trapScratch, ""
 		defer func() { ctx.scratch, ctx.trapAction = scratch, action }()

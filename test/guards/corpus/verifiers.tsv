@@ -189,14 +189,14 @@ safety-guard	Bash	"sh -c \"noglob rm -rf ~\""	refuse	none	T228	-	S1: noglob in a
 safety-guard	Bash	"noglob git push origin main"	ask	none	T228	-	S1: an outward command behind noglob is asked as bare
 safety-guard	Bash	"repeat 1 git push origin main"	ask	none	T228	-	S1: an outward command behind repeat is asked as bare
 safety-guard	Bash	"ls *(e:'rm -rf ~':)"	refuse	none	T228	-	S1: a zsh glob qualifier's e string runs in the shell
-safety-guard	Bash	"ls *(+cleanup)"	refuse	none	T228	-	S1: a zsh glob qualifier's +command runs in the shell
-safety-guard	Bash	"ls *(oe:'REPLY=x':)"	refuse	none	T228	-	S1: a zsh glob sort by an e string runs it
-safety-guard	Bash	"ls *(#qe:x:)"	refuse	none	T228	-	S1: a (#q) qualifier's e string runs in the shell
-safety-guard	Bash	"ls !(test.test)"	refuse	none	T228	-	S1: zsh reads !(test.test) as qualifiers t, e with delimiter s (code t.te), t
+safety-guard	Bash	"ls *(+cleanup)"	allow	none	T228	-	S1, L6: a zsh glob qualifier's +command runs in the shell, read as bare: cleanup removes nothing
+safety-guard	Bash	"ls *(oe:'REPLY=x':)"	allow	none	T228	-	S1, L6: a zsh glob sort by an e string runs it, read as bare: an assignment
+safety-guard	Bash	"ls *(#qe:x:)"	allow	none	T228	-	S1, L6: a (#q) qualifier's e string runs in the shell, read as bare: x removes nothing
+safety-guard	Bash	"ls !(test.test)"	allow	none	T228	-	S1, L6: zsh reads !(test.test) as qualifiers t, e with delimiter s (code t.te), t: t.te removes nothing
 safety-guard	Bash	"ls *($q)"	refuse	none	T228	-	S1: an expansion may supply a qualifier that runs code
 safety-guard	Bash	"g='*(e:x:)'; ls $~g"	refuse	none	T228	-	S1: zsh's $~g globs the value, qualifiers and all
-safety-guard	Bash	"for f in *(e:x:); do echo $f; done"	refuse	none	T228	-	S1: a qualifier's code in a loop's words
-safety-guard	Bash	"eval 'ls *(e:x:)'"	refuse	none	T228	-	S1: a qualifier's code in a string eval runs
+safety-guard	Bash	"for f in *(e:x:); do echo $f; done"	allow	none	T228	-	S1, L6: a qualifier's code in a loop's words, read as bare
+safety-guard	Bash	"eval 'ls *(e:x:)'"	allow	none	T228	-	S1, L6: a qualifier's code in a string eval runs, read as bare
 safety-guard	Bash	"ls @($(rm -rf ~)|x)"	refuse	none	T228	-	S1: a substitution inside an extended glob runs, unread before
 safety-guard	Bash	"ls !(`rm -rf ~`|y)"	refuse	none	T228	-	S1: a backquoted substitution inside an extended glob runs
 safety-guard	Bash	"setsid -f rm -rf ~"	refuse	none	T228	-	L2: setsid's command, read through its options
@@ -246,3 +246,55 @@ safety-guard	Bash	"alias ll='ls -l'"	allow	none	T228	-	L2: a harmless alias
 safety-guard	Bash	"setopt extendedglob"	allow	none	T228	-	L2: an option that is not GLOB_SUBST
 safety-guard	Bash	"emulate -L zsh"	allow	none	T228	-	L2: zsh emulation leaves GLOB_SUBST off
 safety-guard	Bash	"set -o pipefail"	allow	none	T228	-	L2: an option that is not GLOB_SUBST
+# T228 L5 (adversarial verify mwwypv34, odd/probes228) and L6 (the owner's class rule).
+safety-guard	Bash	"tmux send-keys -t x 'rm -rf ~' Enter"	ask	none	T228	-	L6: a program the guard has no reading of, given a removal among its words: unreadable
+safety-guard	Bash	"nix-shell --run 'rm -rf ~'"	ask	none	T228	-	L6: nix-shell runs its --run string: unreadable
+safety-guard	Bash	"conda run -n base rm -rf ~"	ask	none	T228	-	L6: conda run runs its words: unreadable
+safety-guard	Bash	"awk 'BEGIN{system(\"rm -rf ~\")}'"	ask	none	T228	-	L6: awk's system() inside its program text: unreadable
+safety-guard	Bash	"entr rm -rf ~"	ask	none	T228	-	L6: entr runs its words: unreadable
+safety-guard	Bash	"watchexec -- rm -rf ~"	ask	none	T228	-	L6: watchexec runs its words: unreadable
+safety-guard	Bash	"flatpak run --command=rm org.x.Y -rf ~"	ask	none	T228	-	L6: an option's value and the words after it: unreadable
+safety-guard	Bash	"vim -c '!rm -rf ~'"	ask	none	T228	-	L6: vim's ! runs a shell command: unreadable
+safety-guard	Bash	"screen -dm rm -rf ~"	ask	none	T228	-	L6: screen runs its words: unreadable
+safety-guard	Bash	"mise exec -- rm -rf ~"	ask	none	T228	-	L6: mise exec runs its words: unreadable
+safety-guard	Bash	"echo '* * * * * rm -rf ~' | crontab -"	refuse	none	T228	-	L5: crontab - installs its input, read as the commands cron runs
+safety-guard	Bash	"git -c alias.x='!rm -rf ~' x"	refuse	none	T228	-	L5: an alias given with -c and run as the subcommand
+safety-guard	Bash	"git bisect run rm -rf ~"	refuse	none	T228	-	L5: git bisect run's command
+safety-guard	Bash	"repeat 2 {rm -rf ~}"	refuse	none	T228	-	L5: zsh's brace group with no spaces after repeat
+safety-guard	Bash	"{rm -rf ~}"	refuse	none	T228	-	L5: zsh's brace group with no spaces as a command
+safety-guard	Bash	"noglob -- rm -rf ~"	refuse	none	T228	-	L5: a -- after a precommand modifier
+safety-guard	Bash	"a=($~g)"	refuse	none	T228	-	L5: zsh's $~ in an array assignment
+safety-guard	Bash	"for i in $~g; do :; done"	refuse	none	T228	-	L5: zsh's $~ in a loop's words
+safety-guard	Bash	"ls ${x:-*(e:'rm -rf ~':)}"	refuse	none	T228	-	L5: a qualifier's code in a parameter expansion's default word
+safety-guard	Bash	"nice --adjustment 5 rm -rf ~"	refuse	none	T228	-	L5: a wrapper's long option with a separate value
+safety-guard	Bash	"stdbuf --output L rm -rf ~"	refuse	none	T228	-	L5: a wrapper's long option with a separate value
+safety-guard	Bash	"env -vS'rm -rf ~'"	refuse	none	T228	-	L5: env -S in a cluster
+safety-guard	Bash	"env -a x rm -rf ~"	refuse	none	T228	-	L5: env -a takes a value
+safety-guard	Bash	"exec -la x rm -rf ~"	refuse	none	T228	-	L5: exec -a in a cluster takes a value
+safety-guard	Bash	"/usr/bin/time -o x -f %e rm -rf ~"	refuse	none	T228	-	L5: GNU time's -o and -f take a value
+safety-guard	Bash	"alias x='rm -rf'\nx ~"	refuse	none	T228	-	L5: an alias defined, then used on a later line
+safety-guard	Bash	"alias x=rm; x -rf ~"	refuse	none	T228	-	L5: an alias defined, then used (read on the same line too)
+safety-guard	Bash	"emulate csh"	refuse	none	T228	-	L5: csh emulation turns GLOB_SUBST on
+safety-guard	Bash	"typeset -g \"options[globsubst]=on\""	refuse	none	T228	-	L5: GLOB_SUBST through a quoted options table assignment
+safety-guard	Bash	"setopt $o"	refuse	none	T228	-	L5: an option the line computes may be GLOB_SUBST
+safety-guard	Bash	"d=$(mktemp -d)\ntrap 'rm -rf \"$d\"' EXIT\nls"	allow	none	T228	-	L5: the cleanup trap idiom, one command per line
+safety-guard	Bash	"set -e; d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; ls"	allow	none	T228	-	L5: the cleanup trap idiom after set -e
+safety-guard	Bash	"d=$(mktemp -d) || exit 1; trap 'rm -rf \"$d\"' EXIT; ls"	allow	none	T228	-	L5: the cleanup trap idiom after mktemp || exit
+safety-guard	Bash	"local d; d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; ls"	allow	none	T228	-	L5: the cleanup trap idiom with local d
+safety-guard	Bash	"readonly d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; ls"	allow	none	T228	-	L5: the cleanup trap idiom with readonly d
+safety-guard	Bash	"d=$(mktemp -d); trap \"rm -rf $d\" EXIT; ls"	allow	none	T228	-	L5: the cleanup trap idiom, double-quoted
+safety-guard	Bash	"export TMPDIR=$(mktemp -d); trap 'rm -rf \"$TMPDIR\"' EXIT; ls"	allow	none	T228	-	L5: the cleanup trap idiom with TMPDIR
+safety-guard	Bash	"d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; cd \"$d\" && ls"	allow	none	T228	-	L5: the cleanup trap idiom, then into the folder
+safety-guard	Bash	"d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; cp src/x \"$d\"/"	allow	none	T228	-	L5: the cleanup trap idiom, then a copy into the folder
+safety-guard	Bash	"d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; d=~"	refuse	none	T228	-	L5: the folder reassigned after the trap
+safety-guard	Bash	"d=$(mktemp -d); trap 'rm -rf \"$d\"/..' EXIT"	refuse	none	T228	-	L5: the trap removes the folder's parent
+safety-guard	Bash	"d=$(mktemp -d); trap 'rm -rf ${d:-~}' EXIT"	refuse	none	T228	-	L5: the trap's default word is the home folder
+safety-guard	Bash	"d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; trap 'rm -rf ~' INT"	refuse	none	T228	-	L5: a second trap
+safety-guard	Bash	"ls !(tests)"	allow	none	T228	-	L5, L6: bash's extended glob; zsh's e string t removes nothing
+safety-guard	Bash	"ls !(*.test.ts)"	allow	none	T228	-	L5, L6: bash's extended glob; zsh's e string t.t removes nothing
+safety-guard	Bash	"echo $~"	allow	none	T228	-	L5: $~ with no name is text
+safety-guard	Bash	"grep -rn 'rm -rf' ."	allow	none	T228	-	L6: grep never runs its arguments
+safety-guard	Bash	"echo \"rm -rf ~\""	allow	none	T228	-	L6: echo never runs its arguments
+safety-guard	Bash	"git log --grep=rm"	allow	none	T228	-	L6: git is read as git
+safety-guard	Bash	"pgrep -af \"nx run|git push\""	allow	none	T228	-	L6: pgrep never runs its pattern
+safety-guard	Bash	"sed -i 's/rm -rf ~//' x.sh"	allow	none	T228	-	L6: s/rm is no program word

@@ -31,6 +31,31 @@ func TestEnvChangeReadsWhatTheLineRuns(t *testing.T) {
 	}
 }
 
+// T228 L5: the verifier's lines the env-change check missed.
+func TestEnvChangeL5Gaps(t *testing.T) {
+	for _, line := range []string{
+		"nice --adjustment 5 env -i git status", "nice --adjustment=5 env -i git status", "stdbuf --output L env -i git status",
+		"env -a x env -i git status", "env --argv0 x env -i git status", "alias x=unset; x JHON_AGENT", "alias x=unset\nx JHON_AGENT",
+		"bash -ec 'unset JHON_AGENT'", "bash -lc 'unset JHON_AGENT'", "zsh -fc 'unset JHON_AGENT'", "xargs env -i git status",
+		"find . -exec env -i git status \\;", "flock /tmp/l env -i git status", "flock -c 'unset JHON_AGENT' /tmp/l",
+		"busybox env -i git status", "unset -m 'JHON_*'", "noglob unset -m 'JHON*'", "unset -m 'GIT_CONFIG_*'",
+		"env -vS'unset JHON_AGENT'", "exec -la x env -i git status", "/usr/bin/time -o x env -i git status",
+	} {
+		if envChange(line) == "" {
+			t.Errorf("%s: not found", line)
+		}
+	}
+	for _, line := range []string{
+		"nice --adjustment 5 git status", "bash -ec 'git status'", "xargs grep JHON_AGENT", "find . -exec grep JHON_AGENT {} \\;",
+		"flock /tmp/l git status", "busybox ls", "unset -m 'FOO*'", "alias x=ls\nx JHON_AGENT", "watch -n 1 -x env FOO=1 git status",
+		"setsid -f grep -r JHON_AGENT .", "repeat 2 printenv JHON_AGENT", "noglob echo JHON_AGENT",
+	} {
+		if why := envChange(line); why != "" {
+			t.Errorf("%s: refused: %s", line, why)
+		}
+	}
+}
+
 // T228 L2: zsh's precommand modifiers, repeat, external runners and the
 // strings a builtin runs later are read through the shared reader (sh.Unwrap),
 // so env -i, env -u and unset behind them are found as bare.

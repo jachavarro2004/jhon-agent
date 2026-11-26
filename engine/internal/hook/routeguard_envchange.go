@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"path"
 	"regexp"
 	"strings"
 
@@ -24,6 +25,9 @@ func envGuardedPrefix(p string) bool {
 	}
 	return false
 }
+
+// shellC is a shell's -c, alone or in a cluster of its options.
+var shellC = regexp.MustCompile(`^-[a-zA-Z]*c[a-zA-Z]*$`)
 
 var (
 	// indirectNames is `${!PREFIX@}` or `${!PREFIX*}`: every variable with that prefix.
@@ -132,7 +136,7 @@ func envCommand(words []string, depth int) string {
 	}
 	args := words[k+1:]
 	switch prog := sh.Base(words[k]); prog {
-	case "command", "builtin", "nohup", "time":
+	case "command", "builtin", "nohup":
 		if prog == "command" && len(args) > 0 && (args[0] == "-v" || args[0] == "-V") {
 			return ""
 		}
@@ -157,8 +161,19 @@ func envCommand(words []string, depth int) string {
 	case "env":
 		return envArgs(args, depth)
 	case "unset":
+		// zsh's unset -m unsets every variable a pattern matches (T228 L5).
+		patterns := false
 		for _, a := range args {
 			if strings.HasPrefix(a, "-") {
+				patterns = patterns || strings.Contains(a, "m")
+				continue
+			}
+			if patterns {
+				for _, n := range []string{AgentVariable, "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_KEY_0", "SHELLOPTS", "BASHOPTS"} {
+					if ok, _ := path.Match(a, n); ok {
+						return "unset -m " + a + " unsets " + n
+					}
+				}
 				continue
 			}
 			if why := guardedWord(a); why != "" {
@@ -217,7 +232,8 @@ func envCommand(words []string, depth int) string {
 	default:
 		if sh.Shells[prog] && depth < 4 {
 			for i, a := range args {
-				if a == "-c" && i+1 < len(args) {
+				// -c, or a cluster with c in it (bash -ec, -lc, zsh -fc; T228 L5).
+				if shellC.MatchString(a) && i+1 < len(args) {
 					return envChangeIn(args[i+1], depth+1)
 				}
 			}
@@ -294,7 +310,7 @@ func envArgs(args []string, depth int) string {
 				}
 			case len(name) >= 3 && strings.HasPrefix("--split-string", name):
 				return "env -S splits a string the guard does not read into the program's words"
-			case len(name) >= 3 && strings.HasPrefix("--chdir", name) && !attached:
+			case len(name) >= 3 && (strings.HasPrefix("--chdir", name) || strings.HasPrefix("--argv0", name)) && !attached:
 				i++
 			}
 		case strings.HasPrefix(a, "-") && len(a) > 1:
@@ -304,7 +320,7 @@ func envArgs(args []string, depth int) string {
 					return cleared
 				case 'S':
 					return "env -S splits a string the guard does not read into the program's words"
-				case 'u', 'C':
+				case 'u', 'C', 'a':
 					value := a[j+1:]
 					if value == "" && i+1 < len(args) {
 						i++

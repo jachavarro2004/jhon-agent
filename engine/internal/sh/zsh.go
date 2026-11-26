@@ -1,6 +1,7 @@
 package sh
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
@@ -142,8 +143,8 @@ func (r *reader) document(s string) {
 }
 
 // extGlob reads an extended glob: the substitutions its pattern runs, as
-// a command line's, and a qualifier that runs code as a GlobCode command.
-// The parser keeps the pattern as raw text, so its substitutions are read
+// a command line's, and the code its zsh qualifiers run (qualifiers). The
+// parser keeps the pattern as raw text, so its substitutions are read
 // here, as a here-document's (quotes are no quotes there: a substitution
 // inside them is read too). A process substitution in it is unreadable.
 func (r *reader) extGlob(x *syntax.ExtGlob) {
@@ -155,49 +156,197 @@ func (r *reader) extGlob(x *syntax.ExtGlob) {
 		return
 	}
 	r.document(pat)
-	if qualifierRunsCode(pat) {
-		glob := r.text(x)
-		r.cmds = append(r.cmds, &Command{Words: []string{GlobCode, glob}, Raw: glob, Loops: append([]Loop(nil), r.loops...),
-			Scope: append([]int64(nil), r.scope...)})
+	r.qualifiers(pat, r.text(x))
+}
+
+// qualifiers reads the code a glob's parenthesised group pat runs as zsh
+// qualifiers (qualifierCodes): each e string and +command is read as the
+// command line it is, and judged as it is judged bare (T228 L6: zsh runs
+// `!(tests)`'s e string `t`, which is no removal). A group whose qualifiers
+// an expansion may supply is a GlobCode command, glob as written.
+func (r *reader) qualifiers(pat, glob string) {
+	codes, dynamic := qualifierCodes(pat)
+	if dynamic {
+		r.globCode(glob)
+		return
+	}
+	for _, c := range codes {
+		cmds, err := Parse(c)
+		if err != nil {
+			if r.err == nil {
+				r.err = &Unreadable{Why: "the code of the glob qualifier " + glob + ": " + err.Error()}
+			}
+			return
+		}
+		r.cmds = append(r.cmds, cmds...)
 	}
 }
 
-// tildeExpansion is zsh's `$~name` (`$^~name`, `$=~name`), which bash reads
-// as literal text: its value is read as a glob, qualifiers and all.
-var tildeExpansion = lazyre.New(`(?:^|[^\\])\$[\^=]*~`)
+// globCode adds a GlobCode command for glob.
+func (r *reader) globCode(glob string) {
+	r.cmds = append(r.cmds, &Command{Words: []string{GlobCode, glob}, Raw: glob, Loops: append([]Loop(nil), r.loops...),
+		Scope: append([]int64(nil), r.scope...)})
+}
+
+// paramExp reads what a parameter expansion runs beyond its substitutions
+// (T228 L5): the qualifiers of a glob in its default word (`${x:-*(e:…:)}`,
+// `${x-…}`, `${x:+…}`, `${x:=…}`), and an assignment to zsh's
+// options[globsubst] (`${options[globsubst]:=on}`) as a GlobSubst command.
+func (r *reader) paramExp(x *syntax.ParamExp) {
+	if x.Exp == nil || x.Exp.Word == nil {
+		return
+	}
+	if x.Param != nil && x.Param.Value == "options" && x.Index != nil &&
+		(x.Exp.Op == syntax.AssignUnset || x.Exp.Op == syntax.AssignUnsetOrNull) {
+		if key := r.text(x.Index); strings.Contains(OptionName(key), "globsubst") || strings.ContainsAny(key, "$`") {
+			label := r.text(x)
+			r.cmds = append(r.cmds, &Command{Words: []string{GlobSubst, label}, Raw: label, Loops: append([]Loop(nil), r.loops...),
+				Scope: append([]int64(nil), r.scope...)})
+		}
+	}
+	for _, g := range parenGroups(r.text(x.Exp.Word)) {
+		r.qualifiers(g, r.text(x))
+	}
+}
+
+// parenGroups is the text of each top-level parenthesised group of t that
+// is no substitution (`$(…)`, `<(…)`, `>(…)`), outside quotes.
+func parenGroups(t string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i := 0; i < len(t); i++ {
+		switch c := t[i]; {
+		case c == '\\':
+			i++
+		case c == '\'' && depth == 0:
+			if j := strings.IndexByte(t[i+1:], '\''); j >= 0 {
+				i += j + 1
+			}
+		case c == '(' && depth > 0:
+			depth++
+		case c == '(' && (i == 0 || !strings.ContainsRune("$<>", rune(t[i-1]))):
+			depth, start = 1, i+1
+		case c == '(':
+			// A substitution: skip to its close.
+			n := 1
+			for i++; i < len(t) && n > 0; i++ {
+				if t[i] == '(' {
+					n++
+				} else if t[i] == ')' {
+					n--
+				}
+			}
+			i--
+		case c == ')' && depth > 0:
+			if depth--; depth == 0 {
+				out = append(out, t[start:i])
+			}
+		}
+	}
+	return out
+}
+
+// tildeExpansion is zsh's `$~name` (`$^~name`, `$=~name`, `$~1`, `$~@`, …),
+// which bash reads as literal text: its value is read as a glob, qualifiers
+// and all. `$~` with no name after it is the text it is.
+var tildeExpansion = lazyre.New(`(?:^|[^\\])\$[\^=~]*~[\^=~#+]*[A-Za-z_0-9@*{]`)
 
 // globSubst reads unquoted literal text that holds zsh's `$~name` as a
 // GlobCode command: the value it globs may hold a qualifier that runs code.
 func (r *reader) globSubst(lits string) {
 	if tildeExpansion.MatchString(lits) {
-		r.cmds = append(r.cmds, &Command{Words: []string{GlobCode, lits}, Raw: lits, Loops: append([]Loop(nil), r.loops...),
-			Scope: append([]int64(nil), r.scope...)})
+		r.globCode(lits)
 	}
 }
 
-// qualifierRunsCode is whether pat, the text of a glob's parenthesised
-// group, is a zsh qualifier list that runs code. An unquoted `|` outside
-// any nested group or expansion makes it an alternation, unless it opens
-// with `#q`. An expansion in it may supply its qualifiers (zsh reads the
-// expanded text as qualifiers): it may run code. Otherwise the list is
-// read as zsh's glob.c reads it, quotes removed: the other qualifiers'
-// arguments are skipped (f's mode, u's and g's id, P's word, a range, a
-// subscript), so that only an e string with its closing delimiter, a
-// + with a name, or an o or O sort by either counts; the modifiers after
-// `:` run none. A character zsh refuses is skipped and the reading goes
-// on, which can only find more code.
-func qualifierRunsCode(pat string) bool {
+// globSubstParts reads the runs of unquoted literals among parts (the
+// parser splits `$~name` into `$` and `~name`) with globSubst.
+func (r *reader) globSubstParts(parts []syntax.WordPart) {
+	lits := ""
+	for _, p := range parts {
+		if l, ok := p.(*syntax.Lit); ok {
+			lits += l.Value
+			continue
+		}
+		r.globSubst(lits)
+		lits = ""
+	}
+	r.globSubst(lits)
+}
+
+// qualifierCodes is the code pat, the text of a glob's parenthesised
+// group, runs as a zsh qualifier list: each closed e string's text and
+// each +command's name (also as an o or O sort); dynamic is set when an
+// expansion in it may supply its qualifiers (zsh reads the expanded text
+// as qualifiers), so its code cannot be told. An unquoted `|` outside any
+// nested group or expansion makes it an alternation, unless it opens with
+// `#q`. The list is read as zsh's glob.c reads it, quotes removed: the
+// other qualifiers' arguments are skipped (f's mode, u's and g's id, P's
+// word, a range, a subscript), and the modifiers after `:` run none. A
+// character zsh refuses is skipped and the reading goes on, which can only
+// find more code.
+func qualifierCodes(pat string) (codes []string, dynamic bool) {
 	explicit := strings.HasPrefix(pat, "#q")
 	if !explicit && alternation(pat) {
-		return false
+		return nil, false
 	}
 	if strings.ContainsAny(pat, "$`") {
-		return true
+		return nil, true
 	}
-	q := dequote(pat)
 	if explicit {
-		q = q[2:]
+		pat = pat[2:]
 	}
+	// Read with the quotes removed, as zsh compares the characters, and
+	// with a quoted delimiter skipped (`*(e-'rm -rf ~'-)`), which can only
+	// find more code: both readings' code is read.
+	for _, c := range append(scanQualifiers(dequote(pat), delimited, nil), scanQualifiers(pat, quotedDelimited, dequote)...) {
+		if !slices.Contains(codes, c) {
+			codes = append(codes, c)
+		}
+	}
+	return codes, false
+}
+
+// quotedDelimited is delimited with the quoted text in q skipped.
+func quotedDelimited(q string, i int) (int, bool) {
+	if i >= len(q) {
+		return i, false
+	}
+	end := q[i]
+	switch end {
+	case '(':
+		end = ')'
+	case '[':
+		end = ']'
+	case '{':
+		end = '}'
+	case '<':
+		end = '>'
+	}
+	for j := i + 1; j < len(q); j++ {
+		switch c := q[j]; {
+		case c == end:
+			return j + 1, true
+		case c == '\\':
+			j++
+		case c == '\'' || c == '"':
+			k := strings.IndexByte(q[j+1:], c)
+			if k < 0 {
+				return i, false
+			}
+			j += k + 1
+		}
+	}
+	return i, false
+}
+
+// scanQualifiers is the code of the qualifier list q (qualifierCodes),
+// its delimited arguments found by delim and its code passed through clean.
+func scanQualifiers(q string, delim func(string, int) (int, bool), clean func(string) string) (codes []string) {
+	if clean == nil {
+		clean = func(s string) string { return s }
+	}
+	delimited := delim
 	num := func(i int) int {
 		for i < len(q) && q[i] >= '0' && q[i] <= '9' {
 			i++
@@ -210,26 +359,39 @@ func qualifierRunsCode(pat string) bool {
 		}
 		return num(i)
 	}
+	// code reads the e string or +command at i (after its e or +), the index after it.
+	code := func(c byte, i int) int {
+		if c == '+' {
+			j := i
+			for j < len(q) && identChar(q[j]) {
+				j++
+			}
+			if j > i {
+				codes = append(codes, clean(q[i:j]))
+			}
+			return j
+		}
+		if j, ok := delimited(q, i); ok {
+			codes = append(codes, clean(q[i+1:j-1]))
+			return j
+		}
+		return i
+	}
 	for i := 0; i < len(q); {
 		c := q[i]
 		i++
 		switch c {
 		case ':':
-			return false
-		case 'e':
-			if _, ok := delimited(q, i); ok {
-				return true
-			}
-		case '+':
-			if i < len(q) && identChar(q[i]) {
-				return true
-			}
+			return codes
+		case 'e', '+':
+			i = code(c, i)
 		case 'o', 'O':
 			if i < len(q) {
-				if _, ok := delimited(q, i+1); q[i] == 'e' && ok || q[i] == '+' && i+1 < len(q) && identChar(q[i+1]) {
-					return true
+				if q[i] == 'e' || q[i] == '+' {
+					i = code(q[i], i+1)
+				} else {
+					i++
 				}
-				i++
 			}
 		case 'f':
 			i = modeSpec(q, i)
@@ -267,7 +429,7 @@ func qualifierRunsCode(pat string) bool {
 			}
 		}
 	}
-	return false
+	return codes
 }
 
 // delimited is the index after a delimited argument that starts at i,
@@ -381,16 +543,20 @@ func alternation(pat string) bool {
 
 // precommand is the words a zsh precommand modifier runs (T228): `-`,
 // nocorrect, noglob and builtin run the command after them in the shell
-// itself, and `repeat N` runs it N times. A brace group after them,
-// `repeat 2 { … }`, which the parser reads as words, is its commands.
-// ok is false for any other program, or with no command after it.
+// itself, and `repeat N` runs it N times; a `--` after them is skipped
+// (L5). A brace group, after them or as a command (`repeat 2 { … }`,
+// zsh's `{cmd …}`, which the parser reads as words), is its commands; so
+// is a brace list as the command's first word (`{a,b}` is `a b`). ok is
+// false for any other program, or with no command after it.
 func precommand(name string, w []string) (rest []string, ok bool) {
 	k := 0
-	switch name {
-	case "-", "nocorrect", "noglob", "builtin":
+	switch {
+	case name == "-" || name == "nocorrect" || name == "noglob" || name == "builtin":
 		k = 1
-	case "repeat":
+	case name == "repeat":
 		k = 2
+	case len(w) > 0 && strings.HasPrefix(w[0], "{") && w[0] != "{" && w[0] != "{}":
+		k = 0
 	default:
 		return nil, false
 	}
@@ -398,11 +564,115 @@ func precommand(name string, w []string) (rest []string, ok bool) {
 		return nil, false
 	}
 	rest = w[k:]
-	if rest[0] == "{" {
-		rest = rest[1:]
-		if n := len(rest); n > 0 && rest[n-1] == "}" {
-			rest = rest[:n-1]
+	if k > 0 && rest[0] == "--" {
+		if rest = rest[1:]; len(rest) == 0 {
+			return nil, false
 		}
 	}
+	if g := group(rest); g != nil {
+		return g, true
+	}
+	if k == 0 {
+		return nil, false
+	}
 	return rest, true
+}
+
+// braceList is a word that is one brace list, `{a,b,…}`.
+var braceList = lazyre.New(`^\{([^{}]*,[^{}]*)\}$`)
+
+// group is the words of a brace group or a brace list that w opens with,
+// or nil: `{ a b }` and `{a b}` are a b; `{a,b} c` is a b c.
+func group(w []string) []string {
+	switch {
+	case len(w) == 0:
+		return nil
+	case braceList.MatchString(w[0]):
+		return append(strings.Split(braceList.FindStringSubmatch(w[0])[1], ","), w[1:]...)
+	case w[0] == "{":
+		w = w[1:]
+	case strings.HasPrefix(w[0], "{") && w[0] != "{}":
+		w = append([]string{w[0][1:]}, w[1:]...)
+	default:
+		return nil
+	}
+	w = slices.Clone(w)
+	if n := len(w); n > 0 && w[n-1] == "}" {
+		w = w[:n-1]
+	} else if n > 0 && strings.HasSuffix(w[n-1], "}") {
+		w[n-1] = strings.TrimSuffix(w[n-1], "}")
+	}
+	if len(w) == 0 || w[0] == "" {
+		return nil
+	}
+	return w
+}
+
+// expandAliases reads a command whose program word is an alias the line
+// defines before it (an `alias` command earlier in cmds) as the alias's
+// value, its words before the command's own (T228 L5): bash with
+// expand_aliases, and zsh, expand an alias a line defined on a later line,
+// and the reader expands it on the same line too, which fails closed. A
+// zsh global alias (alias -g) is read wherever its name stands as a word.
+// An alias's value is read as a command line where it is defined (runs).
+func expandAliases(cmds []*Command) []*Command {
+	normal, global := map[string]string{}, map[string]string{}
+	for _, c := range cmds {
+		if at(c.Words, 0) == "alias" {
+			g := false
+			for _, a := range c.Words[1:] {
+				if strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
+					g = g || strings.Contains(a, "g")
+					continue
+				}
+				if n, v, ok := strings.Cut(a, "="); ok && n != "" {
+					if g {
+						global[n] = v
+					} else {
+						normal[n] = v
+					}
+				}
+			}
+			continue
+		}
+		if len(normal)+len(global) == 0 {
+			continue
+		}
+		words := c.Words
+		// An alias's value may open with another alias: a bounded number of times.
+		for range 8 {
+			k := 0
+			for k < len(words) && Assignment.MatchString(words[k]) {
+				k++
+			}
+			v, ok := normal[at(words, k)]
+			if !ok {
+				break
+			}
+			words = append(append(slices.Clone(words[:k]), aliasWords(v)...), words[k+1:]...)
+		}
+		if len(global) > 0 {
+			var out []string
+			for _, w := range words {
+				if v, ok := global[w]; ok {
+					out = append(out, aliasWords(v)...)
+				} else {
+					out = append(out, w)
+				}
+			}
+			words = out
+		}
+		c.Words = words
+	}
+	return cmds
+}
+
+// aliasWords is the words an alias's value gives a command that uses it:
+// its last command's, as the reader reads it.
+func aliasWords(v string) []string {
+	cmds, err := Parse(v)
+	if err != nil || len(cmds) == 0 {
+		return strings.Fields(v)
+	}
+	return cmds[len(cmds)-1].Words
 }

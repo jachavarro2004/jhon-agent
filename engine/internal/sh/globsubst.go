@@ -8,13 +8,16 @@ import (
 // GlobSubstOn is the words of a program that turn on zsh's GLOB_SUBST, or
 // "": setopt globsubst (any case, underscores or dashes; -m with a pattern
 // that matches it), unsetopt noglobsubst, set -o globsubst or +o
-// noglobsubst, emulate sh or ksh (which turn it on) or with -o globsubst,
-// and zsh started with any of these. Turning it on is refused whatever
+// noglobsubst, emulate sh, ksh or csh (which turn it on, T228 L5) or with
+// -o globsubst, and zsh started with any of these; an option name the
+// line computes (`setopt $o`) may be it. Turning it on is refused whatever
 // follows: no ordinary line does it, and an expansion after it may come
 // from anywhere.
 func GlobSubstOn(name string, args []string) string {
-	on := func(o string) bool { return OptionName(o) == "globsubst" }
-	off := func(o string) bool { return OptionName(o) == "noglobsubst" }
+	computed := func(o string) bool { return strings.ContainsAny(o, "$`") }
+	on := func(o string) bool { return OptionName(o) == "globsubst" || computed(o) }
+	off := func(o string) bool { return OptionName(o) == "noglobsubst" || computed(o) }
+	mode := func(m string) bool { return m == "sh" || m == "ksh" || m == "csh" }
 	// pair reads -o NAME, +o NAME and -oNAME.
 	pair := func(i int) (string, bool) {
 		a := args[i]
@@ -35,7 +38,7 @@ func GlobSubstOn(name string, args []string) string {
 		for i, a := range args {
 			if a == "-m" {
 				for _, p := range args[i+1:] {
-					if ok, _ := path.Match(OptionName(p), "globsubst"); ok && name == "setopt" {
+					if ok, _ := path.Match(OptionName(p), "globsubst"); (ok || computed(p)) && name == "setopt" {
 						return name + " -m " + p
 					}
 				}
@@ -60,11 +63,11 @@ func GlobSubstOn(name string, args []string) string {
 			switch {
 			case a == "-o" || a == "+o":
 				i++
-			case a == "sh" || a == "ksh":
+			case mode(a) || computed(a):
 				return "emulate " + a
 			case len(a) > 1 && a[0] == '-' && strings.Contains(a, "c"):
-				// -c's string is code (read on its own), not an option.
-				return ""
+				// -c's string is code (read on its own), not an option or the mode.
+				i++
 			}
 		}
 	case "zsh":
@@ -84,7 +87,7 @@ func GlobSubstOn(name string, args []string) string {
 					v = at(args, i)
 					label += " " + v
 				}
-				if on(n) || n == "emulate" && (v == "sh" || v == "ksh") {
+				if on(n) || n == "emulate" && (mode(v) || computed(v)) {
 					return label
 				}
 			case !strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "+"), strings.HasPrefix(a, "-") && strings.Contains(a, "c"):

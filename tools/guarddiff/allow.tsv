@@ -1524,14 +1524,8 @@ verifiers.tsv:188	safety-guard	allow	refuse	hole T228 S1 (found on main): noglob
 verifiers.tsv:189	safety-guard	allow	ask	hole T228 S1 (found on main): an outward command behind noglob is asked as bare
 verifiers.tsv:190	safety-guard	allow	ask	hole T228 S1 (found on main): an outward command behind repeat is asked as bare
 verifiers.tsv:191	safety-guard	allow	refuse	hole T228 S1 (found on main): a zsh glob qualifier's e string runs in the shell
-verifiers.tsv:192	safety-guard	allow	refuse	hole T228 S1 (found on main): a zsh glob qualifier's +command runs in the shell
-verifiers.tsv:193	safety-guard	allow	refuse	hole T228 S1 (found on main): a zsh glob sort by an e string runs it
-verifiers.tsv:194	safety-guard	allow	refuse	hole T228 S1 (found on main): a (#q) qualifier's e string runs in the shell
-verifiers.tsv:195	safety-guard	allow	refuse	hole T228 S1 (found on main): zsh reads !(test.test) as qualifiers t, e with delimiter s (code t.te), t
 verifiers.tsv:196	safety-guard	allow	refuse	hole T228 S1 (found on main): an expansion may supply a qualifier that runs code
 verifiers.tsv:197	safety-guard	allow	refuse	hole T228 S1 (found on main): zsh's $~g globs the value, qualifiers and all
-verifiers.tsv:198	safety-guard	allow	refuse	hole T228 S1 (found on main): a qualifier's code in a loop's words
-verifiers.tsv:199	safety-guard	allow	refuse	hole T228 S1 (found on main): a qualifier's code in a string eval runs
 verifiers.tsv:200	safety-guard	allow	refuse	hole T228 S1 (found on main): a substitution inside an extended glob runs, unread before
 verifiers.tsv:201	safety-guard	allow	refuse	hole T228 S1 (found on main): a backquoted substitution inside an extended glob runs
 verifiers.tsv:202	safety-guard	allow	refuse	hole T228 L2 (found on main): setsid's command, read through its options
@@ -1568,3 +1562,37 @@ verifiers.tsv:232	safety-guard	allow	refuse	hole T228 L2 (found on main): GLOB_S
 verifiers.tsv:233	safety-guard	allow	refuse	hole T228 L2 (found on main): sh emulation turns GLOB_SUBST on
 verifiers.tsv:234	safety-guard	allow	refuse	hole T228 L2 (found on main): GLOB_SUBST turned on through zsh's options table
 verifiers.tsv:235	safety-guard	allow	refuse	hole T228 L2 (found on main): zsh started with GLOB_SUBST on
+verifiers.tsv:250	safety-guard	allow	ask	hole T228 L6 (found on main, adversarial verify mwwypv34): a program the guard has no reading of, given a removal among its words: unreadable
+verifiers.tsv:251	safety-guard	allow	ask	hole T228 L6 (found on main, adversarial verify mwwypv34): nix-shell runs its --run string: unreadable
+verifiers.tsv:252	safety-guard	allow	ask	hole T228 L6 (found on main, adversarial verify mwwypv34): conda run runs its words: unreadable
+verifiers.tsv:253	safety-guard	allow	ask	hole T228 L6 (found on main, adversarial verify mwwypv34): awk's system() inside its program text: unreadable
+verifiers.tsv:254	safety-guard	allow	ask	hole T228 L6 (found on main, adversarial verify mwwypv34): entr runs its words: unreadable
+verifiers.tsv:255	safety-guard	allow	ask	hole T228 L6 (found on main, adversarial verify mwwypv34): watchexec runs its words: unreadable
+verifiers.tsv:256	safety-guard	allow	ask	hole T228 L6 (found on main, adversarial verify mwwypv34): an option's value and the words after it: unreadable
+verifiers.tsv:257	safety-guard	allow	ask	hole T228 L6 (found on main, adversarial verify mwwypv34): vim's ! runs a shell command: unreadable
+verifiers.tsv:258	safety-guard	allow	ask	hole T228 L6 (found on main, adversarial verify mwwypv34): screen runs its words: unreadable
+verifiers.tsv:259	safety-guard	allow	ask	hole T228 L6 (found on main, adversarial verify mwwypv34): mise exec runs its words: unreadable
+verifiers.tsv:260	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): crontab - installs its input, read as the commands cron runs
+verifiers.tsv:261	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): an alias given with -c and run as the subcommand
+verifiers.tsv:262	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): git bisect run's command
+verifiers.tsv:263	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): zsh's brace group with no spaces after repeat
+verifiers.tsv:264	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): zsh's brace group with no spaces as a command
+verifiers.tsv:265	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): a -- after a precommand modifier
+verifiers.tsv:266	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): zsh's $~ in an array assignment
+verifiers.tsv:267	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): zsh's $~ in a loop's words
+verifiers.tsv:268	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): a qualifier's code in a parameter expansion's default word
+verifiers.tsv:269	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): a wrapper's long option with a separate value
+verifiers.tsv:270	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): a wrapper's long option with a separate value
+verifiers.tsv:271	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): env -S in a cluster
+verifiers.tsv:272	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): env -a takes a value
+verifiers.tsv:273	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): exec -a in a cluster takes a value
+verifiers.tsv:274	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): GNU time's -o and -f take a value
+verifiers.tsv:275	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): an alias defined, then used on a later line
+verifiers.tsv:276	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): an alias defined, then used (read on the same line too)
+verifiers.tsv:277	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): csh emulation turns GLOB_SUBST on
+verifiers.tsv:278	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): GLOB_SUBST through a quoted options table assignment
+verifiers.tsv:279	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): an option the line computes may be GLOB_SUBST
+verifiers.tsv:289	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): the folder reassigned after the trap
+verifiers.tsv:290	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): the trap removes the folder's parent
+verifiers.tsv:291	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): the trap's default word is the home folder
+verifiers.tsv:292	safety-guard	allow	refuse	hole T228 L5 (found on main, adversarial verify mwwypv34): a second trap

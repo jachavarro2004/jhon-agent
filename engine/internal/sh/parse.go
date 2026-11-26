@@ -82,7 +82,7 @@ func Parse(src string) ([]*Command, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
-	return r.cmds, nil
+	return expandAliases(r.cmds), nil
 }
 
 // DefinesFunction is whether src defines a shell function anywhere, which
@@ -270,6 +270,11 @@ func (r *reader) walk(n syntax.Node) {
 		case *syntax.ExtGlob:
 			r.extGlob(y)
 			return false
+		case *syntax.Word:
+			// zsh's `$~name` in a word the walk reaches: an array's, a loop's, a default word's (T228 L5).
+			r.globSubstParts(y.Parts)
+		case *syntax.ParamExp:
+			r.paramExp(y)
 		}
 		return true
 	})
@@ -280,7 +285,12 @@ func (r *reader) assign(a *syntax.Assign) string {
 		if a.Value != nil {
 			v := r.word(a.Value)
 			if n, val, ok := strings.Cut(v, "="); ok {
-				r.assigned(n, "", val, nil)
+				// A quoted `name[key]=value` (typeset -g "options[globsubst]=on", T228 L5).
+				index := ""
+				if i := strings.IndexByte(n, '['); i > 0 && strings.HasSuffix(n, "]") {
+					n, index = n[:i], n[i+1:len(n)-1]
+				}
+				r.assigned(n, index, val, nil)
 			}
 			return v
 		}

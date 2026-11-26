@@ -3,6 +3,8 @@ package sh
 import (
 	"slices"
 	"strings"
+
+	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 )
 
 // External runners that run the command after their own options (T228 L2):
@@ -245,6 +247,36 @@ func runs(name string, w []string) (in Inner, ok bool, err error) {
 			}
 		}
 		return strs(ss...)
+	case "flock":
+		// flock [options] file command…, flock [options] file -c string,
+		// flock [options] fd: the command runs with the lock.
+		valued := set("-w", "--wait", "--timeout", "-E", "--conflict-exit-code")
+		file := false
+		for k := 1; k < len(w); k++ {
+			a := w[k]
+			switch {
+			case a == "-c" || a == "--command":
+				return strs(at(w, k+1))
+			case strings.HasPrefix(a, "--command="):
+				return strs(a[len("--command="):])
+			case valued[a]:
+				k++
+			case strings.HasPrefix(a, "-"):
+			case !file:
+				file = true
+			default:
+				return Inner{Words: [][]string{w[k:]}}, true, nil
+			}
+		}
+		return itself, true, nil
+	case "busybox":
+		// busybox runs its applet as the program it names (L477).
+		if len(w) > 1 && !strings.HasPrefix(w[1], "-") {
+			return Inner{Words: [][]string{w[1:]}}, true, nil
+		}
+		return itself, true, nil
+	case "git":
+		return gitRuns(w)
 	case "gdb":
 		in, err := gdbRuns(w)
 		return in, true, err
@@ -356,28 +388,44 @@ func Unwrap(words []string) (in Inner, ok bool, err error) {
 	if in, ok, err := runs(name, words); ok {
 		return in, true, err
 	}
-	values, ok := Wrappers[name]
-	if !ok {
+	switch name {
+	case "xargs":
+		// xargs runs its command with the operands it reads (XargsCommand).
+		if cmd := XargsCommand(words); len(cmd) > 0 {
+			return Inner{Words: [][]string{cmd}}, true, nil
+		}
+		return Inner{Self: true}, true, nil
+	case "find":
+		// find runs each -exec, -execdir, -ok and -okdir command.
+		var in Inner
+		for k := 1; k < len(words); k++ {
+			if !FindExec[words[k]] {
+				continue
+			}
+			e := k + 1
+			for e < len(words) && words[e] != ";" && words[e] != "+" {
+				e++
+			}
+			in.Words = append(in.Words, words[k+1:e])
+			k = e
+		}
+		in.Self = len(in.Words) == 0
+		return in, true, nil
+	}
+	if _, ok := Wrappers[name]; !ok {
 		return Inner{}, false, nil
 	}
 	if name == "command" && (at(words, 1) == "-v" || at(words, 1) == "-V") {
 		return Inner{Self: true}, true, nil
 	}
-	k := 1
-	for k < len(words) && (strings.HasPrefix(words[k], "-") || (name == "env" && Assignment.MatchString(words[k]))) {
-		a := words[k]
-		if name == "env" && (a == "-S" || a == "--split-string") {
-			return Inner{Strings: []string{at(words, k+1)}}, true, nil
-		}
-		k += 1 + values[a]
+	wr := wrapped(name, words)
+	if wr.split != nil {
+		return Inner{Strings: []string{*wr.split}}, true, nil
 	}
-	if name == "timeout" && k < len(words) {
-		k++
-	}
-	if k >= len(words) {
+	if len(wr.rest) == 0 {
 		return Inner{Self: true}, true, nil
 	}
-	return Inner{Words: [][]string{words[k:]}}, true, nil
+	return Inner{Words: [][]string{wr.rest}}, true, nil
 }
 
 // later is the strings the builtins that run a string later run, as eval
@@ -573,3 +621,103 @@ func expectRuns(seen []opt, run bool) ([]string, error) {
 	}
 	return ss, nil
 }
+
+// gitCommandKey is a git configuration key whose value is a command git runs.
+var gitCommandKey = lazyre.New(`(?i)^(?:alias\..+|core\.(?:pager|editor|fsmonitor|askpass)|diff\.(?:external|.+\.(?:textconv|command))|` +
+	`merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|pager\..+|sequence\.editor|credential\.(?:.+\.)?helper|` +
+	`gpg\.(?:.+\.)?program|uploadpack\.packobjectshook|interactive\.difffilter|(?:merge|diff)tool\..+\.cmd)$`)
+
+// gitRuns reads the commands git runs from its own words (T228 L5): a -c
+// value of a key whose value is a command (gitCommandKey: core.pager,
+// core.editor, a filter's or a driver's command, …), read as a shell line,
+// one that does not parse left out; an alias given with -c, where it is
+// the subcommand and no git command has its name, with the arguments
+// after it (its `!` dropped; one with none is a git command line); bisect
+// run's command, rebase's --exec and submodule foreach's command. `git
+// config` of an alias is left to the guard's git-config question (T152).
+// git itself stays read (Self). ok is false for a line with none of these,
+// which runs as git alone.
+func gitRuns(w []string) (Inner, bool, error) {
+	in := Inner{Self: true}
+	value := func(v string) {
+		if _, err := Parse(v); err == nil && strings.TrimSpace(v) != "" {
+			in.Strings = append(in.Strings, v)
+		}
+	}
+	var settings []string
+	k := 1
+	for ; k < len(w); k++ {
+		a := w[k]
+		switch {
+		case a == "-c":
+			k++
+			settings = append(settings, at(w, k))
+		case strings.HasPrefix(a, "-c") && len(a) > 2:
+			settings = append(settings, a[2:])
+		case a == "-C" || a == "--git-dir" || a == "--work-tree" || a == "--namespace":
+			k++
+		case strings.HasPrefix(a, "-"):
+		default:
+			goto sub
+		}
+	}
+sub:
+	rest := w[min(k, len(w)):]
+	for _, kv := range settings {
+		key, v, ok := strings.Cut(kv, "=")
+		name, isAlias := strings.CutPrefix(strings.ToLower(key), "alias.")
+		switch {
+		case !ok || !gitCommandKey.MatchString(key):
+		case isAlias:
+			// An alias runs only when it is the subcommand, and never in place of a git command.
+			if name != at(rest, 0) || gitCommands[name] {
+				continue
+			}
+			args := strings.Join(rest[1:], " ")
+			if s, shell := strings.CutPrefix(v, "!"); shell {
+				value(strings.TrimSpace(s + " " + args))
+			} else {
+				value(strings.TrimSpace("git " + v + " " + args))
+			}
+		default:
+			value(v)
+		}
+	}
+	switch at(rest, 0) {
+	case "bisect":
+		if at(rest, 1) == "run" && len(rest) > 2 {
+			in.Words = append(in.Words, rest[2:])
+		}
+	case "rebase":
+		for i, a := range rest {
+			switch {
+			case a == "-x" || a == "--exec":
+				value(at(rest, i+1))
+			case strings.HasPrefix(a, "--exec="):
+				value(a[len("--exec="):])
+			}
+		}
+	case "submodule":
+		if i := slices.Index(rest, "foreach"); i > 0 {
+			args := rest[i+1:]
+			for len(args) > 0 && strings.HasPrefix(args[0], "-") {
+				args = args[1:]
+			}
+			if len(args) > 0 {
+				value(strings.Join(args, " "))
+			}
+		}
+	}
+	if len(in.Strings) == 0 && len(in.Words) == 0 {
+		return Inner{}, false, nil
+	}
+	return in, true, nil
+}
+
+// gitCommands are git's own commands, which an alias of the same name never replaces.
+var gitCommands = set("add", "am", "annotate", "apply", "archive", "bisect", "blame", "branch", "bundle", "cat-file", "checkout",
+	"cherry", "cherry-pick", "clean", "clone", "commit", "config", "count-objects", "describe", "diff", "difftool", "fetch",
+	"format-patch", "fsck", "gc", "grep", "help", "init", "log", "ls-files", "ls-remote", "ls-tree", "merge", "mergetool", "mv",
+	"notes", "pull", "push", "range-diff", "rebase", "reflog", "remote", "repack", "replace", "reset", "restore", "revert",
+	"rev-list", "rev-parse", "rm", "shortlog", "show", "show-ref", "sparse-checkout", "stash", "status", "submodule", "switch",
+	"tag", "worktree", "version")

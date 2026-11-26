@@ -211,58 +211,220 @@ func lineFacts(line string) *mktempFacts {
 // nothing (it is assigned once, from mktemp -d).
 var trapSignals = set("EXIT", "0", "INT", "TERM", "HUP", "QUIT", "SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT")
 
-// trapExit is the action of the line's one top-level trap whose action is
-// single-quoted text and whose signals are trapSignals, with the scratch
-// folders scratchVars proves for the line with that trap a no-op and its
-// action run at the end (T228 L2: `d=$(mktemp -d); trap 'rm -rf "$d"'
-// EXIT; …` is `d=$(mktemp -d); …; rm -rf "$d"`); "" and nil for any other
-// line, or one where the action removes no folder the line proves.
-func trapExit(line string, ctx *Ctx) (string, map[string]string) {
-	segs, ok := scratchSegments(line)
+// trapExit reads the line's one top-level cleanup trap (T228 L2, L5): a
+// trap whose action is quoted text, single (run at exit, `trap 'rm -rf
+// "$d"' EXIT`) or double with plain variables in it (expanded as the trap
+// is set, `trap "rm -rf $d" EXIT`), and whose signals are trapSignals. It
+// gives the action's word as the reader reads it (the trap command it
+// belongs to), the action to judge, and the scratch folders scratchVars
+// proves for the line read as that action run at its end, the trap a
+// no-op. The proof reads the idiom's common forms as their plain ones: a
+// newline is `;`, `set -e` (-u, -x, -o pipefail …) and `exit [N]` change no
+// variable (:), `local d` before the assignment declares it (:), `local`,
+// `readonly`, `export` or `declare` of `d=$(mktemp -d …)` is that
+// assignment, `cd "$d"` moves into the folder and `cp … "$d"` copies into
+// it, neither changing d (:, cat), and `export TMPDIR=$(mktemp -d)` is
+// read under a name of its own. A trap set with double quotes must come
+// after its variables' assignments, run unconditionally. Every other form,
+// and any abuse scratchVars refuses (another assignment by any route, a
+// second trap, `$d/..`, IFS, …), gives "" and nil.
+func trapExit(line string, ctx *Ctx) (word, action string, scratch map[string]string) {
+	// An escaped quote inside double quotes (`trap "rm -rf \"$d\"" EXIT`) is
+	// one the scratch rule does not read: the trap's segment keeps it, a
+	// placeholder stands for it elsewhere.
+	const quote = "\x01"
+	segs, ok := scratchSegments(strings.ReplaceAll(flattenLines(line), `\"`, quote))
 	if !ok {
-		return "", nil
+		return "", "", nil
 	}
-	trap := ""
-	for _, s := range segs {
+	for i := range segs {
+		if strings.Contains(segs[i].text, quote) && !strings.HasPrefix(strings.TrimSpace(segs[i].text), "trap") {
+			return "", "", nil
+		}
+		segs[i].text = strings.ReplaceAll(segs[i].text, quote, `\"`)
+	}
+	at := -1
+	for i, s := range segs {
 		if m := scratchFirst.FindStringSubmatch(s.text); m != nil && m[1] == "trap" {
-			if trap != "" {
-				return "", nil
+			if at >= 0 {
+				return "", "", nil
 			}
-			trap = s.text
+			at = i
 		}
 	}
-	if trap == "" || strings.Count(line, trap) != 1 {
-		return "", nil
+	if at < 0 {
+		return "", "", nil
 	}
-	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(trap), "")
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(segs[at].text), "")
 	if err != nil || len(f.Stmts) != 1 || len(f.Stmts[0].Redirs) > 0 {
-		return "", nil
+		return "", "", nil
 	}
 	call, ok := f.Stmts[0].Cmd.(*syntax.CallExpr)
 	if !ok || len(call.Assigns) > 0 || len(call.Args) < 3 {
-		return "", nil
+		return "", "", nil
 	}
 	args := call.Args[1:]
 	if v, _ := wordLit(args[0]); v == "--" {
 		args = args[1:]
 	}
 	if len(args) < 2 || len(args[0].Parts) != 1 {
-		return "", nil
-	}
-	q, ok := args[0].Parts[0].(*syntax.SglQuoted)
-	if !ok || q.Dollar {
-		return "", nil
+		return "", "", nil
 	}
 	for _, s := range args[1:] {
 		if v, lit := wordLit(s); !lit || !trapSignals[v] {
-			return "", nil
+			return "", "", nil
 		}
 	}
-	scratch := scratchVars(strings.Replace(line, trap, ":", 1)+"; "+q.Value, ctx)
-	if len(scratch) == 0 {
-		return "", nil
+	var names []string
+	switch q := args[0].Parts[0].(type) {
+	case *syntax.SglQuoted:
+		if q.Dollar {
+			return "", "", nil
+		}
+		word = q.Value
+	case *syntax.DblQuoted:
+		var b strings.Builder
+		for _, p := range q.Parts {
+			switch x := p.(type) {
+			case *syntax.Lit:
+				b.WriteString(x.Value)
+			case *syntax.ParamExp:
+				if x.Param == nil || x.Exp != nil || x.Index != nil || x.Slice != nil || x.Repl != nil || x.Excl || x.Length || x.Width || x.Names != 0 {
+					return "", "", nil
+				}
+				b.WriteString("$" + x.Param.Value)
+				names = append(names, x.Param.Value)
+			default:
+				return "", "", nil
+			}
+		}
+		word = unescape(b.String())
+		if strings.ContainsRune(word, '\\') {
+			return "", "", nil
+		}
+	default:
+		return "", "", nil
 	}
-	return q.Value, scratch
+	// The proof's action: a reference in single quotes inside a double-quoted
+	// trap was expanded when it was set, so it is a plain one.
+	proofAction := word
+	if names != nil {
+		proofAction = regexp.MustCompile(`'(\$[A-Za-z_][A-Za-z0-9_]*)'`).ReplaceAllString(word, `"$1"`)
+	}
+	action = word
+	var b strings.Builder
+	assigned := map[string]int{}
+	for i, s := range segs {
+		t := s.text
+		if m := scratchAssign.FindStringSubmatch(trapDecl.ReplaceAllString(t, "")); m != nil {
+			if _, ok := assigned[m[1]]; !ok {
+				assigned[m[1]] = i
+			}
+		}
+		switch w := strings.Fields(t); {
+		case i == at, trapNoop(w):
+			t = ":"
+		case trapDecl.MatchString(t) && len(w) == 2 && astName.MatchString(w[1]):
+			// A declaration with no value, before its assignment.
+			if _, ok := assigned[w[1]]; !ok {
+				t = ":"
+			}
+		case trapDecl.MatchString(t) && scratchAssign.MatchString(trapDecl.ReplaceAllString(t, "")):
+			t = trapDecl.ReplaceAllString(t, "")
+		case len(w) >= 2 && w[0] == "cd" && trapRef.MatchString(w[len(w)-1]) && (len(w) == 2 || len(w) == 3 && w[1] == "--"):
+			t = ":"
+		case len(w) > 0 && w[0] == "cp":
+			t = "cat" + t[2:]
+		}
+		b.WriteString(t + " " + s.after + " ")
+	}
+	proof := b.String() + "; " + proofAction
+	// TMPDIR assigned from mktemp -d is the line's own scratch folder under a name of its own.
+	if regexp.MustCompile(`(?:^|[;&|]\s*)TMPDIR="?\$\(\s*mktemp`).MatchString(strings.TrimSpace(proof)) {
+		rename := strings.NewReplacer("${TMPDIR}", "${jhon_tmpdir}", "$TMPDIR", "$jhon_tmpdir", "TMPDIR=", "jhon_tmpdir=")
+		proof, action = rename.Replace(proof), rename.Replace(action)
+	}
+	scratch = scratchVars(proof, ctx)
+	if len(scratch) == 0 {
+		return "", "", nil
+	}
+	// A double-quoted trap expands its variables as it is set: after their assignments, which always run.
+	for _, n := range names {
+		i, ok := assigned[n]
+		if n == "TMPDIR" {
+			i, ok = assigned["TMPDIR"]
+		}
+		if !ok || i > at || segs[i].before != "" && segs[i].before != ";" {
+			return "", "", nil
+		}
+	}
+	return word, action, scratch
+}
+
+var (
+	// trapDecl is a declaration keyword before an assignment or a name.
+	trapDecl = regexp.MustCompile(`^(?:local|readonly|export|declare|typeset)\s+`)
+	// trapRef is a word that is a variable, quoted or not.
+	trapRef = regexp.MustCompile(`^"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?$`)
+	// trapSet is a set option that changes no variable: -e, -u, -x, -o pipefail and kin.
+	trapSet = regexp.MustCompile(`^(?:[-+][euxvo]+|errexit|nounset|pipefail|xtrace|verbose)$`)
+)
+
+// trapNoop is whether w, a command's words, changes no variable and moves
+// nowhere: `set` of trapSet options, or `exit [N]`.
+func trapNoop(w []string) bool {
+	switch {
+	case len(w) == 0:
+		return false
+	case w[0] == "set" && len(w) > 1:
+		for _, a := range w[1:] {
+			if !trapSet.MatchString(a) {
+				return false
+			}
+		}
+		return true
+	case w[0] == "exit":
+		return len(w) == 1 || len(w) == 2 && strings.Trim(w[1], "0123456789") == ""
+	}
+	return false
+}
+
+// flattenLines is line with each newline outside quotes a `;`, or a space
+// after an operator or an opening word, so the scratch rule reads a line of
+// several commands as it reads one.
+func flattenLines(line string) string {
+	var b strings.Builder
+	in := byte(0)
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case in == '\'':
+			if c == '\'' {
+				in = 0
+			}
+		case in == '"':
+			if c == '\\' && i+1 < len(line) {
+				b.WriteByte(c)
+				i++
+				c = line[i]
+			} else if c == '"' {
+				in = 0
+			}
+		case c == '\'' || c == '"':
+			in = c
+		case c == '\n':
+			prev := strings.TrimRight(b.String(), " \t")
+			last := prev[strings.LastIndexAny(prev, " \t;")+1:]
+			if prev == "" || strings.ContainsRune("&|({;", rune(prev[len(prev)-1])) || last == "do" || last == "then" || last == "else" {
+				c = ' '
+			} else {
+				b.WriteString(";")
+				c = ' '
+			}
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 // astIndex is a subscript bash cannot evaluate as arithmetic on a
