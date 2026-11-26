@@ -32,6 +32,22 @@ const (
 	reaperEnv = "JHON_INTEGRATIONS_REAPER=1"
 )
 
+// closeInherited marks every descriptor above 2 close-on-exec: one jhon
+// was handed by whatever started it (a CI runner's pipes, a caller's open
+// folder) never reaches the program it runs; the descriptors exec.Cmd
+// passes on purpose (ExtraFiles) are duplicated afresh at the exec.
+func closeInherited() {
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if fd, err := strconv.Atoi(e.Name()); err == nil && fd > 2 {
+			syscall.CloseOnExec(fd)
+		}
+	}
+}
+
 // reaperExe is the helper's program: this one; a variable for the tests.
 var reaperExe = "/proc/self/exe"
 
@@ -50,6 +66,7 @@ func init() {
 // cut ended before it said anything (a TERM before its handler was set)
 // started nothing, and the run is said as cut.
 func reaped(ctx context.Context, cmd *exec.Cmd) (started bool, err error) {
+	closeInherited()
 	r, w, err := os.Pipe()
 	if err != nil {
 		return runGrouped(cmd)
@@ -94,7 +111,7 @@ func reaped(ctx context.Context, cmd *exec.Cmd) (started bool, err error) {
 func reaper(program string, args []string) int {
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, syscall.SIGTERM)
-	syscall.CloseOnExec(3)
+	closeInherited()
 	status := os.NewFile(3, "status")
 	_, _, e := syscall.RawSyscall(syscall.SYS_PRCTL, prSetChildSubreaper, 1, 0)
 	subreaper := e == 0
