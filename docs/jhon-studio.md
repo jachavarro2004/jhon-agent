@@ -36,10 +36,12 @@ as it installs itself:
    `integration --json`, which must name the release's version. That run
    gets only `HOME` (a temporary folder, also its working folder) and
    `PATH` (its own `bin`, the folder of the interpreter its first line
-   names through `env`, such as `node`, and the system's folders); its
-   answer is read up to 64 KiB, and every process it started is stopped
-   when it returns. A newer release that needs a newer jhon is passed over
-   for the next older one.
+   names through `env`, such as `node` in `#!/usr/bin/env node` or
+   `#!/usr/bin/env -S node --flag`, read as env reads it, and the system's
+   folders); its answer is read up to 64 KiB, and every process it started
+   is stopped when it returns, and only those: a process another program
+   jhon started leaves behind is not touched. A newer release that needs a
+   newer jhon is passed over for the next older one.
 2. It unpacks it into `~/.local/share/jhon-studio/<version>`, records that
    folder's digest under `~/.local/share/jhon-studio/.jhon-verified/`, and
    links `~/.local/bin/jhon-studio` to `<version>/bin/jhon-studio`
@@ -74,12 +76,27 @@ replaced or written through: `jhon update` notes it once and leaves it
 alone, as it does a development clone (jhon itself still updates, exit
 0), and `jhon setup` refuses its Install step with the fix, move it away.
 Each is checked again right before jhon writes, and one swapped in while
-the install runs is left as it is and refuses it. A version folder is
-linked, by an install or a roll-back, only while its files still have the
-digest jhon recorded when it verified them (one already there from
-elsewhere is linked only when it is the signed release); an active folder
-that is missing is installed again from its release, and one that changed
-is reported (move it away), never called up to date. On a development
+the install runs is left as it is and refuses it, as is a
+`~/.local/share` swapped for a link (one that was a link before the
+install began is yours, and is installed through); a first install
+refused this way leaves no empty `~/.local/share/jhon-studio` behind. A
+version folder is linked, by an install or a roll-back, only while its
+files still have the digest jhon recorded when it verified them (their
+contents, and their modes: a folder or file made writable by its group or
+by others, or a setuid or setgid file, counts as changed, while a folder's
+setgid, which a setgid `~/.local/share` or `TMPDIR` gives every folder
+made inside, does not; one already there from elsewhere
+is linked only when it is the signed release); an active folder that is
+missing is installed again from its release, and one that changed is
+reported (move it away), by `jhon update --check` too, never called up to
+date:
+
+```text
+jhon: jhon-studio: ~/.local/share/jhon-studio/0.1.0 is not jhon-studio's signed release 0.1.0 (its files differ); move it away for jhon to install it; nothing was changed
+```
+
+The record of that digest is written to a new file and renamed into
+place, never through a link. On a development
 build of jhon, `jhon update` installs nothing, jhon-studio included:
 `jhon setup` installs it there. If the run that reads what jhon it needs
 cannot start because the temporary folder's file system is mounted

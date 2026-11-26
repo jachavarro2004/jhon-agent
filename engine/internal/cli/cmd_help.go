@@ -219,7 +219,11 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            ~/.local/share/jhon-studio jhon did not make, are
                            noted once and left alone (exit 0); a version
                            folder is linked only while it is the one jhon
-                           verified, and a missing one is installed again;
+                           verified (its files and their modes), and a
+                           missing one is installed again, while one that
+                           changed is refused, by --check too, with the fix
+                           (move it away); a ~/.local/share swapped for a
+                           link during the install is refused;
                            a jhon-studio that fails exits 1, nothing of it
                            changed; one signed by its release workflow at
                            another tag or ref is refused naming the
