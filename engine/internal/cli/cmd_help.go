@@ -693,7 +693,22 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            that leads to the home is a link): name its
                            real path (/mnt/data, not ~/data); status,
                            doctor and the note on a refused write there say
-                           so. A cache or store of the default list under
+                           so. Each area bound, writable or read-only, is
+                           opened last, from / with no link followed
+                           (openat2), checked on its descriptor (still a
+                           folder, or a file; a writable one not /, the home
+                           or above it) and handed to bubblewrap as one
+                           (--bind-fd, --ro-bind-fd), which closes it before
+                           the program starts: a folder swapped for a link
+                           after the checks (by a run in another project
+                           that can write a folder on its way) is not
+                           followed, the mount is the folder checked, and
+                           one swapped or gone before the open refuses the
+                           run (exit 126, the folder, what changed and the
+                           fix). Without openat2 (Linux before 5.6), or
+                           where a seccomp filter refuses it, run runs
+                           nothing and exits 126 with the fix, never binding
+                           by path. A cache or store of the default list under
                            the home (~/.cache, ~/.gradle, ~/go/pkg and the
                            others above, and one a variable names under the
                            home) that holds a PATH folder outside the
@@ -944,7 +959,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            elsewhere), whether the sandbox
                            can run here (one empty sandbox is started with
                            the bubblewrap and the options run uses, so one
-                           older than 0.5.0 cannot, as for jhon doctor), and
+                           older than 0.5.0 or without --bind-fd and
+                           --ro-bind-fd cannot, as for jhon doctor, nor
+                           can a kernel without openat2), and
                            the reason and the fix when it cannot; a probe
                            that does not end within 5 s is no verdict: the
                            mode stays on and commands are wrapped as usual,

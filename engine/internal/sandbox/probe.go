@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"time"
 )
@@ -32,8 +31,10 @@ const (
 	installFix = "install bubblewrap (pacman -S bubblewrap, apt install bubblewrap or dnf install bubblewrap)"
 	trustedFix = "install bubblewrap for the whole system (pacman -S bubblewrap, apt install bubblewrap or dnf install bubblewrap), or put it in a PATH folder outside the project and the folders the sandbox opens for writing"
 	// oldFix names the first bubblewrap with every option Args gives it:
-	// --perms came with 0.5.0.
+	// --perms came with 0.5.0. bindFdFix is for one that does not know
+	// --bind-fd or --ro-bind-fd, which a run binds every area with (T248).
 	oldFix    = "update bubblewrap to 0.5.0 or newer (pacman -S bubblewrap, apt install bubblewrap or dnf install bubblewrap)"
+	bindFdFix = "update bubblewrap to a release that has --bind-fd and --ro-bind-fd (pacman -S bubblewrap, apt install bubblewrap or dnf install bubblewrap)"
 	usernsFix = "turn unprivileged user namespaces on (sysctl kernel.unprivileged_userns_clone=1 and user.max_user_namespaces above 0; where AppArmor restricts them, a profile that lets bwrap use them)"
 )
 
@@ -118,7 +119,8 @@ func Check(h Host, in Input) (bwrap string, problem *Problem) {
 // bounded to 5 seconds: what `jhon sandbox status` and `jhon doctor` report,
 // and what turns the default mode on on Linux (Mode).
 // A bubblewrap that does not know one of the options is too old, and would
-// fail every run.
+// fail every run. Its binds are opened as a run opens them (Open), so where
+// openat2 is missing or refused the probe fails as a run would (T248).
 func Probe(h Host, in Input) *Problem {
 	bwrap, p := Check(h, in)
 	if p != nil {
@@ -130,12 +132,34 @@ func Probe(h Host, in Input) *Problem {
 // probeBound is how long Probe waits for its empty sandbox.
 const probeBound = 5 * time.Second
 
-// started is Probe's start of one empty sandbox with bwrap: nil when it ran,
-// else why it did not and the fix. A test gives its own.
-var started = func(bwrap string) *Problem {
+// started is Probe's start of one empty sandbox with bwrap (probe). A test
+// gives its own.
+var started = probe
+
+// probe starts one empty sandbox with bwrap: nil when it ran, else why it
+// did not and the fix.
+func probe(bwrap string) *Problem {
+	tmp := "/tmp"
+	if real, err := filepath.EvalSymlinks(tmp); err == nil {
+		tmp = real
+	}
+	b := &Bound{}
+	defer b.Close()
+	for range 2 {
+		f, err := openNoLink(tmp)
+		if p := openat2Problem(err); p != nil {
+			return p
+		}
+		if err != nil {
+			return &Problem{"the sandbox cannot open " + tmp + " with no link followed (" + err.Error() + ")", "run jhon sandbox status again; a sandboxed command fails the same way until " + tmp + " opens", false}
+		}
+		b.Files = append(b.Files, f)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), probeBound)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bwrap, append(slices.Clone(probeArgs), "true")...)
+	args := probeArgs(int(b.Files[0].Fd()), int(b.Files[1].Fd()), tmp)
+	cmd := exec.CommandContext(ctx, bwrap, append(args, "true")...)
+	cmd.ExtraFiles = b.ExtraFiles()
 	cmd.WaitDelay = time.Second
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -149,7 +173,11 @@ var started = func(bwrap string) *Problem {
 		said = err.Error()
 	}
 	if strings.Contains(said, "Unknown option") {
-		return &Problem{"bubblewrap is too old for the sandbox (" + said + ")", oldFix, false}
+		fix := oldFix
+		if strings.Contains(said, "-bind-fd") {
+			fix = bindFdFix
+		}
+		return &Problem{"bubblewrap is too old for the sandbox (" + said + ")", fix, false}
 	}
 	return &Problem{"bubblewrap cannot start a sandbox (" + said + ")", usernsFix, false}
 }

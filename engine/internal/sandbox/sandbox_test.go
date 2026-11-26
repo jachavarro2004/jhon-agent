@@ -654,14 +654,23 @@ func TestTheProbeUsesEveryOptionARunMayUse(t *testing.T) {
 	in := sample(d)
 	in.Path, in.RuntimeDir = []string{"/home/u/.gradle/bin"}, "/run/user/1000"
 	in.Env["TMPDIR"], in.Env["GH_TOKEN"] = "/proc/sys", "x"
-	for _, a := range Args(in) {
-		if strings.HasPrefix(a, "--") && !slices.Contains(probeArgs, a) {
-			t.Errorf("Args gives bubblewrap %s, which the probe does not try: %v", a, probeArgs)
+	probe := probeArgs(3, 4, "/tmp")
+	for i, a := range Args(in) {
+		// A run binds each area through a descriptor (Open, T248): only the
+		// machine's root stays a --ro-bind.
+		switch {
+		case a == "--bind":
+			a = "--bind-fd"
+		case a == "--ro-bind" && i > 0:
+			a = "--ro-bind-fd"
+		}
+		if strings.HasPrefix(a, "--") && !slices.Contains(probe, a) {
+			t.Errorf("a run gives bubblewrap %s, which the probe does not try: %v", a, probe)
 		}
 	}
-	for _, option := range []string{"--ro-bind", "--dev-bind", "--bind", "--perms", "--tmpfs", "--remount-ro", "--unsetenv", "--setenv", "--proc", "--unshare-pid", "--die-with-parent", "--chdir"} {
-		if !slices.Contains(probeArgs, option) {
-			t.Errorf("the probe does not try %s: %v", option, probeArgs)
+	for _, option := range []string{"--ro-bind", "--dev-bind", "--bind-fd", "--ro-bind-fd", "--perms", "--tmpfs", "--remount-ro", "--unsetenv", "--setenv", "--proc", "--unshare-pid", "--die-with-parent", "--chdir"} {
+		if !slices.Contains(probe, option) {
+			t.Errorf("the probe does not try %s: %v", option, probe)
 		}
 	}
 }

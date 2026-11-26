@@ -157,7 +157,7 @@ A file an agent writes is then formatted by its project's own formatter
 (`jhon hook format-edit`). On Linux `sandbox.mode` is on by default where
 the sandbox can run (one empty sandbox starts); where it cannot (no
 bubblewrap, user namespaces off or blocked by AppArmor, a bubblewrap too
-old) the default is off, commands run unsandboxed and `jhon doctor` warns
+old or without `--bind-fd`, a kernel or seccomp filter without `openat2`) the default is off, commands run unsandboxed and `jhon doctor` warns
 with the fix (an explicit `on` there refuses every command). A probe that
 does not end within 5 seconds is no verdict: the mode stays on, commands are
 wrapped as usual and fail with bubblewrap's own message if it cannot start,
@@ -165,6 +165,11 @@ and `jhon doctor` warns. With it on, an
 allowed command runs inside `jhon sandbox run` (bubblewrap): the project, the
 temporary folders, the caches and `sandbox.allow_write` are writable,
 everything else is read-only, and the home's credentials are not there.
+Each folder it binds is opened last with no link followed (`openat2`) and
+handed to bubblewrap as a descriptor (`--bind-fd`, `--ro-bind-fd`), so a
+folder another sandboxed run swaps for a link after Jhon checked it is not
+followed; one changed before that refuses the run, and without `openat2`
+(Linux before 5.6, or refused by a seccomp filter) the run fails closed.
 Jhon's source checkout, the one `jhon sync` installs from, stays read-only
 unless it is the project itself: a linked worktree of it is another project,
 and writes only its own files (and commits through the checkout's git
