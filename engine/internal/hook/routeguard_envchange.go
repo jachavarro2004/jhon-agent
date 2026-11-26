@@ -234,11 +234,50 @@ func envCommand(words []string, depth int) string {
 			for i, a := range args {
 				// -c, or a cluster with c in it (bash -ec, -lc, zsh -fc; T228 L5).
 				if shellC.MatchString(a) && i+1 < len(args) {
-					return envChangeIn(args[i+1], depth+1)
+					// The string is the first word after the options, which may follow -c (bash -c -e '…', T228 L8).
+					s := i + 1
+					for s < len(args)-1 && len(args[s]) > 1 && (args[s][0] == '-' || args[s][0] == '+') {
+						if args[s] == "-o" || args[s] == "+o" {
+							s++
+						}
+						s++
+					}
+					return envChangeIn(args[s], depth+1)
 				}
 			}
 		}
-		return envUnwrapped(words[k:], depth)
+		if why := envUnwrapped(words[k:], depth); why != "" {
+			return why
+		}
+		return envClass(words[k:], depth)
+	}
+	return ""
+}
+
+// envClass is the class rule of the safety guard (T228 L6, L8) for the
+// environment: a program the check has no reading of (not one that never
+// runs its arguments, by its bare name; not git, gh or jhon) given among
+// its words an env command, or a string that holds one, or exec, unset or
+// export, read as a shell line (`nix-shell --run 'unset JHON_AGENT'`, `conda
+// run env -i …`), may run it: found.
+func envClass(words []string, depth int) string {
+	name := sh.Base(words[0])
+	if sh.NeverRuns(name) && !strings.Contains(words[0], "/") || name == "git" || name == "gh" || name == "jhon" || depth >= 4 {
+		return ""
+	}
+	args := words[1:]
+	for i, a := range args {
+		// env is the one of these a runner can execute; the builtins run only in a shell's string.
+		if sh.Base(a) == "env" {
+			if why := envCommand(args[i:], depth+1); why != "" {
+				return name + " may run its words: " + why
+			}
+		}
+		if strings.ContainsAny(a, " \t;&|$`") {
+			if why := envChangeIn(a, depth+1); why != "" {
+				return name + " may run its words: " + why
+			}
+		}
 	}
 	return ""
 }

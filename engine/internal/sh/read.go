@@ -616,13 +616,25 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 	if Shells[name] {
 		for k := 1; k < len(w); k++ {
 			if shellC.MatchString(w[k]) {
+				// The string is the first word after the options, which may follow
+				// -c (`bash -c -e '…'`, T228 L8).
+				s := k + 1
+				for s < len(w) && len(w[s]) > 1 && (w[s][0] == '-' || w[s][0] == '+') && w[s] != "--" {
+					if shellOptArg.MatchString(w[s]) {
+						s++
+					}
+					s++
+				}
+				if at(w, s) == "--" {
+					s++
+				}
 				// The words after the string are its $0, $1, …: the guard
 				// resolves a script it runs or sources by them (L294).
 				in := inner
-				in.Envv = Positional(envv, w[min(k+2, len(w)):])
-				ps, err := JudgeString(at(w, k+1), sub(name+" -c"), env, in)
+				in.Envv = Positional(envv, w[min(s+1, len(w)):])
+				ps, err := JudgeString(at(w, s), sub(name+" -c"), env, in)
 				// zsh started with GLOB_SUBST on (T228 L2).
-				if l := GlobSubstOn(name, w[1:k+1]); l != "" {
+				if l := GlobSubstOn(name, w[1:s]); l != "" {
 					ps = append([]Program{{Argv: []string{GlobSubst, l}, Via: route, Env: env, Envv: envv, Name: GlobSubst}}, ps...)
 				}
 				return ps, err

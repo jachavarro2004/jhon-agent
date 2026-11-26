@@ -200,7 +200,9 @@ func has(seen []opt, names ...string) bool {
 type Inner struct {
 	Words   [][]string
 	Strings []string
-	Self    bool
+	// Docs are texts whose substitutions it runs (print -P's prompt expansion).
+	Docs []string
+	Self bool
 }
 
 // runs is what the runner name, its words w, runs (Inner); ok is false for
@@ -277,6 +279,22 @@ func runs(name string, w []string) (in Inner, ok bool, err error) {
 		return itself, true, nil
 	case "git":
 		return gitRuns(w)
+	case "sed":
+		return sedRuns(w)
+	case "print":
+		// zsh's print -P expands its arguments as prompts: under PROMPT_SUBST
+		// their substitutions run (T228 L8).
+		var in Inner
+		for k := 1; k < len(w); k++ {
+			if a := w[k]; strings.HasPrefix(a, "-") && strings.Contains(a, "P") && !strings.HasPrefix(a, "--") {
+				in = Inner{Docs: w[k+1:], Self: true}
+				break
+			}
+		}
+		if in.Docs == nil {
+			return Inner{}, false, nil
+		}
+		return in, true, nil
 	case "gdb":
 		in, err := gdbRuns(w)
 		return in, true, err
@@ -356,6 +374,15 @@ func runnerPrograms(name string, w []string, self Program, sub func(string) []st
 			return nil, true, err
 		}
 		out = append(out, ps...)
+	}
+	for _, d := range in.Docs {
+		for _, c := range documentCommands(d) {
+			ps, err := CommandPrograms(c, sub(name), env, inner)
+			if err != nil {
+				return nil, true, err
+			}
+			out = append(out, ps...)
+		}
 	}
 	for _, words := range in.Words {
 		ps, err := Programs(words, sub(name), env, inner)
@@ -623,7 +650,7 @@ func expectRuns(seen []opt, run bool) ([]string, error) {
 }
 
 // gitCommandKey is a git configuration key whose value is a command git runs.
-var gitCommandKey = lazyre.New(`(?i)^(?:alias\..+|core\.(?:pager|editor|fsmonitor|askpass)|diff\.(?:external|.+\.(?:textconv|command))|` +
+var gitCommandKey = lazyre.New(`(?i)^(?:alias\..+|core\.(?:pager|editor|fsmonitor|askpass|sshcommand)|diff\.(?:external|.+\.(?:textconv|command))|` +
 	`merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|pager\..+|sequence\.editor|credential\.(?:.+\.)?helper|` +
 	`gpg\.(?:.+\.)?program|uploadpack\.packobjectshook|interactive\.difffilter|(?:merge|diff)tool\..+\.cmd)$`)
 
@@ -680,7 +707,40 @@ sub:
 				value(strings.TrimSpace("git " + v + " " + args))
 			}
 		default:
+			// A credential helper's `!`; an ssh command that is ssh is the transport git runs anyway.
+			v = strings.TrimPrefix(v, "!")
+			if strings.Contains(strings.ToLower(key), "ssh") && (Base(at(strings.Fields(v), 0)) == "ssh") {
+				continue
+			}
 			value(v)
+		}
+	}
+	// T228 L8: the options whose value git runs as a command, and ext:: remotes.
+	for i := 1; i < len(rest); i++ {
+		a := rest[i]
+		n, v, eq := strings.Cut(a, "=")
+		sub := at(rest, 0)
+		switch {
+		case strings.HasPrefix(a, "ext::"):
+			in.Words = append(in.Words, extWords(a[5:]))
+		case gitCommandOptions[n] && eq:
+			value(v)
+		case gitCommandOptions[n] && i+1 < len(rest):
+			i++
+			value(rest[i])
+		case n == "--smtp-server":
+			if !eq {
+				i++
+				v = at(rest, i)
+			}
+			if strings.Contains(v, "/") {
+				in.Words = append(in.Words, []string{v})
+			}
+		case sub == "difftool" && a == "-x" || sub == "clone" && a == "-u" || sub == "instaweb" && a == "-d":
+			i++
+			value(at(rest, i))
+		case sub == "grep" && strings.HasPrefix(a, "-O") && len(a) > 2:
+			value(a[2:])
 		}
 	}
 	switch at(rest, 0) {
@@ -714,6 +774,39 @@ sub:
 	return in, true, nil
 }
 
+// gitCommandOptions are git's options whose value it runs as a command:
+// difftool's --extcmd, grep's --open-files-in-pager, the transports'
+// --upload-pack and --receive-pack, archive's (and push's) --exec,
+// daemon's --access-hook, instaweb's --httpd and send-email's
+// --sendmail-cmd (T228 L8).
+var gitCommandOptions = set("--extcmd", "--open-files-in-pager", "--upload-pack", "--receive-pack", "--exec", "--access-hook",
+	"--httpd", "--sendmail-cmd")
+
+// extWords is the words an ext:: remote runs: its text split at spaces,
+// `% ` a space inside a word and `%%` a percent sign (git-remote-ext).
+func extWords(s string) []string {
+	var out []string
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		switch {
+		case s[i] == '%' && i+1 < len(s):
+			i++
+			b.WriteByte(s[i])
+		case s[i] == ' ':
+			if b.Len() > 0 {
+				out = append(out, b.String())
+				b.Reset()
+			}
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	if b.Len() > 0 {
+		out = append(out, b.String())
+	}
+	return out
+}
+
 // gitCommands are git's own commands, which an alias of the same name never replaces.
 var gitCommands = set("add", "am", "annotate", "apply", "archive", "bisect", "blame", "branch", "bundle", "cat-file", "checkout",
 	"cherry", "cherry-pick", "clean", "clone", "commit", "config", "count-objects", "describe", "diff", "difftool", "fetch",
@@ -721,3 +814,126 @@ var gitCommands = set("add", "am", "annotate", "apply", "archive", "bisect", "bl
 	"notes", "pull", "push", "range-diff", "rebase", "reflog", "remote", "repack", "replace", "reset", "restore", "revert",
 	"rev-list", "rev-parse", "rm", "shortlog", "show", "show-ref", "sparse-checkout", "stash", "status", "submodule", "switch",
 	"tag", "worktree", "version")
+
+// sedRuns reads the commands sed runs (T228 L8): GNU sed's s command with
+// the e flag runs its pattern space after the substitution, read as the
+// replacement (the text a whole-line match makes it), and the e command
+// runs its text; `e` with none runs the pattern space, input the reader
+// does not see: unreadable. The script is each -e's (--expression) value,
+// else the first operand; a script file (-f) is not read. sed itself stays
+// read (its -i writes). ok is false for a script that runs none.
+func sedRuns(w []string) (Inner, bool, error) {
+	var scripts []string
+	first := true
+	for k := 1; k < len(w); k++ {
+		a := w[k]
+		switch {
+		case a == "-e" || a == "--expression":
+			k++
+			scripts, first = append(scripts, at(w, k)), false
+		case strings.HasPrefix(a, "--expression="):
+			scripts, first = append(scripts, a[len("--expression="):]), false
+		case len(a) > 2 && a[0] == '-' && a[1] != '-' && strings.Contains(a, "e"):
+			// A cluster ending in e takes the script after it (-ne 'script').
+			if i := strings.IndexByte(a, 'e'); i == len(a)-1 {
+				k++
+				scripts, first = append(scripts, at(w, k)), false
+			} else {
+				scripts, first = append(scripts, a[i+1:]), false
+			}
+		case a == "-f" || a == "--file" || a == "-l" || a == "--line-length":
+			k++
+			first = first && a[1] != 'f' && a != "--file"
+		case strings.HasPrefix(a, "-"):
+		case first:
+			scripts, first = append(scripts, a), false
+		}
+	}
+	in := Inner{Self: true}
+	for _, sc := range scripts {
+		cmds, err := sedCommands(sc)
+		if err != nil {
+			return Inner{}, true, err
+		}
+		in.Strings = append(in.Strings, cmds...)
+	}
+	if len(in.Strings) == 0 {
+		return Inner{}, false, nil
+	}
+	return in, true, nil
+}
+
+// sedCommands is the commands a sed script runs (sedRuns).
+func sedCommands(sc string) ([]string, error) {
+	var out []string
+	// field reads the text from i up to an unescaped delim: the text and the index after the delimiter.
+	field := func(i int, delim byte) (string, int) {
+		var b strings.Builder
+		for ; i < len(sc); i++ {
+			switch {
+			case sc[i] == '\\' && i+1 < len(sc):
+				if sc[i+1] != delim {
+					b.WriteByte('\\')
+				}
+				i++
+				b.WriteByte(sc[i])
+			case sc[i] == delim:
+				return b.String(), i + 1
+			default:
+				b.WriteByte(sc[i])
+			}
+		}
+		return b.String(), i
+	}
+	for i := 0; i < len(sc); {
+		c := sc[i]
+		switch {
+		case c == ' ' || c == '\t' || c == ';' || c == '\n' || c == '{' || c == '}' || c == '!' || c == ',' ||
+			c == '$' || c >= '0' && c <= '9' || c == '~' || c == '+':
+			i++
+		case c == '/':
+			_, i = field(i+1, '/')
+		case c == '\\' && i+1 < len(sc):
+			_, i = field(i+2, sc[i+1])
+		case c == 's' && i+1 < len(sc):
+			d := sc[i+1]
+			_, j := field(i+2, d)
+			repl, j := field(j, d)
+			k := j
+			for k < len(sc) && strings.IndexByte(";\n}", sc[k]) < 0 {
+				k++
+			}
+			// The flags, up to a w flag's file name.
+			flags, _, _ := strings.Cut(sc[j:k], "w")
+			if strings.ContainsRune(flags, 'e') {
+				out = append(out, repl)
+			}
+			i = k
+		case c == 'y' && i+1 < len(sc):
+			d := sc[i+1]
+			_, j := field(i+2, d)
+			_, i = field(j, d)
+		case c == 'e':
+			end := strings.IndexByte(sc[i:], '\n')
+			if end < 0 {
+				end = len(sc) - i
+			}
+			cmd := strings.TrimSpace(sc[i+1 : i+end])
+			if cmd == "" {
+				return nil, &Unreadable{Why: "sed's e command runs each line of its input, which the reader does not see"}
+			}
+			out = append(out, cmd)
+			i += end
+		case strings.IndexByte("aic", c) >= 0 || strings.IndexByte("rRwWbtTv:", c) >= 0:
+			// Text or a name to the end of the line.
+			end := strings.IndexByte(sc[i:], '\n')
+			if end < 0 {
+				return out, nil
+			}
+			i += end
+		default:
+			i++
+		}
+	}
+	return out, nil
+}

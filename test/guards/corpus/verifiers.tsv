@@ -298,3 +298,109 @@ safety-guard	Bash	"echo \"rm -rf ~\""	allow	none	T228	-	L6: echo never runs its 
 safety-guard	Bash	"git log --grep=rm"	allow	none	T228	-	L6: git is read as git
 safety-guard	Bash	"pgrep -af \"nx run|git push\""	allow	none	T228	-	L6: pgrep never runs its pattern
 safety-guard	Bash	"sed -i 's/rm -rf ~//' x.sh"	allow	none	T228	-	L6: s/rm is no program word
+# T228 L7b (re-verify mwx1k255, odd/probes228b) and L8 (the owner's decision).
+safety-guard	Bash	"nix-shell --run 'rm -rf \"$HOME\"'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"nix-shell --run 'rm -rf \"${HOME}\"'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"nix-shell --run 'rm -rf \"~\"'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"nix-shell --run 'rm -r\"f\" ~'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"nix-shell --run 'rm \"-rf\" ~'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"nix-shell --run \"rm '-rf' ~\""	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"nix-shell --run '\"rm\" -rf ~'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"nix-shell --run '\\rm -rf ~'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"nix-shell --run 'r\\m -rf ~'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"conda run python -c 'import shutil,os; shutil.rmtree(os.path.expanduser(\"~\"))'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"tmux send-keys 'r' 'm -rf ~' Enter"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"tmux send-keys r m ' ' - r f ' ' '~' Enter"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"entr -s 'rm -rf \"$HOME\"'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"vim -c '!rm -rf \"$HOME\"'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"sed 's/.*/rm -rf ~/e' x"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"LESSOPEN='|rm -rf ~' less x"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"PAGER='rm -rf ~' man ls"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"EDITOR='rm -rf ~' crontab -e"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"./ls 'rm -rf ~'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"./node_modules/.bin/echo rm -rf ~"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"bin/cat --run 'rm -rf ~'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"/usr/local/bin/ls rm -rf ~"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"ln -s /usr/bin/nix-shell ls; ./ls --run 'rm -rf ~'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"ls() { \"$@\"; }; ls rm -rf ~"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"echo() { eval \"$*\"; }; echo rm -rf ~"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"cat() { sh -c \"$1\"; }; cat 'rm -rf ~'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"function grep { \"$@\"; }; grep rm -rf ~"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"test -v 'a[$(rm -rf ~)]'"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"[ -v 'a[$(rm -rf ~)]' ]"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"[[ -v 'a[$(rm -rf ~)]' ]]"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"printf -v 'a[$(rm -rf ~)]' x"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"printf -v a[\\$\\(rm\\ -rf\\ ~\\)] x"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"kill -l 'a[$(rm -rf ~)]'"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"declare -i x='a[$(rm -rf ~)]'"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"x='a[$(rm -rf ~)]'; [[ $x -eq 0 ]]"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"x='a[$(rm -rf ~)]'; echo $((x))"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"x='a[$(rm -rf ~)]'; test \"$x\" -eq 0"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"setopt promptsubst; print -P '$(rm -rf ~)'"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"print -P '%(e.$(rm -rf ~).)'"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rg --pre=sh x"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rg --pre sh x"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rg --pre=./x.sh y"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rg --pre-glob '*' --pre sh x"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"RIPGREP_CONFIG_PATH=x.rc rg y"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rg --hostname-bin=./x --hyperlink-format=default y"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git -c core.sshCommand='rm -rf ~' fetch origin"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git -c credential.helper='!rm -rf ~' fetch"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git -c protocol.ext.allow=always fetch 'ext::sh -c rm% -rf% ~'"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"GIT_EXTERNAL_DIFF='rm -rf ~' git diff"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"GIT_PAGER='rm -rf ~' git log"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"PAGER='rm -rf ~' git log"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"GIT_EDITOR='rm -rf ~' git commit"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"EDITOR='rm -rf ~' git commit"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"VISUAL='rm -rf ~' git commit"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"GIT_SSH_COMMAND='rm -rf ~' git fetch"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"GIT_SSH='rm -rf ~' git fetch"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"GIT_ASKPASS='rm -rf ~' git fetch"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"GIT_SEQUENCE_EDITOR='rm -rf ~' git rebase -i HEAD~1"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0='rm -rf ~' git log"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"GIT_CONFIG_PARAMETERS=\"'core.pager'='rm -rf ~'\" git log"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"export GIT_EXTERNAL_DIFF='rm -rf ~'; git diff"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git difftool --extcmd='rm -rf ~' -y"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git difftool -x 'rm -rf ~' -y"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git difftool --extcmd 'rm -rf ~' -y"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git grep -O'rm -rf ~' x"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git grep --open-files-in-pager='rm -rf ~' x"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git ls-remote --upload-pack='rm -rf ~' ."	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git fetch --upload-pack='rm -rf ~' ."	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git clone -u 'rm -rf ~' . x"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git clone --upload-pack 'rm -rf ~' . x"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git archive --remote=. --exec='rm -rf ~' HEAD"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git daemon --access-hook='rm -rf ~'"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git instaweb --httpd='rm -rf ~'"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"git send-email --sendmail-cmd='rm -rf ~' x"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"ls *(e:'sh -c \"rm -rf ~\"':)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"ls *(e:'bash -c \"rm -rf ~\"':)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"ls *(e:\"sh -c 'rm -rf ~'\":)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"ls *(e:'sh -c rm\\ -rf\\ ~':)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"ls *(e:'zsh -c \"rm -rf ~\"':)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"ls *(e:'nohup sh -c \"rm -rf ~\"':)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(e:'REPLY=~':)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(e:'reply=(~)':)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(e:'REPLY=/':)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(e:'REPLY+=/../..':)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(P:..:)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(P:~:)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(P:/:)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*([1]:a:h:h:h:h:h:h:h:h)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(:a:h:h)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(:h:h)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(:s/dist/~/)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"rm -rf dist/*(:s@dist@..@)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"f() { REPLY=~; }; rm -rf dist/*(+f)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"alias q='REPLY=~'\nrm -rf dist/*(e:q:)"	refuse	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"tmux new -d 'rm -rf \"$HOME\"'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"entr -s 'rm -rf \"$HOME\"/'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"watchexec 'rm -rf \"${HOME:?}\"'"	ask	none	T228	-	L8: a blocker of the re-verify mwx1k255
+safety-guard	Bash	"ls *(e:'[[ -s $REPLY ]]':)"	allow	none	T228	-	L8: an e string that only tests, or a sort key
+safety-guard	Bash	"ls *(e:'[[ $REPLY == *.go ]]':)"	allow	none	T228	-	L8: an e string that only tests, or a sort key
+safety-guard	Bash	"ls *(oe:'REPLY=${#REPLY}':)"	allow	none	T228	-	L8: an e string that only tests, or a sort key
+safety-guard	Bash	"ls *(e:'test -x $REPLY':)"	allow	none	T228	-	L8: an e string that only tests, or a sort key
+safety-guard	Bash	"conda run node -e 'require(\"child_process\").execSync(\"rm -rf \" + require(\"os\").homedir())'"	allow	none	T228	known	L8: outside this round (computed or written script, or code the bare interpreter line allows)
+safety-guard	Bash	"sh <(echo 'rm -rf ~')"	allow	none	T228	known	L8: outside this round (computed or written script, or code the bare interpreter line allows)
+safety-guard	Bash	"echo 'rm -rf ~' > x.sh && sh x.sh"	allow	none	T228	known	L8: outside this round (computed or written script, or code the bare interpreter line allows)
+safety-guard	Bash	"echo cm0gLXJmIH4K | base64 -d | sh"	allow	none	T228	known	L8: outside this round (computed or written script, or code the bare interpreter line allows)

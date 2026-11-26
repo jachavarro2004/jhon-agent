@@ -36,6 +36,8 @@ type Ctx struct {
 	targets *[]Target
 	// noClass turns the class rule off while it judges a candidate (classFinding).
 	noClass bool
+	// defined are the names the line defines as a function or an alias (trusted).
+	defined map[string]bool
 }
 
 // State is what a command line changes as it is read: the directory ("" when
@@ -195,6 +197,7 @@ func unreadableAsk(err error) Finding {
 // Classify is the findings of a command line run in ctx.Cwd.
 func Classify(command string, ctx *Ctx) []Finding {
 	ctx.scratch, ctx.mktempRm = scratchVars(command, ctx), mktempRm(command)
+	ctx.defined = sh.DefinedNames(command)
 	ctx.trapWord, ctx.trapAction, ctx.trapScratch = trapExit(command, ctx)
 	st := &State{Dir: ctx.Cwd, Links: &Links{}}
 	out := classify(command, ctx, 0, st)
