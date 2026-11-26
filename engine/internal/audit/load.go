@@ -62,6 +62,10 @@ type ToolResult struct {
 	IsError bool
 	Text    string
 	Shown   string
+
+	// parts is where each text part after the first starts in Shown (pi):
+	// the shell appends its notices to a tool's output as parts of their own.
+	parts []int
 }
 
 // Usage is the token counts of one API response, as `message.usage` records them.
@@ -122,6 +126,9 @@ type Subagent struct {
 	Parent string
 
 	change, phase, root string
+	// unanswered is whether its last run, a subagent_continue's (pi), never
+	// answered: pi closed or the session resumed first.
+	unanswered bool
 }
 
 // Session is a loaded session.
@@ -299,7 +306,7 @@ func entryOf(o *js.Object, line int, toolResults string) *Entry {
 		case "tool_result":
 			shown := contentText(prop(c, "content"))
 			isErr, _ := prop(c, "is_error").(bool)
-			e.ToolResults = append(e.ToolResults, ToolResult{js.String(prop(c, "tool_use_id")), isErr, fullText(shown, toolResults), shown})
+			e.ToolResults = append(e.ToolResults, ToolResult{ID: js.String(prop(c, "tool_use_id")), IsError: isErr, Text: fullText(shown, toolResults), Shown: shown})
 		}
 	}
 	return e

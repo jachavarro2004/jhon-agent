@@ -28,6 +28,9 @@ type pcall struct {
 	args             *js.Object
 	result           string
 	isError, blocked bool
+	// appended are text parts after the result's own, as the shell's
+	// tool_result handlers append their notices.
+	appended []string
 	// auth is the data of the jhon-owner-authorization entry the extension
 	// records between the call and its result, when the owner answered yes.
 	auth *js.Object
@@ -145,7 +148,11 @@ func (w *pwriter) call(id string, c pcall) {
 	if c.auth != nil {
 		w.entry("custom", "customType", piAuthorizationEntry, "data", c.auth)
 	}
-	r := js.Obj("role", "toolResult", "toolCallId", id, "toolName", c.name, "content", []any{js.Obj("type", "text", "text", c.result)})
+	content := []any{js.Obj("type", "text", "text", c.result)}
+	for _, a := range c.appended {
+		content = append(content, js.Obj("type", "text", "text", a))
+	}
+	r := js.Obj("role", "toolResult", "toolCallId", id, "toolName", c.name, "content", content)
 	if c.blocked {
 		r.Set("details", js.NewObject())
 	} else {
