@@ -219,7 +219,8 @@ func (p *pytestProject) untouched(t *testing.T) []string {
 // T256 (L1726, L1728): what a killed jhon left beside the records (a
 // private copy, a first run's file) is swept by the next run, its lock being
 // held by no one, and the record the run publishes is 0644, readable by
-// every worktree.
+// every worktree. The killed run leaves nothing in its TMPDIR either (T267
+// S3): the file a parallel project's output is held in has no name.
 func TestExecutionsSweepsWhatAKilledRunLeftAndPublishesTheRecord0644(t *testing.T) {
 	t.Parallel()
 	p := newPytestProject(t)
@@ -227,7 +228,8 @@ func TestExecutionsSweepsWhatAKilledRunLeftAndPublishesTheRecord0644(t *testing.
 	// A run killed (SIGKILL) while pytest runs leaves its private copy and
 	// its lock, which the kernel let go.
 	killed := exec.Command(support.Bin(t), "executions", "run", "c1", "--affected", "base", "--json")
-	killed.Dir, killed.Env = p.root, support.Env(append(append([]string{}, p.env...), "FAKE_UV_SLEEP=3")...)
+	tmp := temp(t)
+	killed.Dir, killed.Env = p.root, support.Env(append(append([]string{}, p.env...), "FAKE_UV_SLEEP=3", "TMPDIR="+tmp)...)
 	if err := killed.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -240,6 +242,9 @@ func TestExecutionsSweepsWhatAKilledRunLeftAndPublishesTheRecord0644(t *testing.
 	killed.Process.Kill()
 	killed.Wait()
 	match(t, strings.Join(leftBeside(t, p), " "), `^\S+\.db\.[0-9]+-[0-9]+\.run \S+\.db\.[0-9]+-[0-9]+\.run\.lock$`, "what the killed run left")
+	if left, _ := os.ReadDir(tmp); len(left) > 0 {
+		t.Errorf("the killed run left %s in its TMPDIR", left)
+	}
 	r := p.jhon(t, nil, "executions", "run", "c1", "--affected", "base", "--json")
 	equal(t, r.Code, 0, r.Out())
 	equal(t, leftBeside(t, p), []string(nil), "the killed run's files are swept")
