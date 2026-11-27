@@ -675,9 +675,19 @@ func onlyListed(args []string, allowed options) bool {
 // background. What follows the cd runs only once it succeeded, in that
 // folder.
 func leadingCd(command string) (string, bool) {
+	folder, _, ok := cdWord(command)
+	if !ok || slices.Contains(strings.Split(folder, "/"), "..") {
+		return "", false
+	}
+	return folder, true
+}
+
+// cdWord is leadingCd's folder and its word on the line, with every check
+// of leadingCd's but the one of a .. part.
+func cdWord(command string) (string, *syntax.Word, bool) {
 	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(command), "")
 	if err != nil || len(f.Stmts) != 1 {
-		return "", false
+		return "", nil, false
 	}
 	plain := func(s *syntax.Stmt) bool {
 		return s != nil && !s.Background && !s.Negated && !s.Coprocess && len(s.Redirs) == 0
@@ -689,16 +699,16 @@ func leadingCd(command string) (string, bool) {
 			break
 		}
 		if b.Op != syntax.AndStmt {
-			return "", false
+			return "", nil, false
 		}
 		s, joined = b.X, true
 	}
 	if !joined || !plain(s) {
-		return "", false
+		return "", nil, false
 	}
 	c, isCall := s.Cmd.(*syntax.CallExpr)
 	if !isCall || len(c.Assigns) != 0 || len(c.Args) != 2 || c.Args[0].Lit() != "cd" {
-		return "", false
+		return "", nil, false
 	}
 	var dir strings.Builder
 	for _, p := range c.Args[1].Parts {
@@ -707,27 +717,50 @@ func leadingCd(command string) (string, bool) {
 			dir.WriteString(x.Value)
 		case *syntax.SglQuoted:
 			if x.Dollar {
-				return "", false
+				return "", nil, false
 			}
 			dir.WriteString(x.Value)
 		case *syntax.DblQuoted:
 			for _, q := range x.Parts {
 				l, isLit := q.(*syntax.Lit)
 				if !isLit || x.Dollar {
-					return "", false
+					return "", nil, false
 				}
 				dir.WriteString(l.Value)
 			}
 		default:
-			return "", false
+			return "", nil, false
 		}
 	}
 	folder := dir.String()
-	if !literalWord(c.Args[1], true) || folder == "" || strings.HasPrefix(folder, "-") || strings.ContainsAny(folder, `\{}`) ||
-		slices.Contains(strings.Split(folder, "/"), "..") {
-		return "", false
+	if !literalWord(c.Args[1], true) || folder == "" || strings.HasPrefix(folder, "-") || strings.ContainsAny(folder, `\{}`) {
+		return "", nil, false
 	}
-	return folder, true
+	return folder, c.Args[1], true
+}
+
+// withoutDotDot is line with the folder of its leading `cd <folder> &&`
+// named by its absolute path with no .. part, as the shell's cd (a logical
+// one) takes it from cwd, and whether the folder had one (L1740): leadingCd
+// takes no such folder, so the line runs in the sandbox, and its note gives
+// the line that would not. line itself when its cd has no .. part, or is
+// no leadingCd but for it.
+func withoutDotDot(line, cwd string) (string, bool) {
+	folder, w, ok := cdWord(line)
+	if !ok || !slices.Contains(strings.Split(folder, "/"), "..") {
+		return line, false
+	}
+	if !filepath.IsAbs(folder) {
+		if !filepath.IsAbs(cwd) {
+			return line, false
+		}
+		folder = filepath.Join(cwd, folder)
+	}
+	quoted, err := syntax.Quote(filepath.Clean(folder), syntax.LangBash)
+	if err != nil {
+		return line, false
+	}
+	return line[:w.Pos().Offset()] + quoted + line[w.End().Offset():], true
 }
 
 // literal is whether the shell passes every word of command as written
@@ -826,6 +859,8 @@ func DeliveryNote(argv []string) string {
 // that refused it), when it is not nil; else, for `<shell> -c <line>` (or
 // the command the Claude Code wrap passes after the shell's $0), the reason
 // Outside gives for that line (where its git works, a planted program).
+// A line kept inside only for a .. part in its leading cd's folder gets
+// the line that runs outside, with that folder's absolute path (L1740).
 // Only a line kept inside for its shape (a pipe, another command) gets
 // DeliveryNote's "run it alone". "" when argv holds no git network
 // command and no gh.
@@ -841,9 +876,19 @@ func DeliveryNoteAt(h Host, in Input, argv []string, kept *Problem) string {
 		if len(argv) > 4 {
 			lines = append(lines, argv[4:]...)
 		}
-		for _, line := range lines {
-			if _, p, _ := Outside(h, in, []string{argv[0], "-c", line}); p != nil {
+		// A line whose cd names its folder with a .. part is judged as the
+		// line with that folder's absolute path (withoutDotDot, L1740):
+		// kept inside for another reason, the note gives that one; else
+		// the line it gives runs outside.
+		for i, line := range lines {
+			fixed, dotted := withoutDotDot(line, in.Cwd)
+			lines[i] = fixed
+			_, p, ok := Outside(h, in, []string{argv[0], "-c", fixed})
+			if p != nil {
 				return keptNote + p.Line()
+			}
+			if dotted && ok && DeliveryNote([]string{argv[0], "-c", fixed}) != "" {
+				return escapeControls(keptNote + "the line's cd names its folder with a .. part, which a line outside the sandbox never takes (a cd through a link and back up lands elsewhere); fix: name the folder by its absolute path with no .. part, as in " + fixed)
 			}
 		}
 		// A line that is alone already is kept inside for what it holds,

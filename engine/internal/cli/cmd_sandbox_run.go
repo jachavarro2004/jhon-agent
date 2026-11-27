@@ -26,12 +26,13 @@ import (
 // words, argv[0] first, with env. On a terminal it replaces this process,
 // as run always did; otherwise it supervises it (sandboxSupervised), and
 // a failure ends with failNote when it is not "", any exit but a signal's
-// with runNote. refusal is the note on a refused write to a path
+// with runNote, and with dockerNote when its output says docker could not
+// reach its daemon. refusal is the note on a refused write to a path
 // (sandbox.Refusal for the work profile); nil gives sandbox.RefusalNote.
 // bound are the descriptors of bubblewrap's binds (sandbox.Open, T248),
 // nil for a program with none: they reach the program at the numbers its
 // arguments name, and no other descriptor of jhon's does.
-func sandboxProgram(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string, bound *sandbox.Bound, started *os.File) (int, error) {
+func sandboxProgram(path string, argv, env []string, profile, failNote, runNote, dockerNote string, refusal func(string) string, bound *sandbox.Bound, started *os.File) (int, error) {
 	if !supervisedOutput() {
 		if bound != nil {
 			if err := bound.Inherit(); err != nil {
@@ -48,7 +49,7 @@ func sandboxProgram(path string, argv, env []string, profile, failNote, runNote 
 	if bound != nil {
 		extra = bound.ExtraFiles()
 	}
-	return sandboxSupervised(path, argv, env, profile, failNote, runNote, refusal, extra, started)
+	return sandboxSupervised(path, argv, env, profile, failNote, runNote, dockerNote, refusal, extra, started)
 }
 
 // supervisedOutput is whether `jhon sandbox run` supervises its program
@@ -263,6 +264,12 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 //   - any exit, a success too, not a signal's, ends with runNote after
 //     those, on a line of its own, when it is not "": sandbox.DeployNoteAt
 //     for a work line that holds one of sandbox.deploy_tools (T217);
+//   - any exit, a success too (a pipe to head), not a signal's, whose
+//     output (stdout or stderr) said docker could not reach its daemon
+//     (sandbox.DockerUnreached) ends with dockerNote last, on a line of its
+//     own, when it is not "": sandbox.DockerNote for a work run with the
+//     docker socket hidden (T252), so the agent does not read a hidden
+//     socket as a machine with no Docker;
 //   - a jhon.sandbox event records the profile, the exit code and the
 //     refused path, through telemetry when it is on (G4);
 //   - its exit code is the program's, and a program killed by a signal
@@ -270,7 +277,7 @@ var forwarded = []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, sys
 //
 // extra are the files the program gets besides the standard three
 // (exec.Cmd.ExtraFiles): bubblewrap's bind descriptors.
-func sandboxSupervised(path string, argv, env []string, profile, failNote, runNote string, refusal func(string) string, extra []*os.File, started *os.File) (int, error) {
+func sandboxSupervised(path string, argv, env []string, profile, failNote, runNote, dockerNote string, refusal func(string) string, extra []*os.File, started *os.File) (int, error) {
 	watch := &sandbox.Watch{}
 	errOut := &lastByte{w: os.Stderr}
 	opening := &firstBytes{}
@@ -332,7 +339,7 @@ func sandboxSupervised(path string, argv, env []string, profile, failNote, runNo
 	// with its exit 1. The line stays; the note says what it means, and no
 	// other note follows.
 	if profile == sandbox.Work && code == 1 && killedBy == 0 && started != nil && !signalled(started) && bwrapRaced(opening.String()) {
-		said, failNote, runNote = false, "", ""
+		said, failNote, runNote, dockerNote = false, "", "", ""
 		notes = append(notes, bwrapRaceNote)
 	}
 	if said && code != 0 {
@@ -346,6 +353,9 @@ func sandboxSupervised(path string, argv, env []string, profile, failNote, runNo
 	}
 	if runNote != "" && code <= 128 && killedBy == 0 {
 		notes = append(notes, runNote)
+	}
+	if dockerNote != "" && code <= 128 && killedBy == 0 && watch.Docker() {
+		notes = append(notes, dockerNote)
 	}
 	if len(notes) > 0 {
 		if b := errOut.last(); b != 0 && b != '\n' {

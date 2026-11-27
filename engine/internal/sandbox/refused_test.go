@@ -59,3 +59,26 @@ func TestWatchFindsTheLineAcrossWrites(t *testing.T) {
 		t.Errorf("a last line with no newline: %q, %v", path, said)
 	}
 }
+
+// T252: Watch sees docker's daemon message in pieces, after a refused write
+// too, which keeps the first refused path; a last line with no newline
+// counts, and ordinary output is no daemon message.
+func TestWatchFindsDockersDaemonMessage(t *testing.T) {
+	var w Watch
+	for _, piece := range []string{"x: /a/b: Read-only file system\nfailed to connect to the doc", "ker API at unix:///var/run/docker.sock; check\n", "y: /c: Read-only file system\n"} {
+		w.Write([]byte(piece))
+	}
+	if path, said := w.Refused(); !w.Docker() || !said || path != "/a/b" {
+		t.Errorf("Docker = %v, Refused = %q, %v; want true and /a/b", w.Docker(), path, said)
+	}
+	var tail Watch
+	tail.Write([]byte("Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"))
+	if !tail.Docker() {
+		t.Error("a last line with no newline: no daemon message")
+	}
+	var plain Watch
+	plain.Write([]byte("docker: 'compose' is not a docker command.\nno configuration file provided: not found\n"))
+	if plain.Docker() {
+		t.Error("docker's other failures read as a daemon message")
+	}
+}

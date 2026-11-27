@@ -229,7 +229,7 @@ func sandboxRun(argv []string) (int, error) {
 				kept = repositoryGitProblem(in, program[2], gate, top)
 			}
 			if kept == nil {
-				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), gate...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", nil, nil, nil)
+				code, err := sandboxProgram(program[0], program, append(sandbox.UnsandboxedEnv(os.Environ(), ownerCredentialHelpers(), gate...), hook.AgentVariable+"=1"), sandbox.Unsandboxed, "", "", "", nil, nil, nil)
 				leave()
 				return code, err
 			}
@@ -319,7 +319,7 @@ func sandboxRun(argv []string) (int, error) {
 		}
 		defer started.Close()
 	}
-	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), bound.Command(program)...), env, profile, sandbox.DeliveryNoteAt(sandbox.ThisHost(), in, program, kept), sandbox.DeployNoteAt(sandbox.ThisHost(), in, program, kept), refusal, bound, started)
+	code, err := sandboxProgram(bwrap, append(append([]string{bwrap}, bound.Args...), bound.Command(program)...), env, profile, sandbox.DeliveryNoteAt(sandbox.ThisHost(), in, program, kept), sandbox.DeployNoteAt(sandbox.ThisHost(), in, program, kept), sandbox.DockerNote(in), refusal, bound, started)
 	bound.Close()
 	leave()
 	return code, err

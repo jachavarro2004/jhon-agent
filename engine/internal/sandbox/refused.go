@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -111,27 +112,55 @@ func escapeControls(note string) string {
 	return b.String()
 }
 
+// dockerUnreached are the docker client's own words for a daemon it cannot
+// reach: docker 29's, and those of older clients and docker-compose v1.
+// With the sandbox hiding the docker socket (sandbox.docker off, L37) every
+// docker call inside it ends so, and an agent read that as a machine with
+// no Docker (T252, L1721).
+var dockerUnreached = []string{"failed to connect to the docker API at ", "Cannot connect to the Docker daemon at "}
+
+// DockerUnreached is whether a line of output says the docker client could
+// not reach its daemon.
+func DockerUnreached(line string) bool {
+	return slices.ContainsFunc(dockerUnreached, func(s string) bool { return strings.Contains(line, s) })
+}
+
+// DockerNote is the note a work run in in ends with when its output says
+// docker could not reach its daemon (DockerUnreached, T252): "" with
+// sandbox.docker on, where the socket is there and the message means what
+// it says.
+func DockerNote(in Input) string {
+	if in.Docker {
+		return ""
+	}
+	return dockerNote
+}
+
+const dockerNote = "jhon sandbox: docker cannot reach its daemon from inside the sandbox, which hides the docker socket (sandbox.docker is off), so this says nothing of whether Docker runs on this machine; fix: run the docker command on a line of its own in the project, with no pipes or other commands (as in docker compose up -d), which runs outside the sandbox, or ask the owner to run jhon settings set sandbox.docker true, which shows the socket inside the sandbox, where a container can write anywhere the user can"
+
 // watchLine is the longest line Watch keeps: a longer one is cut there.
 const watchLine = 8192
 
 // Watch is a writer that looks for the first refused write (RefusedWrite)
-// in what is written to it, line by line, across writes that may cut a line;
+// in what is written to it, line by line, across writes that may cut a line,
+// and for a docker client that could not reach its daemon (DockerUnreached);
 // it writes nowhere. Its methods may be called from more than one goroutine.
 type Watch struct {
 	mu      sync.Mutex
 	partial []byte
 	path    string
 	said    bool
+	docker  bool
 }
 
 func (w *Watch) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.said {
+	if w.said && w.docker {
 		return len(p), nil
 	}
 	rest := p
-	for len(rest) > 0 && !w.said {
+	for len(rest) > 0 && !(w.said && w.docker) {
 		i := bytes.IndexByte(rest, '\n')
 		if i < 0 {
 			w.partial = append(w.partial, rest[:min(len(rest), max(0, watchLine-len(w.partial)))]...)
@@ -146,9 +175,12 @@ func (w *Watch) Write(p []byte) (int, error) {
 
 // line looks at the line kept so far, and forgets it.
 func (w *Watch) line() {
-	if path, said := RefusedWrite(string(w.partial)); said {
-		w.path, w.said = path, true
+	if !w.said {
+		if path, said := RefusedWrite(string(w.partial)); said {
+			w.path, w.said = path, true
+		}
 	}
+	w.docker = w.docker || DockerUnreached(string(w.partial))
 	w.partial = w.partial[:0]
 }
 
@@ -157,8 +189,22 @@ func (w *Watch) line() {
 func (w *Watch) Refused() (string, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if !w.said && len(w.partial) > 0 {
+	w.last()
+	return w.path, w.said
+}
+
+// Docker is whether a line said docker could not reach its daemon; a last
+// line with no newline counts.
+func (w *Watch) Docker() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.last()
+	return w.docker
+}
+
+// last looks at a last line with no newline, once.
+func (w *Watch) last() {
+	if len(w.partial) > 0 {
 		w.line()
 	}
-	return w.path, w.said
 }
