@@ -18,6 +18,7 @@ All notable changes to Jhon are recorded here. The format follows
 
 ### Added
 
+- `docs/recommended-settings.md` (T260): the owner's recommended settings for working in super-yolo across a workspace (`sandbox.mode on`, `sandbox.allow_write`, the workspace members, a mode in each repository, `sandbox.deploy_tools`, `sandbox.docker`, the executions deadlines). Each value comes with what it costs and what it protects, as measured on fdadbf9 (a Bash call takes about 90 ms more with the sandbox on). It also lists what to avoid and the gaps left for phase 2, such as a mode in the primary not covering its members.
 - `jhon executions forget <project> [--root <project>]` drops a uv-run pytest project's pytest-testmon record, and the worktree's own from before the shared one, so the next affected run builds it again, every test once (T255, odd/tasks/t255.md L1725). The whole record, not only its failed marks: a test that failed because a service was down recorded only the code it ran before failing, and trusting it as passing would select less.
 
 ### Fixed

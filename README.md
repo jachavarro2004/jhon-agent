@@ -767,6 +767,7 @@ own help.
 | [docs/jhon-studio.md](docs/jhon-studio.md) | jhon-studio, the opt-in video integration: `/jhon-studio:video` in Claude Code, `/jhon:video` in pi |
 | [docs/status-json.md](docs/status-json.md) | the shape of `jhon status --json` |
 | [docs/identity.md](docs/identity.md) | Jhon's one identity across its repos: the mark, the words, the look, the badges, the support block, the community files |
+| [docs/recommended-settings.md](docs/recommended-settings.md) | the owner's recommended settings for multi-repository work in super-yolo: each value with what it costs and what it protects, what to avoid, and the known gaps |
 | [SUPPORT.md](SUPPORT.md) | where to ask, and how to support jhon-agent |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, release by release |
 | `prose/contracts/ldd.md` | the method itself |
