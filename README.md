@@ -326,7 +326,17 @@ helpers and signing apply), to the address `remote.<name>.url` names. A
 configuration that would change that address stops the publish, and so
 does an address that is a path, `file://`, `git://` or a transport helper
 (`ext::` and the like): only an ssh or https remote is pushed to, and
-publish says where it pushed.
+publish says where it pushed. That address must be the release repository,
+the module the published commit's `go.mod` names
+(`github.com/jachavarro2004/jhon-agent`), as `git@github.com:…`,
+`ssh://git@github.com/…` or `https://github.com/…`, or what your own global
+`insteadOf` makes of one (an ssh alias of yours): a url a sandboxed command
+pointed elsewhere stops the publish, with the url and where it is set. A
+mirror on another host is refused the same way. The committed pre-push's
+own git runs no external diff or textconv the checkout's configuration
+names. Sync and publish keep go's work folder for each state folder under
+/var/tmp, and remove those whose state folder is gone and that no run
+holds.
 A variable that names a socket the sandbox hides (`SSH_AUTH_SOCK`, a bus or
 container address) through a link in a folder sandboxed commands write
 stops every sandboxed command, with the real path to set: a command could

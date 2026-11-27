@@ -78,6 +78,8 @@ func Sync(r Roots, o *Out) int {
 	if code, ok := r.NeedRepo(o, "sync"); !ok {
 		return code
 	}
+	// go's work folders of state folders that are gone (T250).
+	pruneWork()
 	if dirty(r.Source, false) {
 		return o.Die("working tree is dirty; commit first (sync activates, it does not commit)")
 	}
@@ -323,7 +325,8 @@ func goEnv() (env []string, done func(), err error) {
 		env = append(env, c[0]+"="+c[1])
 	}
 	env = append(env, "GOTMPDIR="+work, "TMPDIR="+work, "GOWORK=off", "GOTOOLCHAIN=local", "GOFLAGS=-mod=readonly -modcacherw", "GOPROXY="+proxy)
-	return env, func() { os.RemoveAll(dir) }, nil
+	release := useWork(work)
+	return env, func() { os.RemoveAll(dir); release() }, nil
 }
 
 // goState is the folder of the Go caches jhon builds with: <state>/go under
@@ -367,7 +370,68 @@ func goWork(state string) (string, error) {
 	if MayChange != nil && MayChange(work) {
 		return "", goRefused("jhon builds in a work folder of go's under " + base + ", which a sandboxed command may write, where it could change a package go compiled before the build cache takes it; fix: run jhon sync with $TMPDIR outside " + base + ", or take " + base + " out of sandbox.allow_write")
 	}
+	// The state folder it serves, for pruneWork (T250): written once.
+	record := filepath.Join(work, "state")
+	if _, err := os.Lstat(record); errors.Is(err, os.ErrNotExist) {
+		_ = os.WriteFile(record, []byte(state+"\n"), 0o600)
+	}
 	return work, nil
+}
+
+// useWork holds work, a work folder of goWork's, as in use until release is
+// called: a shared lock on its lock file, which pruneWork never removes a
+// folder under.
+func useWork(work string) (release func()) {
+	f, err := os.OpenFile(filepath.Join(work, "lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0o600)
+	if err != nil {
+		return func() {}
+	}
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_SH)
+	return func() { f.Close() }
+}
+
+// pruneWork removes this user's go work folders under /var/tmp (goWork's)
+// whose recorded state folder is gone (T250, the re-verify of d6b1d19:
+// one is kept for every state folder a sync or publish used, a test's
+// scratch home's too, and nothing else removes them). It removes none
+// another user owns, none that is a link, none with no record of its own or
+// whose record names a state folder it is not the folder of, none whose
+// state folder is there, and none in use: it takes the folder's lock
+// exclusively, without waiting, and holds it while it removes the folder.
+func pruneWork() {
+	base := workBase()
+	folders, _ := filepath.Glob(filepath.Join(base, fmt.Sprintf("jhon-go-%d-*", os.Getuid())))
+	for _, work := range folders {
+		fi, err := os.Lstat(work)
+		if err != nil || !fi.IsDir() {
+			continue
+		}
+		if st, ok := fi.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Getuid() {
+			continue
+		}
+		record, err := os.ReadFile(filepath.Join(work, "state"))
+		state := strings.TrimSuffix(string(record), "\n")
+		if err != nil || len(record) > 4096 || !filepath.IsAbs(state) || goWorkPathIn(base, state) != work {
+			continue
+		}
+		if _, err := os.Lstat(state); !errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		lock, err := os.OpenFile(filepath.Join(work, "lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0o600)
+		if err != nil {
+			continue
+		}
+		if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) == nil {
+			os.RemoveAll(work)
+		}
+		lock.Close()
+	}
+}
+
+// goWorkPathIn is the /var/tmp form of goWorkPath for state, in base.
+func goWorkPathIn(base, state string) string {
+	sum := sha256.Sum256([]byte(state))
+	return filepath.Join(base, fmt.Sprintf("jhon-go-%d-%x", os.Getuid(), sum[:6]))
 }
 
 // goWorkPath is where goWork keeps go's work folder for state: under
@@ -377,12 +441,16 @@ func goWorkPath(state string) string {
 	if v := os.Getenv("JHON_GO_CACHE"); filepath.IsAbs(v) && filepath.Clean(v) == state {
 		return filepath.Join(state, "work")
 	}
-	base := "/var/tmp"
-	if fi, err := os.Stat(base); err != nil || !fi.IsDir() {
-		base = os.TempDir()
+	return goWorkPathIn(workBase(), state)
+}
+
+// workBase is the folder goWork keeps work folders in: /var/tmp, else the
+// system's temporary folder.
+func workBase() string {
+	if fi, err := os.Stat("/var/tmp"); err == nil && fi.IsDir() {
+		return "/var/tmp"
 	}
-	sum := sha256.Sum256([]byte(state))
-	return filepath.Join(base, fmt.Sprintf("jhon-go-%d-%x", os.Getuid(), sum[:6]))
+	return os.TempDir()
 }
 
 // callerModCache is the module cache go uses for the caller with no
@@ -488,6 +556,7 @@ func goTest(source, commit string) (string, bool) {
 	if err != nil {
 		return err.Error(), false
 	}
+	defer useWork(work)()
 	lock, err := os.OpenFile(filepath.Join(work, "tree.lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0o600)
 	if err != nil {
 		return "cannot lock the tree the tests run in: " + err.Error(), false
@@ -573,6 +642,7 @@ func Publish(r Roots, o *Out) int {
 	if code, ok := r.NeedRepo(o, "publish"); !ok {
 		return code
 	}
+	pruneWork()
 	if dirty(r.Source, false) {
 		return o.Die("working tree is dirty; commit and sync first (publish pushes the active release)")
 	}
