@@ -3,7 +3,7 @@
 A Jhon session starts with one of two fixed texts (T146h).
 
 - **Lean** is used when no change is active, or the active change is small.
-  It is `prose/lean.md`, rendered for each runtime, and stays under 4.5 KB
+  It is `prose/lean.md`, rendered for each runtime, and stays under 5 KB
   (about 1.1k tokens). It holds four things:
   - identity, with the reply language (below);
   - the limits that cannot be dropped: a refusal is a stop, credential

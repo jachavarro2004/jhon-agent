@@ -8,6 +8,8 @@ All notable changes to Jhon are recorded here. The format follows
 
 ### Changed
 
+- The lean text says that a leading `cd <repo dir> &&` lets only git or `gh` run outside the sandbox; docker and the deploy tools run outside only from the project. It is also 52 bytes shorter with no rule dropped: each paragraph is one line and the read-more lines are shorter
+- The lean text's ceiling is 5,120 bytes, up from 4,608 (T261). Most rules added since the ceiling was set have records of models breaking them, so they stay
 - The orchestrator keeps a live task list for multi-step work instead of calling it optional, so it agrees with `routing.md`, which already asked for one
 
 ### Added
