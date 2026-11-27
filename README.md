@@ -568,6 +568,10 @@ commit is no approval: a sandboxed command can commit too, so a hook you
 change and commit asks once at the next start, and so does a never-started
 repository inside `sandbox.allow_write` that a sandboxed command committed a
 hook into.
+A new worktree of a repository you approved elsewhere (the same git common
+dir, read from the disk) starts with no question when every file that runs
+there equals what an approved sibling worktree has on record, and asks only
+about the files no approved sibling shares.
 
 So that your own projects do not each ask at their first start, `jhon sync`,
 run from your terminal, seeds the records once before it builds: every
