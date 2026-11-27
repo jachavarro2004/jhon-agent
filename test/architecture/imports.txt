@@ -14,6 +14,7 @@ internal/audit -> internal/js
 internal/audit -> internal/lazyre
 internal/audit -> internal/ldd
 internal/audit -> internal/ldd/layout
+internal/audit -> internal/project
 internal/audit -> internal/rename
 internal/audit -> internal/sh
 internal/cli -> internal/audit
@@ -135,6 +136,7 @@ internal/profiles -> internal/rename
 internal/project -> internal/lazyre
 internal/project -> internal/ldd/layout
 internal/project -> internal/lddswitch
+internal/release -> internal/grant
 internal/release -> internal/project
 internal/release -> internal/render
 internal/release -> internal/session
