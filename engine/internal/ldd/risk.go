@@ -347,7 +347,9 @@ func nonEmpty(s string) []string {
 }
 
 // changedFiles is the files changed against base, untracked ones included,
-// with their added lines; ok is false when git cannot say.
+// with their added lines, but for jhon-studio's working output
+// (layout.StudioOutput), which carries no risk of the change; ok is false
+// when git cannot say.
 func (g gitReads) changedFiles(top, base string) ([]Changed, bool) {
 	names, ok1 := g.git(top, "diff", "--name-only", "--no-renames", base)
 	untracked, ok2 := g.git(top, "ls-files", "--others", "--exclude-standard")
@@ -371,9 +373,14 @@ func (g gitReads) changedFiles(top, base string) ([]Changed, bool) {
 	}
 	out := []Changed{}
 	for _, f := range nonEmpty(names) {
-		out = append(out, Changed{f, added[f]})
+		if !layout.StudioOutput(f) {
+			out = append(out, Changed{f, added[f]})
+		}
 	}
 	for _, f := range nonEmpty(untracked) {
+		if layout.StudioOutput(f) {
+			continue
+		}
 		p := filepath.Join(top, f)
 		text := ""
 		// Unreadable, or larger than 1 MiB: no content rule.

@@ -145,6 +145,21 @@ other command of the agent, inside it: jhon-studio reads its install and
 writes in the project's `.jhon/` and the cache. Chrome inside the sandbox,
 for web screens, is jhon-studio's own work (its T9).
 
+What a video leaves in `.jhon/studio/` (its brief, script, screens, review
+image, renders and state, in the project's root or a sub-project's) is
+jhon-studio's working output, never code or a test of the project, so LDD
+leaves it out: writing there gets no note to set LDD up, `jhon status`, the
+session's rules and `jhon risk` count none of it as the change's edits (a
+branch with nothing else has no change yet), a PR asks for no RED for it,
+`jhon executions run --affected` selects no project for it (it says how many
+studio files it ignored), `jhon deliver check` and a slice's commit do not
+count a render made after the last test run as a change since it, and
+`jhon audit` reads no write there as an edit before the RED. You can still commit those files, or ignore them
+in `.gitignore`: the delivery check still asks for a clean working tree, so an
+uncommitted render is committed or ignored before delivery.
+`.jhon/studio.yaml`, the project's settings for jhon-studio, is not in that
+folder and counts as any other file.
+
 ## The jhon it needs
 
 jhon-studio says what jhon it runs with in `jhon-studio integration --json`:

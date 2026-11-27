@@ -315,3 +315,24 @@ func TestCheckDeliveryNamesAFailingCodeCheck(t *testing.T) {
 		t.Errorf("a failing lint is not delivered: %+v", c)
 	}
 }
+
+// jhon-studio's working output (.jhon/studio/, T8g) is no difference from
+// the tested tree: a video rendered and committed after the run leaves the
+// delivery ready; a source file changed beside it is still the one named.
+func TestCheckDeliveryLeavesStudioOutputOut(t *testing.T) {
+	root := deliverRepo(t)
+	tree := deliverGit(t, root, "rev-parse", "HEAD^{tree}")
+	deliverTested(t, root, "pass", "")
+	write(t, filepath.Join(root, ".jhon", "studio", "tour", "out", "tour.mp4"), "MP4\n")
+	write(t, filepath.Join(root, ".jhon", "studio", "tour", "state.json"), "{}\n")
+	deliverCommit(t, root)
+	if c := deliverRun(t, root); !c.Ready || len(c.Reasons) != 0 || c.TestedTree == nil || *c.TestedTree != tree {
+		t.Fatalf("studio output committed after the run: %+v", c)
+	}
+	write(t, filepath.Join(root, "a", "a.go"), "package a\n\nvar X = 1\n")
+	write(t, filepath.Join(root, ".jhon", "studio", "tour", "state.json"), "{\"step\":\"render\"}\n")
+	deliverCommit(t, root)
+	if c := deliverRun(t, root); c.Ready || !deliverReason(c, `^HEAD's tree is not the tested tree: 1 path\(s\) differ \(a/a\.go\); test this revision`) {
+		t.Errorf("a source change beside studio output: %+v", c.Reasons)
+	}
+}

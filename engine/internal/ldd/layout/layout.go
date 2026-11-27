@@ -39,8 +39,9 @@ type Layout interface {
 	Archive(date, change string) string
 	// SpecsDir is the directory of the main specs.
 	SpecsDir() string
-	// Ignored is whether rel, a path relative to the root, is the
-	// record's: no code, and no test, of the project.
+	// Ignored is whether rel, a path relative to the root, is no code,
+	// and no test, of the project: the record's, or jhon-studio's working
+	// output (StudioOutput).
 	Ignored(rel string) bool
 
 	// The grammar of the record (T57 slice 1): what a change's artifacts
@@ -123,7 +124,25 @@ func Words(root, text string) string {
 	return strings.ReplaceAll(text, OpenSpec.Dir()+"/", l.Dir()+"/")
 }
 
-// IgnoredByAny is whether rel is any layout's record.
+// StudioDir is the folder jhon-studio keeps a project's videos in,
+// .jhon/studio/<video>/: each one's brief, script, screens, review image,
+// renders and state, which its commands write in the project they run in, a
+// repository's root or a sub-project of it. None of it is code or a test of
+// the project, nor work a change is responsible for (T8g).
+const StudioDir = ".jhon/studio"
+
+// StudioOutput is whether p, a path relative to a root or absolute, is a
+// StudioDir or lies in one, at any depth: jhon-studio's working output. It
+// is the one test every LDD reading of a change's edits leaves those files
+// out by: Ignored (the route's lines and behaviour, a branch's change, a
+// slice's size, `--affected`), the risk of the diff, route-guard's code
+// edit, the audit's edit-before-red and the paths changed after a tested
+// run.
+func StudioOutput(p string) bool {
+	return strings.Contains("/"+strings.Trim(filepath.ToSlash(p), "/")+"/", "/"+StudioDir+"/")
+}
+
+// IgnoredByAny is whether rel is any layout's record, or StudioOutput.
 func IgnoredByAny(rel string) bool {
 	for _, l := range Layouts {
 		if l.Ignored(rel) {
@@ -176,5 +195,5 @@ func (l shaped) Scenarios(src string, depth int) ([]Requirement, error) {
 	return shapedScenarios(src, depth)
 }
 func (l shaped) Ignored(rel string) bool {
-	return strings.HasPrefix(filepath.ToSlash(rel), l.dir+"/")
+	return strings.HasPrefix(filepath.ToSlash(rel), l.dir+"/") || StudioOutput(rel)
 }

@@ -447,8 +447,9 @@ func homeTilde(f string) string {
 }
 
 // isCode is whether f, a file written, is code in the repository at top:
-// anything inside it but .git and the layouts' directories (openspec/,
-// ldd/), which setting LDD up writes.
+// anything inside it but .git, the layouts' directories (openspec/, ldd/),
+// which setting LDD up writes, and jhon-studio's working output
+// (layout.StudioOutput, T8g).
 func isCode(top, f string) bool {
 	f = project.Realish(f)
 	if !project.Within(f, top) || f == top {
@@ -459,7 +460,7 @@ func isCode(top, f string) bool {
 		return false
 	}
 	first := strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
-	if first == ".git" {
+	if first == ".git" || layout.StudioOutput(rel) {
 		return false
 	}
 	for _, l := range layout.Layouts {

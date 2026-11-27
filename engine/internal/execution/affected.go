@@ -30,7 +30,8 @@ import (
 // staged and unstaged edits, and untracked files), or when it depends,
 // directly or through other projects, on a selected project. A file belongs to
 // the deepest discovered project whose directory holds it; `openspec/` is the
-// change's record, never project input, and is ignored.
+// change's record, never project input, and is ignored, as is jhon-studio's
+// working output under `.jhon/studio/` at any depth (layout.StudioOutput, T8g).
 //
 // Every project is selected, with the reason recorded, when the selection
 // cannot be trusted: a changed file outside every project (root
@@ -626,10 +627,15 @@ func SelectChanged(root, since string, files, outside, projects, candidates, ine
 	}
 	direct := map[string][]string{}
 	source := map[string]string{}
-	skipped, inertN, unread := 0, 0, 0
+	skipped, studio, inertN, unread := 0, 0, 0, 0
 	for _, f := range files {
 		if strings.HasPrefix(f, ignoredOf(root)) {
 			skipped++
+			continue
+		}
+		// jhon-studio's working output, at any depth, is no test input (T8g).
+		if layout.StudioOutput(f) {
+			studio++
 			continue
 		}
 		if Inert(f, inert) {
@@ -661,6 +667,9 @@ func SelectChanged(root, since string, files, outside, projects, candidates, ine
 	}
 	if skipped > 0 {
 		reasons = append(reasons, fmt.Sprintf("%d changed file(s) under %s ignored: the change's record is not project input", skipped, ignoredOf(root)))
+	}
+	if studio > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d changed file(s) under %s/ ignored: jhon-studio's working output is not project input", studio, layout.StudioDir))
 	}
 	if unread > 0 {
 		reasons = append(reasons, fmt.Sprintf("%d changed documentation file(s) ignored: no test module names them", unread))
