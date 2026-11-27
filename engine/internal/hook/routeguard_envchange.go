@@ -3,8 +3,10 @@ package hook
 import (
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/guard"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
 )
 
@@ -91,7 +93,31 @@ func guardedWord(w string) string {
 // variables it sets. A shell's -c string and eval's words are read the same
 // way. A line the parser cannot read is judged by its text.
 func envChange(command string) string {
-	return envChangeIn(command, 0, sh.DefinedNames(command))
+	return envChangeAt(command, "")
+}
+
+// envChangeAt is envChange for a line run in cwd, where the files it
+// sources are read for the names they define (guard.ResolveSourced, T257).
+func envChangeAt(command, cwd string) string {
+	return envChangeIn(command, 0, guard.ResolveSourced(sh.DefinedNames(command), cwd))
+}
+
+// definedBefore is defined without the places at or after byte offset at
+// (sh.Trusts): what a command there may trust (T257).
+func definedBefore(defined map[string]bool, at int) map[string]bool {
+	out := map[string]bool{}
+	for n := range defined {
+		from := -1
+		if rest, ok := strings.CutPrefix(n, sh.Untrusted); ok {
+			from, _ = strconv.Atoi(rest)
+		} else if a, _, ok := sh.Sourced(n); ok {
+			from = a
+		}
+		if from < 0 || from < at {
+			out[n] = true
+		}
+	}
+	return out
 }
 
 func envChangeIn(src string, depth int, defined map[string]bool) string {
@@ -103,7 +129,11 @@ func envChangeIn(src string, depth int, defined map[string]bool) string {
 		return ""
 	}
 	for _, c := range cmds {
-		if why := envCommand(c.Words, depth, defined); why != "" {
+		d := defined
+		if at := strings.Index(src, c.Raw); depth == 0 && at >= 0 {
+			d = definedBefore(defined, at)
+		}
+		if why := envCommand(c.Words, depth, d); why != "" {
 			return why
 		}
 	}
@@ -264,7 +294,7 @@ func envClass(words []string, depth int, defined map[string]bool) string {
 	name := sh.Base(words[0])
 	// A no-run name is trusted only bare and not defined on the line as a
 	// function or an alias, as the safety guard's class rule trusts it (T257).
-	if sh.NeverRuns(name) && !strings.Contains(words[0], "/") && !defined[name] && !sh.Untrusting(defined) || name == "git" || name == "gh" || name == "jhon" || depth >= 4 {
+	if sh.NeverRuns(name) && !strings.Contains(words[0], "/") && sh.Trusts(defined, name, -1) || name == "git" || name == "gh" || name == "jhon" || depth >= 4 {
 		return ""
 	}
 	args := words[1:]
