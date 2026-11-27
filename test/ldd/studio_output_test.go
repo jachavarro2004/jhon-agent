@@ -134,3 +134,18 @@ func TestAffectedRunLeavesStudioOutputOut(t *testing.T) {
 		t.Errorf("--affected beside studio files: exit %d, stderr %q, stdout:\n%s\nwant the run without them (exit %d) plus %q:\n%s", got.Code, got.Stderr, gotOut, want.Code, note, wantOut)
 	}
 }
+
+// T8g verify (mwyf7mgi): .jhon/studio.yaml is the project's settings, not
+// studio output, so it still counts as a change's edit.
+func TestStudioSettingsStillCount(t *testing.T) {
+	t.Parallel()
+	repo, env := studioProject(t)
+	support.Write(t, repo, map[string]string{".jhon/studio.yaml": "x: 1\n"})
+	r := support.Jhon(t, repo, env, "risk")
+	if r.Code != 0 || !strings.Contains(r.Stdout, "medium  .jhon/studio.yaml: other file") {
+		t.Errorf("risk with studio.yaml: %d %q", r.Code, r.Stdout)
+	}
+	if s := studioStatus(t, env, repo); s["change"] != "feat-tour" {
+		t.Errorf("status with studio.yaml: %+v", s)
+	}
+}
