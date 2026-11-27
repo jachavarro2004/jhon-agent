@@ -125,7 +125,7 @@ func vcsJudge(p Payload, tool, raw string, names []string) (vcsVerdict, string, 
 		found = hit(real)
 	}
 	if found != "" {
-		return vcsRefuse, fmt.Sprintf("%s is inside a VCS directory (%s); no one writes there through %s", raw, found, tool), none
+		return vcsRefuse, fmt.Sprintf("%s is inside a VCS directory (%s); no one writes there through %s%s", raw, found, tool, guard.IgnoreInstead(abs)), none
 	}
 	if grant.InGrants(abs) {
 		return vcsRefuse, raw + " is inside the grants directory; a grant is the owner's act (`! jhon grant` in Claude Code, /jhon:grants in pi), never a write", none

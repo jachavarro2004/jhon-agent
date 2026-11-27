@@ -39,7 +39,8 @@ func facetsOf(changed []Changed, reasons []Reason) []string {
 				want["safety"] = true
 			}
 		}
-		if r.Level != Passive && resilienceCode.MatchString(added[r.File]) {
+		// One file that calls for failure is enough: no other is read (T268).
+		if r.Level != Passive && !want["failure"] && resilient(added[r.File]) {
 			want["failure"] = true
 		}
 	}

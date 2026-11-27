@@ -1,6 +1,7 @@
 package ldd
 
 import (
+	"bytes"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"os"
@@ -8,10 +9,12 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/discover"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 )
 
 // This file is the risk tier of a change, by fixed rules over its diff
@@ -164,6 +167,66 @@ func matchI(re interface{ MatchString(string) bool }, s string) bool {
 	return re.MatchString(asciiLower(s))
 }
 
+// destructiveWords and resilienceWords are the words every match of
+// destructive and of resilienceCode holds, lowered in ASCII: a text without
+// any of them cannot match, and is never given to the regexp, which reads a
+// text at about 1 MB/s (T268: the owner's 3366 untracked build files took
+// `jhon risk` over 60 s). Go's (?i) also folds ſ to s and K (Kelvin) to k,
+// the only letters outside ASCII it folds to an ASCII one, so the words are
+// looked for with those folded too (destructive's words hold neither).
+var (
+	destructiveWords = []string{"drop", "truncate", "delete"}
+	resilienceWords  = []string{"exec.command", "subprocess", "child_process", "spawn(", "go func", "sync.", "asyncio", "threading", "promise.all", "retr", "backoff", "timeout", "withdeadline"}
+)
+
+// destructiveIn is matchI(destructive, text), sparing the regexp a text
+// with no destructive word.
+func destructiveIn(text string) bool {
+	return holdsAny(folded(text), destructiveWords) && matchI(destructive, text)
+}
+
+// resilient is resilienceCode.MatchString(text), sparing the regexp a text
+// with no resilience word.
+func resilient(text string) bool {
+	return holdsAny(folded(text), resilienceWords) && resilienceCode.MatchString(text)
+}
+
+// holdsAny is whether lowered holds one of words.
+func holdsAny(lowered []byte, words []string) bool {
+	return slices.ContainsFunc(words, func(w string) bool { return bytes.Contains(lowered, []byte(w)) })
+}
+
+// folded is text for the word test, byte by byte, never decoded (T268:
+// asciiLower's rune by rune pass was most of what was left): A-Z lowered,
+// and ſ (U+017F) and K (U+212A), the two letters outside ASCII (?i) matches
+// with an ASCII one, folded to s and k.
+func folded(text string) []byte {
+	b := []byte(text)
+	j := 0
+	for i := 0; i < len(b); i++ {
+		c := lowerByte[b[i]]
+		if c == 0xc5 && i+1 < len(b) && b[i+1] == 0xbf {
+			c, i = 's', i+1
+		} else if c == 0xe2 && i+2 < len(b) && b[i+1] == 0x84 && b[i+2] == 0xaa {
+			c, i = 'k', i+2
+		}
+		b[j] = c
+		j++
+	}
+	return b[:j]
+}
+
+// lowerByte is each byte with A-Z lowered.
+var lowerByte = func() (t [256]byte) {
+	for i := range t {
+		t[i] = byte(i)
+		if i >= 'A' && i <= 'Z' {
+			t[i] += 'a' - 'A'
+		}
+	}
+	return t
+}()
+
 // isMigration is a data migration the folder and SQL rules miss: a file
 // under a migrate folder at any depth, or code whose base name starts with
 // migrate or migration and is no test; vendored code is not the change's.
@@ -181,9 +244,23 @@ func isSecurityPath(f string) bool {
 	return slices.ContainsFunc(wordSep.Split(js.Lower(f), -1), func(w string) bool { return securityWords[w] })
 }
 
+// globRegexes are the globs GlobRegex has compiled, each once (T268): the
+// risk of every changed path asks for the same few.
+var globRegexes sync.Map
+
 // GlobRegex is a glob over a repository path as a regexp: `**` any depth
-// (a following `/` included), `*` and `?` within one segment.
+// (a following `/` included), `*` and `?` within one segment. Each glob is
+// compiled once; the regexp is shared, as a regexp may be.
 func GlobRegex(glob string) *regexp.Regexp {
+	if re, ok := globRegexes.Load(glob); ok {
+		return re.(*regexp.Regexp)
+	}
+	re := globRegex(glob)
+	globRegexes.Store(glob, re)
+	return re
+}
+
+func globRegex(glob string) *regexp.Regexp {
 	glob = strings.ToValidUTF8(glob, "�")
 	var re strings.Builder
 	for i := 0; i < len(glob); i++ {
@@ -259,7 +336,7 @@ func otherLevel(c Changed) defaulted {
 		return r(High, "contract others consume")
 	case matchI(delivery, f):
 		return r(High, "delivery or infrastructure")
-	case matchI(destructive, c.Added):
+	case destructiveIn(c.Added):
 		return r(High, "destructive data statement")
 	case manifest.MatchString(f):
 		return r(Medium, "dependency manifest")
@@ -346,16 +423,22 @@ func nonEmpty(s string) []string {
 	return slices.DeleteFunc(strings.Split(s, "\n"), func(l string) bool { return l == "" })
 }
 
-// changedFiles is the files changed against base, untracked ones included,
-// with their added lines, but for jhon-studio's working output
-// (layout.StudioOutput), which carries no risk of the change; ok is false
-// when git cannot say.
-func (g gitReads) changedFiles(top, base string) ([]Changed, bool) {
-	names, ok1 := g.git(top, "diff", "--name-only", "--no-renames", base)
-	untracked, ok2 := g.git(top, "ls-files", "--others", "--exclude-standard")
-	patch, ok3 := g.git(top, "diff", "-U0", "--no-renames", base)
+// notToolData is the pathspec, from the git top level, that leaves a tool's
+// own data out of what git lists (layout.ToolData, T268): it is never read.
+func notToolData() []string { return append([]string{"--", ":/"}, layout.ToolDataExcludes()...) }
+
+// changedFilesBudgeted is the files changed against base, untracked ones included,
+// with their added lines, but for a tool's own data (layout.ToolData:
+// jhon-studio's working output, CodeGraph's index), which carries no risk
+// of the change; ok is false when git cannot say. Untracked files over the
+// budget a reading hashes (vcs.UntrackedOverBudget, T268) are not read nor
+// listed: large says so, and only the tracked changes are judged.
+func (g gitReads) changedFilesBudgeted(top, base string) (out []Changed, large *vcs.LargeError, ok bool) {
+	names, ok1 := g.git(top, append([]string{"diff", "--name-only", "--no-renames", base}, notToolData()...)...)
+	untracked, ok2 := g.git(top, append([]string{"ls-files", "--others", "--exclude-standard"}, notToolData()...)...)
+	patch, ok3 := g.git(top, append([]string{"diff", "-U0", "--no-renames", base}, notToolData()...)...)
 	if !ok1 || !ok2 || !ok3 {
-		return nil, false
+		return nil, nil, false
 	}
 	added := map[string]string{}
 	cur := ""
@@ -371,27 +454,31 @@ func (g gitReads) changedFiles(top, base string) ([]Changed, bool) {
 			added[cur] += line[1:] + "\n"
 		}
 	}
-	out := []Changed{}
+	out = []Changed{}
 	for _, f := range nonEmpty(names) {
-		if !layout.StudioOutput(f) {
+		if !layout.ToolData(f) {
 			out = append(out, Changed{f, added[f]})
 		}
 	}
-	for _, f := range nonEmpty(untracked) {
-		if layout.StudioOutput(f) {
-			continue
-		}
+	others := slices.DeleteFunc(nonEmpty(untracked), layout.ToolData)
+	if large = vcs.UntrackedOverBudget(top, others); large != nil {
+		return out, large, true
+	}
+	for _, f := range others {
 		p := filepath.Join(top, f)
 		text := ""
-		// Unreadable, or larger than 1 MiB: no content rule.
+		// Unreadable, or larger than 1 MiB: no content rule. Nor a binary
+		// file, as git tells one (a NUL in its first 8000 bytes): a tracked
+		// one's diff adds no line either (T268: the content rules read the
+		// owner's untracked build output at about 1 MB/s).
 		if st, err := os.Stat(p); err == nil && st.Size() <= 1024*1024 {
-			if b, err := os.ReadFile(p); err == nil {
+			if b, err := os.ReadFile(p); err == nil && bytes.IndexByte(b[:min(len(b), 8000)], 0) < 0 {
 				text = string(b)
 			}
 		}
 		out = append(out, Changed{f, text})
 	}
-	return out, true
+	return out, nil, true
 }
 
 // readWhole is a changed file's whole text in the working tree: none (ok
@@ -454,7 +541,7 @@ func (g gitReads) riskOf(dir string, asked *string) (Risk, error) {
 		}
 		return unreadable("HEAD has no commit"), nil
 	}
-	changed, ok := g.changedFiles(top, commit)
+	changed, large, ok := g.changedFilesBudgeted(top, commit)
 	if !ok {
 		return unreadable("git diff failed"), nil
 	}
@@ -465,6 +552,15 @@ func (g gitReads) riskOf(dir string, asked *string) (Risk, error) {
 			return Risk{}, err
 		}
 		reasons = classify(changed, rules, func(c Changed) ([]byte, bool) { return readWhole(top, c.File) })
+	}
+	// Untracked files past the budget are not judged: once, what to ignore,
+	// at the level an unknown file gets (T268).
+	if large != nil {
+		note := Reason{Medium, "", large.Error() + "; its untracked files are not judged"}
+		if len(changed) == 0 {
+			reasons = nil
+		}
+		reasons = append(reasons, note)
 	}
 	return Risk{Tier: tierOf(reasons), Base: label, Reasons: reasons, Facets: facetsOf(changed, reasons)}, nil
 }

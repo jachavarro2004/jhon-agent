@@ -70,3 +70,19 @@ test("a jhon-scout child's write outside its record runs with a note through the
   assert.equal(await asExplore(() => judge("write", record, ctx)), null);
   assert.equal(await formatEdited(ctx.config, "write", record, dir), undefined);
 });
+
+// T268 (L1762): a guard that does not answer in time refuses, and says not
+// to run the same call again, what to run instead, and for a PR the check
+// that says what holds it: "try again" made the owner's agent retry five
+// times a check that could never answer in time.
+test("a guard that does not answer in time says not to retry and what to run", async () => {
+  const dir = repo("timeout");
+  const bin = join(SCRATCH, "silent-jhon");
+  writeFileSync(bin, "#!/bin/sh\nexec sleep 30\n");
+  chmodSync(bin, 0o755);
+  const ctx: CallContext = { config: configOf(bin), cwd: dir, child: false, interactive: true, hookTimeoutMs: 300 };
+  assert.deepEqual(await judge("bash", { command: "gh pr create --title x" }, ctx), {
+    block: true,
+    reason: "jhon hook pre-tool did not answer in 0.3s; the call is refused. Do not run the same call again: run `jhon doctor` (and `jhon deliver check <change>` for a PR) to find what is slow.",
+  });
+});

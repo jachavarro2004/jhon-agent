@@ -1,12 +1,15 @@
 package hook
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
@@ -27,20 +30,24 @@ import (
 // read from its git config, with no network. The text is the command line,
 // a heredoc body included, and a --body-file it names. A change with no
 // member, a merge, and any repository but a primary are not judged here.
-func membersRefusal(top, cwd, command string) string {
+//
+// The members' check has its own time, memberCheckTime, well under the 10 s
+// the shell waits for a guard (T268, L1762): when it runs out, late says so
+// and names `jhon deliver check` in each member not judged in time.
+func membersRefusal(top, cwd, command string, reads *ldd.Reads) (why, late string) {
 	if !deliveryOf(command).pr {
-		return ""
+		return "", ""
 	}
 	ws := workspace.Of(top)
 	if ws.Role != workspace.Primary {
-		return ""
+		return "", ""
 	}
 	// The branch's changes, active and archived, as deliveryRefusal reads
 	// them; an archived one by its folder under the archive.
 	type branchChange struct{ id, name, archive string }
 	var changes []branchChange
-	active, archived := ldd.BranchChanges(top)
-	if c := ldd.FolderlessChange(top); c != "" && !slices.Contains(active, c) {
+	active, archived := reads.BranchChanges(top)
+	if c := reads.FolderlessChange(top); c != "" && !slices.Contains(active, c) {
 		active = append(active, c)
 	}
 	for _, c := range active {
@@ -55,13 +62,17 @@ func membersRefusal(top, cwd, command string) string {
 		changes = append(changes, branchChange{id: ldd.ArchivedChange(top, folder), name: name, archive: path.Join(lay.ArchiveDir(), folder) + "/"})
 	}
 	text := ""
+	deadline := time.Now().Add(memberCheckTime)
 	for _, ch := range changes {
 		c := ch.name
 		lead := "the change " + c + " delivers in members of the workspace too, one PR per repository, the primary's last: "
 		if ch.archive != "" {
 			lead = "the change " + c + " (archived, " + ch.archive + ") delivers in members of the workspace too, one PR per repository, the primary's last: "
 		}
-		ms := ldd.MemberDeliveries(top, ch.id, ws)
+		ms, slow := memberDeliveriesBy(deadline, top, ch.id, ws)
+		if len(slow) > 0 {
+			return "", lead + lateNote(c, slow)
+		}
 		for _, m := range ms {
 			if m.Ready {
 				continue
@@ -76,27 +87,93 @@ func membersRefusal(top, cwd, command string) string {
 				if steps == "" {
 					steps = m.Next(c) + ", "
 				}
-				return lead + "member " + m.Name + " is not ready (" + why + "): " + steps + "open its PR, then the primary's."
+				return lead + "member " + m.Name + " is not ready (" + why + "): " + steps + "open its PR, then the primary's.", ""
 			}
 			// A member's run is recorded under the active name, c, not
 			// the archived folder the check read it from.
 			why = strings.ReplaceAll(why, "jhon executions run "+ch.id+" ", "jhon executions run "+c+" ")
-			return lead + "member " + m.Name + " is not ready (" + why + "): a member's run is recorded while the change is active: " + steps + "move " + ch.archive + " back to " + lay.ChangeDir(c) + "/, run `jhon executions run " + c + " --repo " + m.Name + "`, open the member's PR, then the primary's."
+			return lead + "member " + m.Name + " is not ready (" + why + "): a member's run is recorded while the change is active: " + steps + "move " + ch.archive + " back to " + lay.ChangeDir(c) + "/, run `jhon executions run " + c + " --repo " + m.Name + "`, open the member's PR, then the primary's.", ""
 		}
 		for _, m := range ms {
 			repo := originRepo(m.Path)
 			if repo == "" {
-				return lead + "member " + m.Name + " has no origin remote naming its repository on a host (`git -C " + m.Path + " remote get-url origin`), so this PR cannot name its pull request: add the remote, open the member's PR, then this one."
+				return lead + "member " + m.Name + " has no origin remote naming its repository on a host (`git -C " + m.Path + " remote get-url origin`), so this PR cannot name its pull request: add the remote, open the member's PR, then this one.", ""
 			}
 			if text == "" {
 				text = prText(command, cwd)
 			}
 			if !regexp.MustCompile(`(?i)(?:^|[^\w.-])(?:https?://)?` + regexp.QuoteMeta(repo) + `/pull/\d+\b`).MatchString(text) {
-				return lead + "this PR's body names no pull request of member " + m.Name + ": open its PR first and name it, https://" + repo + "/pull/<n>, in this PR's body."
+				return lead + "this PR's body names no pull request of member " + m.Name + ": open its PR first and name it, https://" + repo + "/pull/<n>, in this PR's body.", ""
 			}
 		}
 	}
-	return ""
+	return "", ""
+}
+
+// memberCheckTime is how long route-guard judges a PR's members for: well
+// under the 10 s the shell waits for a guard, so the guard answers itself
+// (T268: the owner's member took 90 s, and the shell refused his PR four
+// times with no reason).
+var memberCheckTime = 6 * time.Second
+
+// memberGrace is how long a members' check that ran out of time has to stop
+// its git and remove its private folder before the guard answers anyway.
+const memberGrace = time.Second
+
+// memberDeliveriesBy is ldd.MemberDeliveriesWithin by deadline, in a
+// goroutine the guard does not wait for past the deadline (and memberGrace):
+// ms are change's members' deliveries, and slow the members not judged in
+// time.
+func memberDeliveriesBy(deadline time.Time, top, change string, ws workspace.Info) (ms []ldd.MemberDelivery, slow []workspace.Listed) {
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	type answer struct {
+		ms   []ldd.MemberDelivery
+		done bool
+	}
+	got := make(chan answer, 1)
+	go func() {
+		ms, done := ldd.MemberDeliveriesWithin(ctx, top, change, ws)
+		got <- answer{ms, done}
+	}()
+	var a answer
+	select {
+	case a = <-got:
+	case <-ctx.Done():
+		select {
+		case a = <-got:
+		case <-time.After(memberGrace):
+			a = answer{}
+		}
+	}
+	if a.done {
+		return a.ms, nil
+	}
+	ms = a.ms
+	for _, l := range ldd.ChangeMembers(top, change, ws) {
+		if slices.ContainsFunc(ms, func(m ldd.MemberDelivery) bool { return m.Name == l.Name }) {
+			continue
+		}
+		slow = append(slow, l)
+	}
+	return ms, slow
+}
+
+// lateNote is what route-guard says of a PR whose members' check of change
+// ran out of its time on slow: which members, the check to run in each,
+// and that the PR is not retried before it.
+func lateNote(change string, slow []workspace.Listed) string {
+	var names, runs []string
+	for _, l := range slow {
+		names = append(names, l.Name)
+		runs = append(runs, "`jhon deliver check "+change+"` in "+l.Path)
+	}
+	member := "member " + strings.Join(names, ", ")
+	if len(slow) > 1 {
+		member = "members " + strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("the delivery check of %s did not finish in %s, so this PR is not judged: run %s, which says what holds it (most often a large untracked folder git does not ignore: build output, or a tool's data, which `jhon doctor` names); open the PR once it is ready. Do not retry the PR before that: it only waits again.",
+		member, memberCheckTime, strings.Join(runs, ", then "))
 }
 
 // datedFolder is an archived change's folder, <date>-<change>.

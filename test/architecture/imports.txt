@@ -120,6 +120,7 @@ internal/ldd -> internal/requirements
 internal/ldd -> internal/sandbox
 internal/ldd -> internal/vcs
 internal/ldd -> internal/workspace
+internal/ldd/layout -> internal/integrations
 internal/ldd/layout -> internal/lazyre
 internal/manifest -> internal/contract
 internal/manifest -> internal/js
@@ -178,6 +179,7 @@ internal/update -> internal/version
 internal/vcs -> internal/contract
 internal/vcs -> internal/js
 internal/vcs -> internal/lazyre
+internal/vcs -> internal/ldd/layout
 internal/vcs -> internal/project
 internal/workspace -> internal/discover
 internal/workspace -> internal/grant

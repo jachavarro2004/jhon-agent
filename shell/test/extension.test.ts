@@ -192,7 +192,7 @@ test("a guard that does not answer in time refuses the call, says why, and never
   const started = Date.now();
   const r = await judge("bash", { command: "ls" }, { ...parent(d), config: config({ jhon: silentJhon() }), hookTimeoutMs: 300 });
   const took = Date.now() - started;
-  assert.deepEqual(r, { block: true, reason: "jhon hook pre-tool did not answer in 0.3s; the call is refused; try again or check `jhon doctor`" });
+  assert.deepEqual(r, { block: true, reason: "jhon hook pre-tool did not answer in 0.3s; the call is refused. Do not run the same call again: run `jhon doctor` (and `jhon deliver check <change>` for a PR) to find what is slow." });
   assert.ok(took < 5000, `judged in ${took} ms`);
   // A child's call is refused the same way; nothing a silent guard does lets a call through.
   const write = await judge("write", { path: join(d, "b.ts"), content: "x" }, { ...child(d), config: config({ jhon: silentJhon() }), hookTimeoutMs: 300 });
@@ -232,7 +232,7 @@ test("a guard that times out refuses with the same message without blocking the 
   const { verdict, ticked } = await loopFreeWhile(() => judge("bash", { command: "ls" }, { ...parent(d), config: config({ jhon: silentJhon() }), hookTimeoutMs: 300 }));
   assert.ok(Date.now() - started < 5000, "never held past the timeout");
   assert.equal(ticked, true, "a timer fired while the guard ran");
-  assert.deepEqual(verdict, { block: true, reason: "jhon hook pre-tool did not answer in 0.3s; the call is refused; try again or check `jhon doctor`" });
+  assert.deepEqual(verdict, { block: true, reason: "jhon hook pre-tool did not answer in 0.3s; the call is refused. Do not run the same call again: run `jhon doctor` (and `jhon deliver check <change>` for a PR) to find what is slow." });
 });
 
 test("a guard exiting non-zero refuses with the same message: exit 2 its stderr, any other its failure (T102)", async () => {
