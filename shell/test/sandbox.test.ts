@@ -39,7 +39,9 @@ const state = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8"));
 fs.appendFileSync(path.join(dir, "calls.log"), JSON.stringify({ args, cwd: process.cwd() }) + "\\n");
 if (args[0] === "contract") { process.stdout.write(JSON.stringify({ shell: state.contract })); process.exit(0); }
 if (args[0] === "hook") {
-  if (fs.readFileSync(0, "utf8").includes("GUARD-REFUSES")) { process.stderr.write("safety-guard: refused: GUARD-REFUSES\\n"); process.exit(2); }
+  const input = fs.readFileSync(0, "utf8");
+  fs.appendFileSync(path.join(dir, "hooks.log"), input.trim() + "\\n");
+  if (input.includes("GUARD-REFUSES")) { process.stderr.write("safety-guard: refused: GUARD-REFUSES\\n"); process.exit(2); }
   process.exit(0);
 }
 if (args[0] === "sandbox" && args[1] === "status" && args[2] === "--json" && (args.length === 3 || (args.length === 5 && args[3] === "--project"))) {
@@ -593,7 +595,12 @@ function suite(): void {
 		return file;
 	}
 
-	test("inspect: with the mode on its program starts as `jhon sandbox run --project <pinned> --profile work -- <program> <args>`, after the inspect guard", async (t) => {
+	/** The bash argv an inspect line runs as (shell/lib/guards.ts inspectArgv, T271). */
+	const viaBash = (line: string) => ["env", "-u", "BASH_ENV", "-u", "ENV", "bash", "--noprofile", "--norc", "-c", line];
+	/** The commands the fake's guards were given, as they read them. */
+	const judged = (fake: Fake) => readFileSync(join(dirname(fake.bin), "hooks.log"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).tool_input.command);
+
+	test("inspect: with the mode on the line the inspect guard judged runs as `jhon sandbox run --project <pinned> --profile work -- env -u BASH_ENV -u ENV bash --noprofile --norc -c <line>`, one argument, unchanged", async (t) => {
 		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);
 		const d = project(t);
 		const sub = join(d, "pkg");
@@ -601,12 +608,14 @@ function suite(): void {
 		const show = argvPrinter(t);
 		const { fire, tools } = extension(t, fake);
 		await fire("session_start", {}, ctxAt(sub));
-		const result = await tools.get("inspect").execute("c1", { command: `${show} log  --oneline -3` }, undefined, undefined, ctxAt(sub));
-		assert.equal(textOf(result), "log|--oneline|-3|");
-		assert.deepEqual(fake.runs(), [{ args: ["sandbox", "run", "--project", d, "--profile", "work", "--", show, "log", "--oneline", "-3"], cwd: sub }]);
-		// The guard read the command as the model wrote it, before anything started.
+		const line = `${show} log  --oneline 'a b' "c|d" | cat`;
+		const result = await tools.get("inspect").execute("c1", { command: line }, undefined, undefined, ctxAt(sub));
+		assert.equal(textOf(result), "log|--oneline|a b|c|d|");
+		assert.deepEqual(fake.runs(), [{ args: ["sandbox", "run", "--project", d, "--profile", "work", "--", ...viaBash(line)], cwd: sub }]);
+		// The guard read the line as the model wrote it, before anything started: the same string bash got.
 		const guards = fake.calls().filter((c) => c.args[0] === "hook");
 		assert.deepEqual(guards.map((c) => c.args), [["hook", "inspect-guard"]]);
+		assert.deepEqual(judged(fake), [line]);
 		await assert.rejects(tools.get("inspect").execute("c2", { command: `${show} GUARD-REFUSES` }, undefined, undefined, ctxAt(sub)), { message: "safety-guard: refused: GUARD-REFUSES" });
 		assert.equal(fake.runs().length, 1, "a command the guard refused starts no sandbox");
 	});
@@ -630,18 +639,21 @@ function suite(): void {
 		}
 	});
 
-	test("inspect: with the mode off its program starts as before, the argv its whitespace split gives, and no sandbox runs", async (t) => {
+	test("inspect: with the mode off the line the inspect guard judged runs directly as `env -u BASH_ENV -u ENV bash --noprofile --norc -c <line>`, and no sandbox runs", async (t) => {
 		const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), OFF);
 		const d = project(t);
 		const show = argvPrinter(t);
 		const { fire, tools } = extension(t, fake);
 		await fire("session_start", {}, ctxAt(d));
-		const result = await tools.get("inspect").execute("c1", { command: ` ${show} log  --oneline -3 ` }, undefined, undefined, ctxAt(d));
-		assert.equal(textOf(result), "log|--oneline|-3|");
+		const line = ` ${show} log  --oneline 'a b' "c|d" | cat `;
+		const result = await tools.get("inspect").execute("c1", { command: line }, undefined, undefined, ctxAt(d));
+		assert.equal(textOf(result), "log|--oneline|a b|c|d|");
 		assert.deepEqual(fake.runs(), []);
-		// What the binary was asked: the session's one status, and the inspect guard with the command as written.
+		// What the binary was asked: the session's one status, and the inspect guard with the line as written.
 		assert.deepEqual(fake.calls().filter((c) => c.args[0] !== "contract" && c.args[0] !== "settings").map((c) => c.args), [["sandbox", "status", "--json"], ["hook", "inspect-guard"]]);
-		await assert.rejects(tools.get("inspect").execute("c2", { command: join(d, "no-such-program") }, undefined, undefined, ctxAt(d)), { message: /^inspect: could not run .*no-such-program: / });
+		assert.deepEqual(judged(fake), [line]);
+		// bash runs the line: a program it cannot find is bash's error, and the call fails.
+		await assert.rejects(tools.get("inspect").execute("c2", { command: join(d, "no-such-program") }, undefined, undefined, ctxAt(d)), { message: /no-such-program: No such file or directory/ });
 	});
 
 	test("rule 5: a sub-agent is a child pi that loads this extension; it pins its parent's project, or with none to inherit the folder it runs in (E5)", { skip: !bash && "needs /bin/bash" }, async (t) => {

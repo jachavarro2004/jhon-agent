@@ -160,15 +160,20 @@ test("in a repository with no LDD layout pi's first code edit runs with a note n
   assert.equal(await judge("edit", { path: join(d, "a.txt"), edits: [{ oldText: "b", newText: "c" }] }, child(d)), null, "once set up");
 });
 
-test("no file tool reads or edits a credentials file, nor a command deletes one; a command may read it; its template is any file", async () => {
+test("no file tool reads or edits a credentials file, nor a command prints or deletes one; a command may name it without printing it; its template is any file", async () => {
   const d = lddProject();
   for (const [tool, input] of [["read", { path: join(d, ".env") }], ["edit", { path: join(d, ".env.production") }], ["write", { path: join(d, ".env"), content: "x" }],
     ["grep", { pattern: "KEY", path: join(d, ".env") }], ["bash", { command: "rm .env.local" }]] as const) {
     const r = await judge(tool, input, child(d));
     assert.ok(r && "block" in r && /holds credentials/.test(r.reason), `${tool} ${JSON.stringify(input)}: ${JSON.stringify(r)}`);
   }
+  // T271 (S10): a listed reader printing its contents is refused, with the fix in the reason.
+  for (const command of ["cat .env", "grep KEY .env", "git show HEAD:.env"]) {
+    const r = await judge("bash", { command }, child(d));
+    assert.ok(r && "block" in r && /holds credentials/.test(r.reason) && /read the template \(such as \.env\.example\) instead/.test(r.reason), `${command}: ${JSON.stringify(r)}`);
+  }
   for (const [tool, input] of [["read", { path: join(d, ".env.example") }], ["edit", { path: join(d, ".env.example") }], ["bash", { command: "cat .env.sample" }],
-    ["bash", { command: "cat .env" }], ["bash", { command: "docker compose --env-file .env up -d" }]] as const) {
+    ["bash", { command: "wc -c .env" }], ["bash", { command: "ls -la .env" }], ["bash", { command: "docker compose --env-file .env up -d" }]] as const) {
     assert.equal(await judge(tool, input, child(d)), null, `${tool} ${JSON.stringify(input)}`);
   }
 });
