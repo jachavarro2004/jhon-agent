@@ -158,7 +158,10 @@ count a render made after the last test run as a change since it, and
 in `.gitignore`: the delivery check still asks for a clean working tree, so an
 uncommitted render is committed or ignored before delivery.
 `.jhon/studio.yaml`, the project's settings for jhon-studio, is not in that
-folder and counts as any other file.
+folder and counts as any other file. Keep project code out of `.jhon/studio/`:
+a file the project loads from there on purpose (a `require` of
+`./.jhon/studio/x.js`, a `sys.path` entry) is not part of what the delivery
+check holds to the last test run.
 
 ## The jhon it needs
 
