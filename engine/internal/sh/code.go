@@ -45,8 +45,9 @@ var (
 	// `open my $fh, '>', $p`, `>>`, `+<` and `+>` included.
 	perlOpenWrite = `\bopen\s*\(?\s*(?:my\s+)?[$\w]+\s*,\s*['"]\s*(?:\+?>|\+<)`
 	codeString    = lazyre.New(`'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|` + "`((?:[^`\\\\]|\\\\.)*)`|" +
-		// A word list: perl's qw(…) (any of its usual brackets or a slash), ruby's %w[…] and %W[…] (T257).
-		`\bqw\s*(?:\(([^)]*)\)|\[([^\]]*)\]|\{([^}]*)\}|<([^>]*)>|/([^/]*)/)|%[wW](?:\[([^\]]*)\]|\(([^)]*)\)|\{([^}]*)\})`)
+		// A word list's opening (T257): perl's qw and ruby's %w, %W, %i
+		// and %I, before any delimiter that is no letter, digit or space.
+		`(\bqw\s*|%[wWiI])[^\w\s]`)
 	escapedChar = lazyre.New(`\\(.)`)
 )
 
@@ -58,18 +59,48 @@ func CodeWrites(code string, isTarget func(string) bool) bool {
 // CodeStrings is the string literals of inline code, in order, unescaped as far as a command line needs.
 func CodeStrings(code string) []string {
 	var out []string
-	for _, m := range codeString.FindAllStringSubmatchIndex(code, -1) {
-		for g := 1; 2*g < len(m); g++ {
-			if m[2*g] < 0 {
-				continue
-			}
-			if g <= 3 {
-				out = append(out, escapedChar.ReplaceAllString(code[m[2*g]:m[2*g+1]], "$1"))
-			} else {
-				out = append(out, strings.Fields(code[m[2*g]:m[2*g+1]])...)
-			}
+	for pos := 0; pos < len(code); {
+		m := codeString.FindStringSubmatchIndex(code[pos:])
+		if m == nil {
 			break
 		}
+		if m[8] >= 0 {
+			// A word list: up to its delimiter's pair ((), [], {}, <>,
+			// nested) or the same character again.
+			open := code[pos+m[1]-1]
+			closer, pair := open, false
+			if i := strings.IndexByte("([{<", open); i >= 0 {
+				closer, pair = ")]}>"[i], true
+			}
+			body, depth, j := []byte{}, 0, pos+m[1]
+			for ; j < len(code); j++ {
+				ch := code[j]
+				if ch == '\\' && j+1 < len(code) {
+					j++
+					body = append(body, code[j])
+					continue
+				}
+				if pair && ch == open {
+					depth++
+				} else if ch == closer {
+					if depth == 0 {
+						break
+					}
+					depth--
+				}
+				body = append(body, ch)
+			}
+			out = append(out, strings.Fields(string(body))...)
+			pos = j + 1
+			continue
+		}
+		for g := 1; g <= 3; g++ {
+			if m[2*g] >= 0 {
+				out = append(out, escapedChar.ReplaceAllString(code[pos+m[2*g]:pos+m[2*g+1]], "$1"))
+				break
+			}
+		}
+		pos += m[1]
 	}
 	return out
 }

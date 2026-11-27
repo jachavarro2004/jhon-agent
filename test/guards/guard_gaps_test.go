@@ -174,14 +174,15 @@ func TestUnresolvedScriptNamePasses(t *testing.T) {
 	t.Parallel()
 	s := credTree(t)
 	support.Write(t, s.p, map[string]string{"far.sh": "git push --force\n", ".venv/bin/activate": "export VIRTUAL_ENV=.venv\n"})
-	for _, c := range []string{`bash -c 'source "$1"' far.sh`, `bash -c 'bash $2' x far.sh`, "bash /dev/fd/3 3< far.sh", "source ${X:-far.sh}",
+	for _, c := range []string{`bash -c 'source "$1"' far.sh`, `bash -c 'bash $2' x far.sh`, "source ${X:-far.sh}",
 		". $X", `bash -c 'bash -c "source \$0"' far.sh`} {
 		r := s.bash(t, c, top())
 		code(t, r, 0, c)
 		noDecision(t, r.Stdout, c)
 	}
 	// The words after a -c string are its $0, $1, …: the script they name is read.
-	for _, c := range []string{`bash -c 'source "$0"' far.sh`, `bash -c 'bash "$1"' x far.sh`, `sh -c '. "${0}"' far.sh`} {
+	// A descriptor the line's own redirection opens on a file is that file (T257).
+	for _, c := range []string{`bash -c 'source "$0"' far.sh`, `bash -c 'bash "$1"' x far.sh`, `sh -c '. "${0}"' far.sh`, "bash /dev/fd/3 3< far.sh"} {
 		s.code(t, c, top(), 2, "a script a -c string's parameter names")
 	}
 	for _, c := range []string{"source .venv/bin/activate", `bash -c 'echo "$0"' x`, "X=.venv/bin/activate; source $X", `bash -c 'source "$0"' .venv/bin/activate`} {

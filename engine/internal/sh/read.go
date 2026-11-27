@@ -3,6 +3,7 @@ package sh
 import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"maps"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -321,9 +322,20 @@ func MakeRecipes(text string) string {
 
 // A Feed is what a command reads on its standard input: Text when the
 // reader sees it, else Opaque, which says what it is.
+//
+// For a feed the reader does not see (T257): File is the file it is when
+// it is one on disk (`< f`, `cat f |`), which a guard reads there; Lost,
+// that it holds text the line gives through a path the reader does not
+// follow (a descriptor, a group, a program that passes its input or a
+// file on, `echo "$x"`); Gen, that it is a program's own output for a
+// shell's setup (its completion, init, hook or environment: `kubectl
+// completion bash`, `direnv hook bash`, `ssh-agent -s`).
 type Feed struct {
 	Text   *string
 	Opaque string
+	File   string
+	Lost   bool
+	Gen    bool
 }
 
 func text(s string) *Feed { return &Feed{Text: &s} }
@@ -332,6 +344,10 @@ func text(s string) *Feed { return &Feed{Text: &s} }
 func StdinOf(c *Command) *Feed {
 	var feed *Feed
 	for _, r := range c.Redirects {
+		// `3< f`, `4<<EOF`: another descriptor, not the input (T257).
+		if r.N != "" && r.N != "0" {
+			continue
+		}
 		switch {
 		case r.Op == "<<" || r.Op == "<<-":
 			if r.Body != nil {
@@ -348,17 +364,20 @@ func StdinOf(c *Command) *Feed {
 			if r.Target == "/dev/null" {
 				feed = text("")
 			} else {
-				feed = &Feed{Opaque: "the file " + r.Target}
+				feed = &Feed{Opaque: "the file " + r.Target, File: r.Target}
 			}
 		case strings.HasPrefix(r.Op, "<&"):
-			feed = &Feed{Opaque: "the descriptor " + r.Target}
+			feed = &Feed{Opaque: "the descriptor " + r.Target, Lost: true}
+			if f := FdFeeds(c)[r.Target]; f != nil {
+				feed = f
+			}
 		}
 	}
 	if feed != nil {
 		return feed
 	}
 	if c.PipeOpaque {
-		return &Feed{Opaque: "the output of a group or a subshell"}
+		return &Feed{Opaque: "the output of a group or a subshell", Lost: true}
 	}
 	if c.PipeFrom != nil {
 		return outputOf(c.PipeFrom)
@@ -368,13 +387,83 @@ func StdinOf(c *Command) *Feed {
 
 var echoFlags = lazyre.New(`^-[neE]+$`)
 
+// FdFeeds are what the command's own redirections give its descriptors
+// other than the input (`3< f`, `3< <(…)`, `4<<< …`), by number (T257).
+func FdFeeds(c *Command) map[string]*Feed {
+	var out map[string]*Feed
+	for _, r := range c.Redirects {
+		if r.N == "" || r.N == "0" {
+			continue
+		}
+		var f *Feed
+		switch {
+		case r.Op == "<<" || r.Op == "<<-":
+			if r.Body != nil {
+				f = text(*r.Body)
+			}
+		case r.Op == "<<<":
+			f = text(r.Target + "\n")
+		case r.Op == "<" && r.Target == "(…)":
+			f = procFeed(r.From)
+		case r.Op == "<" || r.Op == "<>":
+			if r.Target == "/dev/null" {
+				f = text("")
+			} else {
+				f = &Feed{Opaque: "the file " + r.Target, File: r.Target}
+			}
+		}
+		if f != nil {
+			if out == nil {
+				out = map[string]*Feed{}
+			}
+			out[r.N] = f
+		}
+	}
+	return out
+}
+
 // procFeed is the file a `<(…)` process substitution names, read as its
 // command's output (outputOf); opaque when it is no single command (T257).
 func procFeed(from *Command) *Feed {
 	if from == nil {
-		return &Feed{Opaque: "a process substitution"}
+		return &Feed{Opaque: "a process substitution of more than one command", Lost: true}
 	}
 	return outputOf(from)
+}
+
+// passOn are the programs whose output is text they are given or fetch:
+// the programs that never run anything (cat, head, base64, jq, …), the
+// filters and packers, tee and dd, and the fetchers. A feed from one the
+// reader does not follow is lost text (Feed.Lost, T257).
+var passOn = set("tee", "dd", "sed", "awk", "gawk", "mawk", "nawk", "sort", "gzip", "gunzip", "zcat", "xz", "unxz", "zstd", "bzip2",
+	"bunzip2", "iconv", "envsubst", "yq", "column", "fmt", "pr", "expand", "unexpand", "curl", "wget", "nc", "ncat", "netcat", "socat",
+	"ssh", "scp", "openssl", "gpg", "xclip", "xsel", "wl-paste", "pbpaste")
+
+// setupWords are the words by which a program prints a shell's setup:
+// its completion, init, hook, activation or environment (Feed.Gen).
+var setupWords = set("completion", "completions", "complete", "init", "hook", "activate", "shellenv", "env", "export", "docker-env", "podman-env",
+	"signin", "-s", "--sh", "--bash", "--zsh")
+
+// setupPrograms print a shell's setup with no such word (an agent's
+// environment, colours).
+var setupPrograms = set("ssh-agent", "gpg-agent", "dircolors", "keychain")
+
+// generator is whether the command p prints a shell's setup by its own
+// code (Feed.Gen): one program that passes nothing on, runs no
+// shell or code of its own, reads no input, and says it prints setup
+// (`/home/linuxbrew/.linuxbrew/bin/brew shellenv` too).
+func generator(p *Command) bool {
+	if len(p.Words) == 0 || p.PipeFrom != nil || p.PipeOpaque || len(p.Procs) > 0 || len(p.Substs) > 0 {
+		return false
+	}
+	name := Base(p.Words[0])
+	if neverRuns[name] || passOn[name] || Shells[name] || CodeInterpreter.MatchString(name) || codeRunners[name] || StdinOf(p) != nil {
+		return false
+	}
+	if _, ok := Wrappers[name]; ok {
+		return false
+	}
+	return setupPrograms[name] || slices.ContainsFunc(p.Words[1:], func(w string) bool { return setupWords[w] })
 }
 
 // outputOf is the output of a pipe's producer, as StdinOf states it.
@@ -419,16 +508,85 @@ func outputOf(p *Command) *Feed {
 			return f
 		}
 	}
+	// cat of `<(…)` files gives their text, in order; of one file, that
+	// file; tee gives its input on (T257).
+	if name == "cat" && !literal && len(args) == len(p.Procs) && !slices.ContainsFunc(args, func(a string) bool { return a != procMarker }) {
+		var b strings.Builder
+		for _, from := range p.Procs {
+			f := procFeed(from)
+			if f.Text == nil {
+				return &Feed{Opaque: "the output of cat", Lost: true}
+			}
+			b.WriteString(*f.Text)
+		}
+		return text(b.String())
+	}
+	if name == "cat" && len(args) == 1 && literal && args[0] != "-" && !strings.HasPrefix(args[0], "-") {
+		return &Feed{Opaque: "the file " + args[0], File: args[0]}
+	}
+	if name == "tee" {
+		if f := StdinOf(p); f != nil && f.Text != nil {
+			return f
+		}
+	}
 	if name == "" {
 		name = "a command"
 	}
-	return &Feed{Opaque: "the output of " + name}
+	return &Feed{Opaque: "the output of " + name, Lost: carriesLine(p, name), Gen: generator(p) || selectsSetup(p, name)}
+}
+
+// selectors pick lines of their input and add none: a shell's setup they
+// select from is still that setup (`go env | grep GOPATH`). sed, awk and
+// tr can write any text, so they are none.
+var selectors = set("grep", "egrep", "fgrep", "head", "tail", "sort", "uniq", "cat", "tee")
+
+// selectsSetup is whether p, one of selectors with literal words, selects
+// from a shell's setup a program prints (Feed.Gen).
+func selectsSetup(p *Command, name string) bool {
+	if !selectors[name] || slices.ContainsFunc(p.Words[1:], func(a string) bool { return strings.ContainsAny(a, "$`") || strings.Contains(a, "…") }) {
+		return false
+	}
+	f := StdinOf(p)
+	return f != nil && f.Gen
+}
+
+// carriesLine is whether the output of p, a pipe's producer, holds text
+// the line gives that the reader did not follow (Feed.Lost): a shell's or
+// an interpreter's (its code is the line's), or one of a program that
+// passes text on (passOn, neverRuns) whose input is the line's text or
+// whose words hold a substitution or a variable. Files it reads on disk
+// and what it fetches are not the line's.
+func carriesLine(p *Command, name string) bool {
+	if Shells[name] || CodeInterpreter.MatchString(name) {
+		// Its code given inline is the line's; a script file's is not.
+		return slices.ContainsFunc(p.Words[1:], shellC.MatchString) || InlineCode(name, p.Words) != nil
+	}
+	if !neverRuns[name] && !passOn[name] {
+		return false
+	}
+	if f := StdinOf(p); f != nil && (f.Text != nil || f.Lost) {
+		return true
+	}
+	// A substitution's output it passes on, or a variable echo prints.
+	return slices.ContainsFunc(p.Words[1:], func(a string) bool {
+		return strings.Contains(a, "…") || (name == "echo" || name == "printf") && strings.ContainsAny(a, "$`")
+	})
 }
 
 var (
 	printfSpec  = lazyre.New(`%(?:%|[-+ #0-9.]*[sbdiqxXoufeEgGc])`)
 	printfTakes = lazyre.New(`%[^%]`)
 )
+
+// PrintfVar is the variable `printf -v <name> <format> [args]` sets and
+// its value, when the words are such a printf with literal words (T257).
+func PrintfVar(words []string) (name, value string, ok bool) {
+	if len(words) < 4 || Base(words[0]) != "printf" || words[1] != "-v" ||
+		slices.ContainsFunc(words[3:], func(a string) bool { return strings.Contains(a, "$") || strings.Contains(a, "…") }) {
+		return "", "", false
+	}
+	return words[2], printfText(words[3], words[4:]), true
+}
 
 // printfText is printf's output for a format and its arguments, as far as a command line needs.
 func printfText(format string, rest []string) string {
@@ -481,30 +639,69 @@ type Program struct {
 	// Input is the text the program is given to read that the reader sees:
 	// its standard input's, and each `<(…)` file's among its words (T257).
 	Input []string
+	// InputFile is the file on disk its input is (`< f`, `cat f |`), and
+	// InputLost what it reads that holds text the reader lost (Feed.Lost),
+	// "" when none (T257).
+	InputFile, InputLost string
+	// ScriptFile is the file on disk a shell, an interpreter, make or a
+	// sourced file reads its own program from (`bash < f`, `cat f | sh`),
+	// read as ScriptRole (StdinRole) says (T257).
+	ScriptFile, ScriptRole string
 }
 
 // Opts are what programs reads beyond the words: the standard input, the
 // files the `<(…)` among the words name (Command.Procs, in their order) and
 // the variables set before.
 type Opts struct {
-	Feed  *Feed
-	Procs []*Feed
-	Envv  map[string]string
+	Feed   *Feed
+	Procs  []*Feed
+	Substs []*Feed
+	Fds    map[string]*Feed
+	Envv   map[string]string
 }
 
 // procMarker is how a word shows a `<(…)` process substitution.
 const procMarker = "<(…)"
 
-// inputs is the text opts gives a program to read, where the reader sees it.
-func inputs(opts Opts) []string {
-	var out []string
-	for _, f := range append([]*Feed{opts.Feed}, opts.Procs...) {
-		if f != nil && f.Text != nil && strings.TrimSpace(*f.Text) != "" {
-			out = append(out, *f.Text)
+// withInput is self with the text opts gives it to read (Program.Input,
+// InputFile, InputLost).
+func withInput(self Program, opts Opts) Program {
+	feeds := append([]*Feed{opts.Feed}, opts.Procs...)
+	// A descriptor's path among its words (`-f /dev/fd/3`, `--file=/dev/fd/3`)
+	// is a file it reads: what the line's redirection gives it, else lost.
+	for _, a := range self.Argv[min(1, len(self.Argv)):] {
+		if i := strings.Index(a, "/dev/fd/"); i < 0 && !strings.Contains(a, "/proc/") {
+			continue
+		}
+		for _, p := range []string{a, a[strings.IndexByte(a, '=')+1:], strings.TrimPrefix(a, "-f")} {
+			if fdPath.MatchString(p) && !StdinNames[p] {
+				f := opts.Fds[path.Base(p)]
+				if f == nil {
+					f = &Feed{Opaque: "the descriptor " + p, Lost: true}
+				}
+				feeds = append(feeds, f)
+				break
+			}
 		}
 	}
-	return out
+	for i, f := range feeds {
+		switch {
+		case f == nil:
+		case f.Text != nil:
+			if strings.TrimSpace(*f.Text) != "" {
+				self.Input = append(self.Input, *f.Text)
+			}
+		case f.Lost && self.InputLost == "":
+			self.InputLost = f.Opaque
+		case i == 0 && f.File != "":
+			self.InputFile = f.File
+		}
+	}
+	return self
 }
+
+// fdPath is a path that names one of the process's descriptors.
+var fdPath = lazyre.New(`^/(?:dev/fd|proc/(?:self|thread-self|\d+)/fd)/\d+$`)
 
 // procScript is how a program reads its own program from a `<(…)` file
 // among w, as StdinRole names it with that word read as /dev/stdin (`bash
@@ -512,7 +709,21 @@ func inputs(opts Opts) []string {
 // feed; "" when it reads none (T257). The words'
 // substitutions are matched to procs by their order, and only when every
 // one is there.
-func procScript(name string, w []string, procs []*Feed) (string, *Feed) {
+func procScript(name string, w []string, procs []*Feed, fds map[string]*Feed) (string, *Feed) {
+	// A descriptor's path other than the input's (`bash /dev/fd/3 3<
+	// …`): what it holds is not followed (T257).
+	for i, a := range w {
+		if fdPath.MatchString(a) && !StdinNames[a] {
+			read := slices.Clone(w)
+			read[i] = "/dev/stdin"
+			if role := StdinRole(name, read); role != "" {
+				if f := fds[path.Base(a)]; f != nil {
+					return role, f
+				}
+				return role, &Feed{Opaque: "the descriptor " + a, Lost: true}
+			}
+		}
+	}
 	n := 0
 	for _, a := range w {
 		n += strings.Count(a, procMarker)
@@ -535,6 +746,48 @@ func procScript(name string, w []string, procs []*Feed) (string, *Feed) {
 	}
 	return "", nil
 }
+
+// evalLine is the line eval runs from its words: each `$(…)` or backquoted
+// substitution read as its command's output where the reader sees it
+// (`eval "$(echo …)"`), kept as written where it is a shell's setup a
+// program prints (`eval "$(direnv hook bash)"`, Feed.Gen); any other is
+// unreadable (T257). The substitutions are matched to substs by their
+// order, and only when every one is there.
+func evalLine(words []string, substs []*Feed) (string, []string, error) {
+	line := strings.Join(words, " ")
+	n := len(substMarks.FindAllStringIndex(line, -1))
+	// A substitution a variable holds is a computed command, out of scope as before.
+	if n == 0 || len(substs) == 0 {
+		return line, nil, nil
+	}
+	if n != len(substs) {
+		return "", nil, &Unreadable{Why: "eval runs a substitution the guard cannot tell"}
+	}
+	k := 0
+	var err error
+	var files []string
+	out := substMarks.ReplaceAllStringFunc(line, func(m string) string {
+		f := substs[k]
+		k++
+		switch {
+		case f.Text != nil:
+			return strings.TrimRight(*f.Text, "\n")
+		case f.File != "":
+			files = append(files, f.File)
+			return ""
+		case f.Gen:
+			return m
+		}
+		if err == nil {
+			err = &Unreadable{Why: "eval runs " + f.Opaque + ", which the guard cannot read"}
+		}
+		return m
+	})
+	return out, files, err
+}
+
+// substMarks are the markers a word shows its substitutions by.
+var substMarks = lazyre.New("\\$\\(…\\)|`…`")
 
 func str(s string) *string { return &s }
 
@@ -598,9 +851,9 @@ func programs(words, via, env []string, opts Opts) (ps []Program, self *Program,
 // readPrograms reads the programs of the words w (IFS split, assignments
 // taken): name is the first word's base name and route its route.
 func readPrograms(w []string, name string, route, env []string, envv map[string]string, opts Opts) ([]Program, error) {
-	self := Program{Argv: w, Via: route, Env: env, Envv: envv, Name: name, Input: inputs(opts)}
+	self := withInput(Program{Argv: w, Via: route, Env: env, Envv: envv, Name: name}, opts)
 	sub := func(extra string) []string { return append(slices.Clone(route), extra) }
-	inner := Opts{Feed: opts.Feed, Procs: opts.Procs, Envv: envv}
+	inner := Opts{Feed: opts.Feed, Procs: opts.Procs, Substs: opts.Substs, Fds: opts.Fds, Envv: envv}
 	if name == "command" && (at(w, 1) == "-v" || at(w, 1) == "-V") {
 		return []Program{self}, nil
 	}
@@ -647,7 +900,15 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 		return with(ps, func(p *Program) { p.Chdir = append([]string{*wr.chdir}, p.Chdir...) }), nil
 	}
 	if name == "eval" {
-		return JudgeString(strings.Join(w[1:], " "), sub("eval"), env, inner)
+		line, files, err := evalLine(w[1:], opts.Substs)
+		if err != nil {
+			return nil, err
+		}
+		// `eval "$(cat f)"` runs f in the shell, as `source f` does: read on disk.
+		for _, f := range files {
+			line = "source '" + strings.ReplaceAll(f, "'", `'\''`) + "'\n" + line
+		}
+		return JudgeString(line, sub("eval"), env, inner)
 	}
 	// at -f reads its commands from a file the reader does not show (L486).
 	if (name == "at" || name == "batch") && slices.ContainsFunc(w[1:], func(a string) bool { return a == "-f" || strings.HasPrefix(a, "-f") && len(a) > 2 }) {
@@ -874,13 +1135,23 @@ func readPrograms(w []string, name string, route, env []string, envv map[string]
 	if feed != nil {
 		role = StdinRole(name, w)
 	}
-	if r, f := procScript(name, w, opts.Procs); r != "" {
+	if r, f := procScript(name, w, opts.Procs, opts.Fds); r != "" {
 		role, feed = r, f
 	}
 	if feed != nil {
 		if role != "" {
 			if feed.Text == nil {
+				// What the guard cannot read fails closed (T257): a file on
+				// disk is read there, a shell's setup a program prints is
+				// its own; anything else is unreadable.
 				self.StdinOpaque = feed.Opaque
+				if feed.File != "" {
+					self.ScriptFile, self.ScriptRole = feed.File, role
+					return []Program{self}, nil
+				}
+				if !feed.Gen {
+					return nil, &Unreadable{Why: name + " runs what it reads from " + feed.Opaque + ", which the guard cannot read"}
+				}
 				return []Program{self}, nil
 			}
 			if role == "code" {
@@ -937,9 +1208,12 @@ func CommandPrograms(c *Command, via, env []string, opts Opts) ([]Program, error
 	if f := StdinOf(c); f != nil {
 		opts.Feed = f
 	}
-	opts.Procs = nil
+	opts.Procs, opts.Substs, opts.Fds = nil, nil, FdFeeds(c)
 	for _, from := range c.Procs {
 		opts.Procs = append(opts.Procs, procFeed(from))
+	}
+	for _, from := range c.Substs {
+		opts.Substs = append(opts.Substs, procFeed(from))
 	}
 	ps, err := Programs(c.Words, via, env, opts)
 	redirects := c.Redirects

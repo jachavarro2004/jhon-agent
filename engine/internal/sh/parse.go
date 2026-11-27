@@ -58,6 +58,9 @@ type Command struct {
 	// order: each the command whose output the file it names gives, nil when
 	// the substitution is no single command (T257).
 	Procs []*Command
+	// Substs are its words' `$(…)` and backquoted substitutions, read the
+	// same way (T257: what eval runs).
+	Substs []*Command
 }
 
 // subshells numbers every subshell read, so that no two share a Scope entry.
@@ -85,7 +88,9 @@ type reader struct {
 	// procs are the `<(…)` substitutions of the words read since the last
 	// simple command (Command.Procs).
 	procs []*Command
-	err   error
+	// substs are the `$(…)` substitutions of those words (Command.Substs).
+	substs []*Command
+	err    error
 }
 
 // Parse reads src into simple commands, including those of every substitution.
@@ -136,42 +141,40 @@ func (r *reader) nested(ss []*syntax.Stmt) {
 }
 
 // substitution reads the statements of a substitution, in a subshell of
-// their own when sub is set.
-func (r *reader) substitution(ss []*syntax.Stmt, sub bool) {
-	pipe, opaque, piped, prefix, procs := r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs
-	r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs = nil, false, false, nil, nil
+// their own when sub is set, and returns the command whose output it gives:
+// its one statement's simple command (a pipeline's last), nil for any
+// other (T257).
+func (r *reader) substitution(ss []*syntax.Stmt, sub bool) *Command {
+	pipe, opaque, piped, prefix, procs, substs := r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs, r.substs
+	r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs, r.substs = nil, false, false, nil, nil, nil
 	if sub {
-		r.subshell(ss)
-	} else {
-		r.stmts(ss)
+		r.scope = append(r.scope, subshells.Add(1))
 	}
-	r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs = pipe, opaque, piped, prefix, procs
-}
-
-// procSubst reads a process substitution in a subshell of its own, as
-// nested does, and returns the command whose output the file it names
-// gives: its one statement's simple command (a pipeline's last), nil for
-// any other (T257).
-func (r *reader) procSubst(x *syntax.ProcSubst) *Command {
-	pipe, opaque, piped, prefix, procs := r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs
-	r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs = nil, false, false, nil, nil
-	r.scope = append(r.scope, subshells.Add(1))
 	var from *Command
-	for _, s := range x.Stmts {
-		if c := r.stmt(s); len(x.Stmts) == 1 {
+	for _, st := range ss {
+		if c := r.stmt(st); len(ss) == 1 {
 			from = c
 		}
 	}
-	r.scope = r.scope[:len(r.scope)-1]
-	r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs = pipe, opaque, piped, prefix, procs
+	if sub {
+		r.scope = r.scope[:len(r.scope)-1]
+	}
+	r.pipe, r.pipeOpaque, r.piped, r.prefix, r.procs, r.substs = pipe, opaque, piped, prefix, procs, substs
 	return from
 }
 
-// cmdSubst reads a command substitution. A bash 5.3 funsub (`${ …; }`,
-// `${| …; }`) runs in the current shell, so a cd in it moves the outer
-// directory; `$(…)` and backquotes run in a subshell.
-func (r *reader) cmdSubst(x *syntax.CmdSubst) {
-	r.substitution(x.Stmts, !x.TempFile && !x.ReplyVar)
+// procSubst reads a process substitution in a subshell of its own and
+// returns the command whose output the file it names gives (substitution).
+func (r *reader) procSubst(x *syntax.ProcSubst) *Command {
+	return r.substitution(x.Stmts, true)
+}
+
+// cmdSubst reads a command substitution and returns the command whose
+// output it is (substitution). A bash 5.3 funsub (`${ …; }`, `${| …; }`)
+// runs in the current shell, so a cd in it moves the outer directory;
+// `$(…)` and backquotes run in a subshell.
+func (r *reader) cmdSubst(x *syntax.CmdSubst) *Command {
+	return r.substitution(x.Stmts, !x.TempFile && !x.ReplyVar)
 }
 
 // subshell reads statements that run in a subshell of their own.
@@ -195,8 +198,8 @@ func (r *reader) emit(s *syntax.Stmt, words []string, redirects []*Redirect) *Co
 		end = max(end, rd.End().Offset())
 	}
 	c := &Command{Words: words, Redirects: redirects, Raw: strings.TrimSpace(r.src[s.Pos().Offset():end]), Loops: append([]Loop(nil), r.loops...),
-		Scope: append([]int64(nil), r.scope...), Procs: r.procs}
-	r.procs = nil
+		Scope: append([]int64(nil), r.scope...), Procs: r.procs, Substs: r.substs}
+	r.procs, r.substs = nil, nil
 	if r.piped {
 		c.PipeFrom, c.PipeOpaque = r.pipe, r.pipeOpaque
 		r.pipe, r.pipeOpaque, r.piped = nil, false, false
@@ -420,7 +423,7 @@ func (r *reader) parts(ps []syntax.WordPart, dq bool) string {
 		case *syntax.DblQuoted:
 			b.WriteString(r.parts(x.Parts, true))
 		case *syntax.CmdSubst:
-			r.cmdSubst(x)
+			r.substs = append(r.substs, r.cmdSubst(x))
 			if x.Backquotes {
 				b.WriteString("`…`")
 			} else {

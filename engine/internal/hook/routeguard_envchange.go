@@ -264,7 +264,7 @@ func envClass(words []string, depth int, defined map[string]bool) string {
 	name := sh.Base(words[0])
 	// A no-run name is trusted only bare and not defined on the line as a
 	// function or an alias, as the safety guard's class rule trusts it (T257).
-	if sh.NeverRuns(name) && !strings.Contains(words[0], "/") && !defined[name] || name == "git" || name == "gh" || name == "jhon" || depth >= 4 {
+	if sh.NeverRuns(name) && !strings.Contains(words[0], "/") && !defined[name] && !sh.Untrusting(defined) || name == "git" || name == "gh" || name == "jhon" || depth >= 4 {
 		return ""
 	}
 	args := words[1:]

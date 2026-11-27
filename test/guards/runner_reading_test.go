@@ -71,7 +71,7 @@ var partB = []string{
 	"cat f | parallel sh -c",
 	"xargs -a f sh -c",
 	"at -f f now",
-	"at now < f",
+	// `at now < f` reads f on disk since T257 (t257_r2_test.go).
 	"batch -f f",
 	// A9: at reads a file the line writes before it runs.
 	"echo x > g; at -f g now",

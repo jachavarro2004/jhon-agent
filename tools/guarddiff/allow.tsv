@@ -1830,3 +1830,4 @@ verifiers.tsv:630	safety-guard	allow	ask	hole T228 L19 (re-verify mwxi192d of 21
 verifiers.tsv:631	safety-guard	allow	ask	hole T228 L19 (re-verify mwxi192d of 21d3d02): L19: socat 1.8.1.3 has no alpn option; an unknown name keeps asking
 verifiers.tsv:632	safety-guard	allow	refuse	hole T228 L19 (re-verify mwxi192d of 21d3d02): L19: a path option on a network address is still read
 verifiers.tsv:404	safety-guard	allow	refuse	hole T257 (T228 L9): a shell given a <(…) file runs it as it runs the same text on its input
+verifiers.tsv:406	safety-guard	allow	ask	hole T257 (verify mwy447y3 B2): a shell given input the guard cannot read is unreadable

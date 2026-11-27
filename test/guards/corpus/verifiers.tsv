@@ -403,7 +403,7 @@ safety-guard	Bash	"ls *(e:'test -x $REPLY':)"	allow	none	T228	-	L8: an e string 
 safety-guard	Bash	"conda run node -e 'require(\"child_process\").execSync(\"rm -rf \" + require(\"os\").homedir())'"	allow	none	T228	known	L8: outside this round (computed or written script, or code the bare interpreter line allows)
 safety-guard	Bash	"sh <(echo 'rm -rf ~')"	refuse	none	T228	-	T257: a shell given a <(…) file runs it as it runs the same text on its input
 safety-guard	Bash	"echo 'rm -rf ~' > x.sh && sh x.sh"	allow	none	T228	known	L8: outside this round (computed or written script, or code the bare interpreter line allows)
-safety-guard	Bash	"echo cm0gLXJmIH4K | base64 -d | sh"	allow	none	T228	known	L8: outside this round (computed or written script, or code the bare interpreter line allows)
+safety-guard	Bash	"echo cm0gLXJmIH4K | base64 -d | sh"	ask	none	T228	-	T257: a shell given input the guard cannot read (a program that passes its input on) is unreadable
 # T228 L9 (re-verify mwx439vt): an ssh value is no exemption, and git's command keys.
 safety-guard	Bash	"GIT_SSH_COMMAND='ssh -o ProxyCommand=\"rm -rf ~\"' git fetch"	refuse	none	T228	-	verify: ssh runs its ProxyCommand; an ssh value is no exemption
 safety-guard	Bash	"git -c core.sshCommand='ssh -o ProxyCommand=\"rm -rf ~\"' fetch"	refuse	none	T228	-	verify: same through -c
