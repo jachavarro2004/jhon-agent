@@ -158,6 +158,19 @@ func (r *reader) assigned(name, index, value string, array *syntax.ArrayExpr) {
 		}
 		return
 	}
+	// BASH_ENV names a file bash sources before it runs (T257): read as
+	// `source <file>`, a `<(…)` as its command's output.
+	if name == "BASH_ENV" && index == "" && array == nil && value != "" {
+		c := &Command{Words: []string{"source", value}, Raw: "source " + value, Loops: append([]Loop(nil), r.loops...),
+			Scope: append([]int64(nil), r.scope...)}
+		if strings.Contains(value, procMarker) {
+			c.Words[1] = procMarker
+			if len(r.procs) > 0 {
+				c.Procs = []*Command{r.procs[len(r.procs)-1]}
+			}
+		}
+		r.cmds = append(r.cmds, c)
+	}
 	values, idx := []string{value}, index
 	if array != nil {
 		// An array's (or a table's) every element.
@@ -847,6 +860,16 @@ func group(w []string) []string {
 func expandAliases(cmds []*Command) []*Command {
 	normal, global := map[string]string{}, map[string]string{}
 	for _, c := range cmds {
+		// `hash -p <path> <name>` runs path for name, as an alias would (T257).
+		if at(c.Words, 0) == "hash" {
+			for i := 1; i+2 < len(c.Words); i++ {
+				if a := c.Words[i]; strings.HasPrefix(a, "-") && strings.Contains(a, "p") {
+					normal[c.Words[i+2]] = c.Words[i+1]
+					break
+				}
+			}
+			continue
+		}
 		if at(c.Words, 0) == "alias" {
 			g := false
 			for _, a := range c.Words[1:] {

@@ -50,7 +50,7 @@ func classRuns(words []string) bool {
 // program), with no function or alias of that name on the line and no
 // PATH of the line's own (T228 L8).
 func trusted(p sh.Program, ctx *Ctx) bool {
-	return !strings.Contains(at(p.Argv, 0), "/") && !ctx.defined[p.Name] && !slices.Contains(p.Env, "PATH") && p.Envv["PATH"] == ""
+	return !strings.Contains(at(p.Argv, 0), "/") && !ctx.defined[p.Name] && !ctx.defined[sh.Untrusted] && !slices.Contains(p.Env, "PATH") && p.Envv["PATH"] == ""
 }
 
 // modelled is whether the guard reads a program exactly: it never runs its
@@ -162,7 +162,17 @@ func classFinding(p sh.Program, name string, args []string, ctx *Ctx, vars map[s
 		u := unreadableAsk(&sh.Unreadable{Why: "rg runs the program its --pre, --hostname-bin or config file names, which the guard does not read"})
 		return &u
 	}
-	texts := classTexts(args, ownInput(p, name, ctx))
+	input, eligible := ownInput(p, name, args, ctx)
+	// What it reads as its own that the guard cannot read fails closed (T257).
+	if eligible && p.InputLost != "" {
+		return classAsk(name, "the text it reads comes from", p.InputLost+", which the guard cannot read")
+	}
+	if eligible && p.InputFile != "" {
+		if text, _, ok := scriptText(p.InputFile, st, ctx, vars); ok && !st.wrote(p.InputFile, ctx, vars) {
+			input = append(input, text)
+		}
+	}
+	texts := classTexts(args, input)
 	if modelled(p, name, args, ctx) {
 		// A program read exactly still reads its input as its own (gdb's
 		// commands, expect's script): only that is judged (T257).
@@ -211,22 +221,113 @@ var inputData = set("sed", "awk", "gawk", "mawk", "nawk", "sort", "tar", "less",
 	"unxz", "zstd", "bzip2", "bunzip2", "iconv", "envsubst", "patch", "yq", "column", "fmt", "pr", "expand", "unexpand", "sponge")
 
 // ownInput is the text p is given to read (Program.Input) when p may read
-// it as commands of its own (T257): not when the reader already read it as
-// p's program (a shell's or an interpreter's script, make's, crontab's,
-// at's), when p never runs anything by a name the guard trusts, when it is
-// data p filters or writes (inputData, the removal and writing programs,
-// git, gh, jhon), xargs's or parallel's operands, or the input a wrapper
-// hands the program it runs, which is judged with it.
-func ownInput(p sh.Program, name string, ctx *Ctx) []string {
-	if len(p.Input) == 0 || p.Code != nil || sh.StdinRole(name, p.Argv) != "" || sh.Shells[name] || sh.NeverRuns(name) && trusted(p, ctx) ||
-		inputData[name] || rmLike[name] || disk[name] || xargsDestroy[name] || name == "git" || name == "gh" || name == "jhon" ||
+// it as commands of its own, and eligible, whether it may (T257): not when
+// the reader already read it as p's program (a shell's or an interpreter's
+// script, make's, crontab's, at's), when p never runs anything by a name
+// the guard trusts, when it is data p filters or writes (inputData, the
+// removal and writing programs, git, gh, jhon), xargs's or parallel's
+// operands, or the input a wrapper hands the program it runs, which is
+// judged with it. awk's and sed's input is their program when -f names it
+// (`-f -`, `-f /dev/stdin`, `-f <(…)`), and awk's data is commands when
+// its program runs them (system(), a pipe to or from a command).
+func ownInput(p sh.Program, name string, args []string, ctx *Ctx) ([]string, bool) {
+	if len(p.Input) == 0 && p.InputFile == "" && p.InputLost == "" {
+		return nil, false
+	}
+	data := inputData[name] && !programFromInput(name, args)
+	// A function the line defines is its own code, read with it; its input goes there.
+	if ctx.defined[name] && !strings.Contains(at(p.Argv, 0), "/") {
+		return nil, false
+	}
+	if p.Code != nil || sh.StdinRole(name, p.Argv) != "" || sh.Shells[name] || sh.NeverRuns(name) && trusted(p, ctx) ||
+		data || rmLike[name] || disk[name] || xargsDestroy[name] || name == "git" || name == "gh" || name == "jhon" ||
 		name == "find" || name == "xargs" || name == "parallel" || name == "at" || name == "batch" || name == "crontab" {
-		return nil
+		return nil, false
 	}
 	if in, ok, _ := sh.Unwrap(p.Argv); ok && len(in.Words) > 0 {
+		return nil, false
+	}
+	return p.Input, true
+}
+
+// awkRuns is awk code that runs a command: system(), a pipe to or from one.
+var awkRuns = regexp.MustCompile(`\bsystem\s*\(|\|\s*getline|\bprint[f]?\b[^;}]*\|`)
+
+// programFromInput is whether awk or sed, given args, reads its program
+// from its input or a `<(…)` or descriptor file, or (awk) runs its data as
+// commands.
+func programFromInput(name string, args []string) bool {
+	if name != "sed" && !strings.HasSuffix(name, "awk") {
+		return false
+	}
+	for i, a := range args {
+		v, ok := "", false
+		switch {
+		case a == "-f" || a == "--file":
+			v, ok = at(args, i+1), true
+		case strings.HasPrefix(a, "--file="):
+			v, ok = a[len("--file="):], true
+		case len(a) > 2 && strings.HasPrefix(a, "-f"):
+			v, ok = a[2:], true
+		}
+		if ok && (sh.StdinNames[v] || strings.Contains(v, "<(…)") || strings.HasPrefix(v, "/dev/fd/") || strings.HasPrefix(v, "/proc/")) {
+			return true
+		}
+	}
+	return name != "sed" && slices.ContainsFunc(args, awkRuns.MatchString)
+}
+
+// judgeValue is the findings of the value an assignment on the line gives
+// the variable name, whatever it is called (T257, the command variables'
+// third spelling: CC, PERL5OPT, BASH_ENV's kin, `printf -v`): a program
+// may run it as a command line, so a value that is one, opening with a
+// program the guard judges, is judged as that command line, and a value
+// that holds such a command elsewhere (`-MPOSIX;system("…")`) makes the
+// line unreadable, as the class rule's text does.
+func judgeValue(name, value string, ctx *Ctx, vars map[string]string, st *State, depth int, via []string) []Finding {
+	if ctx.noClass || depth >= 2 || strings.TrimSpace(value) == "" || !strings.ContainsAny(value, " \t;&|()'\"") {
 		return nil
 	}
-	return p.Input
+	if cmds, err := sh.Parse(value); err == nil {
+		var out []Finding
+		for _, c := range cmds {
+			w := c.Words
+			for len(w) > 0 && sh.Assignment.MatchString(w[0]) {
+				w = w[1:]
+			}
+			if len(w) == 0 || !classCandidate.MatchString(w[0]) || !classRuns(w) && sh.InlineCode(sh.Base(w[0]), w) == nil {
+				continue
+			}
+			cst := &State{Dir: st.Dir, Lost: st.Lost, Links: st.Links.clone()}
+			for _, f := range judgeProgramWords(w, nil, ctx, vars, cst, depth+1, via, nil) {
+				if f.Level == "deny" || f.Level == "ask" && f.Cls != unreadable {
+					out = append(out, f)
+				}
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	inner := *ctx
+	inner.noClass, inner.targets = true, nil
+	for _, l := range classLines([]string{value})[1:] {
+		for j := range l {
+			if !classCandidate.MatchString(l[j]) || !classRuns(l[j:]) && sh.InlineCode(sh.Base(l[j]), l[j:]) == nil {
+				continue
+			}
+			cst := &State{Dir: st.Dir, Lost: st.Lost, Links: st.Links.clone()}
+			for _, f := range judgeProgramWords(l[j:], nil, &inner, vars, cst, depth+1, via, nil) {
+				if f.Level == "deny" || f.Level == "ask" && f.Cls != unreadable {
+					end := min(j+4, len(l))
+					u := unreadableAsk(&sh.Unreadable{Why: "the variable " + name + " holds `" + strings.Join(l[j:end], " ") + "`, which a program may run and the guard would " +
+						map[string]string{"deny": "refuse", "ask": "ask"}[f.Level]})
+					return []Finding{u}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // classAsk is the class rule's question: name is no program the guard

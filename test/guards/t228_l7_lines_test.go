@@ -118,5 +118,5 @@ var t228L7Known = []string{
 	"conda run node -e 'require(\"child_process\").execSync(\"rm -rf \" + require(\"os\").homedir())'",
 	// `sh <(echo 'rm -rf ~')` was one; T257 reads a <(…) file a shell runs (t257_test.go).
 	"echo 'rm -rf ~' > x.sh && sh x.sh",
-	"echo cm0gLXJmIH4K | base64 -d | sh",
+	// `echo … | base64 -d | sh` was one; T257 asks for a script the guard cannot read (t257_verify_test.go).
 }

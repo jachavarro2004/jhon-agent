@@ -1,6 +1,11 @@
 package sh
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+
+	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
+)
 
 // GitValueGlobals are git's global options that take a separate value.
 var GitValueGlobals = map[string]bool{
@@ -58,4 +63,25 @@ func at(args []string, k int) string {
 		return args[k]
 	}
 	return ""
+}
+
+// gitConfigPair is one 'key'='value' of GIT_CONFIG_PARAMETERS.
+var gitConfigPair = lazyre.New(`'([^']*)'='([^']*)'`)
+
+// EnvGitConfigs are the settings the environment env gives git, as
+// key=value, as -c gives them (T257): GIT_CONFIG_COUNT's
+// GIT_CONFIG_KEY_n and GIT_CONFIG_VALUE_n, and GIT_CONFIG_PARAMETERS.
+func EnvGitConfigs(env map[string]string) []string {
+	var out []string
+	if n, err := strconv.Atoi(env["GIT_CONFIG_COUNT"]); err == nil {
+		for i := range min(n, 64) {
+			if k, ok := env["GIT_CONFIG_KEY_"+strconv.Itoa(i)]; ok {
+				out = append(out, k+"="+env["GIT_CONFIG_VALUE_"+strconv.Itoa(i)])
+			}
+		}
+	}
+	for _, m := range gitConfigPair.FindAllStringSubmatch(env["GIT_CONFIG_PARAMETERS"], -1) {
+		out = append(out, m[1]+"="+m[2])
+	}
+	return out
 }

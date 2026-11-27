@@ -197,7 +197,7 @@ func unreadableAsk(err error) Finding {
 // Classify is the findings of a command line run in ctx.Cwd.
 func Classify(command string, ctx *Ctx) []Finding {
 	ctx.scratch, ctx.mktempRm = scratchVars(command, ctx), mktempRm(command)
-	ctx.defined = sh.DefinedNames(command)
+	ctx.defined = sourcedNames(sh.DefinedNames(command), ctx)
 	ctx.trapWord, ctx.trapAction, ctx.trapScratch = trapExit(command, ctx)
 	st := &State{Dir: ctx.Cwd, Links: &Links{}}
 	out := classify(command, ctx, 0, st)
@@ -223,6 +223,37 @@ func Classify(command string, ctx *Ctx) []Finding {
 	return out
 }
 
+// sourcedNames is defined with each file the line sources by a literal
+// path read for the names it defines (T257): one that does not exist
+// defines none; one the guard cannot read, or that sources another in
+// turn, trusts no name (sh.Untrusted).
+func sourcedNames(defined map[string]bool, ctx *Ctx) map[string]bool {
+	for n := range defined {
+		f, ok := strings.CutPrefix(n, sh.SourcedPrefix)
+		if !ok {
+			continue
+		}
+		delete(defined, n)
+		st := &State{Dir: ctx.Cwd}
+		a := pathOf(f, st.Dir, ctx, nil)
+		if _, err := os.Stat(a); a != "" && os.IsNotExist(err) {
+			continue
+		}
+		text, _, ok := scriptText(f, st, ctx, nil)
+		if !ok {
+			defined[sh.Untrusted] = true
+			continue
+		}
+		for m := range sh.DefinedNames(text) {
+			if strings.HasPrefix(m, sh.SourcedPrefix) {
+				m = sh.Untrusted
+			}
+			defined[m] = true
+		}
+	}
+	return defined
+}
+
 // classify reads a command line; depth bounds the re-reading of command strings found in interpreter code.
 func classify(command string, ctx *Ctx, depth int, st *State) []Finding {
 	cmds, err := sh.Parse(command)
@@ -246,9 +277,15 @@ func classify(command string, ctx *Ctx, depth int, st *State) []Finding {
 		vars[n] = v
 	}
 	for _, c := range cmds {
+		// A value a variable is given may be run as a command line (judgeValue, T257).
+		value := func(w string) {
+			n, v, _ := strings.Cut(w, "=")
+			out = append(out, judgeValue(n, v, ctx, vars, st, depth, nil)...)
+		}
 		if len(c.Words) > 0 && !slices.ContainsFunc(c.Words, func(w string) bool { return !sh.Assignment.MatchString(w) }) {
 			for _, w := range c.Words {
 				assign(w)
+				value(w)
 			}
 			continue
 		}
@@ -256,9 +293,13 @@ func classify(command string, ctx *Ctx, depth int, st *State) []Finding {
 			for _, w := range c.Words[1:] {
 				if sh.Assignment.MatchString(w) {
 					assign(w)
+					value(w)
 				}
 			}
 			continue
+		}
+		if n, v, ok := sh.PrintfVar(c.Words); ok {
+			out = append(out, judgeValue(n, v, ctx, vars, st, depth, nil)...)
 		}
 		// A command inside literal `for` loops is judged once per value of
 		// their variables, as the loop would run it.
@@ -499,6 +540,10 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	// zsh's GLOB_SUBST turned on (T228 L2).
 	if l := sh.GlobSubstOn(name, args); l != "" {
 		out = append(out, deny(l, globSubstWhy))
+	}
+	// The values the variables set for it hold (judgeValue, T257).
+	for _, n := range slices.Compact(slices.Sorted(slices.Values(p.Env))) {
+		out = append(out, judgeValue(n, p.Envv[n], ctx, vars, st, depth, p.Via)...)
 	}
 	// A program the guard has no reading of, given a command it would refuse or ask (T228 L6).
 	if f := classFinding(p, name, args, ctx, vars, st, depth); f != nil {
@@ -1188,7 +1233,19 @@ func judgeScriptFile(name string, argv []string, ctx *Ctx, vars map[string]strin
 	// substitution, a descriptor, a parameter it cannot resolve, one sourced
 	// past the bound) is judged by the line's visible words alone (L1311).
 	kind, word, text, path, ok, interp := "", "", "", "", false, name
-	if sourced {
+	if p.ScriptFile != "" {
+		// Its program read from a file on disk (`bash < f`, `cat f | sh`, T257).
+		word = p.ScriptFile
+		text, path, ok = scriptText(word, st, ctx, vars)
+		switch kind = "shell"; p.ScriptRole {
+		case "code":
+			kind = "code"
+		case "make":
+			text = sh.MakeRecipes(text)
+		case "cron":
+			text = sh.CronCommands(text)
+		}
+	} else if sourced {
 		// A sourced script runs in the shell itself, as `bash <script>` would
 		// run it; the scripts it sources are judged in turn, up to a bound.
 		if word = positional(at(nonOptions(argv[min(1, len(argv)):]), 0), p.Envv); word != "" && depth < maxSourceDepth {
