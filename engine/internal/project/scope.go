@@ -184,10 +184,18 @@ func IsClaudeSettings(abs string) bool {
 // T250): jhon's own git runs outside the sandbox, and a sandboxed command
 // can write the repository's configuration. It knows no folder to read the
 // filters' names in, so a command that may run a filter (filterCommands: a
-// status, a diff, an archive) runs through ReadGitCmd instead.
+// status, a diff, an archive) runs through ReadGitCmd instead. Nor does it
+// honour a replace ref (GIT_NO_REPLACE_OBJECTS, gitNoReplace).
 func GitReadEnv() []string {
-	return WithGitConfig(append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_PAGER=cat"), neutralGit())
+	return WithGitConfig(append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_PAGER=cat", gitNoReplace), neutralGit())
 }
+
+// gitNoReplace keeps jhon's own git from honouring refs/replace/* (T250,
+// the final re-verify of 62839a7): a sandboxed command can run `git
+// replace` in the writable .git and so choose what an object reads as, a
+// commit's go.mod or its committed hook among them. jhon reads the objects
+// themselves.
+const gitNoReplace = "GIT_NO_REPLACE_OBJECTS=1"
 
 // NeutralGitEnv is GitReadEnv with the filter drivers the configuration in
 // dir names emptied too (gitFilters): the environment for a program of the
@@ -223,15 +231,16 @@ func gitDiffPrograms(dir string) [][2]string {
 // GIT_* variables, with optional locks off, and with the keys that make git
 // run a program neutralised (gitNeutral, T250), the repository's filters
 // among them for a command that may run one (gitFilters), and an external
-// diff and a textconv off for a diff, log or show. A `git config` runs as
-// written: it runs no program, and a command-line value would stand in for
-// the one it reads (core.hooksPath).
+// diff and a textconv off for a diff, log or show, and no replace ref
+// honoured (gitNoReplace). A `git config` runs as written otherwise: it
+// runs no program, and a command-line value would stand in for the one it
+// reads (core.hooksPath).
 func ReadGitCmd(dir string, args ...string) *exec.Cmd {
 	if len(args) > 0 && (args[0] == "diff" || args[0] == "log" || args[0] == "show") {
 		args = append([]string{args[0], "--no-ext-diff", "--no-textconv"}, args[1:]...)
 	}
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	env := []string{"GIT_OPTIONAL_LOCKS=0"}
+	env := []string{"GIT_OPTIONAL_LOCKS=0", gitNoReplace}
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "GIT_") {
 			env = append(env, kv)

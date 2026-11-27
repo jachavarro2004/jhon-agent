@@ -120,6 +120,44 @@ func TestJhonsOwnGitRunsNoProgramTheRepositoryNames(t *testing.T) {
 	}
 }
 
+// T250 (the final re-verify of 62839a7): jhon's own git honours no replace
+// ref a sandboxed command wrote: ReadGit reads the object itself, and
+// GitReadEnv and NeutralGitEnv carry GIT_NO_REPLACE_OBJECTS=1.
+func TestJhonsOwnGitHonoursNoReplaceRef(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("skipped: no git")
+	}
+	repo := t.TempDir()
+	run := func(stdin string, args ...string) string {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false"}, args...)...)
+		c.Stdin = strings.NewReader(stdin)
+		out, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	run("", "init", "-q")
+	if err := os.WriteFile(filepath.Join(repo, "go.mod"), []byte("module real\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("", "add", "-A")
+	run("", "commit", "-q", "-m", "one")
+	run("", "replace", run("", "rev-parse", "HEAD:go.mod"), run("module planted\n", "hash-object", "-w", "--stdin"))
+	if got := run("", "show", "HEAD:go.mod"); got != "module planted" {
+		t.Fatalf("the plant is not live: %q", got)
+	}
+	if got, _ := ReadGit(repo, "show", "HEAD:go.mod"); got != "module real" {
+		t.Errorf("ReadGit show HEAD:go.mod = %q, want the object itself", got)
+	}
+	for name, env := range map[string][]string{"GitReadEnv": GitReadEnv(), "NeutralGitEnv": NeutralGitEnv(repo)} {
+		if !slices.Contains(env, "GIT_NO_REPLACE_OBJECTS=1") {
+			t.Errorf("%s carries no GIT_NO_REPLACE_OBJECTS=1", name)
+		}
+	}
+}
+
 // T250: every git command that may run a filter driver is among
 // filterCommands, `mv` included (it cleans the moved path through the index).
 func TestFilterCommandsHoldEveryCommandThatRunsAFilter(t *testing.T) {
