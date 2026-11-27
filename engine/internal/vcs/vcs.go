@@ -28,6 +28,7 @@ import (
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/contract"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 )
 
@@ -68,8 +69,21 @@ type result struct {
 	spawn error
 }
 
-func git(root string, args ...string) result {
-	out, err := project.ReadGitCmd(root, args...).Output()
+func git(root string, args ...string) result { return gitEnv(nil, root, args...) }
+
+// runner runs git in root with args and env added to its environment:
+// gitEnv, or a Reading's, which keeps its objects apart and stops with its
+// context.
+type runner func(env []string, root string, args ...string) result
+
+func gitEnv(env []string, root string, args ...string) result {
+	c := project.ReadGitCmd(root, args...)
+	c.Env = append(c.Env, env...)
+	return outcome(c.Output())
+}
+
+// outcome is a git run's result from its output and error.
+func outcome(out []byte, err error) result {
 	var exit *exec.ExitError
 	switch {
 	case err == nil:
@@ -129,15 +143,25 @@ type Candidate struct {
 	Clean  any    `json:"clean"`
 }
 
+// toolData is the pathspec that leaves a tool's own data out of what git
+// reads, from the git top level down (layout.ToolData, T268): CodeGraph's
+// index, jhon-studio's output and Engram's data are never project input,
+// whatever the project's .gitignore says, and git never reads their bytes.
+func toolData() []string { return append([]string{":/"}, layout.ToolDataExcludes()...) }
+
 // CandidateOf is the candidate of root (contracts/ldd.md, "Tested
 // revision"): HEAD's commit, HEAD's tree, and whether the working tree is
 // clean. `git status --porcelain --untracked-files=all` excludes no tracked
-// or untracked path but those in exempt (paths relative to the git top
-// level: a change's own test and delivery records, written after the
-// candidate is fixed), so any other uncommitted byte makes it unclean.
-// Outside a git repository, or below `ready`, each value is
-// CandidateUnknown(). Read-only.
+// or untracked path but a tool's own data (toolData) and those in exempt
+// (paths relative to the git top level: a change's own test and delivery
+// records, written after the candidate is fixed), so any other uncommitted
+// byte makes it unclean. Outside a git repository, or below `ready`, each
+// value is CandidateUnknown(). Read-only.
 func CandidateOf(root string, exempt map[string]bool) Candidate {
+	return candidateOf(gitEnv, root, exempt)
+}
+
+func candidateOf(run runner, root string, exempt map[string]bool) Candidate {
 	root = project.Resolve("", root)
 	u := CandidateUnknown()
 	unknown := Candidate{u, u, u}
@@ -150,7 +174,7 @@ func CandidateOf(root string, exempt map[string]bool) Candidate {
 	if !tree.ok || top == "" {
 		return unknown
 	}
-	st := git(top, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	st := run(nil, top, append([]string{"status", "--porcelain=v1", "-z", "--untracked-files=all", "--"}, toolData()...)...)
 	if !st.ok {
 		return unknown
 	}
@@ -163,13 +187,16 @@ func CandidateOf(root string, exempt map[string]bool) Candidate {
 
 // WorkingTree is the git tree the working state of root would commit to:
 // HEAD's tree with every uncommitted edit and every untracked file git does
-// not ignore, but not the paths in exempt (relative to the git top level:
-// a change's own records). The same bytes give the same tree, so it names
-// what a test run tested even before a commit. It is built in a temporary
-// index, a copy of the real one for its file stat cache, so the real index,
-// HEAD, and every ref are untouched; like `git add`, it stores the working
-// files' blobs, which nothing references and git's gc prunes. "" outside a
-// git repository, or when git cannot build it.
+// not ignore, but not a tool's own data (toolData) nor the paths in exempt
+// (relative to the git top level: a change's own records). The same bytes
+// give the same tree, so it names what a test run tested even before a
+// commit. It is built in a temporary index, a copy of the real one for its
+// file stat cache, so the real index, HEAD, and every ref are untouched;
+// like `git add`, it stores the working files' blobs, which nothing
+// references and git's gc prunes, so the tree a test run records resolves
+// later. A reader that only compares (status, a guard, a delivery check)
+// reads it with a Reading, which writes nothing into the repository. ""
+// outside a git repository, or when git cannot build it.
 func WorkingTree(root string, exempt map[string]bool) string {
 	top := GitTopLevel(project.Resolve("", root))
 	if top == "" {
@@ -181,39 +208,47 @@ func WorkingTree(root string, exempt map[string]bool) string {
 	}
 	tmp.Close()
 	defer os.Remove(tmp.Name())
-	if idx := git(top, "rev-parse", "--path-format=absolute", "--git-path", "index"); idx.ok {
-		real := strings.TrimSpace(idx.out)
-		if b, err := os.ReadFile(real); err == nil {
-			_ = os.WriteFile(tmp.Name(), b, 0o600)
-			// The copy keeps the real index's mtime: git trusts an entry's
-			// stat only when the file is older than the index, so a copy
-			// dated now would take a same-size edit made in the second the
-			// entry was written ("racy git") for the old content.
-			if st, err := os.Stat(real); err == nil {
-				_ = os.Chtimes(tmp.Name(), st.ModTime(), st.ModTime())
-			}
-		} else {
-			os.Remove(tmp.Name()) // no index yet: git starts an empty one
-		}
-	}
-	run := func(args ...string) (string, bool) {
-		c := project.ReadGitCmd(top, args...)
-		c.Env = append(c.Env, "GIT_INDEX_FILE="+tmp.Name())
-		out, err := c.Output()
-		return strings.TrimSpace(string(out)), err == nil
-	}
-	add := []string{"add", "-A", "--", "."}
-	for p := range exempt {
-		add = append(add, ":(exclude,literal)"+p)
-	}
-	if _, ok := run(add...); !ok {
-		return ""
-	}
-	tree, ok := run("write-tree")
-	if !ok {
-		return ""
-	}
+	tree, _ := workingTree(gitEnv, top, tmp.Name(), exempt)
 	return tree
+}
+
+// workingTree is WorkingTree in top with run, its temporary index at index.
+func workingTree(run runner, top, index string, exempt map[string]bool) (string, bool) {
+	copyIndex(top, index)
+	add := append([]string{"add", "-A", "--"}, toolData()...)
+	for _, p := range slices.Sorted(maps.Keys(exempt)) {
+		add = append(add, ":(top,exclude,literal)"+p)
+	}
+	in := func(args ...string) result { return run([]string{"GIT_INDEX_FILE=" + index}, top, args...) }
+	if r := in(add...); !r.ok {
+		return "", false
+	}
+	tree := in("write-tree")
+	return strings.TrimSpace(tree.out), tree.ok && strings.TrimSpace(tree.out) != ""
+}
+
+// copyIndex copies top's real index to index, for its file stat cache, or
+// leaves none there when the repository has none yet (git starts an empty
+// one).
+func copyIndex(top, index string) {
+	os.Remove(index)
+	idx := git(top, "rev-parse", "--path-format=absolute", "--git-path", "index")
+	if !idx.ok {
+		return
+	}
+	real := strings.TrimSpace(idx.out)
+	b, err := os.ReadFile(real)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(index, b, 0o600)
+	// The copy keeps the real index's mtime: git trusts an entry's
+	// stat only when the file is older than the index, so a copy
+	// dated now would take a same-size edit made in the second the
+	// entry was written ("racy git") for the old content.
+	if st, err := os.Stat(real); err == nil {
+		_ = os.Chtimes(index, st.ModTime(), st.ModTime())
+	}
 }
 
 // Frozen is a review's candidate (contracts/review-prism.md, "Freeze"): the
@@ -321,7 +356,7 @@ func worktreesWithChanges(top, baseRef string) []string {
 			continue
 		}
 		head, base := git(dir, "rev-parse", "HEAD"), git(dir, "merge-base", "HEAD", baseRef)
-		status := git(dir, "status", "--porcelain", "--untracked-files=all")
+		status := git(dir, append([]string{"status", "--porcelain", "--untracked-files=all", "--"}, toolData()...)...)
 		if (head.ok && base.ok && strings.TrimSpace(head.out) != strings.TrimSpace(base.out)) || (status.ok && strings.TrimSpace(status.out) != "") {
 			out = append(out, dir)
 		}
@@ -394,9 +429,12 @@ func lines(s string) []string {
 
 // TreeDiff is the paths whose content differs between trees a and b in
 // root; ok is false when either does not resolve. It reads nothing from the
-// working tree.
-func TreeDiff(root, a, b string) (paths []string, ok bool) {
-	r := git(project.Resolve("", root), "diff", "--name-only", "--no-renames", a, b, "--")
+// working tree, and names a tool's own data too: a reader leaves it out by
+// layout.ToolData (a tree an earlier jhon recorded holds it).
+func TreeDiff(root, a, b string) (paths []string, ok bool) { return treeDiff(gitEnv, root, a, b) }
+
+func treeDiff(run runner, root, a, b string) (paths []string, ok bool) {
+	r := run(nil, project.Resolve("", root), "diff", "--name-only", "--no-renames", a, b, "--")
 	if !r.ok {
 		return nil, false
 	}
@@ -406,7 +444,8 @@ func TreeDiff(root, a, b string) (paths []string, ok bool) {
 // WorkingDiff is the paths, relative to the git top level, whose content
 // differs between tree and the working state: HEAD plus every uncommitted
 // change, tracked or untracked (what git ignores is never in a tree),
-// sorted; ok is false when the tree does not resolve.
+// sorted; ok is false when the tree does not resolve. It lists names and
+// hashes nothing; a reader leaves a tool's own data out by layout.ToolData.
 func WorkingDiff(root, tree string) (paths []string, ok bool) {
 	top := GitTopLevel(root)
 	if top == "" {

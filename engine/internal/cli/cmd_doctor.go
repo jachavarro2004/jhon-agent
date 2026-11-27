@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/settings"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/version"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // `jhon doctor [--remote]` and `jhon doctor --runtime <name>`: every
@@ -405,6 +407,19 @@ func (d doctor) project() {
 		for _, l := range staleLocks(top, time.Now()) {
 			d.o.Warn(l)
 		}
+		// T268: a tool's data folder git does not ignore, here and in the
+		// workspace's members, with the line that ignores it.
+		dirs := []string{top}
+		if ws := workspace.Of(top); ws.Role == workspace.Primary {
+			for _, m := range ws.Members {
+				dirs = append(dirs, m.Path)
+			}
+		}
+		for _, dir := range dirs {
+			for _, l := range unignoredToolData(dir) {
+				d.o.Warn(l)
+			}
+		}
 		// T219 S6: under LDD git refuses a move of the default branch no
 		// ready merge check covers, through the merge gate.
 		if project.UsesLdd(top) {
@@ -415,6 +430,33 @@ func (d doctor) project() {
 			}
 		}
 	}
+}
+
+// unignoredToolData are the warnings for each folder of a tool's own data
+// (layout.ToolData: CodeGraph's index, jhon-studio's output, Engram's data)
+// that is untracked in dir's repository and that git does not ignore, each
+// with the .gitignore line that ignores it (T268, L1762): Jhon leaves it out
+// of every tree it reads, but git itself and other tools read it, and the
+// owner's 2.4 GB CodeGraph index made `jhon status` take 90 s before Jhon
+// did. Folders git lists whole only (`--directory`), so it reads no file.
+func unignoredToolData(dir string) []string {
+	out, ok := gitQuietOK(dir, "ls-files", "--others", "--exclude-standard", "--directory", "-z")
+	if !ok {
+		return nil
+	}
+	var warns []string
+	for _, entry := range strings.Split(out, "\x00") {
+		if !strings.HasSuffix(entry, "/") || !layout.ToolData(entry) {
+			continue
+		}
+		whose := "jhon-studio's working output"
+		if name := integrations.DataFolderOf(path.Base(entry)); name != "" {
+			whose = name + "'s data folder"
+		}
+		warns = append(warns, fmt.Sprintf("%s %s in %s is untracked and git does not ignore it: Jhon leaves it out of every tree it reads, but git and other tools read all of it; add the line `/%s` to %s",
+			whose, entry, dir, entry, filepath.Join(dir, ".gitignore")))
+	}
+	return warns
 }
 
 // projectLine is the project's one VCS line, or none when from is in no

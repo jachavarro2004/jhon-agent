@@ -12,8 +12,9 @@ import (
 
 // edit-before-red (ldd/red-first, T31.6, L252 F): in one transcript, the
 // first Edit or Write of a code file (not a test, a document, anything
-// under openspec/, or jhon-studio's working output under .jhon/studio/,
-// lddlayout.StudioOutput) is held against each change the transcript runs through
+// under openspec/, or a tool's own data, lddlayout.ToolData: jhon-studio's
+// working output under .jhon/studio/, CodeGraph's index, T268) is held
+// against each change the transcript runs through
 // `jhon executions run <change>`. It came before that change's RED, the
 // first such run that failed, or before its record,
 // openspec/changes/<change>/tasks.md, written after it: once per change.
@@ -206,7 +207,7 @@ func checkEditBeforeRed(s *Session, emit emitFunc) {
 				if m := recordOf.FindStringSubmatch(file); m != nil {
 					report(m[1], "record openspec/changes/"+m[1]+"/tasks.md", e.Line)
 				}
-				if behaviourFile(file) && !lddlayout.StudioOutput(file) {
+				if behaviourFile(file) && !lddlayout.ToolData(file) {
 					edits = append(edits, edit{u.Name, file, e.Cwd, e.Line})
 				}
 			}

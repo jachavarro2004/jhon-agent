@@ -305,6 +305,20 @@ func segRegex(seg string) *regexp.Regexp { return globRegex(seg, "[^/]*", false,
 
 func isGlob(seg string) bool { return strings.ContainsAny(seg, "*?[") }
 
+// IgnoreInstead is the fix for a write to a repository's .git/info/exclude,
+// which stays refused, as every write into .git does: the same lines go to
+// the project's .gitignore, a tracked file an agent may write (T268, L1762:
+// the owner had to ignore CodeGraph's index by hand). "" for any other path.
+func IgnoreInstead(abs string) string {
+	slashed := filepath.ToSlash(abs)
+	repo, ok := strings.CutSuffix(slashed, "/.git/info/exclude")
+	if !ok || repo == "" {
+		return ""
+	}
+	gitignore := filepath.FromSlash(repo + "/.gitignore")
+	return "; to leave untracked files out of git, write the same lines to " + gitignore + " instead (`>> " + gitignore + "`, or an Edit of it), which is allowed"
+}
+
 // VCSDirs are the VCS directories no agent writes.
 var VCSDirs = []string{".git", ".hg", ".svn"}
 
@@ -436,7 +450,7 @@ func ProtectedHome() (credentials, framework []string) {
 // protectedWhy is why writing abs is never allowed, or "".
 func protectedWhy(abs string, ctx *Ctx) string {
 	if vcs := vcsHit(abs); vcs != "" {
-		return "it writes into the VCS directory " + vcs
+		return "it writes into the VCS directory " + vcs + IgnoreInstead(abs)
 	}
 	if grant.InGrants(abs) {
 		return "it writes into the grants directory"

@@ -6,6 +6,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -173,13 +174,9 @@ func (g gitReads) routeOf(dir string) (Route, error) {
 
 // addedOutsideRecord is the files changed against base outside openspec/,
 // untracked ones included, and the lines added to each.
-func addedOutsideRecord(top, base string) (files []string, added map[string]int) {
-	return gitReads(nil).addedOutsideRecord(top, base)
-}
-
 func (g gitReads) addedOutsideRecord(top, base string) (files []string, added map[string]int) {
 	added = map[string]int{}
-	numstat, _ := g.git(top, "diff", "--numstat", "--no-renames", base)
+	numstat, _ := g.git(top, append([]string{"diff", "--numstat", "--no-renames", base}, notToolData()...)...)
 	for _, l := range nonEmpty(numstat) {
 		f := strings.SplitN(l, "\t", 3)
 		if len(f) < 3 || layout.For(top).Ignored(f[2]) {
@@ -190,13 +187,18 @@ func (g gitReads) addedOutsideRecord(top, base string) (files []string, added ma
 			added[f[2]] += n
 		}
 	}
-	untracked, _ := g.git(top, "ls-files", "--others", "--exclude-standard")
-	for _, f := range nonEmpty(untracked) {
-		if layout.For(top).Ignored(f) {
+	untracked, _ := g.git(top, append([]string{"ls-files", "--others", "--exclude-standard"}, notToolData()...)...)
+	others := slices.DeleteFunc(nonEmpty(untracked), layout.For(top).Ignored)
+	// Past the budget a reading hashes, untracked files are listed but not
+	// read; within it, a file over 1 MiB is never read whole (T268).
+	read := vcs.UntrackedOverBudget(top, others) == nil
+	for _, f := range others {
+		files = append(files, f)
+		p := filepath.Join(top, f)
+		if st, err := os.Stat(p); !read || err != nil || st.Size() > 1024*1024 {
 			continue
 		}
-		files = append(files, f)
-		if b, err := os.ReadFile(filepath.Join(top, f)); err == nil && len(b) <= 1024*1024 {
+		if b, err := os.ReadFile(p); err == nil && len(b) <= 1024*1024 {
 			added[f] += strings.Count(string(b), "\n")
 		}
 	}
@@ -379,16 +381,21 @@ func ProjectBrief(dir string) string {
 // carries against the default branch's merge base: active ones (under
 // openspec/changes/<change>/) and archived ones (their archive directory's
 // name), each once, in path order.
-func BranchChanges(dir string) (active, archived []string) {
-	top, _ := riskGit(dir, "rev-parse", "--show-toplevel")
+func BranchChanges(dir string) (active, archived []string) { return gitReads(nil).branchChanges(dir) }
+
+func (g gitReads) branchChanges(dir string) (active, archived []string) {
+	top, _ := g.git(dir, "rev-parse", "--show-toplevel")
 	top = js.Trim(top)
-	base, _, ok := baseOf(top, nil)
-	if top == "" || !ok {
+	if top == "" {
+		return nil, nil
+	}
+	base, _, ok := g.baseOf(top, nil)
+	if !ok {
 		return nil, nil
 	}
 	changes := layout.For(top).ChangesDir()
-	names, _ := riskGit(top, "diff", "--name-only", "--no-renames", base, "--", changes)
-	untracked, _ := riskGit(top, "ls-files", "--others", "--exclude-standard", "--", changes)
+	names, _ := g.git(top, "diff", "--name-only", "--no-renames", base, "--", changes)
+	untracked, _ := g.git(top, "ls-files", "--others", "--exclude-standard", "--", changes)
 	for _, f := range append(nonEmpty(names), nonEmpty(untracked)...) {
 		parts := strings.Split(strings.TrimPrefix(f, changes+"/"), "/")
 		switch {
@@ -461,16 +468,18 @@ var noSpecChange = lazyre.New(`(?m)^\s*(?:[-*]\s+)?No spec change:\s*\S`)
 // (contracts/ldd.md, "Delivery"). A project with no docs/ directory, a
 // change to tests or documents alone, and a change whose tasks.md states
 // `No docs change: <why>` are left out.
-func UndocumentedProjects(top string) []string {
+func UndocumentedProjects(top string) []string { return gitReads(nil).undocumentedProjects(top) }
+
+func (g gitReads) undocumentedProjects(top string) []string {
 	b, err := project.ReadLddConfig(top)
 	if err != nil || contract.Scalar(b, "docs_with_code") != "true" {
 		return nil
 	}
-	base, _, ok := baseOf(top, nil)
+	base, _, ok := g.baseOf(top, nil)
 	if !ok {
 		return nil
 	}
-	active, _ := BranchChanges(top)
+	active, _ := g.branchChanges(top)
 	l := layout.For(top)
 	for _, c := range active {
 		if t, err := os.ReadFile(layout.At(top, l.Artifact(c, l.Tasks()))); err == nil && noDocsChange.Match(t) {
@@ -485,7 +494,7 @@ func UndocumentedProjects(top string) []string {
 	for _, p := range resolved.Projects {
 		projects = append(projects, p.Path)
 	}
-	files, _ := addedOutsideRecord(top, base)
+	files, _ := g.addedOutsideRecord(top, base)
 	code, documented := map[string]bool{}, map[string]bool{}
 	for _, f := range files {
 		p := deepest(f, projects)

@@ -1,6 +1,7 @@
 package ldd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -93,12 +94,29 @@ func ChangeMembers(root, change string, ws workspace.Info) []workspace.Listed {
 // member that has not joined is not ready, and an error reading one is its
 // reason.
 func MemberDeliveries(root, change string, ws workspace.Info) []MemberDelivery {
-	var out []MemberDelivery
+	out, _ := MemberDeliveriesWithin(context.Background(), root, change, ws)
+	return out
+}
+
+// MemberDeliveriesWithin is MemberDeliveries read within ctx (route-guard's
+// deadline, T268): done is false when ctx ended before every member was
+// judged, and out then holds only the members judged in time.
+func MemberDeliveriesWithin(ctx context.Context, root, change string, ws workspace.Info) (out []MemberDelivery, done bool) {
 	for _, l := range ChangeMembers(root, change, ws) {
+		if ctx.Err() != nil {
+			return out, false
+		}
 		d := MemberDelivery{Name: l.Name, Reasons: []string{}, Path: l.Path, unjoined: !l.Joined}
+		c, err := DeliverCheck{}, error(nil)
+		if l.Joined {
+			c, err = checkMemberDelivery(ctx, l.Path, root, l.Name, change, Merge(), nil)
+			if ctx.Err() != nil {
+				return out, false
+			}
+		}
 		if !l.Joined {
 			d.Reasons = append(d.Reasons, fmt.Sprintf("%s has not joined the workspace: the owner runs `jhon workspace join %s` in it", l.Path, ws.Primary))
-		} else if c, err := CheckMemberDelivery(l.Path, root, l.Name, change, Merge(), nil); err != nil {
+		} else if err != nil {
 			d.Reasons = append(d.Reasons, err.Error())
 		} else {
 			d.Ready = c.Ready
@@ -108,7 +126,7 @@ func MemberDeliveries(root, change string, ws workspace.Info) []MemberDelivery {
 		}
 		out = append(out, d)
 	}
-	return out
+	return out, true
 }
 
 // WithMembers is c, root's check of change, with its members' deliveries:

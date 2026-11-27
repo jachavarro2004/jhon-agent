@@ -1,7 +1,9 @@
 package ldd
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd/layout"
@@ -169,6 +171,12 @@ func CheckDelivery(root, change, action string, artifact *string) (DeliverCheck,
 // read from the primary; its scenarios and its delivery unit are the
 // primary's check's.
 func CheckMemberDelivery(root, primary, name, change, action string, artifact *string) (DeliverCheck, error) {
+	return checkMemberDelivery(context.Background(), root, primary, name, change, action, artifact)
+}
+
+// checkMemberDelivery is CheckMemberDelivery, its working tree read within
+// ctx: once ctx ends, the check's answer is not one (ctx.Err() says so).
+func checkMemberDelivery(ctx context.Context, root, primary, name, change, action string, artifact *string) (DeliverCheck, error) {
 	var run *execution.LastRun
 	if r, ok := execution.RepoRunOf(primary, change, name); ok {
 		failed := []string{}
@@ -181,15 +189,17 @@ func CheckMemberDelivery(root, primary, name, change, action string, artifact *s
 			Scope: execution.Full, Complete: r.Complete, Dirty: r.Dirty(), Tree: r.WorkingTree,
 			WorkingTree: r.WorkingTree, AfterWorkingTree: r.AfterWorkingTree}
 	}
-	return checkDelivery(deliverTarget{root: root, home: primary, change: change, run: run, member: true,
+	return checkDelivery(deliverTarget{ctx: ctx, root: root, home: primary, change: change, run: run, member: true,
 		rerun: "jhon executions run " + change + " --repo " + name, shown: execution.RecordFile(primary, change) + ", repos." + name}, action, artifact)
 }
 
 // deliverTarget is what a check reads: root, the repository delivered;
 // home, the one holding the change's folder (root, but for a member);
 // the run; the command that runs it again and the record as a message
-// names it; and whether root is a workspace member.
+// names it; whether root is a workspace member; and the context its
+// working tree is read within (none: no end).
 type deliverTarget struct {
+	ctx                context.Context
 	root, home, change string
 	run                *execution.LastRun
 	rerun, shown       string
@@ -199,18 +209,40 @@ type deliverTarget struct {
 func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverCheck, error) {
 	root, change, run := t.root, t.change, t.run
 	exempt := execution.ChangeRecordPaths(root, change)
-	now := vcs.CandidateOf(root, exempt)
+	// The working tree is read with a vcs.Reading (T268): the check writes
+	// nothing into the repository, and leaves a tool's own data out.
+	ctx := t.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	diff := func(a, b string) ([]string, bool) { return vcs.TreeDiff(root, a, b) }
+	working := func(map[string]bool) (string, error) { return vcs.WorkingTree(root, exempt), nil }
+	var now vcs.Candidate
+	if rd, err := vcs.OpenReading(ctx, root); err == nil {
+		defer rd.Close()
+		now, diff, working = rd.Candidate(exempt), rd.TreeDiff, rd.WorkingTree
+	} else {
+		now = vcs.CandidateOf(root, exempt)
+	}
 	reasons, notes := []string{}, []string{}
 	// The last run passed on the working tree as it is now, uncommitted, but
 	// for the change's record: its commit is what is left, with no re-run
 	// (T146g G2), as the commit that closes a slice judges it (TestedTree).
+	// An untracked tree over the reading's budget is not hashed: the reason
+	// names what to ignore.
 	var here Tested
+	var large *vcs.LargeError
 	if run != nil && now.Clean != true {
-		here = testedTree(root, change, run, vcs.WorkingTree(root, exempt))
+		tree, err := working(exempt)
+		if !errors.As(err, &large) {
+			here = testedTreeBy(diff, root, change, run, tree)
+		}
 	}
-	testedHere := run != nil && now.Clean != true && here.Why == ""
+	testedHere := run != nil && now.Clean != true && here.Why == "" && large == nil
 	if now.Tree == vcs.CandidateUnknown() {
 		reasons = append(reasons, "HEAD's tree cannot be read: delivery needs a git repository with a commit")
+	} else if large != nil {
+		reasons = append(reasons, "the working tree is not clean (commit or remove the uncommitted changes), and "+large.Error()+deliverOrder)
 	} else if testedHere {
 		reasons = append(reasons, fmt.Sprintf("the working tree is not clean, and the last test run passed on it as it is: commit it, then `jhon deliver check %s`, with no re-run", change))
 	} else if now.Clean != true && len(here.Paths) > 0 {
@@ -248,7 +280,7 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 		if evidence && !isSha(run.AfterWorkingTree) {
 			reasons = append(reasons, fmt.Sprintf("the last test run recorded no working tree at its end (an earlier jhon wrote its record), so it cannot show the tree it tested unchanged: run the tests again, `jhon executions run %s --affected <base>`, then `jhon deliver check`", change))
 		}
-		if evidence && now.Clean == true && isSha(now.Tree) && testedTree(root, change, run, now.Tree).Why == "" {
+		if evidence && now.Clean == true && isSha(now.Tree) && testedTreeBy(diff, root, change, run, now.Tree).Why == "" {
 			committed = true
 			run.Tree = run.WorkingTree
 		}
@@ -259,7 +291,7 @@ func checkDelivery(t deliverTarget, action string, artifact *string) (DeliverChe
 		}
 		if committed || testedHere {
 		} else if isSha(run.Tree) && isSha(now.Tree) && run.Tree != now.Tree {
-			outside, ok := outsideRecord(root, change, run.Tree, now.Tree)
+			outside, ok := outsideRecordBy(diff, root, change, run.Tree, now.Tree)
 			if !ok {
 				reasons = append(reasons, fmt.Sprintf("the tested tree %s does not resolve in this repository", run.Tree))
 			} else if len(outside) > 0 {
