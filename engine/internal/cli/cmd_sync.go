@@ -12,7 +12,10 @@ import (
 // to it, and install the runtime projections from it. It pushes nothing and
 // takes no argument (docket BB1: an unread one once published). A dashboard
 // proven Jhon's from an older release is then restarted from the new one
-// (T15.16).
+// (T15.16). Before all that, from the owner's terminal, it seeds the
+// launch check's records of the roots `jhon start` never saw (seedHooks,
+// T266 L1768), so the question comes while he is there and the build runs
+// unattended after it.
 //
 // `jhon render` (docket AV1): rendering from a checkout no longer installs
 // anything; only a sync, from a committed release, activates a change.
@@ -29,6 +32,7 @@ func runSync(argv []string) (int, error) {
 	// settings first, or a first sync would read telemetry as off.
 	autoMigrate(settings.Path())
 	o := out()
+	seedHooks(o)
 	code := release.Sync(release.Locate(), o)
 	if code == 0 {
 		restartDashboards(o.W)

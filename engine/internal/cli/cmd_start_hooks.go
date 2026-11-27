@@ -2,12 +2,12 @@ package cli
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,6 +18,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"go.yaml.in/yaml/v3"
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/grant"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/isodate"
@@ -49,19 +52,19 @@ import (
 //     (inertClaudeKeys: permissions, the .mcp.json servers enabled);
 //   - .claude/hooks/**, .pi/extensions/** and .pi/skills/**, every file;
 //   - .claude/skills, agents and commands: only a markdown file's
-//     frontmatter hooks and mcpServers, and its lines that run a command
-//     (!`…`);
+//     frontmatter hooks and mcpServers, read as YAML, and its lines that
+//     run a command (!`…`);
 //   - .mcp.json, .pi/mcp.json and .pi/settings.json, all of them;
-//   - a file inside the root that a hook's command, or an MCP server's
-//     command, names (`"$CLAUDE_PROJECT_DIR/tools/guard.sh"`).
+//   - a file (a folder too, for pi's extensions, skills and packages) that
+//     one of those settings names, read as the shell reads a command
+//     (`"$CLAUDE_PROJECT_DIR"/tools/guard.sh`), inside the root or, when
+//     the owner can write it, anywhere.
 //
-// A root never approved records without asking only when HEAD holds each
-// counted file as it is on the disk (its blob, hashed here, so no index
-// flag hides a change) and, where another worktree of the same repository
-// was approved, it equals one of those: a sandboxed command can commit,
-// so a commit is no approval in a repository the owner already reviewed.
-// A root with nothing that runs records empty, so a file that appears
-// later asks.
+// A root never approved records without asking only when nothing runs
+// there (L1768: a commit is no approval, as a sandboxed command can
+// commit); anything else asks once, "(first start here)". `jhon sync`,
+// from the owner's terminal, seeds the roots he never started in
+// (seedHooks).
 
 // approveHooksFlag approves what changed without asking, then starts.
 const approveHooksFlag = "--approve-hooks"
@@ -75,33 +78,55 @@ var inertClaudeKeys = []string{"$schema", "permissions", "enabledMcpjsonServers"
 	"enableAllProjectMcpServers", "model", "outputStyle", "includeCoAuthoredBy", "cleanupPeriodDays",
 	"spinnerTipsEnabled", "alwaysThinkingEnabled"}
 
-// A hookFile is one counted file of a root: its path from the root, the
-// sha256 of what runs in it, and the lines the question shows (secrets
-// hidden). raw is the file as read, for the blob check.
+// A hookFile is one counted file of a root: its path from the root (an
+// absolute path outside it), the sha256 of what runs in it, and the lines
+// the question shows (secrets hidden).
 type hookFile struct {
 	Path  string   `json:"path"`
 	Sum   string   `json:"sha256"`
 	Shown []string `json:"shown"`
-	raw   []byte
+	// unmasked is a file whose Shown lines are still as read: a start whose
+	// files equal the record never shows them, so masked only when shown or
+	// recorded (masked).
+	unmasked bool
+}
+
+// masked is files with every Shown line through maskSecrets.
+func masked(files []hookFile) []hookFile {
+	for i := range files {
+		if files[i].unmasked {
+			shown := make([]string, len(files[i].Shown))
+			for j, l := range files[i].Shown {
+				shown[j] = maskSecrets(l)
+			}
+			files[i].Shown, files[i].unmasked = shown, false
+		}
+	}
+	return files
 }
 
 // A hookRecord is what the owner approved for a root.
 type hookRecord struct {
 	Root       string     `json:"root"`
-	Common     string     `json:"common,omitempty"`
 	ApprovedAt string     `json:"approved_at"`
 	Files      []hookFile `json:"files"`
 }
 
-// hookLimits bound what one root's check reads: a file's bytes, and every
-// counted folder's files and bytes together. Past a limit a file counts by
-// its size alone.
+// hookLimits bound what one root's check reads, so a start stays cheap
+// whatever a sandboxed command plants: a file's bytes, the bytes of every
+// file read together, and the files counted one by one. A file past a byte
+// limit is compared by its size, times and inode (the kernel sets its
+// ctime, which no user can set back); the files past the count limit are
+// folded into one entry, compared the same way.
 const (
 	hookFileMax  = 1 << 20
-	hookTotalMax = 64 << 20
-	hookFilesMax = 20000
+	hookTotalMax = 16 << 20
+	hookFilesMax = 1000
 	shownMax     = 40
 )
+
+// pastLimit is the entry the files past hookFilesMax fold into.
+var pastLimit = fmt.Sprintf("(files past the first %d)", hookFilesMax)
 
 // hooksApproved is the launch check for runtime (named as the question
 // names it), whose own start command is cmd: whether the start may go on,
@@ -119,10 +144,10 @@ func hooksApproved(runtime, cmd string, approve bool) (int, bool) {
 		rec, _ := readHookRecord(root)
 		switch {
 		case rec != nil && sameHooks(rec.Files, files):
-		case rec == nil && (len(files) == 0 || committedAsIs(root, files)):
+		case rec == nil && len(files) == 0:
 			silent = append(silent, newHookRecord(root, files))
 		default:
-			asks = append(asks, pending{root, rec, files})
+			asks = append(asks, pending{root, rec, masked(files)})
 		}
 	}
 	for _, r := range silent {
@@ -166,11 +191,17 @@ func hooksApproved(runtime, cmd string, approve bool) (int, bool) {
 		return 1, false
 	}
 	fmt.Fprintf(o.E, "%sjhon:%s approve these and start %s? [y/N] ", o.R, o.Z, runtime)
-	if a := strings.ToLower(strings.TrimSpace(readAnswer(os.Stdin))); a != "y" && a != "yes" {
+	if !yes(readAnswer(os.Stdin)) {
 		fmt.Fprintf(o.E, "%sjhon:%s %s not started; nothing was approved\n", o.R, o.Z, runtime)
 		return 1, false
 	}
 	return approveAll()
+}
+
+// yes is whether an answer is y or yes.
+func yes(answer string) bool {
+	a := strings.ToLower(strings.TrimSpace(answer))
+	return a == "y" || a == "yes"
 }
 
 // readAnswer is one line of f, read a byte at a time so nothing after it
@@ -230,7 +261,7 @@ func readHookRecord(root string) (*hookRecord, error) {
 }
 
 func newHookRecord(root string, files []hookFile) hookRecord {
-	r := hookRecord{Root: root, Common: project.ReadRepo(root).Common, ApprovedAt: isodate.Format(time.Now()), Files: files}
+	r := hookRecord{Root: root, ApprovedAt: isodate.Format(time.Now()), Files: files}
 	if r.Files == nil {
 		r.Files = []hookFile{}
 	}
@@ -269,309 +300,463 @@ func sameHooks(a, b []hookFile) bool {
 	return slices.EqualFunc(a, b, func(x, y hookFile) bool { return x.Path == y.Path && x.Sum == y.Sum })
 }
 
-// committedAsIs is whether a root never approved may record files without
-// asking: HEAD holds each as it is on the disk, and, where another
-// worktree of the repository was approved, they equal one of those.
-func committedAsIs(root string, files []hookFile) bool {
-	repo := project.ReadRepo(root)
-	if repo.Top == "" {
-		return false
-	}
-	var rels []string
-	for _, f := range files {
-		if f.raw == nil {
-			return false
-		}
-		rel, err := filepath.Rel(repo.Top, filepath.Join(root, filepath.FromSlash(f.Path)))
-		if err != nil || strings.HasPrefix(rel, "..") {
-			return false
-		}
-		rels = append(rels, filepath.ToSlash(rel))
-	}
-	format, _ := project.ReadGit(repo.Top, "rev-parse", "--show-object-format")
-	out, err := project.ReadGitCmd(repo.Top, append([]string{"ls-tree", "-z", "--full-tree", "HEAD", "--"}, rels...)...).Output()
-	if err != nil {
-		return false
-	}
-	blobs := map[string]string{}
-	for _, entry := range strings.Split(string(out), "\x00") {
-		meta, path, ok := strings.Cut(entry, "\t")
-		if f := strings.Fields(meta); ok && len(f) == 3 && f[1] == "blob" && (f[0] == "100644" || f[0] == "100755") {
-			blobs[path] = f[2]
-		}
-	}
-	for i, f := range files {
-		if blobs[rels[i]] != blobID(format, f.raw) {
-			return false
-		}
-	}
-	if repo.Common == "" {
-		return true
-	}
-	entries, _ := os.ReadDir(hookRecordDir())
-	siblings := 0
-	for _, e := range entries {
-		b, err := os.ReadFile(filepath.Join(hookRecordDir(), e.Name()))
-		var r hookRecord
-		if err != nil || json.Unmarshal(b, &r) != nil || r.Common != repo.Common || r.Root == root {
-			continue
-		}
-		siblings++
-		if sameHooks(r.Files, files) {
-			return true
-		}
-	}
-	return siblings == 0
-}
-
-// blobID is git's object id of a blob holding b, in format (sha1 or sha256).
-func blobID(format string, b []byte) string {
-	head := "blob " + strconv.Itoa(len(b)) + "\x00"
-	if format == "sha256" {
-		s := sha256.Sum256(append([]byte(head), b...))
-		return hex.EncodeToString(s[:])
-	}
-	s := sha1.Sum(append([]byte(head), b...))
-	return hex.EncodeToString(s[:])
-}
-
 // hookSignature is what runs outside the sandbox in root, its files sorted
 // by path.
 func hookSignature(root string) []hookFile {
-	s := &signer{root: root, seen: map[string]bool{}}
+	s := &signer{root: root, home: project.Home(), seen: map[string]bool{}, past: sha256.New()}
 	for _, name := range []string{".claude/settings.json", ".claude/settings.local.json"} {
-		s.json(name, inertClaudeKeys)
+		s.json(name, inertClaudeKeys, root, nil)
 	}
 	for _, name := range []string{".mcp.json", ".pi/mcp.json"} {
-		s.json(name, nil)
+		s.json(name, nil, root, nil)
 	}
-	s.json(".pi/settings.json", nil)
+	// pi resolves a project setting's resources from .pi; its prompts and
+	// themes run nothing.
+	s.json(".pi/settings.json", nil, filepath.Join(root, ".pi"), piResource)
 	for _, dir := range []string{".claude/hooks", ".pi/extensions", ".pi/skills"} {
 		s.tree(dir, func(string) bool { return true }, s.whole)
 	}
 	for _, dir := range []string{".claude/skills", ".claude/agents", ".claude/commands"} {
 		s.tree(dir, func(p string) bool { return strings.HasSuffix(p, ".md") }, s.markdown)
 	}
-	for _, ref := range s.refs {
-		if !s.seen[ref] {
-			s.whole(ref)
+	for _, r := range s.refs {
+		if r.dir {
+			s.tree(r.name, func(string) bool { return true }, s.whole)
+		} else {
+			s.count(r.name, nil, s.whole)
 		}
+	}
+	if s.pastN > 0 {
+		s.files = append(s.files, hookFile{Path: pastLimit, Sum: hex.EncodeToString(s.past.Sum(nil)),
+			Shown: []string{fmt.Sprintf("%d more files, not read: compared by name, size, times and inode", s.pastN)}})
 	}
 	sort.Slice(s.files, func(i, j int) bool { return s.files[i].Path < s.files[j].Path })
 	return s.files
 }
 
-// A signer gathers a root's counted files.
-type signer struct {
-	root  string
-	files []hookFile
-	seen  map[string]bool
-	refs  []string
-	count int
-	bytes int64
+// piResource is how .pi/settings.json's leaf at path names what runs: a
+// resource of extensions, skills or packages names a file or a folder,
+// with or without a slash; prompts and themes name nothing that runs.
+func piResource(path string) (use, resource bool) {
+	top, _, _ := strings.Cut(strings.TrimPrefix(path, "."), "[")
+	top, _, _ = strings.Cut(top, ".")
+	switch top {
+	case "prompts", "themes":
+		return false, false
+	case "extensions", "skills", "packages":
+		return true, true
+	}
+	return true, false
 }
 
-// read is the file at rel, read only when it is a regular file (a FIFO
-// planted there is named, never opened for reading), up to hookFileMax:
-// its bytes, or why it is not read.
-func (s *signer) read(rel string) ([]byte, string, bool) {
-	path := filepath.Join(s.root, filepath.FromSlash(rel))
-	fi, err := os.Stat(path)
-	if err != nil {
-		return nil, "", false
+// A signer gathers a root's counted files. A name is a path from the root,
+// or an absolute path outside it.
+type signer struct {
+	root  string
+	home  string
+	files []hookFile
+	seen  map[string]bool
+	refs  []hookRef
+	n     int
+	bytes int64
+	past  hash.Hash
+	pastN int
+}
+
+// A hookRef is a file or a folder a setting names.
+type hookRef struct {
+	name string
+	dir  bool
+}
+
+func (s *signer) abs(name string) string {
+	if filepath.IsAbs(name) {
+		return name
+	}
+	return filepath.Join(s.root, filepath.FromSlash(name))
+}
+
+// count counts the file name with what (fi is its stat when the caller has
+// one): a FIFO or another file that is not regular is named, never opened;
+// one past hookFilesMax is folded into pastLimit; one past a byte limit is
+// compared by its identity; any other is read and handed to what.
+func (s *signer) count(name string, fi os.FileInfo, what func(name string, b []byte)) {
+	if s.seen[name] {
+		return
+	}
+	path := s.abs(name)
+	if fi == nil {
+		var err error
+		if fi, err = os.Stat(path); err != nil {
+			return
+		}
+	}
+	s.seen[name] = true
+	s.n++
+	if s.n > hookFilesMax {
+		s.pastN++
+		io.WriteString(s.past, name+"\x00"+fileIdentity(fi)+"\n")
+		return
 	}
 	if !fi.Mode().IsRegular() {
-		return nil, "(not a regular file)", true
+		s.add(name, []string{"(not a regular file)"}, []string{"(not a regular file)"})
+		return
 	}
-	s.count++
-	if fi.Size() > hookFileMax || s.bytes+fi.Size() > hookTotalMax || s.count > hookFilesMax {
-		return nil, fmt.Sprintf("(%d bytes, compared by size)", fi.Size()), true
+	if fi.Size() > hookFileMax || s.bytes+fi.Size() > hookTotalMax {
+		s.identity(name, fi)
+		return
 	}
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOCTTY, 0)
 	if err != nil {
-		return nil, "(cannot be read: " + err.Error() + ")", true
+		note := "(cannot be read: " + err.Error() + ")"
+		s.add(name, []string{note}, []string{note})
+		return
 	}
 	defer f.Close()
 	if st, err := f.Stat(); err != nil || !st.Mode().IsRegular() {
-		return nil, "(not a regular file)", true
+		s.add(name, []string{"(not a regular file)"}, []string{"(not a regular file)"})
+		return
 	}
 	b, err := io.ReadAll(io.LimitReader(f, hookFileMax+1))
 	if err != nil {
-		return nil, "(cannot be read: " + err.Error() + ")", true
+		note := "(cannot be read: " + err.Error() + ")"
+		s.add(name, []string{note}, []string{note})
+		return
+	}
+	if len(b) > hookFileMax {
+		s.identity(name, fi)
+		return
 	}
 	s.bytes += int64(len(b))
-	return b, "", true
+	what(name, b)
 }
 
-func (s *signer) add(rel string, real, shown []string, raw []byte) {
-	s.seen[rel] = true
+// identity counts a file too big to read by its size, times and inode.
+func (s *signer) identity(name string, fi os.FileInfo) {
+	shown := fmt.Sprintf("(%d bytes, modified %s, not read: compared by size, times and inode)", fi.Size(), fi.ModTime().UTC().Format(time.RFC3339))
+	s.add(name, []string{fileIdentity(fi)}, []string{shown})
+}
+
+func (s *signer) add(name string, real, shown []string) {
 	sum := sha256.Sum256([]byte(strings.Join(real, "\n")))
-	s.files = append(s.files, hookFile{Path: rel, Sum: hex.EncodeToString(sum[:]), Shown: shown, raw: raw})
+	s.files = append(s.files, hookFile{Path: name, Sum: hex.EncodeToString(sum[:]), Shown: shown})
 }
 
-// whole counts every line of the file at rel.
-func (s *signer) whole(rel string) {
-	b, note, ok := s.read(rel)
-	if !ok {
-		return
-	}
-	if b == nil {
-		s.add(rel, []string{note}, []string{note}, nil)
-		return
-	}
+// whole counts every line of a file.
+func (s *signer) whole(name string, b []byte) {
 	if bytes.IndexByte(b, 0) >= 0 {
 		sum := sha256.Sum256(b)
-		s.add(rel, []string{hex.EncodeToString(sum[:])}, []string{fmt.Sprintf("(binary, %d bytes)", len(b))}, b)
+		s.add(name, []string{hex.EncodeToString(sum[:])}, []string{fmt.Sprintf("(binary, %d bytes)", len(b))})
 		return
 	}
-	lines := textLines(b)
-	shown := make([]string, len(lines))
-	for i, l := range lines {
-		shown[i] = maskLine(l)
-	}
-	s.add(rel, []string{string(b)}, shown, b)
+	s.add(name, []string{string(b)}, textLines(b))
+	s.files[len(s.files)-1].unmasked = true
 }
+
+// runnerKeys are the frontmatter keys of a skill, an agent or a command
+// that run something.
+var runnerKeys = []string{"hooks", "mcpServers"}
 
 // markdown counts a skill's, agent's or command's lines that run
 // something: its frontmatter hooks and mcpServers, and !`…` lines.
-func (s *signer) markdown(rel string) {
-	b, note, ok := s.read(rel)
-	if !ok {
-		return
-	}
-	if b == nil {
-		s.add(rel, []string{note}, []string{note}, nil)
-		return
-	}
-	var runs []string
+func (s *signer) markdown(name string, b []byte) {
+	var real, runs []string
 	lines := textLines(b)
 	body := 0
 	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
-		in := false
+		end := len(lines)
 		for i := 1; i < len(lines); i++ {
-			l := lines[i]
-			if strings.TrimSpace(l) == "---" {
-				body = i + 1
+			if strings.TrimSpace(lines[i]) == "---" {
+				end, body = i, i+1
 				break
 			}
-			if l != "" && l[0] != ' ' && l[0] != '\t' {
-				key, _, _ := strings.Cut(l, ":")
-				in = key == "hooks" || key == "mcpServers"
-			}
-			if in {
-				runs = append(runs, l)
-			}
 		}
+		if body == 0 {
+			body = len(lines)
+		}
+		real, runs = frontmatterRuns(lines[1:end])
 	}
 	for _, l := range lines[body:] {
 		if strings.Contains(l, "!`") || strings.HasPrefix(strings.TrimSpace(l), "```!") {
 			runs = append(runs, l)
+			real = append(real, l)
 		}
 	}
 	if len(runs) == 0 {
 		return
 	}
-	shown := make([]string, len(runs))
-	for i, l := range runs {
-		shown[i] = maskLine(l)
-	}
-	s.add(rel, runs, shown, b)
+	s.add(name, real, runs)
+	s.files[len(s.files)-1].unmasked = true
 }
 
-// tree counts each file under dir that keep takes, with count, following
-// links to folders once each.
-func (s *signer) tree(dir string, keep func(string) bool, count func(string)) {
-	visited := map[string]bool{}
-	var walk func(rel string)
-	walk = func(rel string) {
-		path := filepath.Join(s.root, filepath.FromSlash(rel))
-		real, err := filepath.EvalSymlinks(path)
-		if err != nil || visited[real] {
-			return
+// frontmatterRuns is what runs in a frontmatter, read as YAML reads it, so
+// no spelling of a key hides it (`"hooks":`, `hooks :`, an indented root
+// mapping, a merge key): the lines of its hooks and mcpServers keys (real
+// also holds their values as decoded, so an anchor they name counts). A
+// frontmatter that is no YAML mapping counts whole when it mentions one.
+func frontmatterRuns(fm []string) (real, shown []string) {
+	text := strings.Join(fm, "\n")
+	whole := func() ([]string, []string) {
+		l := strings.ToLower(text)
+		if strings.Contains(l, "hooks") || strings.Contains(l, "mcpservers") || strings.Contains(text, `\`) {
+			return fm, fm
 		}
-		visited[real] = true
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			return
+		return nil, nil
+	}
+	var doc yaml.Node
+	if yaml.Unmarshal([]byte(text), &doc) != nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return whole()
+	}
+	root := doc.Content[0]
+	var decoded map[string]any
+	if root.Decode(&decoded) != nil {
+		return whole()
+	}
+	taken := map[int]bool{}
+	direct := map[string]bool{}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		k := root.Content[i]
+		if !slices.Contains(runnerKeys, k.Value) {
+			continue
 		}
-		for _, e := range entries {
-			child := rel + "/" + e.Name()
-			fi, err := os.Stat(filepath.Join(path, e.Name()))
-			switch {
-			case err == nil && fi.IsDir():
-				walk(child)
-			case err == nil && keep(child) || err == nil && !fi.Mode().IsRegular():
-				count(child)
+		direct[k.Value] = true
+		last := len(fm)
+		if i+2 < len(root.Content) {
+			last = max(root.Content[i+2].Line-1, k.Line)
+		}
+		for l := k.Line; l <= last && l <= len(fm); l++ {
+			if !taken[l] {
+				taken[l] = true
+				shown = append(shown, fm[l-1])
 			}
 		}
 	}
-	if fi, err := os.Stat(filepath.Join(s.root, filepath.FromSlash(dir))); err == nil && fi.IsDir() {
-		walk(dir)
+	for _, k := range runnerKeys {
+		v, ok := decoded[k]
+		if !ok {
+			continue
+		}
+		if !direct[k] {
+			// From a merge key: what runs is wherever its anchor is.
+			return fm, fm
+		}
+		real = append(real, fmt.Sprintf("%s = %v", k, v))
+	}
+	if len(real) == 0 {
+		return nil, nil
+	}
+	return append(real, shown...), shown
+}
+
+// tree counts each file under dir that keep takes, with what, following
+// links to folders once each.
+func (s *signer) tree(dir string, keep func(string) bool, what func(string, []byte)) {
+	visited := map[string]bool{}
+	var walk func(name string, fi os.FileInfo)
+	walk = func(name string, fi os.FileInfo) {
+		path := s.abs(name)
+		var id string
+		var err error
+		if dev, ino, ok := devIno(fi); ok {
+			id = fmt.Sprintf("%d:%d", dev, ino)
+		} else {
+			id, err = filepath.EvalSymlinks(path)
+		}
+		if err != nil || visited[id] {
+			return
+		}
+		visited[id] = true
+		entries, err := children(path)
+		if err != nil {
+			return
+		}
+		for _, cfi := range entries {
+			child := name + "/" + cfi.Name()
+			switch {
+			case cfi.IsDir():
+				walk(child, cfi)
+			case keep(child) || !cfi.Mode().IsRegular():
+				s.count(child, cfi, what)
+			}
+		}
+	}
+	if fi, err := os.Stat(s.abs(dir)); err == nil && fi.IsDir() {
+		walk(dir, fi)
 	}
 }
 
 // json counts a JSON file's leaves but those under the inert top-level
-// keys; the files inside the root its commands name are counted too.
-func (s *signer) json(rel string, inert []string) {
-	b, note, ok := s.read(rel)
-	if !ok {
-		return
-	}
-	if b == nil {
-		s.add(rel, []string{note}, []string{note}, nil)
-		return
-	}
-	var v any
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.UseNumber()
-	if err := d.Decode(&v); err != nil {
-		sum := sha256.Sum256(b)
-		s.add(rel, []string{hex.EncodeToString(sum[:])}, []string{fmt.Sprintf("(not valid JSON, %d bytes)", len(b))}, b)
-		return
-	}
-	if m, ok := v.(map[string]any); ok {
-		for _, k := range inert {
-			delete(m, k)
-		}
-		if len(m) == 0 {
+// keys; the files its strings name, read from base, are counted too
+// (reference). filter, when set, says which leaves name something that
+// runs, and which name a resource.
+func (s *signer) json(name string, inert []string, base string, filter func(path string) (use, resource bool)) {
+	s.count(name, nil, func(name string, b []byte) {
+		var v any
+		d := json.NewDecoder(bytes.NewReader(b))
+		d.UseNumber()
+		if err := d.Decode(&v); err != nil {
+			sum := sha256.Sum256(b)
+			s.add(name, []string{hex.EncodeToString(sum[:])}, []string{fmt.Sprintf("(not valid JSON, %d bytes)", len(b))})
 			return
 		}
-	}
-	var real, shown []string
-	flatten(v, "", false, &real, &shown, func(key, value string) {
-		if key == "command" {
-			s.reference(value)
-		}
-	})
-	if len(real) == 0 {
-		return
-	}
-	s.add(rel, real, shown, b)
-}
-
-// reference counts each file inside the root that a command names.
-func (s *signer) reference(command string) {
-	for _, tok := range strings.Fields(command) {
-		tok = strings.Trim(tok, `"'`)
-		tok = strings.NewReplacer("${CLAUDE_PROJECT_DIR}", s.root, "$CLAUDE_PROJECT_DIR", s.root).Replace(tok)
-		if !strings.Contains(tok, "/") || strings.HasPrefix(tok, "-") || strings.HasPrefix(tok, "~") || strings.Contains(tok, "$") {
-			continue
-		}
-		path := tok
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(s.root, path)
-		}
-		path = filepath.Clean(path)
-		rel, err := filepath.Rel(s.root, path)
-		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-			continue
-		}
-		if fi, err := os.Stat(path); err == nil && fi.Mode().IsRegular() {
-			if r := filepath.ToSlash(rel); !slices.Contains(s.refs, r) {
-				s.refs = append(s.refs, r)
+		if m, ok := v.(map[string]any); ok {
+			for _, k := range inert {
+				delete(m, k)
+			}
+			if len(m) == 0 {
+				return
 			}
 		}
+		var real, shown []string
+		flatten(v, "", false, &real, &shown, func(path, value string) {
+			use, resource := true, false
+			if filter != nil {
+				use, resource = filter(path)
+			}
+			if use {
+				s.reference(value, base, resource)
+			}
+		})
+		if len(real) == 0 {
+			return
+		}
+		s.add(name, real, shown)
+	})
+}
+
+// reference counts what a setting's string names: each word of it as the
+// shell reads a command, $CLAUDE_PROJECT_DIR and $HOME expanded (inside
+// single quotes too, so no quoting hides a path), and the value whole. A
+// word counts when it holds a slash (any word of a resource), names a file
+// (a folder too, for a resource) and is inside the root, or, outside it,
+// the owner can write it.
+func (s *signer) reference(value, base string, resource bool) {
+	vars := map[string]string{"CLAUDE_PROJECT_DIR": s.root, "HOME": s.home}
+	words := append([]string{value}, commandWords(value, vars)...)
+	for _, w := range words {
+		cands := []string{w}
+		if _, after, ok := strings.Cut(w, "="); ok {
+			cands = append(cands, after)
+		}
+		for _, c := range cands {
+			if resource {
+				c = strings.TrimLeft(c, "+-")
+				if strings.HasPrefix(c, "!") || strings.Contains(c, ":") && !strings.HasPrefix(c, "/") && !strings.HasPrefix(c, ".") {
+					continue
+				}
+			}
+			if c == "" || (!resource && !strings.Contains(c, "/")) {
+				continue
+			}
+			if rest, ok := strings.CutPrefix(c, "~/"); ok {
+				c = filepath.Join(s.home, rest)
+			}
+			if strings.HasPrefix(c, "~") || strings.Contains(c, "$") {
+				continue
+			}
+			path := c
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(base, path)
+			}
+			s.refer(filepath.Clean(path), resource)
+		}
 	}
+}
+
+// refer adds the file (or a resource's folder) at path to what counts.
+func (s *signer) refer(path string, resource bool) {
+	fi, err := os.Stat(path)
+	if err != nil || !(fi.Mode().IsRegular() || resource && fi.IsDir()) {
+		return
+	}
+	name := path
+	if rel, err := filepath.Rel(s.root, path); err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, "../") {
+		name = filepath.ToSlash(rel)
+	} else if rel == "." || !writable(path) {
+		return
+	}
+	r := hookRef{name, fi.IsDir()}
+	if !slices.Contains(s.refs, r) {
+		s.refs = append(s.refs, r)
+	}
+}
+
+// commandWords are the words of cmd as the shell reads it, quotes removed:
+// a word with an expansion other than vars is none.
+func commandWords(cmd string, vars map[string]string) []string {
+	f, err := syntax.NewParser().Parse(strings.NewReader(cmd), "")
+	if err != nil {
+		var out []string
+		for _, w := range strings.Fields(cmd) {
+			out = append(out, expandVars(strings.NewReplacer(`"`, "", `'`, "").Replace(w), vars))
+		}
+		return out
+	}
+	var out []string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if w, ok := n.(*syntax.Word); ok {
+			if s, ok := wordText(w.Parts, vars); ok {
+				out = append(out, s)
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// wordText is a word's text, quotes removed and vars expanded; ok is false
+// for any other expansion.
+func wordText(parts []syntax.WordPart, vars map[string]string) (string, bool) {
+	var b strings.Builder
+	for _, p := range parts {
+		switch x := p.(type) {
+		case *syntax.Lit:
+			b.WriteString(unescape(x.Value))
+		case *syntax.SglQuoted:
+			b.WriteString(expandVars(x.Value, vars))
+		case *syntax.DblQuoted:
+			s, ok := wordText(x.Parts, vars)
+			if !ok {
+				return "", false
+			}
+			b.WriteString(s)
+		case *syntax.ParamExp:
+			var buf bytes.Buffer
+			if syntax.NewPrinter().Print(&buf, x) != nil {
+				return "", false
+			}
+			name := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(buf.String(), "$"), "{"), "}")
+			v, ok := vars[name]
+			if !ok || (buf.String() != "$"+name && buf.String() != "${"+name+"}") {
+				return "", false
+			}
+			b.WriteString(v)
+		default:
+			return "", false
+		}
+	}
+	return b.String(), true
+}
+
+func unescape(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			i++
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+func expandVars(s string, vars map[string]string) string {
+	for k, v := range vars {
+		s = strings.ReplaceAll(strings.ReplaceAll(s, "${"+k+"}", v), "$"+k, v)
+	}
+	return s
 }
 
 var plainKey = regexp.MustCompile(`^[A-Za-z0-9_$-]+$`)
@@ -581,8 +766,10 @@ var plainKey = regexp.MustCompile(`^[A-Za-z0-9_$-]+$`)
 var secretKey = regexp.MustCompile(`(?i)(token|secret|passw(or)?d|api[_-]?key|authorization|bearer|credential|cookie)`)
 
 // flatten writes v's leaves as `path = value` lines, the keys sorted: real
-// with every value, shown with the hidden ones as `…`.
-func flatten(v any, path string, hidden bool, real, shown *[]string, leaf func(key, value string)) {
+// with every value, shown with the hidden ones as `…` and the rest through
+// maskSecrets; leaf sees every string leaf. In an array, the value after a
+// flag that names a secret (`--api-key`, `-u`) is hidden.
+func flatten(v any, path string, hidden bool, real, shown *[]string, leaf func(path, value string)) {
 	switch x := v.(type) {
 	case map[string]any:
 		if len(x) == 0 {
@@ -603,9 +790,6 @@ func flatten(v any, path string, hidden bool, real, shown *[]string, leaf func(k
 				p = "." + k
 			}
 			h := hidden || strings.EqualFold(k, "env") || strings.EqualFold(k, "headers") || secretKey.MatchString(k)
-			if s, ok := x[k].(string); ok {
-				leaf(k, s)
-			}
 			flatten(x[k], path+p, h, real, shown, leaf)
 		}
 	case []any:
@@ -613,35 +797,117 @@ func flatten(v any, path string, hidden bool, real, shown *[]string, leaf func(k
 			*real, *shown = append(*real, path+" = []"), append(*shown, path+" = []")
 			return
 		}
+		next := false
 		for i, e := range x {
-			flatten(e, path+"["+strconv.Itoa(i)+"]", hidden, real, shown, leaf)
+			flatten(e, path+"["+strconv.Itoa(i)+"]", hidden || next, real, shown, leaf)
+			s, ok := e.(string)
+			next = ok && secretFlag(s)
 		}
 	default:
-		var buf bytes.Buffer
-		enc := json.NewEncoder(&buf)
-		enc.SetEscapeHTML(false)
-		_ = enc.Encode(x)
-		value := strings.TrimSuffix(buf.String(), "\n")
-		*real = append(*real, path+" = "+value)
-		if hidden {
+		encode := func(x any) string {
+			var buf bytes.Buffer
+			enc := json.NewEncoder(&buf)
+			enc.SetEscapeHTML(false)
+			_ = enc.Encode(x)
+			return strings.TrimSuffix(buf.String(), "\n")
+		}
+		*real = append(*real, path+" = "+encode(x))
+		s, isString := x.(string)
+		if isString {
+			leaf(path, s)
+		}
+		switch {
+		case hidden:
 			*shown = append(*shown, path+" = …")
-		} else {
-			*shown = append(*shown, path+" = "+maskURL(value))
+		case isString:
+			*shown = append(*shown, path+" = "+encode(maskSecrets(s)))
+		default:
+			*shown = append(*shown, path+" = "+encode(x))
 		}
 	}
 }
 
+// secretName is whether a flag's or a variable's name names a secret: one
+// of its words (split at - and _) is key, token, pat, password, secret, …,
+// or holds token, secret or passw (GH_PAT, GITHUB_TOKEN, API_KEY,
+// AWS_SECRET_ACCESS_KEY, PGPASSWORD, --api-key, --client-secret).
+func secretName(name string) bool {
+	for _, w := range strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return r == '-' || r == '_' }) {
+		switch {
+		case slices.Contains([]string{"key", "apikey", "pat", "pass", "auth", "bearer", "credential", "credentials", "cookie"}, w),
+			strings.Contains(w, "token"), strings.Contains(w, "secret"), strings.Contains(w, "passw"):
+			return true
+		}
+	}
+	return false
+}
+
+// secretFlag is whether an argument is a flag whose next argument is a
+// secret: a flag that names one, or curl's -u/--user.
+func secretFlag(a string) bool {
+	if a == "-u" || a == "--user" {
+		return true
+	}
+	name, ok := strings.CutPrefix(a, "-")
+	return ok && !strings.Contains(name, "=") && secretName(strings.TrimPrefix(name, "-"))
+}
+
 var (
-	urlCredentials = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)[^/\s:@"']+:[^/\s@"']+@`)
-	secretValue    = regexp.MustCompile(`(?i)((?:token|secret|passw(?:or)?d|api[_-]?key|authorization|credential)[A-Za-z0-9_]*["']?\s*[:=]\s*)\S+|(\bbearer\s+)\S+`)
+	urlAny        = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'<>]+`)
+	urlUserinfo   = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9+.-]*://)[^/\s@?#]+@`)
+	urlQueryValue = regexp.MustCompile(`([?&;][^=&#;\s]+=)[^&#;\s]*`)
+	authorization = regexp.MustCompile(`(?i)(authorization["']?\s*[:=]\s*)[^"'\n]+`)
+	authScheme    = regexp.MustCompile(`(?i)\b(bearer|basic)(\s+)[^\s"']+`)
+	curlUser      = regexp.MustCompile(`(^|\s)(-u|--user)(\s+|=)?([^\s:"']*):("[^"]*"|'[^']*'|[^\s"']+)`)
+	flagValue     = regexp.MustCompile(`(^|[\s"'])(--?[A-Za-z][A-Za-z0-9_-]*)(=|\s+)("[^"]*"|'[^']*'|[^\s"']+)`)
+	assignment    = regexp.MustCompile(`(^|[\s"';&|(])([A-Za-z_][A-Za-z0-9_]*)=("[^"]*"|'[^']*'|[^\s"';&|)]+)`)
+	secretValue   = regexp.MustCompile(`(?i)((?:token|secret|passw(?:or)?d|api[_-]?key|authorization|credential|cookie)[A-Za-z0-9_]*["']?\s*[:=]\s*)[^\s"']+`)
 )
 
-func maskURL(s string) string { return urlCredentials.ReplaceAllString(s, "${1}…@") }
+// maskSecrets is a value or a line as the question shows it: in a url its
+// userinfo and every query value, an Authorization header, a Bearer or
+// Basic credential, curl's -u password, the value of a flag (`--token x`,
+// `--api-key=x`) or a variable (`GH_PAT=x`) whose name names a secret, and
+// a value set to a secret-named key, all `…`.
+func maskSecrets(s string) string {
+	s = urlAny.ReplaceAllStringFunc(s, func(u string) string {
+		return urlQueryValue.ReplaceAllString(urlUserinfo.ReplaceAllString(u, "${1}…@"), "${1}…")
+	})
+	s = authorization.ReplaceAllString(s, "${1}…")
+	s = authScheme.ReplaceAllString(s, "${1}${2}…")
+	s = curlUser.ReplaceAllString(s, "${1}${2}${3}${4}:…")
+	s = replaceGroups(flagValue, s, func(g []string) string {
+		if secretName(strings.TrimLeft(g[2], "-")) {
+			return g[1] + g[2] + g[3] + "…"
+		}
+		return g[0]
+	})
+	s = replaceGroups(assignment, s, func(g []string) string {
+		if secretName(g[2]) {
+			return g[1] + g[2] + "=…"
+		}
+		return g[0]
+	})
+	return secretValue.ReplaceAllString(s, "${1}…")
+}
 
-// maskLine is a line as the question shows it: a url's password and a
-// value set to a key that names a secret are `…`.
-func maskLine(l string) string {
-	return maskURL(secretValue.ReplaceAllString(l, "${1}${2}…"))
+// replaceGroups replaces each match of re in s with f of its groups.
+func replaceGroups(re *regexp.Regexp, s string, f func(groups []string) string) string {
+	var b strings.Builder
+	last := 0
+	for _, m := range re.FindAllStringSubmatchIndex(s, -1) {
+		g := make([]string, len(m)/2)
+		for i := range g {
+			if m[2*i] >= 0 {
+				g[i] = s[m[2*i]:m[2*i+1]]
+			}
+		}
+		b.WriteString(s[last:m[0]])
+		b.WriteString(f(g))
+		last = m[1]
+	}
+	b.WriteString(s[last:])
+	return b.String()
 }
 
 // textLines are b's lines, without a last empty one.
