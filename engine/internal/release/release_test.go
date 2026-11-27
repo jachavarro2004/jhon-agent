@@ -223,6 +223,9 @@ func TestStatus(t *testing.T) {
 func TestPublish(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// The push goes from a private repository in go's work folder for this
+	// home's state folder (goWork), which outlives the home: removed here.
+	t.Cleanup(func() { os.RemoveAll(goWorkPath(goState())) })
 	for _, k := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
@@ -244,7 +247,14 @@ func TestPublish(t *testing.T) {
 	run(src, "add", "-A")
 	run(src, "commit", "-qm", "one")
 	run(home, "init", "-q", "--bare", origin)
-	run(src, "remote", "add", "origin", origin)
+	// publish pushes only to an ssh or https remote (T250): origin is reached
+	// over ssh, through an ssh that runs on this machine what git asks the
+	// far end for, as sshd would.
+	bin := filepath.Join(home, "bin")
+	must(t, os.MkdirAll(bin, 0o755))
+	must(t, os.WriteFile(filepath.Join(bin, "ssh"), []byte("#!/bin/sh\nfor a; do last=$a; done\nexec sh -c \"$last\"\n"), 0o755))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	run(src, "remote", "add", "origin", "git@jhon-test-ssh:"+origin)
 	r := Roots{Runtime: src, Source: src, Share: filepath.Join(home, ".local", "share", "jhon")}
 	var out, errs bytes.Buffer
 	o := &Out{W: &out, E: &errs}
@@ -259,7 +269,7 @@ func TestPublish(t *testing.T) {
 	if code := Publish(r, o); code != 0 {
 		t.Fatalf("Publish = %d, %q", code, errs.String())
 	}
-	if want := "pushing main to origin...\n  warn  mirror not configured, skipped\n"; out.String() != want {
+	if want := "pushing main to origin...\npushed " + short(head) + " to origin (git@jhon-test-ssh:" + origin + ")\n  warn  mirror not configured, skipped\n"; out.String() != want {
 		t.Errorf("Publish said %q; want %q", out.String(), want)
 	}
 	if got := run(origin, "rev-parse", "refs/heads/main"); got != head {

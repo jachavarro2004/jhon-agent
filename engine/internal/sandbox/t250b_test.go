@@ -355,3 +355,36 @@ func TestASocketVariableThroughALinkInAWritableAreaRefusesTheRun(t *testing.T) {
 		t.Errorf("a link in the read-only home: %+v", p)
 	}
 }
+
+// T250 (the re-verify of 18deae4, advisory): a busy path is the one the
+// command could not move or remove, the first an error names (mv names the
+// source, then where it was going); a read-only one is the last, where the
+// write went. So `mv <pinned worktree> X` gets the worktree's own note.
+func TestABusyPathIsTheOneTheCommandCouldNotMove(t *testing.T) {
+	for _, c := range []struct{ line, want string }{
+		{"mv: cannot move '/p-worktrees/w' to '/p-worktrees/x': Device or resource busy", "/p-worktrees/w"},
+		{"error: failed to delete '/p-worktrees/w': Device or resource busy", "/p-worktrees/w"},
+		{"rm: cannot remove '/p/.claude': Device or resource busy", "/p/.claude"},
+		{"mv: cannot move '/p/a' to '/ro/b': Read-only file system", "/ro/b"},
+	} {
+		if got, said := RefusedWrite(c.line); !said || got != c.want {
+			t.Errorf("RefusedWrite(%q) = %q, %v; want %q", c.line, got, said, c.want)
+		}
+	}
+	_, home, proj, in := t250Disk(t)
+	w := filepath.Join(home, "project-worktrees", "w")
+	if err := os.MkdirAll(filepath.Join(w, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(w, ".claude", "s.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(w, ".git"), []byte("gitdir: x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	in.Roots, in.Worktrees = []string{proj, filepath.Join(home, "project-worktrees")}, []string{w}
+	path, _ := RefusedWrite("mv: cannot move '" + w + "' to '" + w + "2': Device or resource busy")
+	if note := Refusal(in, path, nil); !strings.Contains(note, "a folder the sandbox keeps where it is") || !strings.Contains(note, "git worktree remove "+w) {
+		t.Errorf("the note on mv of a pinned worktree: %q", note)
+	}
+}
