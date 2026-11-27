@@ -73,7 +73,9 @@ func objects(t *testing.T, root string) []string {
 	t.Helper()
 	var out []string
 	filepath.WalkDir(filepath.Join(root, ".git", "objects"), func(p string, e os.DirEntry, err error) error {
-		if err == nil && !e.IsDir() {
+		// git's own lock files come and go: a commit starts `git maintenance
+		// run --auto` detached, which holds objects/maintenance.lock a moment.
+		if err == nil && !e.IsDir() && !strings.HasSuffix(p, ".lock") {
 			out = append(out, p)
 		}
 		return nil

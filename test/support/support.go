@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -26,7 +27,8 @@ import (
 // The binaries the tests run are the tests', not the owner's: they record
 // no telemetry (engine/internal/telemetry), and they read the settings of
 // the HOME a test gives them (~/.config/jhon/settings.toml), never the
-// owner's through an inherited XDG_CONFIG_HOME or JHON_SETTINGS. With no
+// owner's through an inherited XDG_CONFIG_HOME or JHON_SETTINGS, nor through
+// the caller's own HOME (isolateSettings, T264). With no
 // file sandbox.mode is on on Linux (T128f): a test that needs the
 // unsandboxed path of the Claude Code wrap or doctor sets it off in its own
 // settings file, and one that pins the default gives an empty file.
@@ -44,12 +46,91 @@ func init() {
 	os.Unsetenv("JHON_IN_SANDBOX")
 }
 
-// callerState and callerHome are the XDG_STATE_HOME and HOME of whoever runs
-// the tests, read before init touches the environment.
+// callerState, callerHome, callerConfig and callerSettings are the
+// XDG_STATE_HOME, HOME, XDG_CONFIG_HOME and JHON_SETTINGS of whoever runs the
+// tests, read before init touches the environment.
 var (
-	callerState = os.Getenv("XDG_STATE_HOME")
-	callerHome  = os.Getenv("HOME")
+	callerState    = os.Getenv("XDG_STATE_HOME")
+	callerHome     = os.Getenv("HOME")
+	callerConfig   = os.Getenv("XDG_CONFIG_HOME")
+	callerSettings = os.Getenv("JHON_SETTINGS")
 )
+
+// isolateSettings is env with no settings file of the caller's (T264): a
+// program reads JHON_SETTINGS, else $XDG_CONFIG_HOME/jhon/settings.toml, else
+// ~/.config/jhon/settings.toml, so a test that ran jhon with the caller's
+// HOME read the owner's settings, and its result depended on who ran it.
+// A JHON_SETTINGS of the test's own is kept, and so is an XDG_CONFIG_HOME
+// of its own; the caller's are dropped; with env's HOME not the caller's
+// nothing is added, so the program reads the settings under that HOME
+// (a file binarySettings named for an Env the test then gave its own HOME
+// is dropped too); else JHON_SETTINGS names a file of the test binary's own
+// that does not exist (binarySettings), one per environment, so the program
+// has the defaults and what one test writes there no other reads.
+func isolateSettings(env []string) []string {
+	var home, file, config string
+	var hasHome, hasFile, hasConfig bool
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		switch k {
+		case "HOME":
+			home, hasHome = v, true
+		case "JHON_SETTINGS":
+			file, hasFile = v, true
+		case "XDG_CONFIG_HOME":
+			config, hasConfig = v, true
+		}
+	}
+	ours := hasFile && filepath.Dir(file) == settingsDir()
+	if hasFile && file != "" && file != callerSettings && !ours {
+		return env
+	}
+	ownConfig := hasConfig && filepath.IsAbs(config) && config != callerConfig
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		k, _, _ := strings.Cut(kv, "=")
+		if k == "JHON_SETTINGS" || k == "XDG_CONFIG_HOME" && !ownConfig {
+			continue
+		}
+		out = append(out, kv)
+	}
+	if ownConfig || hasHome && filepath.IsAbs(home) && home != callerHome {
+		return out
+	}
+	if !ours {
+		file = binarySettings()
+	}
+	return append(out, "JHON_SETTINGS="+file)
+}
+
+var (
+	settingsOnce   sync.Once
+	settingsFolder string
+	settingsFiles  atomic.Int64
+)
+
+// settingsDir is the folder of binarySettings' files: beside the test
+// binary when go test built it in its work folder (go-build…), which go
+// removes after the run; else a new temporary folder.
+func settingsDir() string {
+	settingsOnce.Do(func() {
+		if exe, err := os.Executable(); err == nil && strings.Contains(exe, string(filepath.Separator)+"go-build") {
+			dir := filepath.Join(filepath.Dir(exe), "xdg-config")
+			if os.MkdirAll(dir, 0o700) == nil {
+				settingsFolder = dir
+				return
+			}
+		}
+		settingsFolder, _ = os.MkdirTemp("", "jhon-test-config-")
+	})
+	return settingsFolder
+}
+
+// binarySettings is a settings file no program has written yet, in
+// settingsDir.
+func binarySettings() string {
+	return filepath.Join(settingsDir(), fmt.Sprintf("settings-%d.toml", settingsFiles.Add(1)))
+}
 
 // isolateState is env with XDG_STATE_HOME the test's own: kept when env
 // names one that is not the caller's; with env's HOME not the caller's, the
@@ -318,7 +399,7 @@ func Run(t testing.TB, c Cmd) Result {
 	if env == nil {
 		env = os.Environ()
 	}
-	cmd.Dir, cmd.Env = c.Dir, isolateState(env)
+	cmd.Dir, cmd.Env = c.Dir, isolateSettings(isolateState(env))
 	cmd.Stdin = strings.NewReader(c.Stdin)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
@@ -364,8 +445,8 @@ func init() {
 
 // Env is this process's environment with overrides (KEY=VALUE) applied and
 // every GIT_* variable removed, so a test run from a git hook never points
-// git at the framework's own repository, and XDG_STATE_HOME the test's own
-// (isolateState).
+// git at the framework's own repository, XDG_STATE_HOME the test's own
+// (isolateState), and no settings file of the caller's (isolateSettings).
 func Env(overrides ...string) []string {
 	keys := map[string]bool{}
 	for _, o := range overrides {
@@ -380,7 +461,7 @@ func Env(overrides ...string) []string {
 		}
 		out = append(out, kv)
 	}
-	return isolateState(append(out, overrides...))
+	return isolateSettings(isolateState(append(out, overrides...)))
 }
 
 // Git runs git in dir with a fixed identity and no signing; it fails the
