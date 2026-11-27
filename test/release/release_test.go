@@ -58,10 +58,13 @@ func scratchHome(t *testing.T) scratch {
 	bin := filepath.Join(home, "stub-bin")
 	support.Write(t, home, map[string]string{
 		"stub-bin/claude":   "#!/bin/sh\nexit 1\n",
+		"stub-bin/ssh":      standInSSH,
 		".claude/CLAUDE.md": "@RTK.md\n\n<!-- jhon:start -->\n<!-- jhon:end -->\n",
 	})
-	if err := os.Chmod(filepath.Join(bin, "claude"), 0o755); err != nil {
-		t.Fatal(err)
+	for _, p := range []string{"claude", "ssh"} {
+		if err := os.Chmod(filepath.Join(bin, p), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return scratch{home, bin}
 }
@@ -266,12 +269,20 @@ func equal[T any](t *testing.T, got, want T, msg ...any) {
 }
 
 // bareRemote is a bare repository registered as remote name of src.
+// standInSSH is an ssh that runs on this machine the program git asks the
+// far end for, as sshd would: the stand-in for a real remote reached over
+// ssh, as `jhon publish` pushes only to an ssh or https remote (T250).
+const standInSSH = "#!/bin/sh\nfor a; do last=$a; done\nexec sh -c \"$last\"\n"
+
+// bareRemote is a bare repository the source names as remote name,
+// reached over ssh (git@jhon-test-ssh:<path>) through the scratch home's
+// standInSSH.
 func bareRemote(t *testing.T, src, name string) string {
 	t.Helper()
 	parent := temp(t)
 	bare := filepath.Join(parent, name+".git")
 	support.Git(t, parent, "init", "-q", "--bare", bare)
-	support.Git(t, src, "remote", "add", name, bare)
+	support.Git(t, src, "remote", "add", name, "git@jhon-test-ssh:"+bare)
 	return bare
 }
 

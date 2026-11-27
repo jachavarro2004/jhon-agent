@@ -38,12 +38,17 @@ var (
 // none. The path is the last one before the message (`<shell>: line 1:
 // <path>: Read-only file system` names the shell first), else the first
 // after it (Python's `Read-only file system: '<path>'`); a quoted one
-// first, as a quoted path may hold blanks.
+// first, as a quoted path may hold blanks. For a busy one it is the first
+// before the message: the one the command could not move or remove (mv
+// names its source, then where it was going), T250.
 func RefusedWrite(output string) (path string, said bool) {
 	for _, line := range strings.Split(output, "\n") {
 		before, after, found := strings.Cut(line, readOnly)
 		if !found {
 			before, after, found = strings.Cut(line, busy)
+			if m := quotedPath.FindStringSubmatch(before); found && m != nil {
+				return strings.TrimRight(m[1], "."), true
+			}
 		}
 		if !found {
 			continue

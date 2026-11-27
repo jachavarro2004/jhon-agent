@@ -14,6 +14,12 @@ import (
 // Any failing fails; the exit code is the matrix's.
 func init() { register("test", runTest) }
 
+// goTestArgs are the Go tests' arguments: their own timeout, as the
+// sandbox suite (test/sandbox) alone takes 8 to 10 minutes on a loaded
+// machine, past go's default 10, which would fail with no test at fault
+// (T250).
+var goTestArgs = []string{"test", "-timeout", "30m", "./..."}
+
 func runTest(argv []string) (int, error) {
 	r, o := release.Locate(), out()
 	if code, ok := r.NeedRepo(o, "test"); !ok {
@@ -27,7 +33,7 @@ func runTest(argv []string) (int, error) {
 	if release.Run(build) != 0 {
 		return o.Die("the binary does not build"), nil
 	}
-	gotest := exec.Command("go", "test", "./...")
+	gotest := exec.Command("go", goTestArgs...)
 	gotest.Dir = r.Source
 	if release.Run(gotest) != 0 {
 		return o.Die("Go tests failed"), nil

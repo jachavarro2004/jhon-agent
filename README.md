@@ -315,9 +315,18 @@ inside the repository, reached with no link, each of its hook files tracked
 at HEAD and unmodified (as `tools/git-hooks` in Jhon's own checkout); a
 hook anywhere else (the git folder's hooks, a folder outside the
 repository, a changed or untracked hook file) stops the publish with the
-key, where it is set and the fix, and nothing is pushed. The push also
-runs no ssh command, askpass, credential helper or receive-pack program the
-repository names, only your own from the system and global configuration.
+key, where it is set and the fix, and nothing is pushed. Jhon runs that
+committed pre-push itself, in the checkout, with git's own input, before
+anything is sent. The push never runs with the checkout's git
+configuration: it goes from a private repository Jhon makes for it, whose
+objects are the checkout's and whose configuration is Jhon's and yours
+(the system and global files: your `insteadOf`, ssh command, credential
+helpers and signing apply), to the address `remote.<name>.url` names. A
+`pushurl`, `insteadOf` or `pushInsteadOf` in the checkout's own
+configuration that would change that address stops the publish, and so
+does an address that is a path, `file://`, `git://` or a transport helper
+(`ext::` and the like): only an ssh or https remote is pushed to, and
+publish says where it pushed.
 A variable that names a socket the sandbox hides (`SSH_AUTH_SOCK`, a bus or
 container address) through a link in a folder sandboxed commands write
 stops every sandboxed command, with the real path to set: a command could

@@ -189,6 +189,14 @@ func GitReadEnv() []string {
 	return WithGitConfig(append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_PAGER=cat"), neutralGit())
 }
 
+// NeutralGitEnv is GitReadEnv with the filter drivers the configuration in
+// dir names emptied too (gitFilters): the environment for a program of the
+// repository's own that runs git there outside the sandbox, as `jhon
+// publish` runs the committed pre-push hook (T250).
+func NeutralGitEnv(dir string) []string {
+	return WithGitConfig(GitReadEnv(), gitFilters(dir, []string{"status"}))
+}
+
 // ReadGitCmd is the command ReadGit runs: git in dir, without inherited
 // GIT_* variables, with optional locks off, and with the keys that make git
 // run a program neutralised (gitNeutral, T250), the repository's filters
