@@ -878,7 +878,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            neither in the project nor in a git repository
                            inside a sandbox.allow_write folder, a link on
                            the way, a check below refused it; a line
-                           already alone is told what it holds); any exit but
+                           already alone is told what it holds; a line
+                           whose leading cd names its folder with a ..
+                           part is given the line with the folder's
+                           absolute path, which runs outside); any exit but
                            a signal's, a success too, of a line that holds
                            one of sandbox.deploy_tools ends after those
                            with one line, <tool> runs outside the sandbox
@@ -888,8 +891,15 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            commands: run it alone, as in <tool>
                            <arguments>, and pass settings as options
                            (--region, --profile), not variables (<tools>
-                           run ... of their own for two or more); and with
-                           telemetry on each run
+                           run ... of their own for two or more); with
+                           sandbox.docker off, any exit but a signal's
+                           whose output says docker cannot reach its
+                           daemon ends last with one line saying the
+                           sandbox hides the socket, so this says nothing
+                           of whether Docker runs, that a docker line of
+                           its own in the project runs outside, and that
+                           jhon settings set sandbox.docker true shows it;
+                           and with telemetry on each run
                            records a jhon.sandbox event (its profile, work
                            or unsandboxed, and the exit code). The
                            runtimes' --profile unsandboxed runs <shell> -c

@@ -241,7 +241,10 @@ what git, gh, docker or a deploy tool runs by its name;
 anything else on the line keeps it in the sandbox, and such a line ends, failed
 or not, with a note that the tool runs outside the sandbox only on a line of
 its own (`aws sts get-caller-identity --region us-east-1`, not `export
-AWS_REGION=…; aws … | tail -1`). The agent's always-on text says the same
+AWS_REGION=…; aws … | tail -1`). A git or gh line whose leading `cd` names
+its folder with a `..` part stays in the sandbox too, and its failure gives the
+line with the folder's absolute path, which runs outside (`cd ../repo && git
+fetch origin` is told `cd /home/you/repo && git fetch origin`). The agent's always-on text says the same
 before it runs anything: a failure inside the sandbox is fixed by running the
 program alone, not by turning the sandbox off. That git
 runs with the repository's hooks (configured hooks included), ssh command,
@@ -396,7 +399,12 @@ project's sandboxed commands. Docker's and podman's sockets are hidden inside
 the sandbox: through one a container can write anywhere you can and outlive
 the command. `jhon settings set sandbox.docker true` shows them again, and
 `jhon sandbox status` and `jhon doctor` then name it as an escape you
-accepted; with it off no docker or podman socket is there at all, the
+accepted. With it off, a sandboxed command whose output says docker cannot
+reach its daemon (`failed to connect to the docker API at …`, `Cannot connect
+to the Docker daemon at …`) ends, failed or not, with a note that the sandbox
+hides the socket, so this says nothing of whether Docker runs, that a docker
+line of its own in the project runs outside the sandbox, and that
+`sandbox.docker` shows the socket; with it off no docker or podman socket is there at all, the
 system's (`/run/docker.sock`, `/run/podman`), Docker Desktop's under
 ~/.docker and any unix socket `DOCKER_HOST`, `CONTAINER_HOST` or a docker
 context names. herdr's sockets (its API runs commands in its panes), the system
