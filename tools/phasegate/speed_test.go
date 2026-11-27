@@ -304,10 +304,12 @@ func TestMeasureAgainstTimesTwoBinariesBackToBack(t *testing.T) {
 		}
 	}
 
-	// A compare of the two says they met the same load.
+	// A compare of the two says they met the same load. Its verdict is not
+	// asserted: the fake binaries' real run times decide it, and on a busy
+	// machine one line can read "worse" (exit 1); exit 2 is a failed run.
 	stdout.Reset()
-	if code := run([]string{"compare", "--base", "phase1", "--new", "phase2", "--out", out}, &stdout, &stderr); code != 0 {
-		t.Fatalf("compare exit %d, want 0:\n%s", code, stdout.String())
+	if code := run([]string{"compare", "--base", "phase1", "--new", "phase2", "--out", out}, &stdout, &stderr); code != 0 && code != 1 {
+		t.Fatalf("compare exit %d, want 0 or 1:\n%s%s", code, stdout.String(), stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "phasegate: base and new were timed back to back, in one run") {
 		t.Errorf("the compare does not say the two were timed back to back:\n%s", stdout.String())
