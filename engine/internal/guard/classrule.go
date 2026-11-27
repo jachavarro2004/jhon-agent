@@ -50,7 +50,11 @@ func classRuns(words []string) bool {
 // program), with no function or alias of that name on the line and no
 // PATH of the line's own (T228 L8).
 func trusted(p sh.Program, ctx *Ctx) bool {
-	return !strings.Contains(at(p.Argv, 0), "/") && !ctx.defined[p.Name] && !ctx.defined[sh.Untrusted] && !slices.Contains(p.Env, "PATH") && p.Envv["PATH"] == ""
+	pos := -1
+	if p.Raw != nil {
+		pos = strings.Index(ctx.line, *p.Raw)
+	}
+	return !strings.Contains(at(p.Argv, 0), "/") && sh.Trusts(ctx.defined, p.Name, pos) && !slices.Contains(p.Env, "PATH") && p.Envv["PATH"] == ""
 }
 
 // modelled is whether the guard reads a program exactly: it never runs its

@@ -86,6 +86,12 @@ var commandVars = set("GIT_EXTERNAL_DIFF", "GIT_PAGER", "PAGER", "GIT_EDITOR", "
 // FZF_CTRL_T_COMMAND, *_CMD), whatever program reads it.
 var commandVarName = lazyre.New(`(?i)(?:PAGER|EDITOR|VISUAL|BROWSER|ASKPASS)$|_(?:COMMAND|CMD)$`)
 
+// CommandVar is whether a program runs the value of the variable name as
+// a command line (commandVars, commandVarName, GIT_CONFIG_VALUE_n).
+func CommandVar(name string) bool {
+	return commandVars[name] || commandVarName.MatchString(name) || gitConfigValue.MatchString(name)
+}
+
 // browserList is a browser variable: a list of commands split at `:`
 // (xdg-open, python's webbrowser), each run with the address.
 var browserList = lazyre.New(`(?i)BROWSER$`)

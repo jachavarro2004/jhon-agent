@@ -36,7 +36,7 @@ var markerWord = regexp.MustCompile(`\b` + AgentVariable + `\b`)
 // in a configuration write is refused.
 func gateBypass(command, cwd, top string) string {
 	lower := strings.ToLower(command)
-	envWhy := envChange(command)
+	envWhy := envChangeAt(command, cwd)
 	if envWhy == "" && !strings.Contains(lower, "hook") && !strings.Contains(lower, "include") && !strings.Contains(lower, "config") {
 		return ""
 	}

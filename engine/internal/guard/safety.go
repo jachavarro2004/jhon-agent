@@ -36,8 +36,11 @@ type Ctx struct {
 	targets *[]Target
 	// noClass turns the class rule off while it judges a candidate (classFinding).
 	noClass bool
-	// defined are the names the line defines as a function or an alias (trusted).
+	// defined are the names the line defines as a function or an alias,
+	// and the places where it may define names unseen (trusted, sh.Trusts);
+	// line is the line, where a program's place is read.
 	defined map[string]bool
+	line    string
 }
 
 // State is what a command line changes as it is read: the directory ("" when
@@ -197,7 +200,7 @@ func unreadableAsk(err error) Finding {
 // Classify is the findings of a command line run in ctx.Cwd.
 func Classify(command string, ctx *Ctx) []Finding {
 	ctx.scratch, ctx.mktempRm = scratchVars(command, ctx), mktempRm(command)
-	ctx.defined = sourcedNames(sh.DefinedNames(command), ctx)
+	ctx.defined, ctx.line = sourcedNames(sh.DefinedNames(command), ctx), command
 	ctx.trapWord, ctx.trapAction, ctx.trapScratch = trapExit(command, ctx)
 	st := &State{Dir: ctx.Cwd, Links: &Links{}}
 	out := classify(command, ctx, 0, st)
@@ -223,35 +226,80 @@ func Classify(command string, ctx *Ctx) []Finding {
 	return out
 }
 
-// sourcedNames is defined with each file the line sources by a literal
-// path read for the names it defines (T257): one that does not exist
-// defines none; one the guard cannot read, or that sources another in
-// turn, trusts no name (sh.Untrusted).
+// ResolveSourced is defined (sh.DefinedNames) with each file the line run
+// in cwd sources read for the names it defines (T257): a readable file
+// adds its functions and aliases; one that does not exist adds none; one
+// the guard cannot read (a path it cannot resolve, not a regular file, too
+// large), or that may define names it cannot see in turn, is an Untrusted
+// place at its source. route-guard reads them as the safety guard does.
+func ResolveSourced(defined map[string]bool, cwd string) map[string]bool {
+	return sourcedNames(defined, &Ctx{Cwd: cwd, Home: project.Realish(project.Home()), roots: map[string]string{}})
+}
+
 func sourcedNames(defined map[string]bool, ctx *Ctx) map[string]bool {
-	for n := range defined {
-		f, ok := strings.CutPrefix(n, sh.SourcedPrefix)
+	for _, n := range slices.Collect(maps.Keys(defined)) {
+		at, f, ok := sh.Sourced(n)
 		if !ok {
 			continue
 		}
 		delete(defined, n)
 		st := &State{Dir: ctx.Cwd}
 		a := pathOf(f, st.Dir, ctx, nil)
-		if _, err := os.Stat(a); a != "" && os.IsNotExist(err) {
+		if a == "" {
+			defined[sh.UntrustedAt(at)] = true
 			continue
 		}
-		text, _, ok := scriptText(f, st, ctx, nil)
+		if _, err := os.Stat(a); os.IsNotExist(err) {
+			continue
+		}
+		text, _, ok := scriptText(a, st, ctx, nil)
 		if !ok {
-			defined[sh.Untrusted] = true
+			defined[sh.UntrustedAt(at)] = true
 			continue
 		}
 		for m := range sh.DefinedNames(text) {
-			if strings.HasPrefix(m, sh.SourcedPrefix) {
-				m = sh.Untrusted
+			if _, _, src := sh.Sourced(m); src || strings.HasPrefix(m, sh.Untrusted) {
+				m = sh.UntrustedAt(at)
 			}
 			defined[m] = true
 		}
 	}
 	return defined
+}
+
+// valueVars are variables whose value a program runs as code whatever runs
+// it, not named the way commandVarName reads (perl's PERL5OPT, -M and code).
+var valueVars = set("PERL5OPT")
+
+// lineRuns is what a line runs of its variables (runsValues): the names it
+// expands as a command word (`$X`, `"${X}"`), and whether it runs make,
+// which reads exported variables as its own.
+type lineRuns struct {
+	command map[string]bool
+	make    bool
+}
+
+// commandWord is a word that is one variable's value: `$X`, `${X}`.
+var commandWord = regexp.MustCompile(`^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$`)
+
+func runsValues(cmds []*sh.Command) lineRuns {
+	r := lineRuns{command: map[string]bool{}}
+	for _, c := range cmds {
+		w := c.Words
+		for len(w) > 0 && sh.Assignment.MatchString(w[0]) {
+			w = w[1:]
+		}
+		if len(w) == 0 {
+			continue
+		}
+		if m := commandWord.FindStringSubmatch(w[0]); m != nil {
+			r.command[m[1]] = true
+		}
+		if b := sh.Base(w[0]); b == "make" || b == "gmake" {
+			r.make = true
+		}
+	}
+	return r
 }
 
 // classify reads a command line; depth bounds the re-reading of command strings found in interpreter code.
@@ -276,29 +324,33 @@ func classify(command string, ctx *Ctx, depth int, st *State) []Finding {
 		n, v, _ := strings.Cut(w, "=")
 		vars[n] = v
 	}
+	runs := runsValues(cmds)
 	for _, c := range cmds {
-		// A value a variable is given may be run as a command line (judgeValue, T257).
-		value := func(w string) {
-			n, v, _ := strings.Cut(w, "=")
-			out = append(out, judgeValue(n, v, ctx, vars, st, depth, nil)...)
+		// A value a variable is given is judged where it reaches a place that
+		// runs it (judgeValue, runsValues, T257); elsewhere it is data.
+		value := func(w string, exported bool) {
+			if n, v, _ := strings.Cut(w, "="); runs.command[n] || exported && (runs.make || valueVars[n]) {
+				out = append(out, judgeValue(n, v, ctx, vars, st, depth, nil)...)
+			}
 		}
 		if len(c.Words) > 0 && !slices.ContainsFunc(c.Words, func(w string) bool { return !sh.Assignment.MatchString(w) }) {
 			for _, w := range c.Words {
 				assign(w)
-				value(w)
+				value(w, false)
 			}
 			continue
 		}
 		if len(c.Words) > 0 && slices.Contains([]string{"export", "declare", "typeset", "readonly", "local"}, c.Words[0]) {
+			exported := c.Words[0] == "export" || slices.ContainsFunc(c.Words[1:], func(w string) bool { return strings.HasPrefix(w, "-") && strings.Contains(w, "x") })
 			for _, w := range c.Words[1:] {
 				if sh.Assignment.MatchString(w) {
 					assign(w)
-					value(w)
+					value(w, exported)
 				}
 			}
 			continue
 		}
-		if n, v, ok := sh.PrintfVar(c.Words); ok {
+		if n, v, ok := sh.PrintfVar(c.Words); ok && (runs.command[n] || valueVars[n] || sh.CommandVar(n)) {
 			out = append(out, judgeValue(n, v, ctx, vars, st, depth, nil)...)
 		}
 		// A command inside literal `for` loops is judged once per value of
@@ -541,9 +593,12 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	if l := sh.GlobSubstOn(name, args); l != "" {
 		out = append(out, deny(l, globSubstWhy))
 	}
-	// The values the variables set for it hold (judgeValue, T257).
+	// The values the variables set for it hold, where it runs them: make's
+	// (any variable may be a recipe's command, CC), and valueVars (T257).
 	for _, n := range slices.Compact(slices.Sorted(slices.Values(p.Env))) {
-		out = append(out, judgeValue(n, p.Envv[n], ctx, vars, st, depth, p.Via)...)
+		if valueVars[n] || name == "make" || name == "gmake" {
+			out = append(out, judgeValue(n, p.Envv[n], ctx, vars, st, depth, p.Via)...)
+		}
 	}
 	// A program the guard has no reading of, given a command it would refuse or ask (T228 L6).
 	if f := classFinding(p, name, args, ctx, vars, st, depth); f != nil {
