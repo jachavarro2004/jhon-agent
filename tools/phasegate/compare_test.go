@@ -178,6 +178,42 @@ func TestCompareMarkdown(t *testing.T) {
 	}
 }
 
+// Records whose friction was counted by different rules are not held to
+// each other: the friction rows say so, and a line under the table.
+func TestCompareFrictionCountedByAnotherRule(t *testing.T) {
+	recounted := strings.Replace(newJSON, `"friction": {"since"`, `"friction": {"counting": 2, "since"`, 1)
+	dir := writeRecords(t, map[string]string{"base": baseJSON, "new": recounted})
+	var out, errs bytes.Buffer
+	if code := run([]string{"compare", "--base", "base", "--new", "new", "--out", dir}, &out, &errs); code != 1 {
+		t.Fatalf("exit %d, want 1 (the other measures); stderr %s", code, errs.String())
+	}
+	for _, c := range []struct{ measure, base, new, change string }{
+		{"stops per 100 tool results", "0.5", "0.56", "+0.06 (+12%)"},
+		{"stops per 100: credentials match", "0.3", "0.45", "+0.15 (+50%)"},
+		{"runtime pi stops/tool results", "2/400 (0.5)", "6/800 (0.75)", "+0.25 (+50%)"},
+	} {
+		got := tableRow(t, out.String(), c.measure)
+		if want := []string{c.measure, c.base, c.new, c.change, "not comparable"}; strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("row %q = %q, want %q", c.measure, got, want)
+		}
+	}
+	for _, want := range []string{
+		"phasegate: friction counted by rule 1 in base and rule 2 in new: its rows are not comparable",
+		"phasegate: 8 worse",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("no %q in:\n%s", want, out.String())
+		}
+	}
+	// The same rule on both sides: no such line.
+	dir = writeRecords(t, map[string]string{"base": baseJSON, "new": newJSON})
+	out.Reset()
+	run([]string{"compare", "--base", "base", "--new", "new", "--out", dir}, &out, &errs)
+	if strings.Contains(out.String(), "not comparable") {
+		t.Errorf("records of one rule called not comparable:\n%s", out.String())
+	}
+}
+
 func TestCompareMissingRecordIsAUsageError(t *testing.T) {
 	dir := writeRecords(t, map[string]string{"base": baseJSON})
 	var out, errs bytes.Buffer

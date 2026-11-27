@@ -21,7 +21,7 @@ const fakeScript = `#!/bin/sh
 log="$PHASEGATE_FAKE_LOG"
 if ! mkdir "$log.lock" 2>/dev/null; then echo "OVERLAP $*" >> "$log"; exit 97; fi
 trap 'rmdir "$log.lock"' EXIT
-echo "CALL nice=$(nice) sp=$JHON_SANDBOX_PROJECT $*" >> "$log"
+echo "CALL nice=$(nice) bin=$0 sp=$JHON_SANDBOX_PROJECT $*" >> "$log"
 case "$1" in
 version) echo '{"version":"9.9.9","commit":"abc123","date":"2026-11-27"}' ;;
 status) if [ -e .grow ]; then : > ".git/objects/grown-$$"; fi; sleep 0.02; echo '{}' ;;
@@ -182,6 +182,161 @@ func TestMeasureRunsOneAtATimeAndFailsAProjectWhoseObjectsGrew(t *testing.T) {
 		if strings.Contains(string(raw), bad) {
 			t.Errorf("the record holds %q:\n%s", bad, raw)
 		}
+	}
+}
+
+// The back-to-back form (L6): --against times a second binary in the same
+// run, each run of each command in each project the old binary's then the
+// new one's, and writes a record for each, so that a compare of the two
+// meets the same load. Each binary reads its own tree and is skipped alone
+// where it lacks a command.
+func TestMeasureAgainstTimesTwoBinariesBackToBack(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+	log := filepath.Join(dir, "fake.log")
+	t.Setenv("PHASEGATE_FAKE_LOG", log)
+	// The new binary has risk; the old one is an install whose tree lies
+	// above it and names fewer VCS directories.
+	newBin := filepath.Join(dir, "new", "jhon")
+	writeFile(t, newBin, strings.Replace(fakeScript, "*) echo", "risk) echo ok ;;\n*) echo", 1), 0o755)
+	oldRoot := filepath.Join(dir, "releases", "old")
+	oldBin := filepath.Join(oldRoot, "build", "jhon")
+	writeFile(t, oldBin, strings.Replace(fakeScript, `"version":"9.9.9"`, `"version":"9.9.8"`, 1), 0o755)
+	writeFile(t, filepath.Join(oldRoot, "prose", "contracts", "vocabulary.yaml"), "vcs_dirs: [.git]\n", 0o644)
+	root := filepath.Join(dir, "root")
+	writeFile(t, filepath.Join(root, "prose", "contracts", "vocabulary.yaml"), "vcs_dirs: [.git, .hg]\n", 0o644)
+	var projects []string
+	for _, name := range []string{"acme-api", "acme-web"} {
+		p := filepath.Join(dir, name)
+		writeFile(t, filepath.Join(p, "app.txt"), "hi\n", 0o644)
+		gitIn(t, p, "init", "-q", "-b", "main")
+		gitIn(t, p, "add", "-A")
+		gitIn(t, p, "commit", "-q", "-m", "base")
+		projects = append(projects, p)
+	}
+	pf := filepath.Join(dir, "projects.txt")
+	writeFile(t, pf, strings.Join(projects, "\n")+"\n", 0o644)
+	out, empty := filepath.Join(dir, "out"), filepath.Join(dir, "empty")
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"measure", "--label", "phase2", "--jhon", newBin, "--against", oldBin, "--against-label", "phase1",
+		"--projects-file", pf, "--out", out, "--repo", empty, "--jhon-root", root, "--pi-sessions", empty, "--claude-projects", empty}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit %d, want 0; stderr %s\nstdout %s", code, stderr.String(), stdout.String())
+	}
+	records := map[string]*Record{}
+	for _, label := range []string{"phase1", "phase2"} {
+		r, err := readRecord(filepath.Join(out, label+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		records[label] = r
+		if !strings.Contains(stdout.String(), "phasegate: wrote "+filepath.Join(out, label+".json")) {
+			t.Errorf("stdout does not name %s's record:\n%s", label, stdout.String())
+		}
+	}
+	old, cur := records["phase1"], records["phase2"]
+	if old.Jhon.Version != "9.9.8" || cur.Jhon.Version != "9.9.9" || old.Pair != "phase2" || cur.Pair != "phase1" {
+		t.Errorf("old %+v pair %q, new %+v pair %q", old.Jhon, old.Pair, cur.Jhon, cur.Pair)
+	}
+	for label, r := range records {
+		if r.Speed == nil || len(r.Speed.Projects) != 2 {
+			t.Fatalf("%s speed %+v", label, r.Speed)
+		}
+		for _, p := range r.Speed.Projects {
+			for _, name := range []string{"status", "hook-git-status", "hook-edit", "hook-gh-pr-create", "sandbox-run"} {
+				if tm := p.Commands[name]; tm.Runs != 5 || tm.ExitCodes["0"] != 5 {
+					t.Errorf("%s p%d %s = %+v", label, p.Index, name, tm)
+				}
+			}
+		}
+	}
+	if _, timed := old.Speed.Projects[0].Commands["risk"]; timed || old.Speed.Projects[0].Skipped["risk"] != "the binary has no risk" {
+		t.Errorf("the old binary's risk: timed %v, skipped %q", timed, old.Speed.Projects[0].Skipped["risk"])
+	}
+	if tm := cur.Speed.Projects[0].Commands["risk"]; tm.Runs != 5 {
+		t.Errorf("the new binary's risk = %+v", tm)
+	}
+	// The transcripts are the owner's, not a binary's: friction is counted
+	// once, in the new record.
+	if cur.Friction == nil || old.Friction != nil || !strings.Contains(old.Skipped["friction"], "phase2") {
+		t.Errorf("friction: new %+v, old %+v (skipped %q)", cur.Friction, old.Friction, old.Skipped["friction"])
+	}
+
+	logText, _ := os.ReadFile(log)
+	if strings.Contains(string(logText), "OVERLAP") {
+		t.Errorf("two calls ran at once:\n%s", logText)
+	}
+	// Per project and per command, the runs alternate: old, new, old, new...
+	who := map[string]string{oldBin: "old", newBin: "new"}
+	seq := map[string][]string{}
+	var order []string
+	for _, m := range regexp.MustCompile(`(?m)^CALL nice=\d+ bin=(\S+) sp=(\S*) (status --json|risk|hook pre-tool|sandbox run)`).FindAllStringSubmatch(string(logText), -1) {
+		key := filepath.Base(m[2]) + " " + m[3]
+		if len(seq[key]) == 0 {
+			order = append(order, key)
+		}
+		seq[key] = append(seq[key], who[m[1]])
+	}
+	pairs := strings.TrimSuffix(strings.Repeat("old new ", 5), " ")
+	want := map[string]string{"status --json": pairs, "risk": "old new new new new new",
+		"hook pre-tool": strings.TrimSuffix(strings.Repeat("old new ", 15), " "), "sandbox run": pairs}
+	var wantOrder []string
+	for _, p := range []string{"acme-api", "acme-web"} {
+		for _, c := range []string{"status --json", "risk", "hook pre-tool", "sandbox run"} {
+			wantOrder = append(wantOrder, p+" "+c)
+			if got := strings.Join(seq[p+" "+c], " "); got != want[c] {
+				t.Errorf("%s %s ran by %q, want %q", p, c, got, want[c])
+			}
+		}
+	}
+	if strings.Join(order, ",") != strings.Join(wantOrder, ",") {
+		t.Errorf("commands ran in the order %q, want %q", order, wantOrder)
+	}
+	// Each binary's hook call reads its own tree.
+	for _, want := range []string{"bin=" + oldBin + " sp=" + projects[0] + " hook pre-tool --agent jhon-orchestrator safety-guard vcs-guard .git framework-guard " + oldRoot + " ",
+		"bin=" + newBin + " sp=" + projects[0] + " hook pre-tool --agent jhon-orchestrator safety-guard vcs-guard .git .hg framework-guard " + root + " "} {
+		if !strings.Contains(string(logText), want) {
+			t.Errorf("the log lacks %q", want)
+		}
+	}
+
+	// A compare of the two says they met the same load.
+	stdout.Reset()
+	if code := run([]string{"compare", "--base", "phase1", "--new", "phase2", "--out", out}, &stdout, &stderr); code != 0 {
+		t.Fatalf("compare exit %d, want 0:\n%s", code, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "phasegate: base and new were timed back to back, in one run") {
+		t.Errorf("the compare does not say the two were timed back to back:\n%s", stdout.String())
+	}
+}
+
+func TestMeasureAgainstRefusesAnIncompletePair(t *testing.T) {
+	dir := t.TempDir()
+	pf := filepath.Join(dir, "projects.txt")
+	writeFile(t, pf, "", 0o644)
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--against", "/bin/true", "--projects-file", pf}, "--against needs --against-label"},
+		{[]string{"--against", "/bin/true", "--against-label", "x", "--projects-file", pf}, "--against-label must differ from --label"},
+		{[]string{"--against", "/bin/true", "--against-label", "a/b", "--projects-file", pf}, "--against-label takes a name"},
+		{[]string{"--against", filepath.Join(dir, "none"), "--against-label", "y", "--projects-file", pf}, "--against names no binary"},
+		{[]string{"--against", "/bin/true", "--against-label", "y"}, "--against needs --projects-file"},
+		{[]string{"--against-label", "y", "--projects-file", pf}, "--against-label needs --against"},
+	} {
+		var stdout, stderr bytes.Buffer
+		args := append([]string{"measure", "--label", "x", "--jhon", "/bin/true", "--out", filepath.Join(dir, "out")}, c.args...)
+		if code := run(args, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), c.want) {
+			t.Errorf("%v: exit %d, stderr %q; want 2 and %q", c.args, code, stderr.String(), c.want)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "out")); err == nil {
+		t.Errorf("a refused measure wrote its folder")
 	}
 }
 

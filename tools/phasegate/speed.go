@@ -34,13 +34,15 @@ const (
 	mainAgent = "jhon-orchestrator"
 )
 
-// speedConfig is what the speed measure needs: the binary, the tree it
-// reads (for its vcs_dirs and bounded writers), the home, the projects
-// and the environment of every call.
+// speedConfig is what the speed measure needs: the binaries timed (one, or
+// the old one and the new one, back to back), the tree each reads (for its
+// vcs_dirs and bounded writers), the home, the projects and the
+// environment of every call.
 type speedConfig struct {
-	bin, jhonRoot, home string
-	projects            []string
-	env                 []string
+	bins, roots []string
+	home        string
+	projects    []string
+	env         []string
 }
 
 // call is one timed command: its name in the record, its words after the
@@ -51,29 +53,47 @@ type call struct {
 	stdin []byte
 }
 
-// measureSpeed times every command in every project, one call at a time.
-func measureSpeed(c speedConfig) (*Speed, error) {
-	hook, err := hookArgs(c)
-	if err != nil {
-		return nil, err
+// measureSpeed times every command in every project, one call at a time;
+// with two binaries, each run of a command is the first binary's, then the
+// second's (back to back), so both meet the same load. It returns each
+// binary's times, in the order of c.bins.
+func measureSpeed(c speedConfig) ([]*Speed, error) {
+	hooks := make([][]string, len(c.bins))
+	speeds := make([]*Speed, len(c.bins))
+	for b := range c.bins {
+		h, err := hookArgs(c.roots[b], c.home)
+		if err != nil {
+			return nil, err
+		}
+		hooks[b], speeds[b] = h, &Speed{Runs: speedRuns}
 	}
-	s := &Speed{Runs: speedRuns}
 	for i, p := range c.projects {
-		s.Projects = append(s.Projects, measureProject(c, i+1, p, hook))
+		for b, ps := range measureProject(c, i+1, p, hooks) {
+			speeds[b].Projects = append(speeds[b].Projects, ps)
+		}
 	}
-	return s, nil
+	return speeds, nil
 }
 
 // speedCommands are the measured commands, in the order they run.
 var speedCommands = []string{"status", "risk", "hook-git-status", "hook-edit", "hook-gh-pr-create", "sandbox-run"}
 
-func measureProject(c speedConfig, index int, p string, hook []string) ProjectSpeed {
-	ps := ProjectSpeed{Index: index, Commands: map[string]Timing{}, Skipped: map[string]string{}}
+// measureProject times the commands in p for each binary of c (hooks are
+// each one's hook words). Its objects are counted before the first call and
+// after the last: back to back, a growth is either binary's, and both
+// records say it.
+func measureProject(c speedConfig, index int, p string, hooks [][]string) []ProjectSpeed {
+	pss := make([]ProjectSpeed, len(c.bins))
+	for b := range pss {
+		pss[b] = ProjectSpeed{Index: index, Commands: map[string]Timing{}, Skipped: map[string]string{}}
+	}
 	if st, err := os.Stat(p); err != nil || !st.IsDir() {
-		for _, name := range speedCommands {
-			ps.Skipped[name] = "the project folder does not exist"
+		for b := range pss {
+			for _, name := range speedCommands {
+				pss[b].Skipped[name] = "the project folder does not exist"
+			}
 		}
-		return ps
+		return pss
 	}
 	top, common := gitDirs(p, c.env)
 	// The session's environment as `jhon start` makes it: the project's
@@ -83,59 +103,84 @@ func measureProject(c speedConfig, index int, p string, hook []string) ProjectSp
 	if top != "" {
 		env = append(env, sandboxProjectEnv+"="+top)
 	}
-	ps.Before = countObjects(p, common)
+	before := countObjects(p, common)
 	bash := func(command string) []byte { return payload(p, "Bash", map[string]any{"command": command}) }
-	calls := []call{
-		{"status", []string{"status", "--json"}, nil},
-		{"risk", []string{"risk"}, nil},
-		{"hook-git-status", hook, bash("git status")},
-	}
-	if f := firstTrackedFile(p, env); f != "" {
-		calls = append(calls, call{"hook-edit", hook, payload(p, "Edit", map[string]any{"file_path": filepath.Join(p, f), "old_string": "phasegate-old", "new_string": "phasegate-new"})})
-	} else {
-		ps.Skipped["hook-edit"] = "the project has no tracked file"
-	}
-	calls = append(calls, call{"hook-gh-pr-create", hook, bash("gh pr create --fill")})
-	if why := sandboxCannotRun(c.bin, p, env); why != "" {
-		ps.Skipped["sandbox-run"] = why
-	} else {
-		calls = append(calls, call{"sandbox-run", []string{"sandbox", "run", "--", "true"}, nil})
-	}
-	for _, k := range calls {
-		if t, skip := timeCommand(c.bin, p, env, k); skip != "" {
-			ps.Skipped[k.name] = skip
+	file := firstTrackedFile(p, env)
+	// Each binary's calls by name; one it does not make is skipped.
+	calls := make([]map[string]call, len(c.bins))
+	for b, bin := range c.bins {
+		hook := hooks[b]
+		calls[b] = map[string]call{
+			"status":            {"status", []string{"status", "--json"}, nil},
+			"risk":              {"risk", []string{"risk"}, nil},
+			"hook-git-status":   {"hook-git-status", hook, bash("git status")},
+			"hook-gh-pr-create": {"hook-gh-pr-create", hook, bash("gh pr create --fill")},
+		}
+		if file != "" {
+			calls[b]["hook-edit"] = call{"hook-edit", hook, payload(p, "Edit", map[string]any{"file_path": filepath.Join(p, file), "old_string": "phasegate-old", "new_string": "phasegate-new"})}
 		} else {
-			ps.Commands[k.name] = t
+			pss[b].Skipped["hook-edit"] = "the project has no tracked file"
+		}
+		if why := sandboxCannotRun(bin, p, env); why != "" {
+			pss[b].Skipped["sandbox-run"] = why
+		} else {
+			calls[b]["sandbox-run"] = call{"sandbox-run", []string{"sandbox", "run", "--", "true"}, nil}
 		}
 	}
-	ps.After = countObjects(p, common)
-	ps.ObjectsGrew = ps.After.Project > ps.Before.Project || ps.After.Common > ps.Before.Common
-	if len(ps.Skipped) == 0 {
-		ps.Skipped = nil
+	for _, name := range speedCommands {
+		timeCommand(c.bins, p, env, name, calls, pss)
 	}
-	return ps
+	after := countObjects(p, common)
+	for b := range pss {
+		pss[b].Before, pss[b].After = before, after
+		pss[b].ObjectsGrew = after.Project > before.Project || after.Common > before.Common
+		if len(pss[b].Skipped) == 0 {
+			pss[b].Skipped = nil
+		}
+	}
+	return pss
 }
 
-// timeCommand runs k speedRuns times in dir, one after the other; a binary
-// that does not know the command is skipped after its first call.
-func timeCommand(bin, dir string, env []string, k call) (Timing, string) {
-	t := Timing{ExitCodes: map[string]int{}}
-	var ms []float64
+// timeCommand runs the command name speedRuns times in dir for each binary
+// that makes it (calls[b]), each run the binaries one after the other, and
+// records its times in pss[b]; a binary that does not know the command is
+// skipped after its first call.
+func timeCommand(bins []string, dir string, env []string, name string, calls []map[string]call, pss []ProjectSpeed) {
+	ms := make([][]float64, len(bins))
+	timings := make([]Timing, len(bins))
+	active := make([]bool, len(bins))
+	for b := range bins {
+		_, active[b] = calls[b][name]
+		timings[b].ExitCodes = map[string]int{}
+	}
 	for i := range speedRuns {
-		r := timed(dir, env, k.stdin, callTimeout, append([]string{"nice", "-n", callNice, bin}, k.args...)...)
-		if i == 0 && unknownTo(r.stderr, k.args) {
-			return Timing{}, "the binary has no " + commandWords(k.args)
-		}
-		ms = append(ms, round(float64(r.elapsed.Microseconds())/1000, 1))
-		t.Runs++
-		if r.timedOut {
-			t.Timeouts++
-		} else {
-			t.ExitCodes[strconv.Itoa(r.code)]++
+		for b, bin := range bins {
+			if !active[b] {
+				continue
+			}
+			k := calls[b][name]
+			r := timed(dir, env, k.stdin, callTimeout, append([]string{"nice", "-n", callNice, bin}, k.args...)...)
+			if i == 0 && unknownTo(r.stderr, k.args) {
+				active[b] = false
+				pss[b].Skipped[name] = "the binary has no " + commandWords(k.args)
+				continue
+			}
+			ms[b] = append(ms[b], round(float64(r.elapsed.Microseconds())/1000, 1))
+			timings[b].Runs++
+			if r.timedOut {
+				timings[b].Timeouts++
+			} else {
+				timings[b].ExitCodes[strconv.Itoa(r.code)]++
+			}
 		}
 	}
-	t.MedianMS, t.MaxMS = round(median(ms), 1), maxOf(ms)
-	return t, ""
+	for b := range bins {
+		if active[b] {
+			t := timings[b]
+			t.MedianMS, t.MaxMS = round(median(ms[b]), 1), maxOf(ms[b])
+			pss[b].Commands[name] = t
+		}
+	}
 }
 
 // commandWords are a command's words before its first option.
@@ -201,8 +246,8 @@ var (
 // vocabulary's VCS directories, framework-guard with the install's paths
 // under the home, route-guard with the bounded writers. pre-tool applies
 // each to the tools it judges.
-func hookArgs(c speedConfig) ([]string, error) {
-	voc, err := os.ReadFile(filepath.Join(c.jhonRoot, "prose", "contracts", "vocabulary.yaml"))
+func hookArgs(jhonRoot, home string) ([]string, error) {
+	voc, err := os.ReadFile(filepath.Join(jhonRoot, "prose", "contracts", "vocabulary.yaml"))
 	m := vcsDirsLine.FindSubmatch(voc)
 	if err != nil || m == nil {
 		return nil, fmt.Errorf("no vcs_dirs in the vocabulary of the jhon tree (prose/contracts/vocabulary.yaml); name the tree with --jhon-root")
@@ -213,11 +258,11 @@ func hookArgs(c speedConfig) ([]string, error) {
 			args = append(args, d)
 		}
 	}
-	local := filepath.Join(c.home, ".local")
-	args = append(args, "framework-guard", c.jhonRoot, filepath.Join(c.home, ".agents", "jhon"), filepath.Join(local, "share", "jhon", "releases"),
-		filepath.Join(local, "share", "jhon", "current"), filepath.Join(local, "bin", "jhon"), filepath.Join(c.home, ".claude", "CLAUDE.md"))
+	local := filepath.Join(home, ".local")
+	args = append(args, "framework-guard", jhonRoot, filepath.Join(home, ".agents", "jhon"), filepath.Join(local, "share", "jhon", "releases"),
+		filepath.Join(local, "share", "jhon", "current"), filepath.Join(local, "bin", "jhon"), filepath.Join(home, ".claude", "CLAUDE.md"))
 	args = append(args, "secrets-guard", "route-guard")
-	return append(args, boundedWriters(filepath.Join(c.jhonRoot, "prose", "agents.yaml"))...), nil
+	return append(args, boundedWriters(filepath.Join(jhonRoot, "prose", "agents.yaml"))...), nil
 }
 
 // boundedWriters are the agents agents.yaml marks `bounded: true`.

@@ -4,9 +4,12 @@ package main
 // times and verdicts only: no command text, no path and no project name (a
 // project is its line number in the projects file).
 type Record struct {
-	Label    string    `json:"label"`
-	Created  string    `json:"created"`
-	Jhon     JhonInfo  `json:"jhon"`
+	Label   string   `json:"label"`
+	Created string   `json:"created"`
+	Jhon    JhonInfo `json:"jhon"`
+	// Pair is the label of the record whose binary was timed back to back
+	// with this one, in the same run (measure --against); "" for none.
+	Pair     string    `json:"pair,omitempty"`
 	Speed    *Speed    `json:"speed,omitempty"`
 	Friction *Friction `json:"friction,omitempty"`
 	Budgets  Budgets   `json:"budgets,omitempty"`
@@ -60,6 +63,10 @@ type Timing struct {
 // Friction is measure 2: tool results and guard stops in the runtimes'
 // session transcripts.
 type Friction struct {
+	// Counting is the rule the friction was counted by (frictionCounting);
+	// a record without it was counted by rule 1. Records of two rules are
+	// not held to each other.
+	Counting    int                  `json:"counting,omitempty"`
 	Since       string               `json:"since"`
 	Sessions    int                  `json:"sessions"`
 	ToolResults int                  `json:"tool_results"`

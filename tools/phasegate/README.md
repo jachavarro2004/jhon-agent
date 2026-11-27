@@ -7,9 +7,22 @@ owner's projects and transcripts and writes only its own record.
 
 ```sh
 go run ./tools/phasegate measure --label <name> --jhon <binary> [--projects-file <file>] [--sessions-since <YYYY-MM-DD>] [--out <dir>] \
-    [--pi-sessions <dir>] [--claude-projects <dir>] [--repo <dir>] [--jhon-root <dir>] [--suite-tmp <dir>] [--result <name>=pass|fail]...
+    [--pi-sessions <dir>] [--claude-projects <dir>] [--repo <dir>] [--jhon-root <dir>] [--suite-tmp <dir>] [--result <name>=pass|fail]... \
+    [--against <old binary> --against-label <name>]
 go run ./tools/phasegate compare --base <label> --new <label> [--out <dir>] [--markdown]
 ```
+
+**Back to back.** A record taken at another moment carries that moment's machine load into its times. With
+`--against <old binary> --against-label <name>` (and `--projects-file`), `measure` times the previous phase's
+binary and the new one in the same run: in each project, each run of each command is the old binary's call, then
+the new one's (old, new, old, new…), still one call at a time. It writes `<out>/<label>.json` for `--jhon` and
+`<out>/<against-label>.json` for `--against`, each naming the other in `pair`, so
+`compare --base <against-label> --new <label>` holds two sets of times that met the same load, and says
+`phasegate: base and new were timed back to back, in one run`. The old binary reads its own tree (found from the
+binary, else `--repo`; `--jhon-root` is the new one's) and is skipped alone for a command it lacks. Friction,
+budgets, hygiene and results do not depend on the binary: they are measured once, in the new record. The objects
+are counted around each project's interleaved calls, so a growth is in both records. Without `--against`, measure
+times one binary as before.
 
 `measure` writes `<out>/<label>.json` (`--out` defaults to `$XDG_STATE_HOME/jhon-phasegate`, else
 `~/.local/state/jhon-phasegate`), prints a summary, and exits 1 when a project's objects grew, 2 when it cannot
@@ -38,11 +51,24 @@ cannot be read, 0 otherwise. Run it from the owner's terminal, outside Jhon's sa
   call is refused` in its first 90 (a hook timeout). Left out and counted apart: projects whose folder name holds
   `jhon` (Jhon's own development), scratch folders (`/tmp`, `/var/tmp`, …), and bridge mirrors, the Claude
   Code transcripts whose first entry with an `entrypoint` says `sdk-ts` (the Claude Agent SDK's copy of a pi
-  session on pi-claude-bridge, which would count it twice). Each stop gets one class by its wording after the
-  guard's name: credentials match, inspect allowlist, inspect shell syntax, scope surfaces, unresolved target,
-  unreadable or unknown, slice or delivery discipline, review due, no record, VCS directory, unbounded wait,
-  hook timeout, other. Recorded: stops per 100 tool results in total, per runtime, per ISO week, per guard and
-  per class.
+  session on pi-claude-bridge, which would count it twice). Each tool call counts once, by its id (pi's
+  `toolCallId`, Claude Code's `tool_use_id`): pi's transcripts are read first, and a copy of a counted call is
+  left out apart, as `bridge_copy` when it copies a pi result (the SDK's transcripts whose first entrypoint
+  says `cli`, which the entrypoint rule misses) and as `repeated` otherwise (a resumed Claude Code session copies
+  the results of the one it resumes); a file of copies only is a session of that key. A command the sandbox
+  stopped is a stop of the guard `sandbox`: a line of its own saying `the sandbox refused a write to …` (its
+  note), a line where a program says `Read-only file system` after `: ` or `] ` with no backquote before it (not
+  the sandbox status's `cannot start a sandbox`), the shell's `jhon: sandbox.mode is on and …` or
+  ``jhon: `jhon sandbox status --json` gave no answer`` opening the result, or a line of `jhon sandbox: ` that
+  says `so nothing was run` or that docker cannot reach its daemon. Each stop gets one class by its wording
+  after the guard's name: credentials match, inspect shell syntax, inspect allowlist, VCS directory, unresolved
+  target, unbounded wait, review due, no record, slice or delivery discipline, scope surfaces, unreadable or
+  unknown, light verify, workspace members' PRs, before the last slice, merge method, owner's grant, outside the
+  project, hard line, framework path, hook timeout; the sandbox's by its note's reason: allow_write opens it, no
+  setting opens it, refused write (a note with no reason), read-only, no note, mode on, cannot run, did not start,
+  docker hidden; other. Recorded: the counting rule (`counting`, 2; a record without it was counted by rule 1,
+  which counted the copies), stops per 100 tool results in total, per runtime, per ISO week, per guard and per
+  class.
 - **Budgets.** `go test -run '^(TestFixedContextBytes|TestLeanTextFitsBothRuntimes)$' -v ./engine/internal/render`
   in `--repo` (under `nice -n 19`): each runtime's fixed context and lean text from the tests' logs, each limit
   from their source (fix/t145b's bytes times the test's percentage; `leanLimit`).
@@ -56,4 +82,6 @@ projects file, so keep the file's order between phases).
 hook median over 1000 ms or a status median over 3000 ms is worse even with no base; stops per 100 tool results
 is worse when it grows by more than 10% (per class and per runtime are shown, not gated); a budget is worse when its headroom is
 below 0; hygiene is worse when the leftovers grow; a result is worse when it goes from pass to fail, or fails
-with no base result (a fail in both is shown as `still fails`). A project whose objects grew is worse.
+with no base result (a fail in both is shown as `still fails`). A project whose objects grew is worse. Friction
+counted by two rules is not held to the base: its rows say `not comparable`, and a line under the table says
+`phasegate: friction counted by rule <b> in base and rule <n> in new: its rows are not comparable`.

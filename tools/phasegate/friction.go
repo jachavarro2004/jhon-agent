@@ -3,17 +3,26 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 )
+
+// frictionCounting is the rule this build counts friction by: 1 counted
+// the Claude Agent SDK's copies of a pi session whose first entrypoint says
+// cli, and a resumed session's copies, once more each; 2 counts each tool
+// call once, names the stops that were "other" and counts the sandbox's.
+const frictionCounting = 2
 
 // stopWindow is how far into a tool result a guard's name and its colon
 // must lie for the result to be the guard's stop (L1772): a result that
@@ -53,13 +62,99 @@ var stopClasses = []struct {
 	{"slice or delivery discipline", regexp.MustCompile(`closes slice|red before green|planned ahead|ldd is not set up|slices? left|docs_with_code|merge gate|tested tree`)},
 	{"scope surfaces", regexp.MustCompile(`surfaces`)},
 	{"unreadable or unknown", regexp.MustCompile(`unreadable|unknown`)},
+	// Named in T270 among the stops that were "other"; an unknown verdict
+	// whose target cannot be resolved stays unknown, above.
+	{"unresolved target", regexp.MustCompile(`cannot be resolved`)},
+	{"light verify", regexp.MustCompile(`light verify`)},
+	{"workspace members' PRs", regexp.MustCompile(`members of the workspace`)},
+	{"before the last slice", regexp.MustCompile(`after its last slice`)},
+	{"merge method", regexp.MustCompile(`merges with (?:rebase|squash|merge)`)},
+	{"owner's grant", regexp.MustCompile(`needs the owner's authorization`)},
+	{"outside the project", regexp.MustCompile(`outside the project and the scratch roots`)},
+	{"hard line", regexp.MustCompile(`never granted to an agent`)},
+	{"framework path", regexp.MustCompile(`protected path`)},
+}
+
+// sandboxGuard is the guard of a command the sandbox stopped.
+const sandboxGuard = "sandbox"
+
+// The sandbox's stops, by their own words (engine/internal/sandbox and the
+// shell's lib/sandbox.ts): readOnly is the kernel's message for EROFS as a
+// program prints it (libc, Rust, Python), the one the sandbox's refusal
+// note keys on.
+const (
+	readOnly     = "Read-only file system"
+	refusedWrite = "the sandbox refused a write to "
+	sandboxSays  = "jhon sandbox: "
+)
+
+var (
+	// sandboxShell is the shell's refusal of a command with sandbox.mode on
+	// where the sandbox cannot run or has no project to pin; it opens the
+	// result.
+	sandboxShell = regexp.MustCompile("^jhon: (?:sandbox\\.mode is on and |`jhon sandbox status --json` gave no answer)")
+	// sandboxNote is the sandbox's note on a write it refused: a line of its
+	// own, the rest of it the reason.
+	sandboxNote = regexp.MustCompile(`(?m)^[ \t]*` + refusedWrite + `(.*)$`)
+	// sandboxNotRun is jhon sandbox's own line on a sandbox that did not start.
+	sandboxNotRun = regexp.MustCompile(`(?m)^[ \t]*` + sandboxSays + `.*so nothing was run`)
+	// sandboxDocker is its note on docker, whose socket the sandbox hides.
+	sandboxDocker = regexp.MustCompile(`(?m)^[ \t]*` + sandboxSays + `docker cannot reach its daemon`)
+	// readOnlyLine is a line where a program says Read-only file system after
+	// the path or call it names (": ") or Python's errno ("] "), with no
+	// backquote before it, as a report quoting it has.
+	readOnlyLine = regexp.MustCompile("^[^`]*(?:: |\\] )" + readOnly)
+)
+
+// readOnlyStop is whether a line of text is a program's Read-only file
+// system (readOnlyLine), not the sandbox status's own words on a sandbox
+// that cannot start (bwrap's uid map), which stopped no command.
+func readOnlyStop(text string) bool {
+	for line := range strings.Lines(text) {
+		if strings.Contains(line, readOnly) && readOnlyLine.MatchString(line) && !strings.Contains(line, "cannot start a sandbox") {
+			return true
+		}
+	}
+	return false
+}
+
+// sandboxStop classes a result the sandbox stopped, by the reason its note
+// gives; ok is false for any other result.
+func sandboxStop(text string) (class string, ok bool) {
+	switch {
+	case sandboxShell.MatchString(text):
+		return "mode on, cannot run", true
+	case strings.Contains(text, refusedWrite):
+		if m := sandboxNote.FindStringSubmatch(text); m != nil {
+			switch why := m[1]; {
+			case strings.Contains(why, "sandbox.allow_write opens it"):
+				return "allow_write opens it", true
+			case strings.Contains(why, "no setting") || strings.Contains(why, "does not open it"):
+				return "no setting opens it", true
+			}
+			return "refused write", true
+		}
+	}
+	if strings.Contains(text, sandboxSays) {
+		switch {
+		case sandboxNotRun.MatchString(text):
+			return "did not start", true
+		case sandboxDocker.MatchString(text):
+			return "docker hidden", true
+		}
+	}
+	if strings.Contains(text, readOnly) && readOnlyStop(text) {
+		return "read-only, no note", true
+	}
+	return "", false
 }
 
 // classify reads one tool result: a stop when a guard's name and a colon
 // lie in its first stopWindow characters (hookErrorWindow after the older
-// hook error's prefix), or when it is the shell's hook timeout within
-// stopWindow; then its guard ("hook-timeout" for a timeout) and its class,
-// read from the text after the guard's name.
+// hook error's prefix), when it is the shell's hook timeout within
+// stopWindow, or when the sandbox stopped it (sandboxStop); then its guard
+// ("hook-timeout" for a timeout, "sandbox") and its class, read from the
+// text after the guard's name.
 func classify(text string) (guard, class string, ok bool) {
 	text = strings.TrimSpace(text)
 	if loc := hookTimeout.FindStringIndex(text); loc != nil && utf8.RuneCountInString(text[:loc[0]]) < stopWindow {
@@ -75,6 +170,9 @@ func classify(text string) (guard, class string, ok bool) {
 	}
 	m := guardStop.FindStringSubmatchIndex(head)
 	if m == nil {
+		if class, ok := sandboxStop(text); ok {
+			return sandboxGuard, class, true
+		}
 		return "", "", false
 	}
 	guard, rest := head[m[2]:m[3]], strings.ToLower(text[m[1]:])
@@ -97,6 +195,17 @@ var scratchPrefixes = []string{"tmp", "var-tmp", "private-tmp", "private-var-fol
 // entrypoint saying sdk-ts; counted there, every result would count twice.
 const bridgeMirror = "bridge_mirror"
 
+// Each tool call counts once, by its id (counting rule 2): bridgeCopy is
+// the left-out key of a Claude Code result that copies a pi result the
+// count already holds (an SDK transcript whose first entrypoint says cli),
+// repeated that of any other copy (a resumed Claude Code session copies
+// the results of the one it resumes). A file whose results are all copies
+// is a session of that key.
+const (
+	bridgeCopy = "bridge_copy"
+	repeated   = "repeated"
+)
+
 // leftOut is why a project's transcript folder is left out of the count:
 // "jhon" for one whose name holds jhon (Jhon's own development, L1772),
 // "scratch" for a scratch folder, "" to count it.
@@ -117,14 +226,23 @@ func leftOut(folder string) string {
 // (runtime -> folder) changed since since (all when zero), the tool results
 // and the stops among them, by guard, class, ISO week and runtime, leaving
 // Jhon's own development and scratch folders out and counting them apart.
+// Each tool call counts once: pi's transcripts are read first, and a
+// result whose id was counted is a copy, counted apart.
 func countFriction(roots map[string]string, since time.Time) (*Friction, error) {
-	f := &Friction{Since: "all", PerRuntime: map[string]*Count{}, PerGuard: map[string]int{},
-		PerClass: map[string]ClassRate{}, PerWeek: map[string]*Count{}, LeftOut: map[string]*Count{"jhon": {}, "scratch": {}, bridgeMirror: {}}}
+	f := &Friction{Counting: frictionCounting, Since: "all", PerRuntime: map[string]*Count{}, PerGuard: map[string]int{},
+		PerClass: map[string]ClassRate{}, PerWeek: map[string]*Count{},
+		LeftOut: map[string]*Count{"jhon": {}, "scratch": {}, bridgeMirror: {}, bridgeCopy: {}, repeated: {}}}
 	if !since.IsZero() {
 		f.Since = since.Format(time.DateOnly)
 	}
 	classes := map[string]int{}
-	for runtime, root := range roots {
+	// counted is the runtime that counted each tool call id.
+	counted := map[string]string{}
+	runtimes := slices.SortedFunc(maps.Keys(roots), func(a, b string) int {
+		return cmp.Or(cmp.Compare(boolInt(a != "pi"), boolInt(b != "pi")), cmp.Compare(a, b))
+	})
+	for _, runtime := range runtimes {
+		root := roots[runtime]
 		folders, err := os.ReadDir(root)
 		if os.IsNotExist(err) {
 			continue
@@ -155,13 +273,14 @@ func countFriction(roots map[string]string, since time.Time) (*Friction, error) 
 				// A file's results are kept until its entrypoint is known.
 				type read struct {
 					at           time.Time
+					id           string
 					guard, class string
 					stop         bool
 				}
 				var reads []read
-				entrypoint := readTranscript(file, since, info.ModTime(), func(at time.Time, text string) {
+				entrypoint := readTranscript(file, since, info.ModTime(), func(at time.Time, id, text string) {
 					guard, class, stop := classify(text)
-					reads = append(reads, read{at, guard, class, stop})
+					reads = append(reads, read{at, id, guard, class, stop})
 				})
 				out := out
 				if out == "" && runtime == "claude-code" && entrypoint == "sdk-ts" {
@@ -171,14 +290,52 @@ func countFriction(roots map[string]string, since time.Time) (*Friction, error) 
 				if out != "" {
 					count = f.LeftOut[out]
 				}
-				count.Sessions++
+				// copyOf is the left-out key of a copy of a counted call, ""
+				// for a call not counted yet.
+				copyOf := func(id string) string {
+					switch first, seen := counted[id]; {
+					case out != "" || id == "" || !seen:
+						return ""
+					case first == "pi" && runtime != "pi":
+						return bridgeCopy
+					}
+					return repeated
+				}
+				session := count
+				if len(reads) > 0 {
+					key := repeated
+					for _, r := range reads {
+						c := copyOf(r.id)
+						if c == "" {
+							key = ""
+							break
+						}
+						if c == bridgeCopy {
+							key = bridgeCopy
+						}
+					}
+					if key != "" {
+						session = f.LeftOut[key]
+					}
+				}
+				session.Sessions++
 				for _, r := range reads {
+					if c := copyOf(r.id); c != "" {
+						f.LeftOut[c].ToolResults++
+						if r.stop {
+							f.LeftOut[c].Stops++
+						}
+						continue
+					}
 					count.ToolResults++
 					if r.stop {
 						count.Stops++
 					}
 					if out != "" {
 						continue
+					}
+					if r.id != "" {
+						counted[r.id] = runtime
 					}
 					y, w := r.at.ISOWeek()
 					week := fmt.Sprintf("%04d-W%02d", y, w)
@@ -225,15 +382,18 @@ type transcriptLine struct {
 	Type      string `json:"type"`
 	Timestamp string `json:"timestamp"`
 	Message   *struct {
-		Role    string          `json:"role"`
-		Content json.RawMessage `json:"content"`
+		Role       string          `json:"role"`
+		ToolCallID string          `json:"toolCallId"`
+		Content    json.RawMessage `json:"content"`
 	} `json:"message"`
 }
 
 // readTranscript calls each for every tool result in r at or after since,
-// with its time (the line's, else modified) and its text. It returns the
-// entrypoint of the first entry that carries one, "" when none does.
-func readTranscript(r io.Reader, since, modified time.Time, each func(time.Time, string)) (entrypoint string) {
+// with its time (the line's, else modified), its tool call's id (pi's
+// toolCallId, Claude Code's tool_use_id, the same for one call) and its
+// text. It returns the entrypoint of the first entry that carries one, ""
+// when none does.
+func readTranscript(r io.Reader, since, modified time.Time, each func(at time.Time, id, text string)) (entrypoint string) {
 	br := bufio.NewReaderSize(r, 1<<20)
 	decided := false
 	for {
@@ -256,16 +416,17 @@ func readTranscript(r io.Reader, since, modified time.Time, each func(time.Time,
 				if !at.Before(since) {
 					switch {
 					case l.Type == "message" && l.Message.Role == "toolResult":
-						each(at, contentText(l.Message.Content))
+						each(at, l.Message.ToolCallID, contentText(l.Message.Content))
 					case l.Type == "user":
 						var parts []struct {
-							Type    string          `json:"type"`
-							Content json.RawMessage `json:"content"`
+							Type      string          `json:"type"`
+							ToolUseID string          `json:"tool_use_id"`
+							Content   json.RawMessage `json:"content"`
 						}
 						if json.Unmarshal(l.Message.Content, &parts) == nil {
 							for _, p := range parts {
 								if p.Type == "tool_result" {
-									each(at, contentText(p.Content))
+									each(at, p.ToolUseID, contentText(p.Content))
 								}
 							}
 						}
@@ -277,6 +438,13 @@ func readTranscript(r io.Reader, since, modified time.Time, each func(time.Time,
 			return entrypoint // the end, or an unreadable rest that counts as the end
 		}
 	}
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // contentText is a content's text: a string, or its text parts joined.
