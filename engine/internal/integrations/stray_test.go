@@ -29,6 +29,7 @@ var exceptions = []struct{ lit, reason string }{
 	{"internal/hook/launchcontext.go: .codegraph", "CodeGraph's own index folder; v1 has no field for it, and a new field is v2 (integrations/README.md)"},
 	{"internal/hook/launchcontext.go: .codegraph-wsl", "CodeGraph's own index folder under WSL; v1 has no field for it, and a new field is v2"},
 	{"internal/hook/launchcontext.go: codegraph.db", "CodeGraph's own database file; v1 has no field for it, and a new field is v2"},
+	{"internal/ldd/layout/layout.go: .jhon/studio", "jhon-studio's working output folder in a project, which LDD leaves out (T8g); v1 has no field for it, and a new field is v2"},
 }
 
 // TestNoIntegrationLiteralsOutsideTheReader (M2, L1150): engine code names
