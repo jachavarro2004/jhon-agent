@@ -41,7 +41,7 @@ capabilities:
   jhon-mcp:  [mcp__plugin_jhon_jhon__audit, mcp__plugin_jhon_jhon__status]   # the read-only jhon MCP server of the release plugin, which jhon start loads
   ms365:     [mcp__claude_ai_Microsoft_365]   # the owner's claude.ai Microsoft 365 connector; a server name grants every tool of it (verified on Claude Code 2.1.304)
   web-search: [WebSearch]   # search only; fetching a page stays with `web`
-  inspect:   [Bash]   # Bash confined to inspect_allow by jhon hook inspect-guard: reviewers stay read-only
+  inspect:   [Bash]   # Bash held read-only by construction by jhon hook inspect-guard (T271): reviewers stay read-only
   plan-tasks: [TaskCreate, TaskUpdate, TaskList]   # the slice's task list the owner follows live (prose/orchestrator.md, "Work a slice"); pi's is its `todo` tool
   todo:      []   # pi's `todo` tool in a child: the agent's own next steps, private to it (T134, L1019). None in Claude Code, whose Task* list is the session's, shared with its sub-agents
   orchestrate: [AskUserQuestion, ExitPlanMode, SendMessage]   # + Agent(<every non-primary agent>), derived by the renderer. Each tool needs its primitive (ask-user, plan-mode; Agent and SendMessage need named-subagents) in the claude-code row of runtime_primitives, and render.ts drops one that is absent
@@ -51,9 +51,10 @@ capabilities:
 # jhon hook framework-guard, and a bounded writer (`bounded: true`) carries
 # jhon hook scope-guard, which keeps it to its handoff's edit surfaces.
 
-# The only Bash commands an `inspect` agent may run, as exact leading words.
-# Claude Code enforces it with jhon hook inspect-guard, rendered from this list.
-inspect_allow: [git diff, git show, git log, git status, codegraph callers, codegraph impact, codegraph affected, jhon review freeze]
+# Jhon's own readers an `inspect` agent may run besides read-only programs,
+# as exact leading words; jhon hook inspect-guard reads every other program
+# by its read-only list (docs/safety-guard.md), rendered with this one.
+inspect_allow: [codegraph callers, codegraph impact, codegraph affected, codegraph explore, codegraph query, jhon review freeze]
 
 # ── runtime capability model (docket AG) ─────────────────────────────────────
 # Which runtimes Jhon describes, what each one offers, and how strongly each

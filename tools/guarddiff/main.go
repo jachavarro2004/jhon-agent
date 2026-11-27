@@ -25,8 +25,12 @@ import (
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
-// guards are the guards judged, in pre-tool's order (judge).
-var guards = []string{"safety-guard", "vcs-guard", "framework-guard", "secrets-guard", "scope-guard", "route-guard"}
+// guards are the guards judged, in pre-tool's order (judge); an
+// inspector's are those the Claude Code render gives a Prism facet.
+var (
+	guards          = []string{"safety-guard", "vcs-guard", "framework-guard", "secrets-guard", "scope-guard", "route-guard"}
+	inspectorGuards = []string{"inspect-guard", "safety-guard", "framework-guard", "secrets-guard", "route-guard"}
+)
 
 func run(args []string, stdout, stderr io.Writer) int {
 	fail := func(err error) int { fmt.Fprintln(stderr, "guarddiff:", err); return 2 }
@@ -124,6 +128,9 @@ type line struct{ id, place, fixture, caller, tool, input, cwd string }
 var (
 	places  = []string{"ldd", "ldd:yolo", "ldd:super-yolo", "repo", "repo:yolo", "repo:super-yolo", "folder"}
 	callers = []string{"top-default", "top-bypass", "subagent"}
+	// inspector is a Prism facet, named only explicitly (`*` is callers): its
+	// Bash is inspect-guard's too (T271).
+	inspector = "inspector"
 )
 
 // loadLines reads every *.tsv under dir: a corpus line (8 columns, see
@@ -167,7 +174,7 @@ func loadLines(dir string) ([]line, error) {
 			}
 			for _, p := range expand(col[0], places) {
 				for _, c := range expand(col[2], callers) {
-					if base, _, _ := strings.Cut(p, ":"); !slices.Contains(places, p) && base != "corpus" || !slices.Contains(callers, c) {
+					if base, _, _ := strings.Cut(p, ":"); !slices.Contains(places, p) && base != "corpus" || !slices.Contains(callers, c) && c != inspector {
 						return nil, fmt.Errorf("%s: unknown place %q or caller %q", at, p, c)
 					}
 					out = append(out, line{id: at + "@" + p + "/" + c, place: p, fixture: col[1], caller: c, tool: col[3], input: input})
@@ -231,6 +238,8 @@ type binary struct {
 	name, path, root string
 	matchers         map[string][]string
 	vcsDirs          []string
+	// inspect is its tree's inspect_allow (prose/agents.yaml), inspect-guard's arguments.
+	inspect []string
 }
 
 type diff struct {
@@ -292,9 +301,17 @@ func newDiff(linesDir, scratch string, bins []*binary) (*diff, error) {
 		for _, s := range strings.Split(string(m[1]), ",") {
 			b.vcsDirs = append(b.vcsDirs, strings.TrimSpace(s))
 		}
+		agents, _ := os.ReadFile(filepath.Join(b.root, "prose", "agents.yaml"))
+		if m := inspectAllow.FindSubmatch(agents); m != nil {
+			for _, s := range strings.Split(string(m[1]), ",") {
+				b.inspect = append(b.inspect, strings.TrimSpace(s))
+			}
+		}
 	}
 	return d, nil
 }
+
+var inspectAllow = regexp.MustCompile(`(?m)^inspect_allow:\s*\[(.*)\]`)
 
 // readTrees reads the fixture files: a `-- <fixture> <path> --` header, then
 // the file's text; <path> is under the tree (proj/, other/, home/ …).
@@ -367,7 +384,11 @@ func (d *diff) judge(l line) ([]judged, error) {
 		return nil, err
 	}
 	var out []judged
-	for _, g := range guards {
+	gs := guards
+	if l.caller == inspector {
+		gs = inspectorGuards
+	}
+	for _, g := range gs {
 		if d.takes(g, l.tool) {
 			out = append(out, judged{id: l.id, guard: g})
 		}
@@ -577,6 +598,8 @@ func (t *tree) args(b *binary, gs ...judged) []string {
 // (render/claude.go hooksBlock): route-guard's are the bounded writers.
 func (t *tree) guardArgs(g string, b *binary) []string {
 	switch g {
+	case "inspect-guard":
+		return b.inspect
 	case "route-guard":
 		return []string{"worker"}
 	case "vcs-guard":
@@ -609,6 +632,9 @@ func (t *tree) payload(l line) ([]byte, error) {
 	}
 	if l.caller == "subagent" {
 		p["agent_id"], p["agent_type"], p["transcript_path"] = scopeAgent, "worker", filepath.Join(t.dir, "transcripts", "s1.jsonl")
+	}
+	if l.caller == inspector {
+		p["agent_id"], p["agent_type"] = "ainspector0123456", "prism-safety"
 	}
 	return json.Marshal(p)
 }

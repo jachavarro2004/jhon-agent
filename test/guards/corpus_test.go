@@ -47,7 +47,7 @@ var (
 	corpusGuards    = map[string]bool{"safety-guard": true, "secrets-guard": true, "framework-guard": true}
 	corpusDecisions = map[string]bool{"allow": true, "ask": true, "refuse": true}
 	corpusFixtures  = map[string]bool{"none": true, "cred-near": true, "cred-far": true, "framework": true, "framework-cwd": true}
-	guarddiffLines  = map[string]bool{"fuzz.tsv": true, "matrix.tsv": true, "rows.tsv": true}
+	guarddiffLines  = map[string]bool{"fuzz.tsv": true, "matrix.tsv": true, "rows.tsv": true, "inspect.tsv": true}
 )
 
 func readCorpus(t *testing.T) []corpusCase {
@@ -107,6 +107,8 @@ func corpusTree(t *testing.T, fixture string) sgEnv {
 	farScript := "cd " + s.other + "\nfind . -name 'id_*' -exec cat {} \\;\n"
 	files := map[string]string{
 		"dirs.txt": "x\n", "far.sh": farScript, "far2.sh": "source far.sh\n", "deploy/far.sh": farScript, "deploy/ok.sh": "echo hi\n",
+		// T271: a template, which a credentials-named glob reaches without reading credentials.
+		"deploy/.env.example":             "KEY=\n",
 		".venv/bin/activate":              "VIRTUAL_ENV=.venv\nexport VIRTUAL_ENV\nPATH=\"$VIRTUAL_ENV/bin:$PATH\"\nexport PATH\n",
 		"deploy/env.sh":                   "export STAGE=dev\n[ -f local.sh ] && source local.sh\n",
 		"deploy/verify-deploy-script.mjs": scriptGlobbing("i18n/**.json", ""),

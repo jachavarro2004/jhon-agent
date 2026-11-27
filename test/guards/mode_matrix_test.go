@@ -101,7 +101,8 @@ var (
 		{name: "credentials-read", kind: "refuse", call: func(f matrixFixture) (string, map[string]any) {
 			return "Read", map[string]any{"file_path": filepath.Join(f.dir, ".env")}
 		}},
-		{name: "credentials-bash", kind: "allow", call: bashRow("cat .env")},
+		// T271 (S10): a listed reader printing a credentials file is refused in every mode.
+		{name: "credentials-bash", kind: "refuse", call: bashRow("cat .env")},
 		{name: "settings-write", kind: "ask", cls: "settings", call: writeRow(func(f matrixFixture) string { return filepath.Join(f.dir, ".claude", "settings.json") })},
 		{name: "git-config", kind: "ask", cls: "git-config", call: bashRow(askSiteCommand("git-config"))},
 		{name: "framework-write", kind: "refuse", call: writeRow(func(f matrixFixture) string { return filepath.Join(f.fw, "orchestrator.md") })},

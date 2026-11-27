@@ -12,8 +12,8 @@ import (
 // The file tools' reading of credentials (secrets-guard) and the home
 // directories the sandbox hides (ProtectedHome). A template of one
 // (`.env.example`) holds none, and is read and edited like any file. A shell
-// command is no longer read for them: guards limit only destructive acts
-// (T128f, L1366).
+// command is read for them where it writes or deletes one, and where a
+// listed reader's operand reaches one (credentialReads, T271, S10).
 
 var (
 	// credentialName is a file name that holds credentials: an env file

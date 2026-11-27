@@ -121,10 +121,11 @@ func TestGuardStaleNote(t *testing.T) {
 	}
 }
 
-func TestGuardStaleNoteKeepsAllowedForms(t *testing.T) {
+// The note follows the refusal, whose first line keeps its fix (T271).
+func TestGuardStaleNoteKeepsTheFix(t *testing.T) {
 	t.Parallel()
 	h := newStaleHome(t, "2026-09-24T18:13:29.864Z")
 	g := staleGuards[0]
 	r := h.run(t, g, with(g.refused, "transcript_path", h.transcript))
-	matches(t, r.Stderr, `(?m)^allowed forms: git diff, git show$`, "stderr")
+	matches(t, strings.Split(r.Stderr, "\n")[0], `^inspect-guard: git fetch: .*\. Instead: \S`, "stderr")
 }

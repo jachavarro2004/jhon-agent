@@ -16,8 +16,8 @@
  *   call; its ask is put to the owner when the main session has a UI, and is a
  *   refusal otherwise. A missing `jhon.json` fails closed.
  * - The `inspect` tool gives the reviewers (the `inspect` capability) their
- *   read-only inspectors without a shell: the inspect guard admits the
- *   command, which then runs as the argv its whitespace split gives.
+ *   read-only lines: the inspect guard admits the line (T271), which
+ *   then runs as that same string through `bash --noprofile --norc -c`.
  * - The `subagent` tool runs one of the agents in <agent dir>/agents as a
  *   child pi process (pi/agents.ts); the child loads this file too, so the
  *   guards judge its calls. `subagent_continue` runs a saved one again on its
@@ -1171,8 +1171,8 @@ export default function jhon(pi: any): void {
   pi.registerTool({
     name: "inspect",
     label: "Inspect",
-    description: `Run one read-only inspector (${(config?.inspectAllow ?? []).join(", ") || "none configured"}). No shell: arguments split on spaces; quotes, pipes, redirections and chains are refused. E.g. git log --oneline -20 -- src/a.ts. cwd: the change's worktree, from the main checkout.`,
-    parameters: { type: "object", additionalProperties: false, required: ["command"], properties: { command: { type: "string", description: "The inspector and its arguments, e.g. `git diff main...HEAD -- src/a.ts`." }, cwd: CWD } },
+    description: `Run one read-only bash line: pipes, &&, quotes of cat, grep, rg, git log/show/diff/grep… or (${(config?.inspectAllow ?? []).join(", ") || "none configured"}). Writes, programs, network, credentials: refused. E.g. git diff a...HEAD -- src | head. cwd: the change's worktree, from the main checkout.`,
+    parameters: { type: "object", additionalProperties: false, required: ["command"], properties: { command: { type: "string", description: "The read-only line, e.g. `git grep -n foo HEAD -- src | head`." }, cwd: CWD } },
     async execute(_id: string, params: { command?: unknown; cwd?: unknown }, _signal: unknown, _onUpdate: unknown, ctx: any) {
       if (!config) throw new Error(`jhon: ${join(agentDir, CONFIG_FILE)} is missing or invalid; run \`jhon sync\``);
       if (mismatch) throw new Error(mismatch);

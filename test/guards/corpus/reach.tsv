@@ -1,0 +1,29 @@
+# T271 rule 2, credentials by real reach (S10): a listed reader's operand that reaches a credentials file is
+# refused; an exclusion, a recursion into a folder, a template and a program that is no listed reader are not.
+# Fixtures and columns: corpus_test.go. cred-near holds deep/sub/id_rsa, deep/c/credentials.json,
+# snapshots/credentials.json and i18n/deep/x/credentials.json beside i18n/en.json.
+# guard	tool	input	decision	fixture	source	known	note
+safety-guard	Bash	"rg x -g '!id_*' -g '!**/credentials.json' ."	allow	cred-near	T271	-	rg's `!glob` leaves the files out
+safety-guard	Bash	"grep -rn x --exclude='id_*' --exclude=credentials.json ."	allow	cred-near	T271	-	grep's --exclude leaves the files out
+safety-guard	Bash	"git diff -- . ':!**/id_*' ':(exclude)snapshots' ':^deep'"	allow	cred-near	T271	-	a pathspec exclusion names files to leave out
+safety-guard	Bash	"find . -not -name 'id_*' -name '*.txt' -exec cat {} +"	allow	cred-near	T271	-	find's -not selects the other files
+safety-guard	Bash	"find . ! -name 'cred*' -name '*.txt' -exec cat {} +"	allow	cred-near	T271	-	find's ! selects the other files
+safety-guard	Bash	"grep -rn x deep"	allow	cred-near	T271	-	a search that recurses into a folder names no credentials file
+safety-guard	Bash	"cat i18n/*.json"	allow	cred-near	T271	-	the glob expands to i18n/en.json only
+safety-guard	Bash	"cat i18n/**.json"	allow	cred-near	T271	-	`**` not followed by / is `*`: i18n/en.json only
+safety-guard	Bash	"ls -la deep/sub && wc -c deep/sub/id_rsa"	allow	cred-near	T271	-	no listed reader prints it
+safety-guard	Bash	"cat deep/sub/id_rsa"	refuse	cred-near	T271	-	a path that is a credentials file
+safety-guard	Bash	"head -1 deep/sub/*"	refuse	cred-near	T271	-	a shell glob that expands to one
+safety-guard	Bash	"cat {a,deep/sub/id_rsa}"	refuse	cred-near	T271	-	a brace alternative that is one
+safety-guard	Bash	"git show HEAD:deep/sub/id_rsa"	refuse	cred-near	T271	-	a rev:path that is one
+safety-guard	Bash	"echo deep/sub/id_rsa | xargs cat"	refuse	cred-near	T271	-	xargs hands it to cat, as the reader sees
+safety-guard	Bash	"cat i18n/**/credentials.json"	refuse	cred-near	T271	-	`**/` reaches any depth
+safety-guard	Bash	"grep -l x deep/c/cred*"	refuse	cred-near	T271	-	a shell glob that expands to one
+safety-guard	Bash	"rg x -g 'credentials*' deep"	refuse	cred-near	T271	-	a selection glob named as credentials that reaches one there
+safety-guard	Bash	"rg x -g 'id_rsa*' ."	refuse	cred-near	T271	-	its plainest instance, id_rsa, is credentials, and deep/sub/id_rsa exists
+safety-guard	Bash	"rg x -g '*.json' ."	allow	cred-near	T271	-	word.json is no credentials name: recursion narrowed to ordinary files, though credentials.json lies there
+safety-guard	Bash	"grep -rn x --include='*.json' . && git grep x -- '*.json'"	allow	cred-near	T271	-	the same, by grep's --include and a git pathspec
+safety-guard	Bash	"rg x -g 'id_*' ."	allow	cred-near	T271	-	id_word is no credentials name (the lexical rule errs toward passing here)
+safety-guard	Bash	"rg x -g '.env*' deploy"	allow	cred-near	T271	-	.env is a credentials name, but deploy holds only the template .env.example
+secrets-guard	Grep	"{\"pattern\": \"x\", \"glob\": \"!**/id_*\"}"	allow	cred-near	T271	-	the Grep tool's `!glob` leaves the files out
+secrets-guard	Grep	"{\"pattern\": \"x\", \"glob\": \"**/id_*\"}"	refuse	cred-near	T271	-	a glob that reaches one
