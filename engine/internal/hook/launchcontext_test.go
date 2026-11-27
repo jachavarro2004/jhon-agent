@@ -2,6 +2,7 @@ package hook
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -49,7 +51,10 @@ func fakeLaunchTools(t *testing.T) launchFakes {
 			t.Fatal(err)
 		}
 	}
+	// FAKE_ENGRAM_DELAY slows each answer down, as a loaded machine does
+	// (T264: a run with it set shows the decisions do not depend on it).
 	script("engram", `[ -n "$FAKE_ENGRAM_SLEEP" ] && exec sleep "$FAKE_ENGRAM_SLEEP"
+[ -n "$FAKE_ENGRAM_DELAY" ] && sleep "$FAKE_ENGRAM_DELAY"
 [ -n "$FAKE_ENGRAM_EXIT" ] && exit "$FAKE_ENGRAM_EXIT"
 case "$*" in
   *"--type decision"*) printf '[1] #41 (decision) — Launch context goes at the end of the brief\n' ;;
@@ -144,6 +149,35 @@ func agentCall(t *testing.T, cwd, kind, prompt, mode string, extra map[string]an
 	return code, out.String(), errs.String()
 }
 
+// steadyHandoff is the handoff packet of a launch in cwd held steady (T264,
+// L1756): the packet the launch reads is the one ldd.LaunchHandoff, the
+// launch's own source, gives for cwd, read once here with no deadline, so a
+// loaded machine whose Engram searches outlast decisionsTime no longer
+// drops the decisions block the test asserts. TestLaunchDropsSlowSources
+// holds the deadline itself. Each launch still asks for it: every call must
+// come for cwd with a deadline at most decisionsTime away; calls counts them.
+func steadyHandoff(t *testing.T, cwd string) (calls func() int) {
+	t.Helper()
+	if reflect.ValueOf(launchHandoff).Pointer() != reflect.ValueOf(ldd.LaunchHandoff).Pointer() {
+		t.Fatal("a launch's handoff packet is not ldd.LaunchHandoff's")
+	}
+	packet, err := ldd.LaunchHandoff(context.Background(), cwd)
+	if err != nil {
+		t.Fatalf("the handoff packet of %s: %v", cwd, err)
+	}
+	var n atomic.Int32
+	saved := launchHandoff
+	launchHandoff = func(ctx context.Context, dir string) (ldd.Context, error) {
+		n.Add(1)
+		if deadline, ok := ctx.Deadline(); dir != cwd || !ok || time.Until(deadline) > decisionsTime {
+			t.Errorf("the handoff was asked for %s with deadline %v (set %v), want %s within %v", dir, deadline, ok, cwd, decisionsTime)
+		}
+		return packet, nil
+	}
+	t.Cleanup(func() { launchHandoff = saved })
+	return func() int { return int(n.Load()) }
+}
+
 // answerOf is the PreToolUse output of an answer.
 func answerOf(t *testing.T, stdout string) map[string]any {
 	t.Helper()
@@ -160,6 +194,7 @@ func answerOf(t *testing.T, stdout string) map[string]any {
 func TestLaunchAppendsTheDecisionsAndTheCodeMap(t *testing.T) {
 	f := fakeLaunchTools(t)
 	cwd := launchRepo(t, true, false)
+	asked := steadyHandoff(t, cwd)
 	code, stdout, stderr := agentCall(t, cwd, "worker", launchBrief, "default", nil)
 	if code != 0 || stderr != "" {
 		t.Fatalf("exit %d: %s", code, stderr)
@@ -185,6 +220,9 @@ func TestLaunchAppendsTheDecisionsAndTheCodeMap(t *testing.T) {
 		if _, decided := a["permissionDecision"]; decided || a["updatedInput"].(map[string]any)["prompt"] != want["prompt"] {
 			t.Errorf("%s mode: %s", mode, stdout)
 		}
+	}
+	if n := asked(); n != 4 {
+		t.Errorf("the handoff packet was asked %d times, want once per launch (4)", n)
 	}
 }
 
@@ -254,9 +292,10 @@ func TestLaunchDropsSlowSources(t *testing.T) {
 func TestLaunchWithNoIndexHasNoCodeMap(t *testing.T) {
 	f := fakeLaunchTools(t)
 	cwd := launchRepo(t, false, false)
+	asked := steadyHandoff(t, cwd)
 	_, stdout, _ := agentCall(t, cwd, "worker", launchBrief, "default", nil)
-	if got := answerOf(t, stdout)["updatedInput"].(map[string]any)["prompt"]; got != launchBrief+wantDecisions {
-		t.Errorf("prompt: %q", got)
+	if got := answerOf(t, stdout)["updatedInput"].(map[string]any)["prompt"]; got != launchBrief+wantDecisions || asked() != 1 {
+		t.Errorf("prompt (the handoff asked %d times): %q", asked(), got)
 	}
 	if len(f.log("codegraph")) != 0 {
 		t.Errorf("codegraph ran: %q", f.log("codegraph"))

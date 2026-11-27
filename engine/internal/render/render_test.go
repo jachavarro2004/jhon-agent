@@ -17,6 +17,8 @@ const repo = "../../.."
 // engineAt is the renderer over root with flags argv, under an empty HOME.
 func engineAt(t *testing.T, root string, argv ...string) *engine {
 	t.Helper()
+	// The settings are TestMain's file of the run's own (JHON_SETTINGS,
+	// XDG_CONFIG_HOME), the defaults, unless the test set its own first.
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("JHON_PROFILES", "")
 	t.Setenv("JHON_DESKTOP_COLORS", "")

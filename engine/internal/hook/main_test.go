@@ -22,6 +22,12 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv("XDG_STATE_HOME", state)
 	os.Unsetenv("JHON_IN_SANDBOX")
+	// Nor the owner's settings (T264): JHON_SETTINGS and XDG_CONFIG_HOME name
+	// a file of the run's own that does not exist, the defaults, unless a test
+	// writes its own.
+	config := filepath.Join(state, "config")
+	os.Setenv("XDG_CONFIG_HOME", config)
+	os.Setenv("JHON_SETTINGS", filepath.Join(config, "jhon", "settings.toml"))
 	code := m.Run()
 	os.RemoveAll(state)
 	os.Exit(code)
