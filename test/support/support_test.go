@@ -117,3 +117,69 @@ func TestEnvNeverPassesTheCallersStateFolder(t *testing.T) {
 		t.Errorf("Run with HOME=/h: XDG_STATE_HOME %q; want it unset", r.Stdout)
 	}
 }
+
+// T264 (L1735): a program a test runs never reads the settings of whoever
+// runs the tests. Whoever runs them here has a hostile settings file where
+// the caller's would be found, through its XDG_CONFIG_HOME, its
+// JHON_SETTINGS and its HOME: with the caller's HOME the program reads a
+// file of the test binary's own that does not exist (one per environment),
+// with the test's own HOME the settings under it, and with the test's own
+// JHON_SETTINGS or XDG_CONFIG_HOME those; and jhon gives the defaults.
+func TestEnvNeverPassesTheCallersSettings(t *testing.T) {
+	jhon := Bin(t) // built with the real HOME's caches, before HOME moves
+	caller := t.TempDir()
+	config := filepath.Join(caller, ".config")
+	hostile := filepath.Join(config, "jhon", "settings.toml")
+	if err := os.MkdirAll(filepath.Dir(hostile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hostile, []byte("schema = 1\n\n[integrations]\nstudio = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	savedHome, savedConfig, savedSettings := callerHome, callerConfig, callerSettings
+	callerHome, callerConfig, callerSettings = caller, config, hostile
+	t.Cleanup(func() { callerHome, callerConfig, callerSettings = savedHome, savedConfig, savedSettings })
+	t.Setenv("HOME", caller)
+
+	show := []string{"sh", "-c", `printf '%s|%s' "${JHON_SETTINGS-unset}" "${XDG_CONFIG_HOME-unset}"`}
+	binaryOwn := func(name, got string) string {
+		t.Helper()
+		file, xdg, _ := strings.Cut(got, "|")
+		if !filepath.IsAbs(file) || strings.HasPrefix(file, caller) || xdg != "unset" {
+			t.Errorf("%s: JHON_SETTINGS|XDG_CONFIG_HOME = %q, want a file of the test binary's own and XDG_CONFIG_HOME unset", name, got)
+		}
+		if _, err := os.Stat(file); !os.IsNotExist(err) {
+			t.Errorf("%s: %s exists (%v), want no file", name, file, err)
+		}
+		return file
+	}
+	nilEnv := binaryOwn("Run with a nil env", Run(t, Cmd{Args: show}).Stdout)
+	inherited := binaryOwn("Run with the caller's values", Run(t, Cmd{Args: show, Env: append(os.Environ(), "JHON_SETTINGS="+hostile, "XDG_CONFIG_HOME="+config)}).Stdout)
+	env := Env()
+	fromEnv := binaryOwn("Env()", Run(t, Cmd{Args: show, Env: env}).Stdout)
+	if again := Run(t, Cmd{Args: show, Env: env}).Stdout; !strings.HasPrefix(again, fromEnv+"|") {
+		t.Errorf("one environment run twice: %q then %q, want the same file", fromEnv, again)
+	}
+	if other := binaryOwn("a second Env()", Run(t, Cmd{Args: show, Env: Env()}).Stdout); other == fromEnv || nilEnv == inherited {
+		t.Errorf("two environments share a settings file: %q %q %q %q", nilEnv, inherited, fromEnv, other)
+	}
+	for _, c := range []struct {
+		name string
+		env  []string
+		want string
+	}{
+		{"the test's own HOME", Env("HOME=/h"), "unset|unset"},
+		{"Env() given its own HOME after", append(Env(), "HOME=/h"), "unset|unset"},
+		{"the test's own JHON_SETTINGS", Env("JHON_SETTINGS=/s/settings.toml"), "/s/settings.toml|unset"},
+		{"the test's own XDG_CONFIG_HOME", Env("XDG_CONFIG_HOME=/x"), "unset|/x"},
+		{"the test's own HOME and the caller's values", append(Env("HOME=/h"), "JHON_SETTINGS="+hostile, "XDG_CONFIG_HOME="+config), "unset|unset"},
+	} {
+		if got := Run(t, Cmd{Args: show, Env: c.env}).Stdout; got != c.want {
+			t.Errorf("%s: JHON_SETTINGS|XDG_CONFIG_HOME = %q, want %q", c.name, got, c.want)
+		}
+	}
+	// And jhon reads the defaults, not the caller's jhon-studio on.
+	if r := Run(t, Cmd{Args: []string{jhon, "settings", "get", "integrations.studio"}}); r.Code != 0 || r.Stdout != "false\n" {
+		t.Errorf("jhon settings get integrations.studio with the caller's HOME: exit %d %q %q, want false", r.Code, r.Stdout, r.Stderr)
+	}
+}

@@ -17,7 +17,7 @@ import jhon, { CONFIG_FILE } from "../extensions/jhon.ts";
 import { childEnv } from "../lib/agents.ts";
 import { registerBackgroundTasks } from "../lib/background-tasks-tools.ts";
 import { createTaskRegistry } from "../lib/background-tasks.ts";
-import { SHELL_CONTRACT } from "../lib/guards.ts";
+import { HOOK_TIMEOUT_MS, SHELL_CONTRACT } from "../lib/guards.ts";
 import { readSandboxStatus, SANDBOX_READ_REUSE_MS, sandboxOperations, sandboxShown, sandboxVerdict, wireSandbox } from "../lib/sandbox.ts";
 import { SANDBOX_EVENT } from "../lib/events.ts";
 import { waitFor } from "./bounded-wait.ts";
@@ -88,6 +88,34 @@ function fakeJhonAt(dir: string, status: Status): Fake {
 	writeFileSync(bin, FAKE);
 	chmodSync(bin, 0o755);
 	const calls = (): Call[] => readFileSync(join(dir, "calls.log"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+	return { bin, calls, runs: () => calls().filter((c) => c.args[1] === "run"), asks: () => calls().filter((c) => c.args[1] === "status"), set: write };
+}
+
+/**
+ * A fake jhon that only answers `jhon sandbox status --json`, as FAKE does
+ * for `status` asked in `cwd`, and logs a `sandbox run`: a /bin/sh script
+ * holding its answer, so a read costs a shell's start, not node's (T264,
+ * L1745: on a loaded machine node's start outlasted the session's bound on a
+ * read, and the test asserted the machine, not the refusal).
+ * JHON_TEST_STATUS_DELAY slows each answer down, as a loaded machine does.
+ */
+function shellStatusFakeAt(dir: string, cwd: string, status: Status): Fake {
+	const projectOf = (from: string): string => {
+		for (let d = from; ; d = dirname(d)) {
+			if (existsSync(join(d, ".git"))) return d;
+			if (dirname(d) === d) return "";
+		}
+	};
+	const bin = join(dir, "jhon"), log = join(dir, "calls.log");
+	const write = (s: Status | { fails: string }) => {
+		if ("fails" in s) throw new Error("shellStatusFakeAt answers a status, not a failure");
+		const answer = JSON.stringify({ ...s, project: s.project === "@cwd" ? projectOf(cwd) : s.project });
+		writeFileSync(bin, `#!/bin/sh\ncase "$1 $2 $3" in\n"sandbox status --json") printf '{"args":["sandbox","status"]}\\n' >> '${log}'; [ -n "$JHON_TEST_STATUS_DELAY" ] && sleep "$JHON_TEST_STATUS_DELAY"; printf '%s\\n' '${answer}' ;;\n"sandbox run "*) printf '{"args":["sandbox","run"]}\\n' >> '${log}'; exit 1 ;;\n*) exit 2 ;;\nesac\n`);
+		chmodSync(bin, 0o755);
+	};
+	write(status);
+	writeFileSync(log, "");
+	const calls = (): Call[] => readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 	return { bin, calls, runs: () => calls().filter((c) => c.args[1] === "run"), asks: () => calls().filter((c) => c.args[1] === "status"), set: write };
 }
 
@@ -458,17 +486,22 @@ function suite(): void {
 			["a hang past the timeout", (f) => writeFileSync(f.bin, "#!/bin/sh\nexec sleep 30\n"), NO_REPOSITORY_TODAY],
 			["no jhon", (f) => rmSync(f.bin), NO_REPOSITORY_TODAY],
 		];
+		// The session's own bound on each read (T264, L1745): every answer but
+		// the hang must come within it, so the fake answers from a shell
+		// script (shellStatusFakeAt); a 0.5 s bound on node's start lost the
+		// session start's read on a loaded machine.
+		const timeoutMs = HOOK_TIMEOUT_MS;
 		for (const [name, answer, said] of answers) {
-			const fake = fakeJhonAt(scratch(t, "jhon-sbx-fake-"), ON);
 			const bare = scratch(t, "jhon-sbx-bare-");
+			const fake = shellStatusFakeAt(scratch(t, "jhon-sbx-fake-"), bare, ON);
 			const env: NodeJS.ProcessEnv = {};
 			const { pi, tools, fire } = fakePi();
-			const sandbox = wireSandbox(pi, { jhon: fake.bin, env, timeoutMs: 500 });
+			const sandbox = wireSandbox(pi, { jhon: fake.bin, env, timeoutMs });
 			await fire("session_start", {}, ctxAt(bare));
 			answer(fake);
 			const began = Date.now();
 			for (const tool of ["bash", "bash_background", "monitor"]) assert.equal(await sandbox.gate(tool, bare), said, `${name}: ${tool}`);
-			assert.ok(Date.now() - began < 3 * 500 + 1500, `${name}: each read bounded by the timeout`);
+			assert.ok(Date.now() - began < 3 * timeoutMs + 1500, `${name}: each read bounded by the timeout`);
 			assert.deepEqual(await sandbox.startArgv("git", ["status"], bare), { refuse: said }, `${name}: inspect`);
 			assert.throws(() => sandbox.jobOperations(undefined), `${name}: a job`);
 			assert.equal(tools.has("bash"), false, `${name}: no bash registered`);
