@@ -47,7 +47,7 @@ var (
 	corpusGuards    = map[string]bool{"safety-guard": true, "secrets-guard": true, "framework-guard": true}
 	corpusDecisions = map[string]bool{"allow": true, "ask": true, "refuse": true}
 	corpusFixtures  = map[string]bool{"none": true, "cred-near": true, "cred-far": true, "framework": true, "framework-cwd": true}
-	guarddiffLines  = map[string]bool{"fuzz.tsv": true, "matrix.tsv": true, "rows.tsv": true, "inspect.tsv": true}
+	guarddiffLines  = map[string]bool{"fuzz.tsv": true, "matrix.tsv": true, "rows.tsv": true, "inspect.tsv": true, "workingset.tsv": true}
 )
 
 func readCorpus(t *testing.T) []corpusCase {

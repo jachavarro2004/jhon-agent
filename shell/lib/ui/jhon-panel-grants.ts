@@ -37,6 +37,8 @@ export interface ModeData {
 	root: string;
 	/** When the owner set it; null when no mode was ever set. */
 	since: string | null;
+	/** The primary whose mode a workspace member with none of its own takes (T281); absent otherwise. */
+	from?: string;
 }
 
 /** The modes, Customize's radios, and what each does, in `jhon mode --help`'s words. */

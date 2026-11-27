@@ -95,6 +95,10 @@ func workspaceList(asJSON bool) (int, error) {
 	}
 	for _, p := range pointers {
 		fmt.Printf("%s  -> %s  (joined %s)\n", p.Root, p.Primary, p.JoinedAt)
+		// T281: a pointer whose primary does not list it makes no member.
+		if u, ok := workspace.UnlistedAt(p.Root); ok {
+			fmt.Println("  warning: " + u.Note())
+		}
 	}
 	return 0, nil
 }

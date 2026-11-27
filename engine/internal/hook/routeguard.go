@@ -301,15 +301,18 @@ func setUpEditNote() string {
 }
 
 // missingSurfaces is why a bounded writer of kind, launched from cwd, may not
-// start: its surfaces name a path that matches nothing in the project (each
-// of its roots, workspace.ProjectRoots), or in cwd when it is no project;
-// "" when every path matches (guard.MissingSurfaces, T153, L1364 b).
+// start: its surfaces name a path that matches nothing in the session's
+// working set (each root of its project and workspace, and each
+// sandbox.allow_write folder, workspace.WorkingSet, T281), or in cwd when it
+// is no project; "" when every path matches (guard.MissingSurfaces, T153,
+// L1364 b).
 func missingSurfaces(kind, cwd string, surfaces []string) string {
-	roots := workspace.ProjectRoots(cwd)
+	set := workspace.WorkingSet(cwd)
+	roots := set.Project
 	if len(roots) == 0 {
 		roots = []string{project.Realish(cwd)}
 	}
-	missing := guard.MissingSurfaces(surfaces, roots)
+	missing := guard.MissingSurfaces(surfaces, append(slices.Clone(roots), set.Shared...))
 	if len(missing) == 0 {
 		return ""
 	}

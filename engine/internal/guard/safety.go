@@ -20,7 +20,10 @@ import (
 type Ctx struct {
 	Cwd, Home, Root                                     string
 	Projects, Roots, Worktrees, Tmp, Scratch, Deletable []string
-	roots                                               map[string]string
+	// Shared are the roots that are sandbox.allow_write folders (T281):
+	// a repository's top inside one is a project root too.
+	Shared []string
+	roots  map[string]string
 	// scratch is the variables the line proves directories mktemp -d makes
 	// (scratchVars), by the path each reads as; mktempRm, that the whole
 	// line is `rm $(mktemp -d)` (T64c).
@@ -167,8 +170,10 @@ func (ctx *Ctx) rootOf(d string) string {
 func ContextOf(cwd string) *Ctx {
 	home := project.Realish(project.Home())
 	root := project.Root(cwd)
-	// A workspace's primary and joined members are the project too (T57 slice 5).
-	roots := workspace.ProjectRoots(cwd)
+	// The session's working set is the project (T281): a workspace's primary
+	// and joined members (T57 slice 5) and the sandbox.allow_write folders.
+	set := workspace.WorkingSet(cwd)
+	roots := set.Roots()
 	var projects []string
 	for _, r := range roots {
 		if !strings.HasSuffix(r, "-worktrees") {
@@ -192,7 +197,7 @@ func ContextOf(cwd string) *Ctx {
 	// Deletion stays inside the temporary roots and ~/.cache; the transcripts
 	// and plans under ~/.claude are scratch for writes, never for deletion.
 	deletable := append(slices.Clone(tmp), filepath.Join(home, ".cache"))
-	return &Ctx{Cwd: project.Realish(cwd), Home: home, Root: root, Projects: projects, Roots: roots, Worktrees: worktrees,
+	return &Ctx{Cwd: project.Realish(cwd), Home: home, Root: root, Projects: projects, Roots: roots, Shared: set.Shared, Worktrees: worktrees,
 		Tmp: tmp, Scratch: scratch, Deletable: deletable, roots: map[string]string{}}
 }
 

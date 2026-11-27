@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/discover"
-	"github.com/jachavarro2004/jhon-agent/engine/internal/grant"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/ldd"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lddswitch"
@@ -58,7 +57,9 @@ func runStatus(argv []string) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	s.Mode = grant.ModeOf(root).Mode
+	// A workspace member with no mode of its own shows the primary's (T281).
+	mode, _ := workspace.ModeOf(root, root)
+	s.Mode = mode.Mode
 	// The notes and the strict_tdd reason name the project's own layout (L479).
 	for i := range s.Notes {
 		s.Notes[i] = layout.Words(root, s.Notes[i])

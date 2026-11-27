@@ -12,6 +12,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/guard"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/isodate"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // modeFor is the owner's mode that answers an ask of cls whose finding
@@ -24,21 +25,43 @@ import (
 // passes only when the session's own mode passes it too: a cd into a
 // super-yolo project lends a normal session nothing (L157), and a
 // super-yolo session lends a normal project nothing (L183). A repository
-// the guard cannot tell (guard.UnknownRoot) is normal.
-func modeFor(own, root, cls string) (grant.ModeRecord, bool) {
+// the guard cannot tell (guard.UnknownRoot) is normal. A member of a
+// workspace that its primary lists, that joined and that has no mode of
+// its own takes the primary's (workspace.ModeOf, T281: one mode for the
+// workspace), as the session's project and as the finding's; its note says
+// from which project.
+func modeFor(own, root, cls string) (modeRec, bool) {
 	if root == guard.UnknownRoot {
 		m := grant.ModeOf("")
-		return m, grant.ModeCovers(m.Mode, cls)
+		return modeRec{ModeRecord: m}, grant.ModeCovers(m.Mode, cls)
 	}
-	mine := grant.ModeOf(own)
+	m, from := workspace.ModeOf(own, own)
+	mine := modeRec{m, from}
 	if root != "" && !project.Exists(root) {
 		root = project.Root(existingAncestor(root))
 	}
-	if root == "" || !isRepo(root) || grant.Root(root) == mine.Root {
+	if root == "" || !isRepo(root) || grant.Root(root) == grant.Root(own) {
 		return mine, grant.ModeCovers(mine.Mode, cls)
 	}
-	theirs := grant.ModeOf(root)
+	m, from = workspace.ModeOf(root, own)
+	theirs := modeRec{m, from}
 	return theirs, grant.ModeCovers(mine.Mode, cls) && grant.ModeCovers(theirs.Mode, cls)
+}
+
+// modeRec is the mode that answers an ask, and the project it is taken
+// from when that is not the project's own (a workspace's primary, T281).
+type modeRec struct {
+	grant.ModeRecord
+	from string
+}
+
+// label is how a note names the mode: "super-yolo mode", or "super-yolo
+// mode, from <primary>" for one a member takes from its primary.
+func (m modeRec) label() string {
+	if m.from == "" {
+		return m.Mode + " mode"
+	}
+	return m.Mode + " mode, from " + m.from
 }
 
 // existingAncestor is the nearest ancestor of dir that exists.
@@ -64,7 +87,7 @@ func isRepo(dir string) bool {
 
 // modePass is an ask the owner's mode let through: the mode, its class, and what.
 type modePass struct {
-	mode      grant.ModeRecord
+	mode      modeRec
 	cls, what string
 }
 
@@ -88,20 +111,21 @@ func passByMode(io IO, p Payload, guardName string, passed []modePass) {
 	now := isodate.Format(time.Now())
 	for _, x := range passed {
 		part := x.cls + ": " + x.what
-		if slices.Contains(byMode[x.mode.Mode], part) {
+		label := x.mode.label()
+		if slices.Contains(byMode[label], part) {
 			continue
 		}
-		if !slices.Contains(modes, x.mode.Mode) {
-			modes = append(modes, x.mode.Mode)
+		if !slices.Contains(modes, label) {
+			modes = append(modes, label)
 		}
-		byMode[x.mode.Mode] = append(byMode[x.mode.Mode], part)
+		byMode[label] = append(byMode[label], part)
 		// The log is the audit's record; a call is not refused for it.
 		_ = grant.RecordAllowed(grant.Allowed{At: now, Mode: x.mode.Mode, Root: x.mode.Root, Class: x.cls, What: x.what,
 			Guard: guardName, Session: p.Str("session_id"), Agent: agent})
 	}
 	var notes []string
 	for _, m := range modes {
-		notes = append(notes, fmt.Sprintf("allowed by the owner's %s mode: %s", m, strings.Join(byMode[m], "; ")))
+		notes = append(notes, fmt.Sprintf("allowed by the owner's %s: %s", m, strings.Join(byMode[m], "; ")))
 	}
 	fmt.Fprint(io.Out, noteJSON(modeNotePrefix+strings.Join(notes, "; ")))
 }

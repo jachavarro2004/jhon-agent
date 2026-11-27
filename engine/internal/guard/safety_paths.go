@@ -11,6 +11,7 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/grant"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // A Finding is one effect the safety guard judged: a deny, an ask of a
@@ -383,6 +384,12 @@ func outsideWhy(abs string, ctx *Ctx, root bool) string {
 			return "it reaches the project root"
 		}
 	}
+	// A repository inside a sandbox.allow_write folder is a project of the
+	// working set too (T281): its top, or a folder holding one, is never
+	// removed.
+	if slices.ContainsFunc(ctx.Shared, func(s string) bool { return project.Within(p, s) }) && (holdsRepository(p) || globbed && holdsRepository(g)) {
+		return "it reaches the project root"
+	}
 	if slices.ContainsFunc(ctx.Roots, func(r string) bool { return project.Within(p, r) && (root || p != r) }) ||
 		slices.ContainsFunc(ctx.Deletable, func(t string) bool { return project.Within(p, t) && p != t }) {
 		return ""
@@ -397,6 +404,19 @@ func outsideWhy(abs string, ctx *Ctx, root bool) string {
 		return ""
 	}
 	return outsideRoots
+}
+
+// holdsRepository is whether dir is a repository's top or holds one right
+// below it (a VCS directory there).
+func holdsRepository(dir string) bool {
+	has := func(d string) bool {
+		return slices.ContainsFunc(VCSDirs, func(v string) bool { return project.Exists(filepath.Join(d, v)) })
+	}
+	if has(dir) {
+		return true
+	}
+	entries, _ := os.ReadDir(dir)
+	return slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.IsDir() && has(filepath.Join(dir, e.Name())) })
 }
 
 // outsideRoots is outsideWhy's answer for a path in no project and no
@@ -418,7 +438,13 @@ func writeWhy(abs string, ctx *Ctx) string {
 // that holds no credentials, a deny for anything else.
 func deleteFinding(what, why, abs string, ctx *Ctx) Finding {
 	p := project.Realish(abs)
-	if why == outsideRoots && project.Within(p, ctx.Home) && p != ctx.Home && protectedWhy(abs, ctx) == "" {
+	outside := why == outsideRoots
+	// A sibling that joined a workspace whose primary does not list it is
+	// said, with the entry that lists it (T281).
+	if u, ok := workspace.UnlistedAt(p); ok && outside {
+		why += "; " + u.Note()
+	}
+	if outside && project.Within(p, ctx.Home) && p != ctx.Home && protectedWhy(abs, ctx) == "" {
 		return destroy(what, why)
 	}
 	return deny(what, why)

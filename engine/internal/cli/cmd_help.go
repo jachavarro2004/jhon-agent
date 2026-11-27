@@ -644,15 +644,23 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            your own terminal in pi
                            A folder that is no git repository takes no mode:
                            it is refused there, and calls there are judged
-                           as in normal mode
+                           as in normal mode. A workspace member the primary
+                           lists, joined, with no mode of its own takes the
+                           primary's (jhon mode there says from where); one
+                           you set there is its own
   jhon workspace join <primary> | leave | list [--json]
                            a multi-repository workspace: the primary's LDD
                            config lists its sibling repositories (workspace:,
                            name: path relative to its top); join, run in a
                            sibling, records its pointer to the primary under
                            Jhon's state, leave removes it, list shows every
-                           pointer. A sibling is a member only while the
+                           pointer, and warns on one the primary does not
+                           list, with the entry that lists it (jhon doctor
+                           too). A sibling is a member only while the
                            primary lists it; jhon status reports the workspace.
+                           Inside the working set (the project, its
+                           worktrees, the members and sandbox.allow_write)
+                           no write or removal is outside the project
                            Joining and leaving are yours alone, as a mode is
   jhon sandbox run [--profile work] [--project <folder>] -- <program> [args...]
                            run the program under bubblewrap (Linux), in its
