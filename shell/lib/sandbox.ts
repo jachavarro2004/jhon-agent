@@ -22,12 +22,13 @@
  * same engine function (sandbox.ProfileFor). Either way `jhon sandbox run`
  * ends a failure on a read-only path with the stop note on stderr, which is
  * the tool result's end, and records a jhon.sandbox event (G3, G4).
- * `inspect`, which starts the program the model names with no shell, runs
+ * `inspect`, which runs the read-only line the inspect guard judged (T271),
+ * runs
  *
- *   jhon sandbox run --project <pinned> --profile work -- <program> <args...>
+ *   jhon sandbox run --project <pinned> --profile work -- env -u BASH_ENV -u ENV bash --noprofile --norc -c <line>
  *
- * The command is one argument of that argv: no shell reads it before the one
- * inside the sandbox. With the mode on where the sandbox cannot run, or with
+ * (lib/guards.ts inspectArgv). The line is one argument of that argv: no
+ * shell reads it before the bash inside the sandbox. With the mode on where the sandbox cannot run, or with
  * no answer to pin, the call is refused and nothing runs; a probe that timed
  * out (`timed_out`) is no verdict, and the command is wrapped as usual. With the mode off
  * nothing here touches a command: `bash` stays pi's built-in tool.
