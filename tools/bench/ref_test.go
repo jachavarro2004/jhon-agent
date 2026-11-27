@@ -37,7 +37,7 @@ case "$1" in version) echo '{"version":"0.0.0-dev+%s","commit":"%s","file":"%s"}
 		installer := fmt.Sprintf("#!/bin/sh\nmkdir -p \"$HOME/.local/bin\"\ncat > \"$HOME/.local/bin/jhon\" <<'EOI'\n%sEOI\nchmod +x \"$HOME/.local/bin/jhon\"\n", installed)
 		packer := fmt.Sprintf(`#!/bin/sh
 [ "$1 $2" = "release pack" ] || exit 2
-d=$(mktemp -d); mkdir -p "$d/build"
+d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; mkdir -p "$d/build"
 cat > "$d/build/jhon" <<'EOS'
 %sEOS
 chmod +x "$d/build/jhon"
@@ -52,7 +52,15 @@ tar -czf "$4/jhon-fake.tar.gz" -C "$d" build/jhon
 
 // `bench prepare --ref <commit>` installs that commit's build, made from a
 // clone of the checkout at the commit in scratch; the checkout stays as it is.
+// Nothing is left in TMPDIR (T267 S3: the fake packer's mktemp -d folder was).
 func TestPrepareRefInstallsThatCommitsBuild(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Cleanup(func() {
+		if left, _ := os.ReadDir(tmp); len(left) > 0 {
+			t.Errorf("left in TMPDIR: %s", left)
+		}
+	})
 	checkout := t.TempDir()
 	gitOut(t, checkout, "init", "-q")
 	for _, v := range []string{"old", "new"} {

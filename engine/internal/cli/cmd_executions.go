@@ -869,7 +869,9 @@ func runExecutions(argv []string) (int, error) {
 	}
 	// One project's commands run in order; projects run in parallel, up to
 	// jobs at a time. In parallel a project's output is held in a file and
-	// printed whole when it finishes, so outputs never interleave.
+	// printed whole when it finishes, so outputs never interleave. The file
+	// is unlinked as soon as it is made and read through its descriptor, so
+	// a run killed mid-way leaves nothing in TMPDIR (T267).
 	var mu sync.Mutex
 	done := make([][]execution.Execution, len(plan))
 	var startErr string
@@ -890,8 +892,8 @@ func runExecutions(argv []string) (int, error) {
 		out, held := stdout, (*os.File)(nil)
 		if jobs > 1 {
 			if f, err := os.CreateTemp("", "jhon-executions-"); err == nil {
+				os.Remove(f.Name())
 				out, held = f, f
-				defer os.Remove(f.Name())
 				defer f.Close()
 			}
 		}
@@ -901,7 +903,8 @@ func runExecutions(argv []string) (int, error) {
 				say(line)
 				return
 			}
-			if b, err := os.ReadFile(held.Name()); err == nil && len(b) > 0 {
+			held.Seek(0, 0)
+			if b, err := io.ReadAll(held); err == nil && len(b) > 0 {
 				lines = append(lines, strings.TrimSuffix(string(b), "\n"))
 				held.Truncate(0)
 				held.Seek(0, 0)
