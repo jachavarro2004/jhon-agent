@@ -28,8 +28,7 @@ import (
 // links to the owner's auth.json and keybindings.json, claude-bridge.json
 // (the owner's, its Claude Code executable the provider wrapper below; both
 // only when the active profile runs on claude-bridge or Claude Code is one of
-// the install's runtimes, and then with AskClaude off for a profile that
-// names no bridge model), and the theme `rose-ink` (render.Theme, wired by the cli), seeded under themes/, as settings.json's theme.
+// the install's runtimes, and then with no askClaude block, T282), and the theme `rose-ink` (render.Theme, wired by the cli), seeded under themes/, as settings.json's theme.
 type pi struct{ *engine }
 
 func (pi) Runtime() string { return "pi" }
@@ -73,9 +72,14 @@ func (e *engine) piProviderWrapper() string {
 	return filepath.Join(e.piHome(), "claude-code-provider")
 }
 
-// piBridge is Jhon's claude-bridge.json: the owner's, every key kept, with
-// its Claude Code executable the provider wrapper, which runs the owner's
-// own executable (its pathToClaudeCodeExecutable, else claude).
+// piBridge is Jhon's claude-bridge.json: the owner's, every key kept but
+// askClaude, with its Claude Code executable the provider wrapper, which
+// runs the owner's own executable (its pathToClaudeCodeExecutable, else
+// claude). pi-claude-bridge 0.13 has no AskClaude tool (it is the separate
+// pi-claude-bridge-askclaude package) and warns at every interactive start
+// while the file says askClaude.enabled true, with advice a sync would undo;
+// it reads a missing block as off, silently (T282, L1786). With no tool, the
+// bridge is a provider only, whatever the profile (L708).
 func (e *engine) piBridge() (config *js.Object, real string) {
 	real = "claude"
 	owner := js.NewObject()
@@ -97,6 +101,7 @@ func (e *engine) piBridge() (config *js.Object, real string) {
 	}
 	provider.Set("pathToClaudeCodeExecutable", e.piProviderWrapper())
 	owner.Set("provider", provider)
+	owner.Delete("askClaude")
 	return owner, real
 }
 
@@ -211,26 +216,9 @@ func (e *engine) piBridged() bool {
 // active profile runs on it (piBridged), or Claude Code is one of this
 // install's runtimes (on, settings.runtimes), so that every session's model
 // registry holds the bridge's models and the profiles can choose one (T130,
-// L909). A profile that names none gets the bridge as a provider only
-// (piProviderOnly).
+// L909). The bridge registers its provider and no tool (piBridge).
 func (e *engine) piBridgeLoaded() bool {
 	return e.piBridged() || e.on("claude-code")
-}
-
-// piProviderOnly is config, a claude-bridge.json, with its AskClaude tool off
-// and every other key kept: the bridge then registers its provider and no
-// tool, so a session whose profile names no bridge model has the tools and
-// the system prompt it had without the bridge (L708).
-func piProviderOnly(config *js.Object) *js.Object {
-	ask, ok := js.Prop(config, "askClaude").(*js.Object)
-	if ok {
-		ask = ask.Clone()
-	} else {
-		ask = js.NewObject()
-	}
-	ask.Set("enabled", false)
-	config.Set("askClaude", ask)
-	return config
 }
 
 // piPretty is pi-pretty (syntax-highlighted reads, diffs, file trees), pinned
@@ -396,9 +384,6 @@ func (p pi) Files() []File {
 	// are (T56); with it, the bridge is a provider only (T130).
 	if p.piBridgeLoaded() {
 		bridge, real := p.piBridge()
-		if !p.piBridged() {
-			bridge = piProviderOnly(bridge)
-		}
 		out = append(out, File{p.piBridgeConfig(), js.StringifyValue(bridge) + "\n"}, File{p.piProviderWrapper(), piWrapper(real)})
 	}
 	for _, a := range p.roles() {

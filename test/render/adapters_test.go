@@ -174,7 +174,7 @@ func TestRuntimesAsAdapters(t *testing.T) {
 		current := filepath.Join(home, ".local", "share", "jhon", "current")
 		want := `{
   "packages": [
-    "npm:pi-claude-bridge@0.9.3",
+    "npm:pi-claude-bridge@0.13.0",
     "npm:pi-web-access@0.43.0",
     {
       "source": "npm:@heyhuynhgiabuu/pi-pretty@0.6.27",
@@ -206,17 +206,18 @@ func TestRuntimesAsAdapters(t *testing.T) {
 		}
 	})
 
-	t.Run("a profile on the bridge keeps the owner's AskClaude as written: claude-bridge.json byte for byte as before", func(t *testing.T) {
+	// T282 (L1786 B2): pi-claude-bridge 0.13.0 has no AskClaude tool (it is
+	// the separate pi-claude-bridge-askclaude package) and warns at every
+	// interactive start while its file says askClaude.enabled true, with
+	// advice jhon sync would undo; a missing block is silent. Jhon's file
+	// carries no askClaude block, the owner's every other key kept.
+	t.Run("a profile on the bridge drops the owner's AskClaude block (T282): claude-bridge.json is the owner's otherwise, byte for byte", func(t *testing.T) {
 		t.Parallel()
 		_, pi := piHome(t, func(h string) {
 			write(t, filepath.Join(h, ".pi", "agent", "claude-bridge.json"), ownerBridge)
 		})
 		equal(t, support.Read(t, filepath.Join(pi, "claude-bridge.json")), `{
   "owner": true,
-  "askClaude": {
-    "enabled": true,
-    "allowFullMode": true
-  },
   "provider": {
     "plan": "max",
     "pathToClaudeCodeExecutable": "`+filepath.Join(pi, "claude-code-provider")+`"
@@ -225,7 +226,7 @@ func TestRuntimesAsAdapters(t *testing.T) {
 `)
 	})
 
-	t.Run("a profile on provider anthropic, Claude Code a runtime of the install: pi-claude-bridge is in the packages as a provider only, its config the owner's with the wrapper and AskClaude off (T130, L909)", func(t *testing.T) {
+	t.Run("a profile on provider anthropic, Claude Code a runtime of the install: pi-claude-bridge is in the packages as a provider only, its config the owner's with the wrapper and no AskClaude block (T130, L909, T282)", func(t *testing.T) {
 		t.Parallel()
 		home, pi := apiHome(t, &apiWithClaude, "")
 		s := readJSON(t, filepath.Join(pi, "settings.json")).(map[string]any)
@@ -233,10 +234,6 @@ func TestRuntimesAsAdapters(t *testing.T) {
 		equal(t, s["packages"], piPackages(filepath.Join(home, ".local", "share", "jhon", "current")), "pi-claude-bridge first, as a bridged profile lists it")
 		equal(t, support.Read(t, filepath.Join(pi, "claude-bridge.json")), `{
   "owner": true,
-  "askClaude": {
-    "enabled": false,
-    "allowFullMode": true
-  },
   "provider": {
     "plan": "max",
     "pathToClaudeCodeExecutable": "`+filepath.Join(pi, "claude-code-provider")+`"
@@ -281,7 +278,7 @@ func TestRuntimesAsAdapters(t *testing.T) {
 			return v
 		}
 		sWith, sAlone := settings(homeWith, piWith), settings(homeAlone, piAlone)
-		equal(t, sWith["packages"].([]any)[0], "npm:pi-claude-bridge@0.9.3")
+		equal(t, sWith["packages"].([]any)[0], "npm:pi-claude-bridge@0.13.0")
 		sWith["packages"] = sWith["packages"].([]any)[1:]
 		equal(t, sWith, sAlone, "settings.json, the bridge's package aside")
 		delete(with, "~/.pi/jhon/settings.json")
@@ -399,26 +396,28 @@ func TestProviderOnlyBridgeNeverWritesTheOwnersFile(t *testing.T) {
 	if err := os.Symlink(owner, own); err != nil {
 		t.Fatal(err)
 	}
-	askClaude := func() any {
+	// T282: Jhon's file carries no askClaude block on or off the bridge.
+	askClaude := func() bool {
 		t.Helper()
-		return readJSON(t, own).(map[string]any)["askClaude"].(map[string]any)["enabled"]
+		_, ok := readJSON(t, own).(map[string]any)["askClaude"]
+		return ok
 	}
-	settled := func(enabled bool, when string) {
+	settled := func(when string) {
 		t.Helper()
 		wantCode(t, install(t, home, repoRoot, "--only", "pi"), 0)
 		fi, err := os.Lstat(own)
 		if err != nil || !fi.Mode().IsRegular() {
 			t.Fatalf("%s: Jhon's claude-bridge.json is not a regular file: %v", when, err)
 		}
-		equal(t, askClaude(), enabled, when)
+		equal(t, askClaude(), false, when+": an askClaude key")
 		equal(t, support.Read(t, owner), ownerBridge, when+": the owner's own file")
 		c := render(t, home, "--check", "--only", "pi")
 		wantCode(t, c, 0)
 		noMatch(t, c.Out(), `DRIFT`, when)
 	}
-	settled(false, "an old link, a profile off the bridge")
+	settled("an old link, a profile off the bridge")
 	write(t, profiles, `{"active":"b","profiles":{"b":{}}}`)
-	settled(true, "switched to a profile on the bridge")
+	settled("switched to a profile on the bridge")
 	write(t, profiles, apiProfile)
-	settled(false, "switched back off the bridge")
+	settled("switched back off the bridge")
 }
