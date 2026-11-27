@@ -429,3 +429,70 @@ func TestTheCommittedHooksGitRunsNoDiffProgramTheRepositoryNames(t *testing.T) {
 		t.Errorf("the committed hook did not run to its end (exit %d, %q)", code, out)
 	}
 }
+
+// T250 (the final re-verify of 62839a7): a sandboxed command can run `git
+// replace`, which writes refs/replace/* in the writable .git and so chose
+// what HEAD:go.mod and HEAD:tools/git-hooks/pre-push read as. jhon's own
+// reads of the repository honour no replace ref (GIT_NO_REPLACE_OBJECTS=1):
+// (a) a replaced go.mod naming the attacker's module, with origin at the
+// attacker, is not the release repository; (b) a replaced HEAD whose tree
+// holds another pre-push, which the disk then matches, is a hook that
+// differs from the one the repository tracks. Nothing planted runs.
+func TestPublishIgnoresReplaceRefs(t *testing.T) {
+	object := func(b publishBox, body string) string {
+		c := exec.Command("git", "-C", b.src, "hash-object", "-w", "--stdin")
+		c.Stdin = strings.NewReader(body)
+		out, err := c.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	t.Run("a replaced go.mod", func(t *testing.T) {
+		b := newPublishBox(t)
+		b.git("replace", b.git("rev-parse", "HEAD:go.mod"), object(b, "module evil.example/attacker/x\n"))
+		b.git("remote", "set-url", "origin", "git@evil.example:attacker/x.git")
+		if got := b.git("show", "HEAD:go.mod"); !strings.Contains(got, "evil.example") {
+			t.Fatalf("the plant is not live: HEAD:go.mod reads %q", got)
+		}
+		code, out := publish(b.r)
+		hosts, _ := os.ReadFile(b.sshHosts)
+		if code == 0 || !strings.Contains(out, "is not the release repository github.com/jachavarro2004/jhon-agent") || strings.Contains(string(hosts), "evil") || b.pushed() != "" || b.ran("committed-hook") {
+			t.Errorf("exit %d, %q, ssh asked for %q; want refused, nothing sent", code, out, hosts)
+		}
+	})
+	// (b) A replaced HEAD whose tree holds another pre-push. The index
+	// follows the replaced tree (the verify's shape: git status sees no
+	// change while replace refs count) or keeps the real one with the hook
+	// marked assume-unchanged; the disk holds the planted hook either way.
+	for _, c := range []struct {
+		name, refusal string
+		index         func(b publishBox)
+	}{
+		{"a replaced HEAD holding another pre-push, the index read from it", "working tree is dirty", func(b publishBox) { b.git("read-tree", "HEAD") }},
+		{"a replaced HEAD holding another pre-push, the real index", "whose pre-push differs from the one the repository tracks", func(b publishBox) {
+			b.git("update-index", "--assume-unchanged", "tools/git-hooks/pre-push")
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			b := newPublishBox(t)
+			planted := "#!/bin/sh\ntouch '" + filepath.Join(b.markers, "planted-hook") + "'\n"
+			b.git("switch", "-q", "-c", "side")
+			b.write("tools/git-hooks/pre-push", planted, 0o755)
+			b.git("commit", "-qam", "side")
+			side := b.git("rev-parse", "HEAD")
+			b.git("switch", "-q", "main")
+			b.git("branch", "-q", "-D", "side")
+			b.git("replace", b.commit, side)
+			c.index(b)
+			b.write("tools/git-hooks/pre-push", planted, 0o755)
+			if got := b.git("show", "HEAD:tools/git-hooks/pre-push"); !strings.Contains(got, "planted-hook") {
+				t.Fatalf("the plant is not live: HEAD's pre-push reads %q", got)
+			}
+			code, out := publish(b.r)
+			if code == 0 || !strings.Contains(out, c.refusal) || b.ran("planted-hook") || b.pushed() != "" {
+				t.Errorf("exit %d, %q, planted hook ran %v; want refused (%q), nothing run", code, out, b.ran("planted-hook"), c.refusal)
+			}
+		})
+	}
+}
