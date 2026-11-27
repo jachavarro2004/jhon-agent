@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -38,7 +39,7 @@ func publishRemote(source, remote, branch, commit string, stdout, stderr *os.Fil
 	if refused != "" {
 		return "", refused, ""
 	}
-	url, refused := publishURL(source, remote)
+	url, origin, refused := publishURL(source, remote)
 	if refused != "" {
 		return "", refused, ""
 	}
@@ -56,6 +57,26 @@ func publishRemote(source, remote, branch, commit string, stdout, stderr *os.Fil
 	target, _ = run("remote", "get-url", "--push", remote)
 	if why := pushTarget(target); why != "" {
 		return target, remote + " is " + target + ", " + why + tail + "set remote." + remote + ".url to the ssh or https address of the remote (a rewrite of your own, url.<base>.insteadOf, belongs in your global configuration)", ""
+	}
+	// The target is the release repository (T250, the re-verify of
+	// d6b1d19): remote.<name>.url is the source's, which a sandboxed command
+	// may have pointed at another host, and the push would then succeed
+	// there while the release believes it shipped.
+	module, ok := releaseModule(source, commit)
+	if !ok {
+		return target, "cannot read the module go.mod names at " + short(commit) + ", the release repository publish pushes to" + tail + "commit a go.mod that names the module", ""
+	}
+	if !releaseTarget(target, module, func(c string) string {
+		// A remote of the private repository's own: git rewrites it with the
+		// owner's insteadOf and pushInsteadOf, as it rewrites the push's.
+		if _, ok := run("config", "remote.jhon-release.url", c); !ok {
+			return ""
+		}
+		got, _ := run("remote", "get-url", "--push", "jhon-release")
+		return got
+	}) {
+		host, path, _ := strings.Cut(module, "/")
+		return target, "remote." + remote + ".url = " + url + " (" + origin + ") is not the release repository " + module + " (the module go.mod names at " + short(commit) + "), as pushed to " + target + tail + "set it to git@" + host + ":" + path + ".git, or map that address to your own in your global configuration (url.<yours>.insteadOf)", ""
 	}
 	top, _ := project.ReadGit(source, "rev-parse", "--show-toplevel")
 	if pre := filepath.Join(hooks, "pre-push"); hooks != "/dev/null" && executable(pre) {
@@ -131,7 +152,8 @@ func privateRepo(source, remote, url, branch, commit string) (dir string, done f
 	if err != nil {
 		return "", nil, err
 	}
-	done = func() { os.RemoveAll(dir) }
+	release := useWork(work)
+	done = func() { os.RemoveAll(dir); release() }
 	git := func(args ...string) error {
 		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
 		c.Env = privateEnv()
@@ -167,7 +189,7 @@ func privateRepo(source, remote, url, branch, commit string) (dir string, done f
 // remote.<remote>.pushurl, or a url.<base>.insteadOf or pushInsteadOf
 // whose value begins the url. Each refusal names the key, its origin and
 // the fix.
-func publishURL(source, remote string) (url, refused string) {
+func publishURL(source, remote string) (url, origin, refused string) {
 	const tail = "; nothing was pushed; fix: "
 	out, _ := project.ReadGitCmd(source, "config", "--show-scope", "--show-origin", "--get-regexp", `^remote\.`+regexp.QuoteMeta(remote)+`\.(url|pushurl)$|^url\..*\.(insteadof|pushinsteadof)$`).Output()
 	type entry struct{ scope, origin, key, value string }
@@ -187,9 +209,14 @@ func publishURL(source, remote string) (url, refused string) {
 		}
 	}
 	if len(urls) != 1 {
-		return "", remote + " names " + strconv.Itoa(len(urls)) + " urls (remote." + remote + ".url), not one" + tail + "leave one url for " + remote
+		return "", "", remote + " names " + strconv.Itoa(len(urls)) + " urls (remote." + remote + ".url), not one" + tail + "leave one url for " + remote
 	}
 	url = urls[0]
+	for _, e := range entries {
+		if strings.EqualFold(e.key, "remote."+remote+".url") {
+			origin = e.origin
+		}
+	}
 	for _, e := range entries {
 		if e.scope == "system" || e.scope == "global" {
 			continue
@@ -197,10 +224,50 @@ func publishURL(source, remote string) (url, refused string) {
 		lower := strings.ToLower(e.key)
 		rewrites := (strings.HasSuffix(lower, ".insteadof") || strings.HasSuffix(lower, ".pushinsteadof")) && strings.HasPrefix(url, e.value)
 		if strings.EqualFold(e.key, "remote."+remote+".pushurl") || rewrites {
-			return "", e.key + " = " + e.value + " (" + e.origin + ") would change where " + remote + " is pushed, and the repository's configuration may be a sandboxed command's" + tail + "remove it (git config --unset " + e.key + "); a rewrite of your own belongs in your global configuration"
+			return "", "", e.key + " = " + e.value + " (" + e.origin + ") would change where " + remote + " is pushed, and the repository's configuration may be a sandboxed command's" + tail + "remove it (git config --unset " + e.key + "); a rewrite of your own belongs in your global configuration"
 		}
 	}
-	return url, ""
+	return url, origin, ""
+}
+
+// releaseModule is the module path the go.mod of commit names (read from
+// the commit through project.ReadGitCmd, never from the work tree, where an
+// index flag can hide a change): <host>/<owner>/<repository>, the release
+// repository publish pushes to.
+func releaseModule(source, commit string) (string, bool) {
+	out, err := project.ReadGitCmd(source, "show", commit+":go.mod").Output()
+	if err != nil {
+		return "", false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if m, ok := strings.CutPrefix(strings.TrimSpace(line), "module "); ok {
+			m = strings.Trim(strings.TrimSpace(m), `"`)
+			if parts := strings.Split(m, "/"); len(parts) == 3 && !slices.Contains(parts, "") {
+				return m, true
+			}
+			return "", false
+		}
+	}
+	return "", false
+}
+
+// releaseTarget is whether target, the address git would push to, is the
+// release repository module (<host>/<owner>/<repository>): one of its own
+// addresses (git@<host>:<owner>/<repository>, ssh://git@<host>/…,
+// https://<host>/…, with or without .git), or what the owner's own
+// configuration rewrites one to (rewrite: his url.insteadOf, as git applies
+// it in the private repository, the source's configuration never read).
+func releaseTarget(target, module string, rewrite func(string) string) bool {
+	host, path, _ := strings.Cut(module, "/")
+	norm := func(u string) string { return strings.TrimSuffix(strings.TrimSuffix(u, "/"), ".git") }
+	for _, c := range []string{"git@" + host + ":" + path, "ssh://git@" + host + "/" + path, "https://" + host + "/" + path} {
+		for _, form := range []string{c, c + ".git"} {
+			if norm(target) == norm(form) || norm(target) == norm(rewrite(form)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // pushTarget is why publish does not push to url, the address git would

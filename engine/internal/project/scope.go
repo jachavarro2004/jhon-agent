@@ -194,7 +194,29 @@ func GitReadEnv() []string {
 // repository's own that runs git there outside the sandbox, as `jhon
 // publish` runs the committed pre-push hook (T250).
 func NeutralGitEnv(dir string) []string {
-	return WithGitConfig(GitReadEnv(), gitFilters(dir, []string{"status"}))
+	return WithGitConfig(GitReadEnv(), append(gitFilters(dir, []string{"status"}), gitDiffPrograms(dir)...))
+}
+
+// gitDiffPrograms are the diff programs the configuration in dir names
+// (diff.external, a driver's textconv or command), each emptied: a program
+// of the repository's own that runs git diff, log -p or show then runs
+// none (an emptied external diff makes git diff fail instead, closed), as
+// ReadGitCmd's --no-ext-diff --no-textconv does for jhon's own (T250). Only
+// the keys the configuration names: an empty diff.external given always
+// would break every git diff. Read with `git config --name-only`, which
+// runs no program; nil when there are none.
+func gitDiffPrograms(dir string) [][2]string {
+	out, err := ReadGitCmd(dir, "config", "--name-only", "-z", "--get-regexp", `^diff\.(external|.*\.(textconv|command))$`).Output()
+	if err != nil {
+		return nil
+	}
+	var keys [][2]string
+	for _, k := range strings.Split(string(out), "\x00") {
+		if k = strings.TrimSpace(k); k != "" {
+			keys = append(keys, [2]string{k, ""})
+		}
+	}
+	return keys
 }
 
 // ReadGitCmd is the command ReadGit runs: git in dir, without inherited

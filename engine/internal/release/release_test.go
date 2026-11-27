@@ -243,6 +243,7 @@ func TestPublish(t *testing.T) {
 	must(t, os.MkdirAll(src, 0o755))
 	must(t, os.MkdirAll(filepath.Join(src, "engine", "cmd", "jhon"), 0o777))
 	must(t, os.WriteFile(filepath.Join(src, SourceMarker), nil, 0o644))
+	must(t, os.WriteFile(filepath.Join(src, "go.mod"), []byte("module github.com/jachavarro2004/jhon-agent\n"), 0o644))
 	run(src, "init", "-q")
 	run(src, "add", "-A")
 	run(src, "commit", "-qm", "one")
@@ -254,7 +255,13 @@ func TestPublish(t *testing.T) {
 	must(t, os.MkdirAll(bin, 0o755))
 	must(t, os.WriteFile(filepath.Join(bin, "ssh"), []byte("#!/bin/sh\nfor a; do last=$a; done\nexec sh -c \"$last\"\n"), 0o755))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	run(src, "remote", "add", "origin", "git@jhon-test-ssh:"+origin)
+	// The release repository (go.mod's module), which the owner's global
+	// configuration maps to the scratch remote, as it maps github.com to his
+	// ssh alias.
+	global := filepath.Join(home, "gitconfig")
+	must(t, os.WriteFile(global, []byte("[url \"git@jhon-test-ssh:"+origin+"\"]\n\tinsteadOf = git@github.com:jachavarro2004/jhon-agent.git\n"), 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", global)
+	run(src, "remote", "add", "origin", "git@github.com:jachavarro2004/jhon-agent.git")
 	r := Roots{Runtime: src, Source: src, Share: filepath.Join(home, ".local", "share", "jhon")}
 	var out, errs bytes.Buffer
 	o := &Out{W: &out, E: &errs}

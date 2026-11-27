@@ -52,6 +52,7 @@ func newPublishBox(t *testing.T) publishBox {
 	}
 	b.git("init", "-q")
 	b.write("engine/cmd/jhon/main.go", "package main\n\nfunc main() {}\n", 0o755)
+	b.write("go.mod", "module github.com/jachavarro2004/jhon-agent\n\ngo 1.21\n", 0o644)
 	b.write("tools/git-hooks/pre-push", "#!/bin/sh\ncat > '"+filepath.Join(b.markers, "committed-hook")+"'\n", 0o755)
 	b.git("add", "-A")
 	b.git("commit", "-q", "-m", "one")
@@ -343,5 +344,88 @@ func TestPushCmdRunsNoProxySignerOrLocalReceivePackTheRepositoryNames(t *testing
 				t.Errorf("exit %d, %q; want pushed, unsigned", code, out)
 			}
 		})
+	}
+}
+
+// T250 (the re-verify of d6b1d19, the url residual): a sandboxed command can
+// set remote.origin.url, and publish took it, pushed and moved origin/main.
+// The target is pinned: it must be the release repository the commit's own
+// go.mod names (github.com/jachavarro2004/jhon-agent), as git@, ssh:// or
+// https:// on its host, or what the owner's own global insteadOf makes of
+// one (git@github-personal:… in his configuration). Anything else refuses,
+// naming the url, its origin and the expected repository.
+func TestPublishPushesOnlyToTheReleaseRepository(t *testing.T) {
+	for _, c := range []struct {
+		name, url string
+		ok        bool
+	}{
+		{"the verify's plant", "git@evil.example:attacker/x.git", false},
+		{"the owner's alias, as his checkout names it", "git@github-personal:jachavarro2004/jhon-agent.git", true},
+		{"github over ssh", "git@github.com:jachavarro2004/jhon-agent.git", true},
+		{"github over ssh, no .git", "git@github.com:jachavarro2004/jhon-agent", true},
+		{"github over https", "https://github.com/jachavarro2004/jhon-agent", true},
+		{"another repository of the owner's", "git@github-personal:jachavarro2004/other.git", false},
+		{"another owner's on github", "git@github.com:attacker/jhon-agent.git", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			b := newPublishBox(t)
+			// The stand-in serves every github form, as GitHub would.
+			f, _ := os.OpenFile(b.global, os.O_APPEND|os.O_WRONLY, 0)
+			f.WriteString("[url \"git@github-personal:jachavarro2004/jhon-agent.git\"]\n\tinsteadOf = https://github.com/jachavarro2004/jhon-agent\n")
+			f.Close()
+			b.git("remote", "set-url", "origin", c.url)
+			code, out := publish(b.r)
+			if c.ok {
+				if code != 0 || b.pushed() != b.commit {
+					t.Errorf("exit %d, %q; want pushed", code, out)
+				}
+				return
+			}
+			want := "jhon: remote.origin.url = " + c.url + " (file:.git/config) is not the release repository github.com/jachavarro2004/jhon-agent (the module go.mod names at " + b.commit[:7] + ")"
+			if code == 0 || !strings.Contains(out, want) || !strings.Contains(out, "; nothing was pushed; fix: ") || b.pushed() != "" || b.ran("committed-hook") {
+				t.Errorf("exit %d, %q; want refused before the hook with %q", code, out, want)
+			}
+			if _, err := exec.Command("git", "-C", b.src, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main").Output(); err == nil {
+				t.Error("origin/main moved")
+			}
+		})
+	}
+	// go.mod is read from the commit, not the work tree.
+	t.Run("a go.mod changed in the work tree", func(t *testing.T) {
+		b := newPublishBox(t)
+		b.write("go.mod", "module github.com/attacker/x\n", 0o644)
+		b.git("update-index", "--assume-unchanged", "go.mod")
+		b.git("remote", "set-url", "origin", "git@github.com:attacker/x.git")
+		if code, out := publish(b.r); code == 0 || !strings.Contains(out, "is not the release repository github.com/jachavarro2004/jhon-agent") {
+			t.Errorf("exit %d, %q; want refused against the committed module", code, out)
+		}
+	})
+}
+
+// T250 (the re-verify of d6b1d19, advisory 1): the committed hook's own git
+// calls run no external diff or textconv the repository's configuration
+// names: a hook that runs `git log -p -1`, `git show` and `git diff`.
+func TestTheCommittedHooksGitRunsNoDiffProgramTheRepositoryNames(t *testing.T) {
+	b := newPublishBox(t)
+	b.write(".gitattributes", "*.go diff=y\n", 0o644)
+	b.write("tools/git-hooks/pre-push", "#!/bin/sh\ncat > /dev/null\ngit log -p -1 > /dev/null\ngit show HEAD > /dev/null\ngit diff HEAD~1 > /dev/null\ntouch '"+filepath.Join(b.markers, "committed-hook")+"'\nexit 0\n", 0o755)
+	b.write("engine/cmd/jhon/main.go", "package main\n\nfunc main() { _ = 2 }\n", 0o644)
+	b.git("add", "-A")
+	b.git("commit", "-q", "-m", "two")
+	two := b.git("rev-parse", "HEAD")
+	os.Remove(filepath.Join(b.r.Share, "current"))
+	os.MkdirAll(filepath.Join(b.r.Share, "releases", two), 0o755)
+	os.Symlink(filepath.Join(b.r.Share, "releases", two), filepath.Join(b.r.Share, "current"))
+	b.git("config", "diff.external", b.plant("external"))
+	b.git("config", "diff.y.textconv", b.plant("textconv"))
+	b.git("config", "diff.y.command", b.plant("diff-command"))
+	code, out := publish(b.r)
+	for _, m := range []string{"external", "textconv", "diff-command"} {
+		if b.ran(m) {
+			t.Errorf("the hook's git ran the repository's %s (exit %d, %q)", m, code, out)
+		}
+	}
+	if !b.ran("committed-hook") {
+		t.Errorf("the committed hook did not run to its end (exit %d, %q)", code, out)
 	}
 }

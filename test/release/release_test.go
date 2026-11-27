@@ -268,21 +268,34 @@ func equal[T any](t *testing.T, got, want T, msg ...any) {
 	}
 }
 
-// bareRemote is a bare repository registered as remote name of src.
 // standInSSH is an ssh that runs on this machine the program git asks the
 // far end for, as sshd would: the stand-in for a real remote reached over
 // ssh, as `jhon publish` pushes only to an ssh or https remote (T250).
 const standInSSH = "#!/bin/sh\nfor a; do last=$a; done\nexec sh -c \"$last\"\n"
 
-// bareRemote is a bare repository the source names as remote name,
-// reached over ssh (git@jhon-test-ssh:<path>) through the scratch home's
-// standInSSH.
-func bareRemote(t *testing.T, src, name string) string {
+// releaseForms are the release repository's addresses (go.mod's module,
+// github.com/jachavarro2004/jhon-agent) a remote of the scratch source
+// names: `jhon publish` pushes only there (T250).
+var releaseForms = map[string]string{"origin": "git@github.com:jachavarro2004/jhon-agent.git", "mirror": "https://github.com/jachavarro2004/jhon-agent"}
+
+// bareRemote is a bare repository the source names as remote name, by one
+// of the release repository's addresses, which the scratch home's global
+// configuration maps to it over ssh (git@jhon-test-ssh:<path>, through the
+// home's standInSSH), as the owner's maps github.com to his ssh alias.
+func bareRemote(t *testing.T, env scratch, src, name string) string {
 	t.Helper()
 	parent := temp(t)
 	bare := filepath.Join(parent, name+".git")
 	support.Git(t, parent, "init", "-q", "--bare", bare)
-	support.Git(t, src, "remote", "add", name, "git@jhon-test-ssh:"+bare)
+	support.Git(t, src, "remote", "add", name, releaseForms[name])
+	f, err := os.OpenFile(filepath.Join(env.home, ".gitconfig"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString("[url \"git@jhon-test-ssh:" + bare + "\"]\n\tinsteadOf = " + releaseForms[name] + "\n"); err != nil {
+		t.Fatal(err)
+	}
 	return bare
 }
 
@@ -592,8 +605,8 @@ func TestRelease(t *testing.T) {
 		parallel(t)
 		env := scratchHome(t)
 		src := scratchSource(t)
-		origin := bareRemote(t, src, "origin")
-		mirror := bareRemote(t, src, "mirror")
+		origin := bareRemote(t, env, src, "origin")
+		mirror := bareRemote(t, env, src, "mirror")
 		r := syncOf(t, env, src)
 		wantCode(t, r, 0)
 		equal(t, realpath(t, filepath.Join(share(env.home), "current")), filepath.Join(share(env.home), "releases", head(t, src)))
@@ -605,8 +618,8 @@ func TestRelease(t *testing.T) {
 		parallel(t)
 		env := scratchHome(t)
 		src := scratchSource(t)
-		origin := bareRemote(t, src, "origin")
-		mirror := bareRemote(t, src, "mirror")
+		origin := bareRemote(t, env, src, "origin")
+		mirror := bareRemote(t, env, src, "mirror")
 		wantCode(t, syncOf(t, env, src), 0)
 		r := run(t, env, cliOf(src), []string{"publish"})
 		wantCode(t, r, 0)
@@ -618,7 +631,7 @@ func TestRelease(t *testing.T) {
 		parallel(t)
 		env := scratchHome(t)
 		src := scratchSource(t)
-		origin := bareRemote(t, src, "origin")
+		origin := bareRemote(t, env, src, "origin")
 		wantCode(t, syncOf(t, env, src), 0)
 		appendTo(t, filepath.Join(src, "prose", "skills", "ldd", "references", "apply.md"), "\nuncommitted\n")
 		dirty := run(t, env, cliOf(src), []string{"publish"})
