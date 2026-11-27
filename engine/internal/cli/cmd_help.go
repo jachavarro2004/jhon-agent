@@ -134,7 +134,7 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            locks nothing); a development clone at
                            ~/.local/share/jhon-studio is left alone; exit 2
                            without a terminal
-  jhon start [<claude args>]
+  jhon start [--approve-hooks] [<claude args>]
                            start a Jhon session: claude --agent jhon-orchestrator
                            with the release's plugin, which carries the
                            /jhon-ldd command; every other argument goes to
@@ -158,8 +158,13 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            with -p/--print, where --agent already makes the
                            orchestrator the system prompt, it sets
                            JHON_AGENT_LOADED=jhon-orchestrator and the
-                           session's start hands it no second copy
-  jhon start pi [<pi args>]
+                           session's start hands it no second copy;
+                           before it launches, the hooks, extensions and MCP
+                           servers here are compared with what you last
+                           approved, and a change is shown and asked about
+                           (no terminal: nothing starts, exit 1);
+                           --approve-hooks approves it without asking
+  jhon start pi [--approve-hooks] [<pi args>]
                            start pi on Jhon's agent directory, ~/.pi/jhon (the
                            orchestrator, the agents, and the guards); every
                            other argument goes to pi; a jhon-studio that is on
@@ -169,7 +174,9 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            before a render wrote ~/.pi/jhon/settings.json it
                            runs nothing, exit 1, and names the fix (on a
                            release install, jhon setup with pi among its
-                           runtimes; from a source checkout, jhon sync)
+                           runtimes; from a source checkout, jhon sync);
+                           the same check of what runs here, and the same
+                           --approve-hooks, as jhon start
                            both set CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS=60000
                            (Claude Code retries an API that sends nothing after
                            60 s, not minutes) unless it is already set

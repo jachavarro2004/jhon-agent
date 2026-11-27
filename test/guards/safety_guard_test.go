@@ -838,6 +838,61 @@ func TestSafetyGuardSessionWithPromptsAllowed(t *testing.T) {
 	}
 }
 
+// T266: `jhon start --approve-hooks` approves, as the owner, what a
+// session runs outside the sandbox, so an agent that planted a hook could
+// approve it itself. Run by an agent it is asked at the top level (the
+// settings question, which no grant and no mode answers) and refused to a
+// sub-agent, read through the same reader as every line: behind env, a
+// shell's -c, a pane run, or a path to the binary.
+var sgApproveHooks = []string{
+	"jhon start --approve-hooks",
+	"jhon start pi --approve-hooks",
+	"jhon start --approve-hooks pi -p hi",
+	"jhon start --resume abc --approve-hooks",
+	"env JHON_TELEMETRY=off jhon start --approve-hooks",
+	"JHON_CLAUDE=/bin/true jhon start --approve-hooks",
+	"bash -c 'jhon start pi --approve-hooks'",
+	"sh -c \"cd /tmp && jhon start --approve-hooks -p x\"",
+	"./bin/jhon start --approve-hooks",
+	"/home/jhon-safety-test/.local/bin/jhon start pi --approve-hooks",
+	"herdr pane run w1:p2 'jhon start --approve-hooks'",
+}
+
+func TestSafetyGuardAsksAnAgentsApproveHooks(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"normal", "super-yolo"} {
+		s := newSG(t)
+		s.setMode(t, s.p, mode)
+		for _, c := range sgApproveHooks {
+			label := mode + ": " + c
+			sub := s.bash(t, c, sgOpts{})
+			code(t, sub, 2, "sub-agent "+label)
+			matches(t, sub.Stderr, "settings: jhon start --approve-hooks: it approves, for the owner, the hooks, extensions and MCP servers a session runs outside the sandbox; it is refused outside a prompt the owner can answer", "sub-agent "+label)
+			tp := s.bash(t, c, top())
+			code(t, tp, 0, "top-level "+label)
+			matches(t, askedWhy(t, tp.Stdout, "top-level "+label), `(^|; )settings: jhon start --approve-hooks: `, "top-level "+label)
+		}
+	}
+}
+
+// A start without the flag keeps its verdict (PRESERVE): it passes with no
+// decision and no note, for a sub-agent and at the top level, and a prompt
+// that only mentions the flag is no flag.
+func TestSafetyGuardStartWithoutApproveHooksKeepsItsVerdict(t *testing.T) {
+	t.Parallel()
+	s := newSG(t)
+	for _, c := range []string{"jhon start", "jhon start pi", "jhon start --resume abc", "jhon start pi -p hi",
+		"jhon start -p 'what does --approve-hooks do?'", "jhon start --help"} {
+		for _, o := range []sgOpts{{}, top()} {
+			r := s.bash(t, c, o)
+			code(t, r, 0, c)
+			if r.Stdout != "" {
+				t.Errorf("%s: printed %q", c, r.Stdout)
+			}
+		}
+	}
+}
+
 func TestSafetyGuardPaneRunJudged(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)

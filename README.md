@@ -522,6 +522,38 @@ Every rule is a hypothesis with its evidence, and the evidence is measured.
 | The dashboard | `jhon dashboard`, or `/jhon:dashboard` in the shell | A read-only page on http://127.0.0.1:7480: Home, Sessions (each with its audit), Changes, Usage (tokens per day, money where pi recorded it, never estimated), Memory (Engram and MEMORY.md, read only) and Telemetry. |
 | The audit | `jhon audit <session>`, `jhon audit --all` | What a session did against the rules, read-only; exit 1 only on a verified violation. |
 
+Before either start launches anything, it checks what runs outside the
+sandbox in the folder you start in and its repository's top, against what
+you last approved there: a sandboxed command can write a sibling worktree or
+another project inside `sandbox.allow_write`, and a hook, an extension or an
+MCP server planted there would run, unsandboxed, at the next session.
+What counts is only what runs: `.claude/settings.json` and
+`.claude/settings.local.json` without the keys that run nothing and that Claude
+Code writes itself (`permissions`, the model, the MCP file's servers
+enabled), `.claude/hooks/`, a skill's, agent's or command's frontmatter
+`hooks` and `mcpServers` and its ``!`…` `` lines, the MCP file (.mcp.json), `.pi/mcp.json`,
+`.pi/settings.json`, `.pi/extensions/`, `.pi/skills/`, and a file of the
+project a hook's or a server's command names. Prose, rules and permissions
+never ask (in the owner's last 30 days, none of the 10 commits under a
+project's `.claude/` changed what runs). When it changed, the start shows
+each file new, changed or removed with the lines added and removed (an
+`env` or `headers` value, a key that names a secret and a url's password
+show as `…`) and asks `approve these and start Claude Code? [y/N]`; only y
+starts it and records the approval. With no terminal to ask on it starts
+nothing (exit 1) and says to run `jhon start --approve-hooks` (`jhon start
+pi --approve-hooks`), which shows the same list, records it and starts. The
+approvals live in jhon's state folder
+(~/.local/state/jhon/hook-approvals/), read-only to every sandboxed command
+and kept from every agent by the guards; an agent's `jhon start
+--approve-hooks` (behind `env`, a shell's `-c`, a pane run or a path to the
+binary too) is asked at the top level, as the settings question no grant and
+no mode answers, and refused to a sub-agent. A folder never approved records
+without asking when nothing runs there, or when HEAD holds each counted file
+as it is on the disk (its blob, so no index flag hides a change) and, if
+another worktree of the repository was approved, it matches one of them;
+anything else asks once. A commit is no approval: a sandboxed command can
+commit too, so a hook you change and commit asks once at the next start.
+
 The shell talks to Jhon only through the binary (`shell/CONTRACT.md`).
 Its commands:
 
@@ -658,7 +690,7 @@ own help.
 | Command | Does |
 |---|---|
 | `jhon setup` | the setup wizard, on a terminal |
-| `jhon start [pi]` | start a session in Claude Code, or in pi |
+| `jhon start [pi]` | start a session in Claude Code, or in pi; `--approve-hooks` approves a changed hook, extension or MCP server without asking |
 | `jhon status [<change>]` | where a change stands: artifacts, tasks, last run, advisory next step; never a gate |
 | `jhon risk` | the change's risk tier against the default branch, with a reason per file |
 | `jhon executions run <change>` | run and record the change's tests (`--affected`, `prime`, `verify`) |

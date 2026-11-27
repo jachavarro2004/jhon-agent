@@ -28,13 +28,24 @@ import (
 // Code's first-byte window (firstByteEnv) and the project its sandboxed
 // commands are pinned to (sandboxProjectEnv). A cli integration that is on
 // (jhon-studio, odd/tasks/jhon-studio.md S3) adds its own plugin to the
-// Claude Code launch (launchPlugins). The program replaces this process;
-// JHON_CLAUDE and JHON_PI name another.
+// Claude Code launch (launchPlugins). Before either launch, what runs
+// outside the sandbox in the roots the runtime reads is checked against
+// what the owner last approved (hooksApproved, T266); --approve-hooks,
+// first or right after `pi`, approves a change without asking. The
+// program replaces this process; JHON_CLAUDE and JHON_PI name another.
 func init() { register("start", runStart) }
 
 func runStart(argv []string) (int, error) {
+	approve := false
+	if len(argv) > 0 && argv[0] == approveHooksFlag {
+		approve, argv = true, argv[1:]
+	}
 	if len(argv) > 0 && argv[0] == "pi" {
-		return startPi(argv[1:])
+		rest := argv[1:]
+		if len(rest) > 0 && rest[0] == approveHooksFlag {
+			approve, rest = true, rest[1:]
+		}
+		return startPi(rest, approve)
 	}
 	for _, a := range argv {
 		flag, _, _ := strings.Cut(a, "=")
@@ -43,6 +54,9 @@ func runStart(argv []string) (int, error) {
 			fmt.Fprintf(o.E, "%sjhon:%s jhon start sets %s itself\nusage: jhon start [<claude args>]\n", o.R, o.Z, flag)
 			return 2, nil
 		}
+	}
+	if code, ok := hooksApproved("Claude Code", "jhon start", approve); !ok {
+		return code, nil
 	}
 	plugin := release.Locate().Runtime + "/" + render.PluginDir
 	args := []string{"--agent", "jhon-orchestrator", "--plugin-dir", plugin}
@@ -196,8 +210,9 @@ func firstByteEnv(env []string) []string {
 // fit this jhon is off for the session, with its note (toolsOffEnv).
 // Before a render wrote the directory it names the fix: jhon sync from a
 // source checkout, jhon setup with pi among its runtimes on a release
-// install, which has no checkout to sync (T8b).
-func startPi(argv []string) (int, error) {
+// install, which has no checkout to sync (T8b). Then the launch check
+// (hooksApproved), as for Claude Code.
+func startPi(argv []string, approve bool) (int, error) {
 	dir := os.Getenv("HOME") + "/.pi/jhon"
 	if !release.IsFile(dir + "/settings.json") {
 		// The message names dir in full, $HOME expanded, never as ~.
@@ -208,6 +223,9 @@ func startPi(argv []string) (int, error) {
 		}
 		fmt.Fprintf(o.E, "%sjhon:%s %s has no settings.json; %s\n", o.R, o.Z, dir, fix)
 		return 1, nil
+	}
+	if code, ok := hooksApproved("pi", "jhon start pi", approve); !ok {
+		return code, nil
 	}
 	env, notes := toolsOffEnv(withEnv(firstByteEnv(sandboxProjectEnv(os.Environ())), "PI_CODING_AGENT_DIR="+dir))
 	for _, n := range notes {

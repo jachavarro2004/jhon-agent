@@ -1291,6 +1291,28 @@ func bypassFlag(name string, args []string) string {
 	return ""
 }
 
+// approveHooksWhat is what an agent's `jhon start --approve-hooks` does.
+const approveHooksWhat = "jhon start --approve-hooks: it approves, for the owner, the hooks, extensions and MCP servers a session runs outside the sandbox"
+
+// judgeApproveHooks is the settings question of a `jhon start` that
+// approves what runs outside the sandbox (T266): `jhon start` checks the
+// hooks, extensions and MCP servers of the roots it starts in against the
+// owner's approval, and --approve-hooks records a change as approved
+// without asking, so an agent that planted one could approve it itself.
+// The question is the settings one, which no grant and no mode answers:
+// asked at the top level, refused to a sub-agent. The flag counts wherever
+// it stands among the words, an argument the runtime would get included
+// (fail closed); a prompt that only mentions it is no flag.
+func judgeApproveHooks(name string, args []string) []Finding {
+	if name != "jhon" || at(args, 0) != "start" {
+		return nil
+	}
+	if slices.ContainsFunc(args[1:], func(a string) bool { return a == "--approve-hooks" || strings.HasPrefix(a, "--approve-hooks=") }) {
+		return []Finding{ask("settings", approveHooksWhat)}
+	}
+	return nil
+}
+
 // hookFlags are claude's flags that can leave out the plugin that carries
 // Jhon's hooks, or turn its hooks off.
 var hookFlags = []string{"--settings", "--setting-sources", "--bare"}
@@ -1351,8 +1373,12 @@ func judgeOutward(name string, args []string, env map[string]string) []Finding {
 	first, hasFirst := at(ops, 0), len(ops) > 0
 	in := func(s string, xs ...string) bool { return slices.Contains(xs, s) }
 	A := func(cls, what string) []Finding { return []Finding{ask(cls, what)} }
+	approve := judgeApproveHooks(name, args)
 	if f, ok := judgeBypassLaunch(name, args, env); ok {
-		return f
+		return append(approve, f...)
+	}
+	if approve != nil {
+		return approve
 	}
 	if in(name, "npm", "pnpm", "yarn", "bun") && !in(first, "run", "exec", "dlx", "x", "run-script") && slices.Contains(ops[:min(3, len(ops))], "publish") {
 		return A("publish", name+" publish")
