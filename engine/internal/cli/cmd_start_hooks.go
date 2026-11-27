@@ -62,7 +62,10 @@ import (
 //
 // A root never approved records without asking only when nothing runs
 // there (L1768: a commit is no approval, as a sandboxed command can
-// commit); anything else asks once, "(first start here)". `jhon sync`,
+// commit), or when every file that runs there equals what an approved
+// sibling worktree of the same repository has on record (siblingShared,
+// L1782); anything else asks once, "(first start here)", showing only the
+// files no approved sibling shares. `jhon sync`,
 // from the owner's terminal, seeds the roots he never started in
 // (seedHooks).
 
@@ -107,7 +110,11 @@ func masked(files []hookFile) []hookFile {
 
 // A hookRecord is what the owner approved for a root.
 type hookRecord struct {
-	Root       string     `json:"root"`
+	Root string `json:"root"`
+	// Common is the root's git common dir when it was approved, as
+	// project.ReadRepo proved it from the disk: what makes another root a
+	// worktree of the same repository (siblingShared).
+	Common     string     `json:"common,omitempty"`
 	ApprovedAt string     `json:"approved_at"`
 	Files      []hookFile `json:"files"`
 }
@@ -136,6 +143,9 @@ func hooksApproved(runtime, cmd string, approve bool) (int, bool) {
 		root  string
 		rec   *hookRecord
 		files []hookFile
+		// shared are the files of a first-seen root that an approved
+		// sibling worktree has on record, which the question leaves out.
+		shared []hookFile
 	}
 	var asks []pending
 	var silent []hookRecord
@@ -144,10 +154,15 @@ func hooksApproved(runtime, cmd string, approve bool) (int, bool) {
 		rec, _ := readHookRecord(root)
 		switch {
 		case rec != nil && sameHooks(rec.Files, files):
-		case rec == nil && len(files) == 0:
-			silent = append(silent, newHookRecord(root, files))
+		case rec != nil:
+			asks = append(asks, pending{root, rec, masked(files), nil})
 		default:
-			asks = append(asks, pending{root, rec, masked(files)})
+			shared := siblingShared(root, files)
+			if len(shared) == len(files) {
+				silent = append(silent, newHookRecord(root, masked(files)))
+			} else {
+				asks = append(asks, pending{root, nil, masked(files), shared})
+			}
 		}
 	}
 	for _, r := range silent {
@@ -165,6 +180,7 @@ func hooksApproved(runtime, cmd string, approve bool) (int, bool) {
 			before = p.rec.Files
 			fmt.Fprintf(&b, "  %s\n", p.root)
 		} else {
+			before = p.shared
 			fmt.Fprintf(&b, "  %s (first start here)\n", p.root)
 		}
 		b.WriteString(hookChanges(before, p.files))
@@ -261,11 +277,51 @@ func readHookRecord(root string) (*hookRecord, error) {
 }
 
 func newHookRecord(root string, files []hookFile) hookRecord {
-	r := hookRecord{Root: root, ApprovedAt: isodate.Format(time.Now()), Files: files}
+	r := hookRecord{Root: root, Common: project.ReadRepo(root).Common, ApprovedAt: isodate.Format(time.Now()), Files: files}
 	if r.Files == nil {
 		r.Files = []hookFile{}
 	}
 	return r
+}
+
+// siblingShared are the files of a root never approved that equal, by
+// path and content, a file an approved sibling worktree has on record: a
+// record of another root whose common dir, proven when the owner approved
+// it, is the one project.ReadRepo proves for root now (no git program
+// runs). The records live in jhon's state folder, which the sandbox mounts
+// read-only, so a sandboxed command can plant no sibling; and a root that
+// only claims the repository gains nothing the owner did not approve. The
+// owner makes a worktree per task (L1782): one equal to an approved
+// sibling starts with no question.
+func siblingShared(root string, files []hookFile) []hookFile {
+	common := project.ReadRepo(root).Common
+	if common == "" || len(files) == 0 {
+		return nil
+	}
+	type key struct{ path, sum string }
+	approved := map[key]bool{}
+	entries, _ := os.ReadDir(hookRecordDir())
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".json") || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		file := filepath.Join(hookRecordDir(), e.Name())
+		b, err := os.ReadFile(file)
+		var r hookRecord
+		if err != nil || json.Unmarshal(b, &r) != nil || r.Root == root || r.Common != common || hookRecordPath(r.Root) != file {
+			continue
+		}
+		for _, f := range r.Files {
+			approved[key{f.Path, f.Sum}] = true
+		}
+	}
+	var shared []hookFile
+	for _, f := range files {
+		if approved[key{f.Path, f.Sum}] {
+			shared = append(shared, f)
+		}
+	}
+	return shared
 }
 
 // writeHookRecord replaces root's record, written beside it and renamed.
