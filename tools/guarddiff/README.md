@@ -25,12 +25,15 @@ changed verdict is not on the allow list, 2 when the run cannot be made, 0 other
   uncommitted behaviour change), `ldd` (the same with LDD and the change's record), `folder` (no repository),
   `corpus` (corpus_test.go's tree); `ldd` and `repo` take a mode (`ldd:yolo`, `repo:super-yolo`), which each
   binary sets itself with `jhon mode`. Callers: `top-default`, `top-bypass`, `subagent` (a `worker`, jhon-builder's old name, which both binaries read, launched
-  with the surfaces `src/a.ts`, `src/parse/`, `svc/src/**`, so scope-guard judges it).
+  with the surfaces `src/a.ts`, `src/parse/`, `svc/src/**`, so scope-guard judges it), and `inspector`, named only
+  explicitly (`*` is the other three): a Prism facet (`prism-safety`) whose call runs inspect-guard first, with the
+  `inspect_allow` of each binary's own tree (prose/agents.yaml), then safety, framework, secrets and route-guard (T271).
 - **The set** (`test/guards/corpus/*.tsv`): the corpus (8 columns, corpus_test.go; a safety-guard line runs at
   the top level, the others in the sub-agent), and 6-column lines `place, fixture, caller, tool, input, source`
   where a place or caller is a name, a comma list or `*` (every one) and the input is Go-quoted (a Bash command,
   else the tool input as JSON, with the placeholders above): `matrix.tsv` (the T59 matrix,
-  TestGuarddiffMatrixRows), `rows.tsv` (route-guard and scope-guard) and `fuzz.tsv` (generated, never edited).
+  TestGuarddiffMatrixRows), `rows.tsv` (route-guard and scope-guard), `inspect.tsv` (the inspector's lines, T271) and
+  `fuzz.tsv` (generated, never edited).
   A line's id is `file:line`, with `@place/caller` for a 6-column one.
 - **The allow list** (`allow.tsv`): `id, guard, old, new, why`, tab-separated; `*` matches any value.
 - **The baseline** (`baseline.txt`): v0.3.7 against the head this tool landed on: no changed verdict.

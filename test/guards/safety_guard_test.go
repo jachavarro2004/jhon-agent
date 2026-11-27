@@ -1211,8 +1211,9 @@ var sgAllow = []string{
 	"f() { echo x >> /tmp/$1.log; }; f a",
 	// Listing the grants changes none.
 	"jhon grant --list",
-	// Reading a credentials file is not limited (L1366); a template is any file.
-	"cat .env",
+	// A credentials file is limited only where a listed reader prints it
+	// (T271, S10: cat .env is refused); a template is any file, and a glob
+	// that expands to no credentials file reaches none.
 	"source .env",
 	"cp .env /tmp/x",
 	"grep KEY .env*",

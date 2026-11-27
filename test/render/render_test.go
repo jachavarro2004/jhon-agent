@@ -755,7 +755,7 @@ func TestRenderValidateRules(t *testing.T) {
 	}
 }
 
-var inspectPrefixes = []string{"git diff", "git show", "git log", "git status", "codegraph callers", "codegraph impact", "codegraph affected", "jhon review freeze"}
+var inspectPrefixes = []string{"codegraph callers", "codegraph impact", "codegraph affected", "codegraph explore", "codegraph query", "jhon review freeze"}
 
 func TestRenderAgentTools(t *testing.T) {
 	t.Parallel()

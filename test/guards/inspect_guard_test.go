@@ -1,14 +1,15 @@
-// inspect-guard, the PreToolUse hook that confines the review facets' Bash
-// to the read-only prefixes declared in agents.yaml.
+// inspect-guard, the PreToolUse hook that keeps the review facets' Bash
+// read-only by construction (T271): a line passes when every program it runs
+// is on the read-only list and keeps its rule, or is one of Jhon's own
+// readers declared in agents.yaml (inspect_allow).
 //
 // The guard is spawned exactly as Claude Code runs it: the hook payload on
-// stdin, the allowed prefixes as arguments. Exit 0 allows; exit 2 blocks.
+// stdin, Jhon's readers as arguments. Exit 0 allows; exit 2 blocks.
 
 package guards
 
 import (
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -47,6 +48,10 @@ func TestInspectGuardAllows(t *testing.T) {
 		"git diff HEAD~1 HEAD",
 		"codegraph callers foo",
 		"jhon review freeze --base main", // each facet freezes for itself (contracts/review-prism.md)
+		// T271: what was refused only for its spelling.
+		"git diff && echo",
+		"git diff ~/x",
+		"git diff 'a b'",
 	} {
 		t.Run(command, func(t *testing.T) {
 			t.Parallel()
@@ -60,7 +65,6 @@ func TestInspectGuardDenies(t *testing.T) {
 	for _, command := range []string{
 		"git checkout .",
 		"git diff; rm -rf x",
-		"git diff && echo",
 		"git diff | sh",
 		"git diff $(id)",
 		"git diff `id`",
@@ -75,8 +79,6 @@ func TestInspectGuardDenies(t *testing.T) {
 		"codegraph init .",
 		"git push",
 		"git diff *",
-		"git diff ~/x",
-		"git diff 'a b'",
 		"git diff\nrm -rf x",
 	} {
 		t.Run(strconv.Quote(command), func(t *testing.T) {
@@ -99,11 +101,6 @@ func TestInspectGuardDeniesBashWithoutCommand(t *testing.T) {
 func TestInspectGuardAllowsNonBash(t *testing.T) {
 	t.Parallel()
 	code(t, inspectRaw(t, map[string]any{"tool_name": "Read", "tool_input": map[string]any{"file_path": "/etc/passwd"}}), 0, "Read")
-}
-
-func TestInspectGuardNoPrefixesDeniesAll(t *testing.T) {
-	t.Parallel()
-	code(t, hook(t, nil, "inspect-guard", nil, map[string]any{"tool_name": "Bash", "tool_input": cmd("git diff")}), 2, "no prefixes")
 }
 
 // ── owner scoping ───────────────────────────────────────────────────────────
@@ -158,9 +155,10 @@ func TestInspectGuardOwnerScoping(t *testing.T) {
 	}
 }
 
+// The owner's name is never read as one of Jhon's readers.
 func TestInspectGuardOwnerNameIsNotAPrefix(t *testing.T) {
 	t.Parallel()
-	code(t, inspectScoped(t, "git", []string{"git diff"}, "git log", ptr("git")), 2, "git log")
+	code(t, inspectScoped(t, "codegraph", []string{"codegraph callers"}, "codegraph init", ptr("codegraph")), 2, "codegraph init")
 }
 
 func TestInspectGuardWithoutAgentJudgesEveryCaller(t *testing.T) {
@@ -173,81 +171,41 @@ func TestInspectGuardAgentWithoutNameFailsClosed(t *testing.T) {
 	code(t, hook(t, nil, "inspect-guard", []string{"--agent"}, map[string]any{"tool_name": "Bash", "agent_type": "general", "tool_input": cmd("git diff")}), 2, "--agent")
 }
 
-// ── declared allowed forms (docket AA5) ─────────────────────────────────────
-// A refusal that concerns only the form of a command declares the forms this
-// guard allows, on its own line, so an agent and `jhon audit` can tell a form
-// the same authority permits from a way around it. A refusal over an option
-// that writes a file or runs a program, and a refusal of the payload itself,
-// declare nothing: the form was never the issue.
+// ── the refusal (S11) ───────────────────────────────────────────────────────
+// A refusal names, on its first line, what it refused, why, and what to do
+// instead. No refusal declares `allowed forms` any more: nothing is judged by
+// its form (T271), so `jhon audit` reads no form a later call could match.
 
-func declared(err string) []string {
-	out := []string{}
-	for _, l := range strings.Split(err, "\n") {
-		if strings.HasPrefix(l, "allowed forms: ") {
-			out = append(out, l)
-		}
-	}
-	return out
-}
-
-func declares(t *testing.T, r support.Result, want []string) {
-	t.Helper()
-	if got := declared(r.Stderr); !reflect.DeepEqual(got, want) {
-		t.Errorf("declared %q; want %q: %s", got, want, r.Stderr)
-	}
-}
-
-func TestInspectGuardFormRefusalDeclaresForms(t *testing.T) {
+func TestInspectGuardRefusalNamesWhatWhyAndAFix(t *testing.T) {
 	t.Parallel()
-	for _, command := range []string{"git -C /work/p diff a b", "git checkout .", "git diff; rm -rf x", "git diff ~/x", "GIT_PAGER=cat git diff"} {
+	for _, command := range []string{"git checkout .", "git diff; rm -rf x", "git diff > f", "git diff --output=f", "GIT_PAGER=cat git diff", "git diff *"} {
 		t.Run(strconv.Quote(command), func(t *testing.T) {
 			t.Parallel()
 			r := inspectBash(t, command)
 			code(t, r, 2, command)
-			declares(t, r, []string{"allowed forms: " + strings.Join(inspectAllow, ", ")})
-		})
-	}
-}
-
-func TestInspectGuardReasonOnFirstLine(t *testing.T) {
-	t.Parallel()
-	r := inspectBash(t, "git checkout .")
-	matches(t, strings.Split(r.Stderr, "\n")[0], `^inspect-guard: command is outside this agent's Bash allowlist \(git diff, git show, `, "first line")
-}
-
-func TestInspectGuardOptionRefusalDeclaresNoForms(t *testing.T) {
-	t.Parallel()
-	for _, command := range []string{"git diff --output=f", "git show --textconv HEAD"} {
-		t.Run(command, func(t *testing.T) {
-			t.Parallel()
-			r := inspectBash(t, command)
-			code(t, r, 2, command)
-			declares(t, r, []string{})
+			matches(t, strings.Split(r.Stderr, "\n")[0], `^inspect-guard: \S.*: \S.*\. Instead: \S`, "first line")
+			if strings.Contains(r.Stderr, "allowed forms:") {
+				t.Errorf("%s declares forms: %s", command, r.Stderr)
+			}
 		})
 	}
 }
 
 func TestInspectGuardPayloadRefusalDeclaresNoForms(t *testing.T) {
 	t.Parallel()
-	declares(t, inspectRaw(t, "{not json"), []string{})
-	declares(t, inspectRaw(t, map[string]any{"tool_name": "Bash", "tool_input": map[string]any{}}), []string{})
+	for _, r := range []support.Result{inspectRaw(t, "{not json"), inspectRaw(t, map[string]any{"tool_name": "Bash", "tool_input": map[string]any{}})} {
+		if strings.Contains(r.Stderr, "allowed forms:") {
+			t.Errorf("declares forms: %s", r.Stderr)
+		}
+	}
 }
 
-func TestInspectGuardNoPrefixesDeclaresNoForms(t *testing.T) {
-	t.Parallel()
-	r := hook(t, nil, "inspect-guard", nil, map[string]any{"tool_name": "Bash", "tool_input": cmd("git diff")})
-	code(t, r, 2, "no prefixes")
-	declares(t, r, []string{})
-}
-
-// ── narrow read forms (docket F8 / AT1) ─────────────────────────────────────
-// Session 6506479f's orchestrator was refused two harmless reads and
-// delegated them to a worker: `git -C <its change's worktree> status --short`
-// (outside the allowlist) and `git rev-parse <rev>^{tree}` (shell syntax). The
-// guard now reads exactly these two forms: one leading `-C <path>` whose path
-// is inside the session's cwd or a linked worktree of the same repository,
-// and a `<rev>^{tree}` argument of a git command. Everything else stays
-// refused.
+// ── other repositories (docket F8, AT1; T271) ───────────────────────────────
+// Session 6506479f's orchestrator was refused two harmless reads: `git -C
+// <its change's worktree> status --short` and `git rev-parse <rev>^{tree}`;
+// a reviewer was refused `cd <dir> &&`, `2>/dev/null` and `| head`. Since
+// T271 a read is a read wherever it runs, as the Read tool's is: `cd` and
+// `git -C` reach any folder, and what writes, runs or fetches stays refused.
 
 var inspectOrch = append(append([]string{}, inspectAllow...), "git rev-parse")
 
@@ -273,7 +231,7 @@ func inCwd(t *testing.T, cwd, command string) support.Result {
 		map[string]any{"tool_name": "Bash", "cwd": cwd, "tool_input": cmd(command), "agent_type": "jhon-orchestrator"})
 }
 
-func TestInspectGuardF8DashCInProject(t *testing.T) {
+func TestInspectGuardReadsAnyRepository(t *testing.T) {
 	t.Parallel()
 	r := newInspectRepos(t)
 	for _, command := range []string{
@@ -281,81 +239,33 @@ func TestInspectGuardF8DashCInProject(t *testing.T) {
 		"git -C " + filepath.Join(r.project, "sub") + " status --short",
 		"git -C sub diff HEAD",
 		"git -C " + r.worktree + " rev-parse HEAD",
-	} {
-		code(t, inCwd(t, r.project, command), 0, command)
-	}
-}
-
-func TestInspectGuardF8TreeArgument(t *testing.T) {
-	t.Parallel()
-	r := newInspectRepos(t)
-	for _, command := range []string{"git rev-parse 9b1bde21^{tree}", "git diff HEAD~1^{tree} HEAD^{tree}", "git -C " + r.worktree + " rev-parse HEAD^{tree}"} {
-		code(t, inCwd(t, r.project, command), 0, command)
-	}
-}
-
-func TestInspectGuardF8OpensNothingElse(t *testing.T) {
-	t.Parallel()
-	r := newInspectRepos(t)
-	for _, command := range []string{
 		"git -C " + r.other + " status",
 		"git -C /tmp status",
-		"git -C " + r.project + " push",
-		"git -C " + r.project + " -c core.pager=sh diff",
 		"git -C " + r.project + " -C " + r.other + " status",
-		"git -C " + r.project + " diff --output=f",
-		"git -C " + r.project + " diff --ext-diff",
 		"git -C ~/x status",
-		"git -C",
-		"git rev-parse HEAD^{commit}",
-		"git rev-parse {tree}",
-		"git rev-parse HEAD^{tree}; rm x",
-		"git rev-parse HEAD^{tree} > f",
-		"codegraph callers x^{tree}",
-	} {
-		code(t, inCwd(t, r.project, command), 2, command)
-	}
-}
-
-// Docket AT1 (closed in AY B5): a reviewer was refused three harmless
-// wrappers around an allowed read. The guard now strips exactly these, then
-// judges what is left as before: one leading `cd <dir> &&` into the session's
-// project or its worktrees, a literal `2>/dev/null`, and one trailing
-// `| head`, `| tail` (with `-n N` or `-N`), or `| wc` (with `-l`, `-w`, or
-// `-c`). Any other shell syntax, and any wrapper around a refused command,
-// stays refused.
-func TestInspectGuardAT1Wrappers(t *testing.T) {
-	t.Parallel()
-	r := newInspectRepos(t)
-	for _, command := range []string{
-		"cd " + r.worktree + " && git diff HEAD~1 HEAD",
-		"cd sub && git status --short",
-		"git diff a b 2>/dev/null",
-		"git diff a b | head -n 40",
-		"git show HEAD:a.go | tail -20",
-		"git diff --name-only a b | wc -l",
-		"cd " + r.worktree + " && git diff a b 2>/dev/null | head -50",
-		"git rev-parse HEAD^{tree} 2>/dev/null",
+		"git rev-parse 9b1bde21^{tree}", "git diff HEAD~1^{tree} HEAD^{tree}", "git -C " + r.worktree + " rev-parse HEAD^{tree}",
+		"git rev-parse HEAD^{commit}", "git rev-parse {tree}", "codegraph callers x^{tree}",
+		"cd " + r.worktree + " && git diff HEAD~1 HEAD", "cd sub && git status --short", "cd " + r.other + " && git diff", "cd /tmp && git status",
+		"cd ~ && git diff", "cd sub && cd .. && git diff", "cd sub; git diff",
+		"git diff a b 2>/dev/null", "git diff >/dev/null", "git diff a b | head -n 40", "git show HEAD:a.go | tail -20",
+		"git diff --name-only a b | wc -l", "git diff | head -c 4", "git diff | tail -f", "git diff | wc -L", "git diff | head $(id)",
+		"cd " + r.worktree + " && git diff a b 2>/dev/null | head -50", "git rev-parse HEAD^{tree} 2>/dev/null",
 	} {
 		code(t, inCwd(t, r.project, command), 0, command)
 	}
 	for _, command := range []string{
-		"cd " + r.other + " && git diff",
-		"cd /tmp && git status",
-		"cd ~ && git diff",
+		"git -C " + r.project + " push",
+		"git -C " + r.project + " -c core.pager=sh diff",
+		"git -C " + r.project + " diff --output=f",
+		"git -C " + r.project + " diff --ext-diff",
+		"git rev-parse HEAD^{tree}; rm x",
+		"git rev-parse HEAD^{tree} > f",
 		"cd sub && git push",
-		"cd sub && cd .. && git diff",
 		"git diff 2>/dev/null > f",
 		"git diff 2>/tmp/x",
-		"git diff >/dev/null",
 		"git diff | head | sh",
 		"git diff | sh",
 		"git diff | head -n 4; rm -rf x",
-		"git diff | head -c 4",
-		"git diff | tail -f",
-		"git diff | wc -L",
-		"git diff | head $(id)",
-		"cd sub; git diff",
 		"git push 2>/dev/null",
 		"git checkout . | head",
 	} {

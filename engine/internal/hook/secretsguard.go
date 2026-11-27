@@ -11,9 +11,9 @@ import (
 // SecretsGuard refuses every agent's Read, Grep, Glob, Edit, MultiEdit, Write,
 // or NotebookEdit of a file that holds credentials (secrets-guard), and of
 // any file in a home credentials directory: the owner handles them. A
-// template of one (`.env.example`) passes like any file; a shell command
-// that writes or deletes one is safety-guard's; one that reads it is not
-// judged (L1366).
+// template of one (`.env.example`) passes like any file, and so does a
+// Grep glob that leaves files out (`!*.env`, T271); a shell command that
+// writes, deletes or prints one is safety-guard's (T271, S10).
 func SecretsGuard(args []string, io IO) int {
 	scoped, name, _ := owner(args)
 	var p Payload

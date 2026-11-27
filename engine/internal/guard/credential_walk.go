@@ -71,6 +71,12 @@ func globReachesFrom(dir, glob string) (found, ok bool) {
 // directory, a link it cannot read, an unreadable directory, or more than
 // globMaxEntries entries.
 func globReachesBelow(base, glob string) (found, ok bool) {
+	return globReachesBelowSkipping(base, glob, nil)
+}
+
+// globReachesBelowSkipping is globReachesBelow that does not descend into
+// a directory skip names by its path relative to base (nil: none).
+func globReachesBelowSkipping(base, glob string, skip func(rel string) bool) (found, ok bool) {
 	info, err := os.Lstat(base)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, true
@@ -94,6 +100,9 @@ func globReachesBelow(base, glob string) (found, ok bool) {
 			return errUnsafe
 		}
 		rel, _ := filepath.Rel(base, p)
+		if skip != nil && d.IsDir() && skip(filepath.ToSlash(rel)) {
+			return fs.SkipDir
+		}
 		hit := re.MatchString(filepath.ToSlash(rel))
 		if hit && strings.HasPrefix(d.Name(), "-") {
 			return errUnsafe // a name the program would read as an option
@@ -168,6 +177,11 @@ func credentialGlobWord(w string) bool {
 // leading `~` is the home directory), and the glob reaching, at any depth
 // under path, no credentials file.
 func ToolGlob(glob, path, cwd string) bool {
+	// A leading `!` leaves the files it matches out (rg's and the Grep
+	// tool's glob): naming a file to leave it out is no read (T271).
+	if strings.HasPrefix(glob, "!") {
+		return false
+	}
 	// A glob searched in a home credentials directory reads one under any name (T87c).
 	if isGlob(glob) {
 		dir := cwd

@@ -1,0 +1,30 @@
+# T271 rule 1, read-only by construction: lines a Prism facet runs (caller `inspector`: inspect-guard, safety,
+# framework, secrets and route guards), the shapes that pass now and their dangerous neighbours. guarddiff only.
+# place	fixture	caller	tool	input	source
+corpus	cred-near	inspector	Bash	"git grep -n -e alpha -e beta HEAD -- src/a.go docs/b.md"	T271
+corpus	cred-near	inspector	Bash	"git grep -n \"alpha\\|beta\" HEAD -- src"	T271
+corpus	cred-near	inspector	Bash	"git cat-file -t HEAD && git ls-tree -r --name-only HEAD -- src"	T271
+corpus	cred-near	inspector	Bash	"git blame -L 1,5 HEAD -- far.sh"	T271
+corpus	cred-near	inspector	Bash	"git diff HEAD -- . ':!snapshots' 'deploy/*.sh'"	T271
+corpus	cred-near	inspector	Bash	"git -C <OTHER> log --oneline -3 | head -2"	T271
+corpus	cred-near	inspector	Bash	"for f in far.sh far2.sh; do grep -c cd \"$f\"; done"	T271
+corpus	cred-near	inspector	Bash	"find deploy -name '*.sh' -exec grep -l echo {} + 2>/dev/null"	T271
+corpus	cred-near	inspector	Bash	"codegraph explore alpha"	T271
+corpus	cred-near	inspector	Bash	"git diff > out.txt"	T271
+corpus	cred-near	inspector	Bash	"git diff | tee out.txt"	T271
+corpus	cred-near	inspector	Bash	"sort -o out.txt dirs.txt"	T271
+corpus	cred-near	inspector	Bash	"find deploy -name '*.sh' -delete"	T271
+corpus	cred-near	inspector	Bash	"find deploy -exec rm {} +"	T271
+corpus	cred-near	inspector	Bash	"git ls-files | xargs sed -i s/a/b/"	T271
+corpus	cred-near	inspector	Bash	"rg --pre=sh alpha"	T271
+corpus	cred-near	inspector	Bash	"git -c core.pager=sh log"	T271
+corpus	cred-near	inspector	Bash	"git diff --output=out.txt"	T271
+corpus	cred-near	inspector	Bash	"git fetch origin"	T271
+corpus	cred-near	inspector	Bash	"python3 -c 'print(1)'"	T271
+corpus	cred-near	inspector	Bash	"PATH=/tmp git log"	T271
+corpus	cred-near	inspector	Bash	"git diff *"	T271
+corpus	cred-near	inspector	Bash	"curl https://example.invalid"	T271
+corpus	cred-near	inspector	Bash	"codegraph init ."	T271
+corpus	cred-near	inspector	Bash	"cat deep/sub/id_rsa"	T271
+corpus	cred-near	inspector	Bash	"rg x -g 'id_*' ."	T271
+corpus	cred-near	inspector	Bash	"rg x -g '!id_*' ."	T271

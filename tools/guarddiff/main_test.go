@@ -82,6 +82,48 @@ func TestChangedVerdictOnTheAllowListPasses(t *testing.T) {
 	}
 }
 
+// An inspector line (T271) runs a Prism facet's guards, inspect-guard first
+// with its tree's inspect_allow, and only when named: `*` keeps the three
+// callers.
+func TestInspectorRunsInspectGuardWithItsTreesForms(t *testing.T) {
+	dir := t.TempDir()
+	fake := func(name, judge string) string {
+		p := filepath.Join(dir, name)
+		script := "#!/bin/sh\ncase \"$1 $2 $3\" in\n\"hook pre-tool --matchers\") printf 'inspect-guard\\tBash\\nsafety-guard\\tBash\\n'; exit 0 ;;\nesac\n" + judge + "\n"
+		if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	// The new binary refuses when inspect-guard comes first with the tree's first form.
+	new := fake("new", `cat >/dev/null; if [ "$5" = inspect-guard ] && [ "$6" = "codegraph callers" ]; then echo 'inspect-guard: refused' >&2; exit 2; fi; exit 0`)
+	old := fake("old", `cat >/dev/null; exit 0`)
+	files := map[string]string{
+		"lines/set.tsv":                        "folder\tnone\tinspector\tBash\t\"ls\"\tt\nfolder\tnone\t*\tBash\t\"ls\"\tt\n",
+		"lines/trees.txt":                      "-- all proj/README --\nhi\n",
+		"root/prose/contracts/vocabulary.yaml": "vcs_dirs: [.git]\n",
+		"root/prose/agents.yaml":               "inspect_allow: [codegraph callers, jhon review freeze]\n",
+	}
+	for name, body := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root := filepath.Join(dir, "root")
+	var out, errs bytes.Buffer
+	code := run([]string{"--old", old, "--new", new, "--old-root", root, "--new-root", root, "--lines", filepath.Join(dir, "lines"), "--scratch", dir}, &out, &errs)
+	if code != 1 || !strings.Contains(out.String(), "set.tsv:1@folder/inspector\tinspect-guard\tallow -> refuse\tNOT ALLOWED") {
+		t.Errorf("exit %d: %s%s", code, out.String(), errs.String())
+	}
+	if !strings.Contains(out.String(), "guarddiff: 4 lines, 1 changed verdict ") {
+		t.Errorf("want the inspector line and the three callers of `*`, only inspect-guard's verdict changed: %s", out.String())
+	}
+}
+
 // The checked-in set reads, and its fuzz file is the generator's output.
 func TestCheckedInSet(t *testing.T) {
 	dir := filepath.Join("..", "..", "test", "guards", "corpus")

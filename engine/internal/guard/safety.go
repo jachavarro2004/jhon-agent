@@ -52,8 +52,11 @@ type State struct {
 	Dir       string
 	Lost      bool
 	FindPaths []string
-	Links     *Links
-	scoped    map[int64]dirState
+	// FindSelect is the last find's -name and -path globs that select what
+	// its -exec reads, the negated ones aside (credentialReads, T271).
+	FindSelect []string
+	Links      *Links
+	scoped     map[int64]dirState
 	// written is the files the line, or a script it runs, writes (T34b).
 	written map[string]bool
 }
@@ -604,6 +607,8 @@ func judgeOne(p sh.Program, redirects []*sh.Redirect, ctx *Ctx, vars map[string]
 	if f := classFinding(p, name, args, ctx, vars, st, depth); f != nil {
 		out = append(out, *f)
 	}
+	// A listed reader's operand that reaches a credentials file (T271, S10).
+	out = append(out, credentialReads(p, name, args, ctx, vars, st)...)
 	// xargs deleting or overwriting operands the guard cannot see (`find … |
 	// xargs rm -rf`) is the destructive core: asked, as in v0.3.7.
 	if slices.Contains(via, sh.XargsUnseen) && (xargsDestroy[name] || ((name == "sed" || name == "perl") && hasInPlace(args))) {
@@ -1049,6 +1054,12 @@ func judgeDelete(name string, args []string, p sh.Program, ctx *Ctx, vars map[st
 			}
 			execs = append(execs, args[j+1:e])
 			j = e
+		}
+		st.FindSelect = nil
+		for j := 0; j+1 < len(expr); j++ {
+			if findSelects[expr[j]] && (j == 0 || expr[j-1] != "!" && expr[j-1] != "-not") {
+				st.FindSelect = append(st.FindSelect, expr[j+1])
+			}
 		}
 		how := ""
 		if slices.Contains(expr, "-delete") {

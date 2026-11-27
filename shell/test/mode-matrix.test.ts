@@ -50,7 +50,7 @@ const TABLE: Row[] = [
   { name: "publish", kind: "ask", cls: "publish", passes: yoloUp, call: bash("npm publish") },
   { name: "deploy", kind: "ask", cls: "deploy", passes: yoloUp, call: bash("kubectl apply -f x.yaml") },
   { name: "credentials-read", kind: "refuse", call: (f) => ["read", { path: join(f.dir, ".env") }] },
-  { name: "credentials-bash", kind: "allow", call: bash("cat .env") },
+  { name: "credentials-bash", kind: "refuse", call: bash("cat .env") },
   { name: "settings-write", kind: "ask", cls: "settings", call: write((f) => join(f.dir, ".claude", "settings.json")) },
   { name: "git-config", kind: "ask", cls: "git-config", call: bash("git config core.hooksPath /tmp/h") },
   { name: "framework-write", kind: "refuse", call: write((f) => join(f.fw, "orchestrator.md")) },

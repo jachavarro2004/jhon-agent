@@ -49,9 +49,9 @@ secrets-guard	Grep	"{\"pattern\": \"x\", \"glob\": \"*.json\"}"	allow	none	L242	
 safety-guard	Bash	"cat i18n/**.json"	allow	none	L265	-	the owner's client-project read, no credentials file
 safety-guard	Bash	"cat i18n/**.json"	allow	cred-near	L265	-	T128f slice 6 (L1366): a read, which no guard limits; was: the owner's client-project read beside a credentials file
 safety-guard	Bash	"cat snapshots/*.json"	allow	none	L265	-	the owner's client-project read, no credentials file
-safety-guard	Bash	"cat snapshots/*.json"	allow	cred-near	L265	-	T128f slice 6 (L1366): a read, which no guard limits; was: the owner's client-project read beside a credentials file
+safety-guard	Bash	"cat snapshots/*.json"	refuse	cred-near	L265	-	T271 (S10): a listed reader prints a credentials file it reaches; was: T128f slice 6 (L1366): a read, which no guard limits; was: the owner's client-project read beside a credentials file
 safety-guard	Bash	"jq . snapshots/*.json"	allow	none	L265	-	the owner's client-project read, no credentials file
-safety-guard	Bash	"jq . snapshots/*.json"	allow	cred-near	L265	-	T128f slice 6 (L1366): a read, which no guard limits; was: the owner's client-project read beside a credentials file
+safety-guard	Bash	"jq . snapshots/*.json"	refuse	cred-near	L265	-	T271 (S10): a listed reader prints a credentials file it reaches; was: T128f slice 6 (L1366): a read, which no guard limits; was: the owner's client-project read beside a credentials file
 safety-guard	Bash	"wc -c i18n/**.json"	allow	none	L265	-	the owner's client-project read, no credentials file
 safety-guard	Bash	"wc -c i18n/**.json"	allow	cred-near	L265	-	T128f slice 6 (L1366): a read, which no guard limits; was: the owner's client-project read beside a credentials file
 safety-guard	Bash	"builtin source far.sh"	allow	cred-far	L265	-	G2.1: a sourced script that reads a credentials file elsewhere; T128f: the credentials file is outside the project, the sandbox's
@@ -99,14 +99,14 @@ safety-guard	Bash	"echo \"$(git rev-parse HEAD)\""	allow	none	L270	-	a substitut
 safety-guard	Bash	"git log \"$(git merge-base HEAD main)\"..HEAD"	allow	none	L270	-	a substitution in a normal command's arguments
 safety-guard	Bash	"diff <(sort a.txt) <(sort b.txt)"	allow	none	L270	-	a substitution in a normal command's arguments
 safety-guard	Bash	"cat <(echo hi)"	allow	none	L270	-	a substitution in a normal command's arguments
-safety-guard	Bash	"cat ../id*"	allow	cred-far	L265	known	advisory: `id*` is too short for the name rule, and it climbs out of the project
-safety-guard	Bash	"cat {a,../id_*}"	allow	cred-far	L265	known	advisory: the name rule does not expand a brace that climbs out
-safety-guard	Bash	"node --require ./deploy/ok.cjs deploy/far.mjs"	allow	cred-far	L265	-	T152 (L1311): judged by its visible words; was: T34b: the script past the preload's value is read
-safety-guard	Bash	"node -r ./deploy/ok.cjs deploy/far.mjs"	allow	cred-far	L265	-	T152 (L1311): judged by its visible words; was: T34b: the script past the preload's value is read
-safety-guard	Bash	"node --import ./deploy/ok.cjs deploy/far.mjs"	allow	cred-far	L265	-	T152 (L1311): judged by its visible words; was: T34b: the script past the preload's value is read
+safety-guard	Bash	"cat ../id*"	refuse	cred-far	L265	-	T271 (S10): a listed reader prints a credentials file it reaches; was: advisory: `id*` is too short for the name rule, and it climbs out of the project
+safety-guard	Bash	"cat {a,../id_*}"	refuse	cred-far	L265	-	T271 (S10): a listed reader prints a credentials file it reaches; was: advisory: the name rule does not expand a brace that climbs out
+safety-guard	Bash	"node --require ./deploy/ok.cjs deploy/far.mjs"	refuse	cred-far	L265	-	T271 (S10): a listed reader prints a credentials file it reaches; was: T152 (L1311): judged by its visible words; was: T34b: the script past the preload's value is read
+safety-guard	Bash	"node -r ./deploy/ok.cjs deploy/far.mjs"	refuse	cred-far	L265	-	T271 (S10): a listed reader prints a credentials file it reaches; was: T152 (L1311): judged by its visible words; was: T34b: the script past the preload's value is read
+safety-guard	Bash	"node --import ./deploy/ok.cjs deploy/far.mjs"	refuse	cred-far	L265	-	T271 (S10): a listed reader prints a credentials file it reaches; was: T152 (L1311): judged by its visible words; was: T34b: the script past the preload's value is read
 safety-guard	Bash	"NODE_OPTIONS='--require ./deploy/pre.cjs' node deploy/ok.mjs"	allow	cred-far	L265	-	T152 (L1311): judged by its visible words; was: advisory fixed in T34: a module node preloads, which the guard does not read
 safety-guard	Bash	"export NODE_OPTIONS='--import ./deploy/pre.cjs'; node deploy/ok.mjs"	allow	cred-far	L265	-	T152 (L1311): judged by its visible words; was: advisory fixed in T34: a module node preloads, which the guard does not read
-safety-guard	Bash	"node --import=./deploy/ok.cjs deploy/far.mjs"	allow	cred-far	L265	-	T152 (L1311): judged by its visible words; was: an attached preload value: the script is read
+safety-guard	Bash	"node --import=./deploy/ok.cjs deploy/far.mjs"	refuse	cred-far	L265	-	T271 (S10): a listed reader prints a credentials file it reaches; was: T152 (L1311): judged by its visible words; was: an attached preload value: the script is read
 safety-guard	Bash	"node deploy/up.mjs"	allow	cred-far	L265	known	advisory: a `..` built at run time, then a relative glob
 safety-guard	Bash	"python3 -c \"import colorsys; print(colorsys.rgb_to_hsv(1, 0, 0))\""	allow	cred-far	L265	known	advisory: a module the project shadows
 safety-guard	Bash	"node tools/run.mjs"	allow	cred-far	L265	known	advisory: a planted node_modules/fast-glob (accepted by the spec)
@@ -137,7 +137,7 @@ safety-guard	Bash	"source /dev/fd/3 3< far.sh"	allow	cred-far	L294	-	T152 (L1311
 safety-guard	Bash	"bunx --preload ./deploy/pre.cjs tsc"	allow	cred-far	L294	-	T152 (L1311): judged by its visible words; was: bunx preloads
 safety-guard	Bash	"node -e 1 -r ./deploy/pre.cjs"	allow	cred-far	L294	-	T152 (L1311): judged by its visible words; was: a preload after inline code
 safety-guard	Bash	"bun run --env-file cfg.txt deploy/ok.mjs"	allow	cred-far	L294	-	T152 (L1311): judged by its visible words; was: an env file after a bun subcommand
-safety-guard	Bash	"node -C dev deploy/far.mjs"	allow	cred-far	L294	-	T128f slice 6 (L1366): a read, which no guard limits; was: fixed in T34b: an option's value is taken for the script, far.mjs is not read
+safety-guard	Bash	"node -C dev deploy/far.mjs"	refuse	cred-far	L294	-	T271 (S10): a listed reader prints a credentials file it reaches; was: T128f slice 6 (L1366): a read, which no guard limits; was: fixed in T34b: an option's value is taken for the script, far.mjs is not read
 safety-guard	Bash	"export NODE_OPTIONS='--require ./deploy/pre.cjs'; npm test"	allow	cred-far	L294	-	T152 (L1311): judged by its visible words; was: fixed in T34b: inherited NODE_OPTIONS through npm
 safety-guard	Bash	"source genc.sh"	allow	cred-far	L295	-	T152 (L1311): judged by its visible words; was: fixed in T34b: a nested script that writes then sources a file passes as missing
 safety-guard	Bash	"node $X"	allow	cred-far	L300	-	T152 (L1311): judged by its visible words; was: A4 fixed in T34b: an interpreter script named by an unresolved parameter

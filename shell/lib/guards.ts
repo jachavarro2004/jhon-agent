@@ -237,15 +237,25 @@ export async function judge(toolName: string, input: Record<string, unknown>, ct
 export type Started = { program: string; args: string[] } | { refuse: string };
 
 /**
- * Run an inspector the inspect guard admits, as the argv its whitespace split
- * gives; a long one never freezes the TUI. `start` says how that argv starts
- * in this session (lib/sandbox.ts: in the sandbox with `sandbox.mode` on, or
- * refused where it cannot run); without it, the program itself.
+ * The argv that runs an inspect line (T271): bash reads the very string the
+ * inspect guard judged, as one argument, with no profile, rc file, BASH_ENV
+ * or ENV of its own that could run anything the guard did not read.
+ */
+export function inspectArgv(command: string): string[] {
+  return ["env", "-u", "BASH_ENV", "-u", "ENV", "bash", "--noprofile", "--norc", "-c", command];
+}
+
+/**
+ * Run a line the inspect guard admits (read-only by construction, T271)
+ * through bash, as inspectArgv gives it; a long one never freezes the TUI.
+ * `start` says how that argv starts in this session (lib/sandbox.ts: in the
+ * sandbox with `sandbox.mode` on, or refused where it cannot run); without
+ * it, the program itself.
  */
 export async function inspect(command: string, config: JhonPiConfig, cwd: string, start?: (program: string, args: string[]) => Promise<Started>): Promise<{ ok: boolean; text: string }> {
   const verdict = await runGuard(config, "inspect-guard", config.inspectAllow, { tool_name: "Bash", tool_input: { command }, cwd });
   if (verdict && "block" in verdict) return { ok: false, text: verdict.reason };
-  const [program, ...args] = command.trim().split(/\s+/);
+  const [program, ...args] = inspectArgv(command);
   const started = start ? await start(program, args) : { program, args };
   if ("refuse" in started) return { ok: false, text: started.refuse };
   const r = await runAsync(started.program, started.args, { cwd });

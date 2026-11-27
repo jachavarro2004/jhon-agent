@@ -25,7 +25,7 @@ import { continuedScope } from "../lib/agents.ts";
 import { ModelChoice } from "../lib/model-choice.ts";
 import { lddPrompt } from "../lib/ldd-command.ts";
 import { OWNER_SETTINGS, useMemorySettings } from "./fake-jhon-settings.ts";
-import { SHELL_CONTRACT, contractMismatch, formatEdited } from "../lib/guards.ts";
+import { SHELL_CONTRACT, contractMismatch, formatEdited, inspectArgv } from "../lib/guards.ts";
 import { SESSION_SECTION } from "../lib/ui/append-system-prompt.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -303,6 +303,31 @@ test("inspect runs what the inspect guard admits and refuses the rest", async ()
   assert.equal(refused.ok, false);
   assert.match(refused.text, /inspect-guard/);
   assert.equal(spawnSync("git", ["status", "--short"], { cwd: d, encoding: "utf8" }).stdout.trim(), "M a.txt");
+});
+
+test("inspect runs a read-only line through bash: the string the guard read, with no BASH_ENV or ENV of its own (T271)", async () => {
+  const d = project();
+  assert.deepEqual(inspectArgv("git log | grep -c 'x y'"), ["env", "-u", "BASH_ENV", "-u", "ENV", "bash", "--noprofile", "--norc", "-c", "git log | grep -c 'x y'"]);
+  const piped = await inspect("git diff -- a.txt | grep -c '^+b$'", config(), d);
+  assert.equal(piped.ok, true, piped.text);
+  assert.equal(piped.text, "1");
+  const ran = join(d, "rc-ran");
+  const rc = join(tempDir("jhon-pi-rc-"), "rc.sh");
+  writeFileSync(rc, `touch '${ran}'\n`);
+  const saved = { BASH_ENV: process.env.BASH_ENV, ENV: process.env.ENV };
+  Object.assign(process.env, { BASH_ENV: rc, ENV: rc });
+  try {
+    const chained = await inspect("git status --short && echo done", config(), d);
+    assert.equal(chained.ok, true, chained.text);
+    assert.match(chained.text, /done$/);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+  assert.equal(existsSync(ran), false, "bash ran BASH_ENV or ENV");
+  const refused = await inspect("git diff > out.txt", config(), d);
+  assert.equal(refused.ok, false);
+  assert.match(refused.text, /^inspect-guard: .*Instead: /);
+  assert.equal(existsSync(join(d, "out.txt")), false);
 });
 
 // ── the extension as pi loads it ────────────────────────────────────────────
@@ -1800,7 +1825,7 @@ test("the shell's tools keep short descriptions that carry what the agent needs"
   const byName = new Map(tools.map((t: any) => [t.name, t]));
   const textOf = (t: any) => [t.description, t.promptSnippet ?? "", ...(t.promptGuidelines ?? [])].join("\n");
   const pins: Record<string, RegExp[]> = {
-    inspect: [/read-only/, /No shell/, /quotes, pipes, redirections/, /git log --oneline -20 -- src\/a\.ts/],
+    inspect: [/read-only bash line/, /pipes, &&, quotes/, /credentials: refused/, /git diff a\.\.\.HEAD -- src \| head/],
     subagent: [/Agents: /, /## Allowed edit surfaces/, /runs in the background/, /do not poll or sleep/, /several in one turn/, /task_result/, /task_stop/, /worktree: true/, /integrate the branch/],
     subagent_continue: [/stopped short/, /id subagent returned/, /Its scope carries over/, /context cap/, /fresh one with a handoff/, /runs in the background/],
     ask_user: [/1 to \d+ questions/, /\d+ to \d+ options/, /never add one/, /multiSelect/, /\(Recommended\)/, /interactive main session/],
