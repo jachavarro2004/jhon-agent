@@ -416,7 +416,9 @@ func (l *lastByte) last() byte {
 // ("Can't …: No such file or directory" on that first line, or a folder
 // it hides now a link: "Can't mount on symlink destination", or a bind of a
 // folder Jhon opened a moment before that the kernel no longer takes where
-// it is: "Can't bind mount …", T250 round 3, A3), as bubblewrap
+// it is: "Can't bind mount …", T250 round 3, A3, or one it cannot make
+// read-only there any more: "Can't remount readonly on …", seen once in a
+// race of the project's hook files after the rebase), as bubblewrap
 // turns a descriptor back into its path and places every mount by path
 // (T250: the read-only binds inside the project, whose parent a concurrent
 // run swapped, which Jhon opened a moment before). bwrapRaceNote is what a
@@ -426,6 +428,7 @@ func bwrapRaced(opening string) bool {
 	return strings.HasPrefix(line, "bwrap: Race condition binding dirfd") ||
 		strings.HasPrefix(line, "bwrap: Can't mount on symlink destination ") ||
 		strings.HasPrefix(line, "bwrap: Can't bind mount ") ||
+		strings.HasPrefix(line, "bwrap: Can't remount readonly on ") ||
 		strings.HasPrefix(line, "bwrap: Can't ") && strings.HasSuffix(line, ": No such file or directory")
 }
 
