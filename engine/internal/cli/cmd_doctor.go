@@ -414,6 +414,13 @@ func (d doctor) project() {
 			for _, m := range ws.Members {
 				dirs = append(dirs, m.Path)
 			}
+			// T281: a sibling that joined while the config does not list it
+			// is no member, and its writes are outside the working set.
+			for _, u := range workspace.UnlistedOf(ws.Primary) {
+				d.o.Warn(u.Note())
+			}
+		} else if u, ok := workspace.UnlistedAt(top); ok {
+			d.o.Warn(u.Note())
 		}
 		for _, dir := range dirs {
 			for _, l := range unignoredToolData(dir) {

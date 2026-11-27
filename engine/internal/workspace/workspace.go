@@ -11,8 +11,9 @@
 // change. The guards keep that folder from every agent (grant.InGrants).
 // A member counts only when its pointer names a primary whose config lists a
 // path resolving to it. The guards that judge "outside the project" count
-// the primary and the joined members as the project (ProjectRoots, the
-// sandbox's DiskRoots), route-guard judges a member's PR with the
+// the primary and the joined members as the project, with the
+// sandbox.allow_write folders (WorkingSet, T281; the sandbox's DiskRoots),
+// route-guard judges a member's PR with the
 // primary's record (T57 slice 5), and executions and delivery read it
 // (`jhon executions run <change> --repo <name>`, a member's `jhon deliver
 // check`, T57 slice 6).

@@ -128,6 +128,11 @@ type line struct{ id, place, fixture, caller, tool, input, cwd string }
 var (
 	places  = []string{"ldd", "ldd:yolo", "ldd:super-yolo", "repo", "repo:yolo", "repo:super-yolo", "folder"}
 	callers = []string{"top-default", "top-bypass", "subagent"}
+	// workingSetPlaces are named only explicitly (`*` is places): a primary
+	// under LDD listing its joined member <LIB>, a sibling <SITE> that joined
+	// but is not listed, a repository <SHARED> only sandbox.allow_write
+	// names, and a linked worktree <WT> on its own change (T281).
+	workingSetPlaces = []string{"ws", "ws:super-yolo"}
 	// inspector is a Prism facet, named only explicitly (`*` is callers): its
 	// Bash is inspect-guard's too (T271).
 	inspector = "inspector"
@@ -174,7 +179,7 @@ func loadLines(dir string) ([]line, error) {
 			}
 			for _, p := range expand(col[0], places) {
 				for _, c := range expand(col[2], callers) {
-					if base, _, _ := strings.Cut(p, ":"); !slices.Contains(places, p) && base != "corpus" || !slices.Contains(callers, c) && c != inspector {
+					if base, _, _ := strings.Cut(p, ":"); !slices.Contains(places, p) && base != "corpus" && !slices.Contains(workingSetPlaces, p) || !slices.Contains(callers, c) && c != inspector {
 						return nil, fmt.Errorf("%s: unknown place %q or caller %q", at, p, c)
 					}
 					out = append(out, line{id: at + "@" + p + "/" + c, place: p, fixture: col[1], caller: c, tool: col[3], input: input})
@@ -490,11 +495,20 @@ func (d *diff) build(place, fixture string) (*tree, error) {
 		"content": "Apply task 1.1.\n\n## Allowed edit surfaces\n- `src/a.ts`\n- src/parse/\n- svc/src/**: the service\n\nReturn the fixed shape."}})
 	files["transcripts/s1.jsonl"] = ""
 	files["transcripts/s1/subagents/agent-"+scopeAgent+".jsonl"] = string(prompt) + "\n" + `{"type":"assistant","message":{"content":[]}}` + "\n"
-	if base == "repo" || base == "ldd" || base == "folder" {
+	if base == "repo" || base == "ldd" || base == "folder" || base == "ws" {
 		files["proj/src/app.py"] = "X = 1\n"
 	}
 	if base == "ldd" {
 		files["proj/openspec/config.yaml"] = ""
+	}
+	if base == "ws" {
+		files["proj/openspec/config.yaml"] = "workspace:\n  lib: ../lib\n"
+		for _, r := range []string{"lib", "site", "shared"} {
+			files[r+"/src/a.py"], files[r+"/.env"] = "X = 1\n", "KEY=v\n"
+		}
+		// Only this tree's settings name the shared repository.
+		t.settings = filepath.Join(dir, "settings.toml")
+		files["settings.toml"] = "[sandbox]\nmode = \"off\"\nallow_write = [\"" + filepath.Join(dir, "shared") + "\"]\n"
 	}
 	if err := t.write(files); err != nil {
 		return nil, err
@@ -519,6 +533,11 @@ func (d *diff) build(place, fixture string) (*tree, error) {
 		gits = append(gits, []string{"proj", "init", "-q", "-b", "main"})
 	case "repo", "ldd":
 		gits = append(gits, []string{"proj", "init", "-q", "-b", "main"}, []string{"proj", "add", "-A"}, []string{"proj", "commit", "-q", "-m", "base"})
+	case "ws":
+		gits = append(gits, []string{"proj", "init", "-q", "-b", "main"}, []string{"proj", "add", "-A"}, []string{"proj", "commit", "-q", "-m", "base"},
+			[]string{"proj", "remote", "add", "origin", "git@github.com:acme/app.git"},
+			[]string{"proj", "worktree", "add", "-q", "-b", "w", filepath.Join(dir, "proj-worktrees", "wt")},
+			[]string{"lib", "init", "-q", "-b", "main"}, []string{"site", "init", "-q", "-b", "main"}, []string{"shared", "init", "-q", "-b", "main"})
 	}
 	for _, g := range gits {
 		c := exec.Command("git", append([]string{"-C", filepath.Join(dir, g[0]), "-c", "user.name=guarddiff", "-c", "user.email=guarddiff@invalid", "-c", "commit.gpgsign=false"}, g[1:]...)...)
@@ -535,6 +554,16 @@ func (d *diff) build(place, fixture string) (*tree, error) {
 		}
 		if err := t.write(change); err != nil {
 			return nil, err
+		}
+	}
+	// The owner's joins, in each binary's own state.
+	for _, b := range d.bins {
+		for _, r := range map[bool][]string{true: {"lib", "site"}}[base == "ws"] {
+			c := exec.Command(b.path, "workspace", "join", t.proj)
+			c.Dir, c.Env = filepath.Join(dir, r), t.env(b)
+			if out, err := c.CombinedOutput(); err != nil {
+				return nil, fmt.Errorf("%s workspace join in %s: %v: %s", b.path, r, err, out)
+			}
 		}
 	}
 	for _, b := range d.bins {
@@ -579,6 +608,7 @@ func (t *tree) env(b *binary) []string {
 
 func (t *tree) expand(s string) string {
 	return strings.NewReplacer("<SCRATCH>", t.dir, "<P>", t.proj, "<OTHER>", filepath.Join(t.dir, "other"),
+		"<LIB>", filepath.Join(t.dir, "lib"), "<SITE>", filepath.Join(t.dir, "site"), "<SHARED>", filepath.Join(t.dir, "shared"), "<WT>", filepath.Join(t.dir, "proj-worktrees", "wt"),
 		"<TMP>", filepath.Join(t.dir, "tmpdir"), "<HOME>", t.home, "<FW>", t.fw).Replace(s)
 }
 

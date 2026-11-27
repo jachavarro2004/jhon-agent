@@ -1,0 +1,27 @@
+# T281: several repositories at once. The working-set place `ws`: the primary <P> under LDD lists its joined member
+# <LIB>; <SITE> joined but is not listed; <SHARED> is a repository only sandbox.allow_write names; <OTHER> is
+# declared nowhere; <WT> is a linked worktree of <P> whose remote is acme/app. `ws:super-yolo` is the owner's
+# super-yolo in the primary. Columns: tools/guarddiff/README.md.
+# place	fixture	caller	tool	input	source
+ws	none	top-default,subagent	Edit	"{\"file_path\":\"<SHARED>/src/a.py\",\"old_string\":\"1\",\"new_string\":\"2\"}"	T281: an Edit in an allow_write repository is inside the working set
+ws	none	top-default,subagent	Write	"{\"content\":\"x\",\"file_path\":\"<SHARED>/new/b.py\"}"	T281: a Write in an allow_write repository is inside the working set
+ws	none	top-default,subagent	Bash	"rm -r <SHARED>/src"	T281: a removal in an allow_write repository is inside the working set
+ws	none	top-default,subagent	Bash	"cd <SHARED> && rm -rf build"	T281: a removal after a cd into an allow_write repository
+ws	none	top-default,subagent	Edit	"{\"file_path\":\"<LIB>/src/a.py\",\"old_string\":\"1\",\"new_string\":\"2\"}"	T57 neighbour: an Edit in a listed, joined member stays inside
+ws	none	top-default,subagent	Edit	"{\"file_path\":\"<OTHER>/src/a.py\",\"old_string\":\"1\",\"new_string\":\"2\"}"	T281 neighbour: an Edit in a repository declared nowhere stays outside
+ws	none	top-default,subagent	Edit	"{\"file_path\":\"<SITE>/src/a.py\",\"old_string\":\"1\",\"new_string\":\"2\"}"	T281 neighbour: an Edit in a joined sibling the primary does not list stays outside, said
+ws	none	top-default,subagent	Bash	"rm -r <SITE>/src"	T281 neighbour: a removal in the unlisted sibling stays refused, said
+ws	none	top-default,subagent	Bash	"rm -rf <SHARED>"	S10: removing an allow_write repository itself stays refused
+ws	none	top-default,subagent	Bash	"rm -rf <LIB>"	S10: removing a member's top stays refused
+ws	none	top-default,subagent	Read	"{\"file_path\":\"<SHARED>/.env\"}"	S10: a credentials file in an allow_write repository stays refused
+ws	none	top-default,subagent	Edit	"{\"file_path\":\"<SHARED>/.env\",\"old_string\":\"v\",\"new_string\":\"w\"}"	S10: a credentials file in an allow_write repository stays refused
+ws	none	top-default,subagent	Bash	"cat <LIB>/.env"	S10: a member's credentials stay refused
+ws	none	top-default,subagent	Write	"{\"content\":\"x\",\"file_path\":\"<SHARED>/.git/config\"}"	S10: a .git config in an allow_write repository stays refused
+ws	none	top-default,subagent	Write	"{\"content\":\"x\",\"file_path\":\"<LIB>/.git/hooks/pre-commit\"}"	S10: a member's git hook stays refused
+ws	none	top-default,subagent	Write	"{\"content\":\"{}\",\"file_path\":\"<SHARED>/.claude/settings.json\"}"	S10: Claude Code's settings in an allow_write repository stay asked or refused
+ws:super-yolo	none	top-default,subagent	Bash	"cd <LIB> && git push"	T281 (owner's decision A): a listed, joined member with no mode takes the primary's super-yolo
+ws:super-yolo	none	top-default,subagent	Bash	"cd <SHARED> && git push"	T281 neighbour: an allow_write repository takes no other mode
+ws:super-yolo	none	top-default,subagent	Bash	"cd <SITE> && git push"	T281 neighbour: an unlisted sibling takes no other mode
+ws:super-yolo	none	top-default,subagent	Bash	"cd <OTHER> && git push"	T281 neighbour: a repository declared nowhere takes no other mode
+ws	none	top-default,subagent	Bash	"cd <WT> && gh pr create --repo acme/app --head w --title x --body y"	T281: a gh line given its repository is judged in the worktree it runs in
+ws	none	top-default,subagent	Bash	"cd <WT> && gh pr create --repo acme/other --head w --title x --body y"	T281 neighbour: a repository none of its remotes names is judged at the session's root

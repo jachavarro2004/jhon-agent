@@ -7,6 +7,7 @@ import (
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/guard"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // A sandbox.allow_write folder that does not exist yet (T239,
@@ -271,6 +272,9 @@ func Refusal(in Input, path string, missing []MissingFolder) string {
 	return escapeControls(refusal(in, path, missing))
 }
 
+// unlistedAt is the unlisted sibling a refused path lies in (a test seam).
+var unlistedAt = workspace.UnlistedAt
+
 // refusal is Refusal before its control characters are escaped.
 func refusal(in Input, path string, missing []MissingFolder) string {
 	p := filepath.Clean(path)
@@ -309,6 +313,11 @@ func refusal(in Input, path string, missing []MissingFolder) string {
 			if project.Within(p, f.Folder) || project.Within(real, fr) || !found && (project.Within(f.Folder, p) || project.Within(fr, real)) {
 				return head + exists + "; sandbox.allow_write names " + f.Folder + ", which does not exist and Jhon did not create it: " + f.Why + stop
 			}
+		}
+		// A sibling that joined a workspace whose primary does not list it
+		// is no member: said, with the entry that lists it (T281).
+		if u, ok := unlistedAt(real); ok {
+			return head + exists + "; " + u.Note() + stop
 		}
 		// A file directly in the home (~/.bashrc), the home itself and a
 		// path outside it get no setting suggested (L26 A4).

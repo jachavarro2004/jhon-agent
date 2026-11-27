@@ -399,10 +399,13 @@ func (in Input) repositoryAt(dir string, roots []string) (string, *Problem) {
 		if in.SettingsProblem != "" {
 			fix += "; sandbox.allow_write counts for nothing now, as the settings cannot be read: " + in.SettingsProblem
 		}
-		return "", &Problem{
-			Reason: dir + " is neither in " + where + " nor in a git repository inside a sandbox.allow_write folder",
-			Fix:    fix,
+		reason := dir + " is neither in " + where + " nor in a git repository inside a sandbox.allow_write folder"
+		// A sibling that joined a workspace whose primary does not list it
+		// is no member: said, with the entry that lists it (T281).
+		if u, ok := unlistedAt(realPath(dir, in.Stat)); ok {
+			reason += "; " + u.Note()
 		}
+		return "", &Problem{Reason: reason, Fix: fix}
 	}
 	if l := in.linkOn(allow); l != "" {
 		return "", &Problem{Reason: "the sandbox.allow_write folder " + written + " is or passes through the link " + l + ", and the sandbox opens no link for writing, so " + dir + " counts as no project", Fix: setReal(realPath(allow, in.Stat), written)}

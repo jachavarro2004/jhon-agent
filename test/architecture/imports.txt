@@ -186,3 +186,4 @@ internal/workspace -> internal/grant
 internal/workspace -> internal/isodate
 internal/workspace -> internal/lazyre
 internal/workspace -> internal/project
+internal/workspace -> internal/settings

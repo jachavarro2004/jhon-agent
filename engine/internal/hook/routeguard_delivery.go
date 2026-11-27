@@ -6,7 +6,9 @@ import (
 
 	"github.com/jachavarro2004/jhon-agent/engine/internal/guard"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/project"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/sh"
+	"github.com/jachavarro2004/jhon-agent/engine/internal/workspace"
 )
 
 // A delivery is what a Bash command delivers: a commit, a PR, or both.
@@ -209,19 +211,32 @@ func deliveryRoots(command, cwd, top string, pr bool) []string {
 	for _, p := range ps {
 		if of(programDelivery(p, 0)) {
 			want++
-			if !placeable(p, command) {
+			// A gh given its repository is placed below, by where it runs.
+			if _, named := ghRepo(p, command); !placeable(p, command) && !named {
 				add(top)
 			}
 		}
 	}
 	placed := 0
+	var set *workspace.Set
 	for _, t := range guard.Targets(command, cwd) {
 		if !of(programDelivery(t.Program, 0)) {
 			continue
 		}
 		placed++
 		r := t.Root
-		if !placeable(t.Program, command) || r == guard.UnknownRoot || r == "" {
+		ok := placeable(t.Program, command)
+		// A gh given its repository (-R, --repo) delivers in the repository
+		// it runs in when that one is of the session's working set and one
+		// of its remotes is the repository named (T281); else at the root.
+		if slug, named := ghRepo(t.Program, command); named && r != guard.UnknownRoot && r != "" {
+			if set == nil {
+				s := workspace.WorkingSet(cwd)
+				set = &s
+			}
+			ok = set.Holds(r) && remoteNames(r, slug)
+		}
+		if !ok || r == guard.UnknownRoot || r == "" {
 			r = top
 		}
 		add(r)
@@ -252,4 +267,70 @@ func placeable(p sh.Program, command string) bool {
 		})
 	}
 	return false
+}
+
+// ghRepo is the repository a gh program of command is given with -R or
+// --repo, when that is all that keeps it from being placeable: no code,
+// unseen input or GH_REPO, and the value named once, as written.
+func ghRepo(p sh.Program, command string) (slug string, named bool) {
+	if p.Name != "gh" || p.Code != nil || p.StdinOpaque != "" || len(p.Argv) == 0 || unnamed.MatchString(p.Argv[0]) || strings.Contains(command, "GH_REPO") {
+		return "", false
+	}
+	args := p.Argv[1:]
+	for i := 0; i < len(args); i++ {
+		var v string
+		switch a := args[i]; {
+		case a == "-R" || a == "--repo":
+			if i+1 >= len(args) {
+				return "", false
+			}
+			i++
+			v = args[i]
+		case strings.HasPrefix(a, "--repo="):
+			v = strings.TrimPrefix(a, "--repo=")
+		case strings.HasPrefix(a, "-R"):
+			v = strings.TrimPrefix(a, "-R")
+		case strings.HasPrefix(a, "--repo"):
+			return "", false
+		default:
+			continue
+		}
+		if slug != "" || v == "" || unnamed.MatchString(v) {
+			return "", false
+		}
+		slug = v
+	}
+	return slug, slug != ""
+}
+
+// remoteNames is whether one of the remotes of the repository at root is
+// the GitHub repository slug names ([HOST/]OWNER/REPO, or a URL), compared
+// by owner and name, case aside.
+func remoteNames(root, slug string) bool {
+	want := ownerRepo(slug)
+	if want == "" {
+		return false
+	}
+	out, _ := project.ReadGit(root, "remote", "-v")
+	for _, l := range strings.Split(out, "\n") {
+		if f := strings.Fields(l); len(f) >= 2 && ownerRepo(f[1]) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// ownerRepo is the owner/name a GitHub repository's slug or URL ends with,
+// lowercase; "" when it names fewer than two parts.
+func ownerRepo(s string) string {
+	s = strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(s), "/"), ".git")
+	if _, rest, ok := strings.Cut(s, "://"); ok {
+		s = rest
+	}
+	s = strings.ReplaceAll(s, ":", "/")
+	parts := strings.Split(s, "/")
+	if len(parts) < 2 || parts[len(parts)-1] == "" || parts[len(parts)-2] == "" {
+		return ""
+	}
+	return strings.ToLower(parts[len(parts)-2] + "/" + parts[len(parts)-1])
 }

@@ -16,8 +16,8 @@ import (
 // VCSGuard is the PreToolUse guard for the file-writing tools (Edit, Write,
 // NotebookEdit):
 // no one writes a VCS directory or the grants directory, no agent writes
-// Claude Code settings, and a write outside the project (with a workspace's
-// primary and joined members, workspace.ProjectRoots) is the
+// Claude Code settings, and a write outside the project (the session's
+// working set, workspace.WorkingSet, T281) is the
 // outside-write ASK class, which the owner's yolo or super-yolo mode passes
 // with a note: the sandbox wraps Bash only (T161, L1420). A jhon-scout agent's
 // write beyond its record runs with a note (a refusal until T153). Fail
@@ -142,7 +142,8 @@ func vcsJudge(p Payload, tool, raw string, names []string) (vcsVerdict, string, 
 	}
 
 	home := project.Realish(project.Home())
-	allowed := append(append(workspace.ProjectRoots(cwd), project.TmpRoots()...), filepath.Join(home, ".claude"), filepath.Join(home, ".cache"))
+	// The session's working set is the project (T281).
+	allowed := append(append(workspace.WorkingSet(cwd).Roots(), project.TmpRoots()...), filepath.Join(home, ".claude"), filepath.Join(home, ".cache"))
 	for _, r := range allowed {
 		if project.Within(real, r) || project.Within(real, project.Realish(r)) {
 			return vcsAllow, "", none
@@ -161,6 +162,11 @@ func vcsJudge(p Payload, tool, raw string, names []string) (vcsVerdict, string, 
 		shown = "no project root: " + project.Realish(cwd) + " is not a git repository"
 	}
 	what := fmt.Sprintf("%s of %s lands outside the project (%s) and the scratch roots", tool, raw, shown)
+	// A sibling that joined a workspace whose primary does not list it is
+	// said, with the entry that lists it (T281).
+	if u, ok := workspace.UnlistedAt(real); ok {
+		what += "; " + u.Note()
+	}
 	if m, ok := modeFor(root, "", "outside-write"); ok {
 		return vcsMode, "", modePass{m, "outside-write", what}
 	}

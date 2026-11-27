@@ -1937,3 +1937,15 @@ verifiers.tsv:105	safety-guard	allow	refuse	S10 (T271 rule 2): a listed reader p
 verifiers.tsv:106	safety-guard	allow	refuse	S10 (T271 rule 2): a listed reader prints a credentials file it reaches (credential-read)
 verifiers.tsv:109	safety-guard	allow	refuse	S10 (T271 rule 2): a listed reader prints a credentials file it reaches (credential-read)
 verifiers.tsv:140	safety-guard	allow	refuse	S10 (T271 rule 2): a listed reader prints a credentials file it reaches (credential-read)
+workingset.tsv:6@ws/top-default	vcs-guard	ask	allow	T281 working-set: an Edit in a sandbox.allow_write repository is inside the working set, no outside-write ask
+workingset.tsv:6@ws/subagent	vcs-guard	refuse	allow	T281 working-set: an Edit in a sandbox.allow_write repository is inside the working set, no outside-write ask
+workingset.tsv:7@ws/top-default	vcs-guard	ask	allow	T281 working-set: a Write in a sandbox.allow_write repository is inside the working set, no outside-write ask
+workingset.tsv:7@ws/subagent	vcs-guard	refuse	allow	T281 working-set: a Write in a sandbox.allow_write repository is inside the working set, no outside-write ask
+workingset.tsv:8@ws/top-default	safety-guard	refuse	allow	T281 working-set: a removal in a sandbox.allow_write repository is judged as in the project; its top and the folder itself stay refused (lines 14, 15)
+workingset.tsv:8@ws/subagent	safety-guard	refuse	allow	T281 working-set: a removal in a sandbox.allow_write repository is judged as in the project; its top and the folder itself stay refused (lines 14, 15)
+workingset.tsv:9@ws/top-default	safety-guard	refuse	allow	T281 working-set: a removal in a sandbox.allow_write repository is judged as in the project; its top and the folder itself stay refused (lines 14, 15)
+workingset.tsv:9@ws/subagent	safety-guard	refuse	allow	T281 working-set: a removal in a sandbox.allow_write repository is judged as in the project; its top and the folder itself stay refused (lines 14, 15)
+workingset.tsv:17@ws/top-default	vcs-guard	ask	allow	T281 working-set: vcs-guard no longer asks outside-write for a sandbox.allow_write repository; secrets-guard still refuses its credentials file (S10)
+workingset.tsv:17@ws/subagent	vcs-guard	refuse	allow	T281 working-set: vcs-guard no longer asks outside-write for a sandbox.allow_write repository; secrets-guard still refuses its credentials file (S10)
+workingset.tsv:22@ws:super-yolo/top-default	safety-guard	ask	allow	T281 owner's decision A (one mode for the workspace): a listed, joined member with no mode of its own takes the primary's super-yolo; the note names the primary
+workingset.tsv:22@ws:super-yolo/subagent	safety-guard	refuse	allow	T281 owner's decision A (one mode for the workspace): a listed, joined member with no mode of its own takes the primary's super-yolo; the note names the primary

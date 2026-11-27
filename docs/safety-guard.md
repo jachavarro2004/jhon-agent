@@ -13,6 +13,42 @@ caches are writable, everything else is read-only, whatever the guard let
 through. In super-yolo, the owner's own mode, a line the guard cannot read
 runs with a note, so there the sandbox is the only containment.
 
+## The working set is the project (T281)
+
+What the guards call "the project" is the session's working set: the
+repository the session runs in, its worktrees (`<root>-worktrees`), the
+workspace members its primary lists and that joined (with theirs), and each
+`sandbox.allow_write` folder the sandbox opens for writing (absolute, not the
+home, reached through no link). The sandbox already writes there; the guards
+now agree with it:
+
+- An Edit or Write there is no outside-write ask; a removal there is judged
+  as one in the project.
+- What stays refused there is refused as in the project: removing the top
+  of a member, an `allow_write` folder itself or a repository inside one; a
+  credentials file; a `.git` config or hook; Claude Code's settings ask or
+  are refused as anywhere.
+- A path is judged by its real path: a link into the set is inside, a link
+  out of it is outside.
+- route-guard judges a `gh` line given `--repo`/`-R` in the repository it
+  runs in (a `cd` or `-C` there) when that repository is in the set and one
+  of its remotes is the repository named; otherwise at the session's root,
+  as before. A bounded writer's surfaces may name paths in any repository of
+  the set.
+- A member the primary lists, joined, with no mode of its own takes the
+  primary's mode in a session of that workspace (the owner's decision); the
+  note says `super-yolo mode, from <primary>`, and `jhon mode` there says it
+  too. A member with its own mode keeps it; a repository only
+  `allow_write` names, an unlisted sibling and a member that has not joined
+  take no other mode.
+
+Outside the set nothing changed: a repository declared nowhere asks (an
+Edit) or is refused (a removal) as before. A sibling that ran `jhon
+workspace join` while the primary's config does not list it is no member:
+the outside-write ask, a removal's finding, the sandbox's note, `jhon
+workspace list` and `jhon doctor` say so, with the `workspace:` entry that
+lists it.
+
 ## Credentials by real reach (T271)
 
 Credential contents are the owner's alone (S10): in every mode, for every
