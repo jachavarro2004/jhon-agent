@@ -10,9 +10,9 @@ import (
 	"github.com/jachavarro2004/jhon-agent/engine/internal/js"
 )
 
-// leanLimit is T146h's ceiling for the lean text of either runtime: the
-// design's 4 KB target with its tests' 0.5 KB margin.
-const leanLimit = 4608
+// leanLimit is the lean text's ceiling on either runtime. T146h set 4608; T261 (L1748) raised it to 5120 because the rules added since (T194 reply language,
+// T226 identity, T240, the T251/T257 sandbox lines) almost all have records of models breaking them. Measure first; never raise it to fit one change.
+const leanLimit = 5120
 
 // leanCore are the sentences the lean text may never lose (T146h L1): the
 // small path's RED and GREEN, the stop and the same effect, credentials,
@@ -47,7 +47,7 @@ func leanPointersAt(e *engine, runtime string) []string {
 }
 
 // T146h L1: the lean text is the only fixed text of a small task, at most
-// 4.5 KB on both runtimes, measured at a representative home.
+// leanLimit on both runtimes, measured at a representative home.
 func TestLeanTextFitsBothRuntimes(t *testing.T) {
 	e := engineAt(t, repo, "--validate")
 	e.home = "/home/owner"
@@ -99,14 +99,16 @@ func TestLeanTextKeepsItsCore(t *testing.T) {
 // sandbox.allow_write folder named by its real path (T251, L1722), and that
 // a failure inside ends with a note whose fix it follows, not by turning
 // the sandbox off (L1729: running it alone is the fix only when the note
-// says so).
+// says so). A leading cd into a repository lets git and gh out only:
+// docker and the deploy tools run outside only from the project (T257,
+// L1740).
 func TestLeanTextSaysWhatRunsOutsideTheSandbox(t *testing.T) {
 	e := engineAt(t, repo, "--validate")
 	for _, rt := range []string{"claude-code", "pi"} {
 		lean := flatText(e.leanText(rt))
 		for _, w := range []string{
 			"With Jhon's sandbox on, git over SSH, `gh` and `sandbox.deploy_tools` run outside, with the owner's credentials, alone on their line, by name:",
-			"no pipes, `;`, `&&` (but a leading `cd <absolute repository dir> &&`), `$(…)`, `$VAR`, `~` or `VAR=value` in front.",
+			"no pipes, `;`, `&&`, `$(…)`, `$VAR`, `~` or `VAR=value` in front; `cd <repo dir> &&` before git or `gh` only (docker and the deploy tools run outside only from the project).",
 			"git and `gh` also run outside in a git repository in `sandbox.allow_write`, by its real path with no `..`.",
 			"One kept inside says why: follow that fix, never turn the sandbox off.",
 		} {
