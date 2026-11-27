@@ -172,16 +172,16 @@ func ownerProject(t *testing.T, m machine) {
 	commit(t, m.proj, "the owner's hooks")
 }
 
-// A project whose hook files are committed as they are starts with no
-// question the first time, and every time after; what Claude Code writes
-// itself in ordinary work (a permission the owner allowed, an MCP server he
-// enabled, in settings.local.json) and edits to skills' prose, rules and
-// agents never ask, in Claude Code or pi.
+// A project the owner approved once (its first start asks, L1768) starts
+// with no question every time after; what Claude Code writes itself in
+// ordinary work (a permission the owner allowed, an MCP server he enabled,
+// in settings.local.json) and edits to skills' prose, rules and agents
+// never ask, in Claude Code or pi.
 func TestStartLaunchesAnUnchangedProjectWithNoQuestion(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
 	ownerProject(t, m)
-	quiet(t, "first start", m.try(t, m.proj))
+	approved(t, "first start", m.try(t, m.proj, "--approve-hooks"))
 	quiet(t, "second start", m.try(t, m.proj))
 	quiet(t, "from a folder of the project", m.try(t, filepath.Join(m.proj, "src")))
 	quiet(t, "pi", m.try(t, m.proj, "pi"))
@@ -239,7 +239,7 @@ func TestStartAsksOnceForAHookTheOwnerCommits(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
 	ownerProject(t, m)
-	quiet(t, "first start", m.try(t, m.proj))
+	approved(t, "first start", m.try(t, m.proj, "--approve-hooks"))
 
 	settings := support.Read(t, filepath.Join(m.proj, ".claude", "settings.json"))
 	support.Write(t, m.proj, map[string]string{".claude/settings.json": strings.Replace(settings, `"matcher":"Bash"`, `"matcher":"Bash|Edit"`, 1)})
@@ -261,9 +261,10 @@ func TestStartAsksOnceForAHookTheOwnerCommits(t *testing.T) {
 	refused(t, "the hook's script", m.try(t, m.proj), want)
 }
 
-// A first start records without asking only what HEAD holds as it is on
-// the disk: an index flag that hides a change from `git status`
-// (--skip-worktree) hides nothing, and an untracked hook asks.
+// A first start where anything runs asks once (L1768), whatever HEAD and
+// the index say: here an index flag (--skip-worktree) hides a change from
+// `git status`, and the question shows every counted file; outside any
+// repository, an untracked hook asks the same way.
 func TestStartFirstSeenTrustsOnlyWhatHEADHolds(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
@@ -325,7 +326,7 @@ func TestStartAsksForAHiddenValueWithoutShowingIt(t *testing.T) {
 	m := newMachine(t)
 	support.Write(t, m.proj, map[string]string{".mcp.json": `{"mcpServers":{"x":{"command":"x-mcp","env":{"NODE_OPTIONS":"--max-old-space-size=512"}}}}`})
 	commit(t, m.proj, "a server")
-	quiet(t, "committed", m.try(t, m.proj))
+	approved(t, "committed", m.try(t, m.proj, "--approve-hooks"))
 	support.Write(t, m.proj, map[string]string{".mcp.json": `{"mcpServers":{"x":{"command":"x-mcp","env":{"NODE_OPTIONS":"--require /tmp/evil.js"}}}}`})
 	l := m.try(t, m.proj)
 	refused(t, "a hidden env value", l, changedHeader+"  "+m.proj+"\n    changed .mcp.json\n      (a value jhon does not show changed)\n"+claudeNoTTY)

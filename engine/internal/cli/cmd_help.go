@@ -163,7 +163,10 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            servers here are compared with what you last
                            approved, and a change is shown and asked about
                            (no terminal: nothing starts, exit 1);
-                           --approve-hooks approves it without asking
+                           --approve-hooks approves it without asking; a
+                           folder never approved where something runs asks
+                           once at its first start, unless the seed of
+                           jhon sync, run before, recorded it
   jhon start pi [--approve-hooks] [<pi args>]
                            start pi on Jhon's agent directory, ~/.pi/jhon (the
                            orchestrator, the agents, and the guards); every
@@ -1239,6 +1242,16 @@ const usage = `{B}jhon{Z} — maintenance for the Jhon agent framework
                            as is. A running dashboard proven Jhon's from
                            another release is restarted from the new one on
                            its port
+                           Before it builds, on your terminal, it
+                           offers once to record what runs outside the
+                           sandbox in each folder jhon start never saw (each
+                           repository under sandbox.allow_write, with its
+                           worktrees, and each project with Jhon state), so
+                           their first start does not ask; it shows each
+                           folder and how many files run there, asks [y/N],
+                           and never asks again for a folder already
+                           recorded; with no terminal it skips that in one
+                           line, and inside the sandbox it never records
   jhon publish             push the current branch to origin and mirror; refused
                            unless the tree is clean and HEAD is the active
                            release; it takes no argument

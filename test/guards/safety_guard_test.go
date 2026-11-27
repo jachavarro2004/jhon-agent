@@ -882,13 +882,36 @@ func TestSafetyGuardStartWithoutApproveHooksKeepsItsVerdict(t *testing.T) {
 	t.Parallel()
 	s := newSG(t)
 	for _, c := range []string{"jhon start", "jhon start pi", "jhon start --resume abc", "jhon start pi -p hi",
-		"jhon start -p 'what does --approve-hooks do?'", "jhon start --help"} {
+		"jhon start -p 'what does --approve-hooks do?'", "jhon start --help", "jhon sync --help", "jhon help sync", "echo jhon sync"} {
 		for _, o := range []sgOpts{{}, top()} {
 			r := s.bash(t, c, o)
 			code(t, r, 0, c)
 			if r.Stdout != "" {
 				t.Errorf("%s: printed %q", c, r.Stdout)
 			}
+		}
+	}
+}
+
+// T266, L1768: `jhon sync` from a terminal seeds the approval of every
+// folder the owner never started in, so an agent's `jhon sync` (a pane
+// run gives it a terminal) is asked as --approve-hooks is: at the top
+// level, as the settings question no grant and no mode answers, and
+// refused to a sub-agent, through every spelling the reader follows.
+func TestSafetyGuardAsksAnAgentsSync(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"normal", "super-yolo"} {
+		s := newSG(t)
+		s.setMode(t, s.p, mode)
+		for _, c := range []string{"jhon sync", "env JHON_TELEMETRY=off jhon sync", "bash -c 'jhon sync'", "cd /tmp && jhon sync",
+			"./bin/jhon sync", "/home/jhon-safety-test/.local/bin/jhon sync", "herdr pane run w1:p2 'jhon sync'", "jhon sync extra"} {
+			label := mode + ": " + c
+			sub := s.bash(t, c, sgOpts{})
+			code(t, sub, 2, "sub-agent "+label)
+			matches(t, sub.Stderr, "settings: jhon sync: from a terminal it approves, for the owner, the hooks, extensions and MCP servers of every folder he never started a session in; it is refused outside a prompt the owner can answer", "sub-agent "+label)
+			tp := s.bash(t, c, top())
+			code(t, tp, 0, "top-level "+label)
+			matches(t, askedWhy(t, tp.Stdout, "top-level "+label), `(^|; )settings: jhon sync: `, "top-level "+label)
 		}
 	}
 }

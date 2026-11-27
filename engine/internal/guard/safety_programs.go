@@ -1303,15 +1303,30 @@ const approveHooksWhat = "jhon start --approve-hooks: it approves, for the owner
 // asked at the top level, refused to a sub-agent. The flag counts wherever
 // it stands among the words, an argument the runtime would get included
 // (fail closed); a prompt that only mentions it is no flag.
+//
+// `jhon sync` is asked the same way (L1768): from a terminal it seeds the
+// approval of every root the owner never started in, so an agent that got
+// one (a pane run) could approve what it planted. Its help (-h, --help
+// anywhere, which runs nothing) keeps its verdict.
 func judgeApproveHooks(name string, args []string) []Finding {
-	if name != "jhon" || at(args, 0) != "start" {
+	if name != "jhon" {
 		return nil
 	}
-	if slices.ContainsFunc(args[1:], func(a string) bool { return a == "--approve-hooks" || strings.HasPrefix(a, "--approve-hooks=") }) {
-		return []Finding{ask("settings", approveHooksWhat)}
+	switch at(args, 0) {
+	case "start":
+		if slices.ContainsFunc(args[1:], func(a string) bool { return a == "--approve-hooks" || strings.HasPrefix(a, "--approve-hooks=") }) {
+			return []Finding{ask("settings", approveHooksWhat)}
+		}
+	case "sync":
+		if !slices.ContainsFunc(args[1:], func(a string) bool { return a == "-h" || a == "--help" }) {
+			return []Finding{ask("settings", seedHooksWhat)}
+		}
 	}
 	return nil
 }
+
+// seedHooksWhat is what an agent's `jhon sync` does.
+const seedHooksWhat = "jhon sync: from a terminal it approves, for the owner, the hooks, extensions and MCP servers of every folder he never started a session in"
 
 // hookFlags are claude's flags that can leave out the plugin that carries
 // Jhon's hooks, or turn its hooks off.

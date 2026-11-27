@@ -531,15 +531,29 @@ What counts is only what runs: `.claude/settings.json` and
 `.claude/settings.local.json` without the keys that run nothing and that Claude
 Code writes itself (`permissions`, the model, the MCP file's servers
 enabled), `.claude/hooks/`, a skill's, agent's or command's frontmatter
-`hooks` and `mcpServers` and its ``!`…` `` lines, the MCP file (.mcp.json), `.pi/mcp.json`,
-`.pi/settings.json`, `.pi/extensions/`, `.pi/skills/`, and a file of the
-project a hook's or a server's command names. Prose, rules and permissions
+`hooks` and `mcpServers` (read as YAML, so `"hooks":`, `hooks :` or an
+indented frontmatter count too) and its ``!`…` `` lines, the MCP file (.mcp.json), `.pi/mcp.json`,
+`.pi/settings.json`, `.pi/extensions/`, `.pi/skills/`, and every file one of
+those settings names: a hook's script read as the shell reads the command
+(`"$CLAUDE_PROJECT_DIR"/tools/guard.sh`, `"${CLAUDE_PROJECT_DIR}/x"` and
+`'$CLAUDE_PROJECT_DIR'/x` alike; pi has no such variable), a server's
+argument, an extension, skill or package of `.pi/settings.json` (from
+`.pi/`, a folder too), inside the project or, when you can write it,
+anywhere. A file is compared by its content; one over 1 MiB, past 16 MiB
+read, or past the first 1000 files, by its size, times and inode (the
+kernel's change time, which no user can set back), so a start stays cheap
+whatever is planted (20,050 files: about 130 ms against 27 ms on a loaded
+machine, the floor being one stat per file). Prose, rules and permissions
 never ask (in the owner's last 30 days, none of the 10 commits under a
 project's `.claude/` changed what runs). When it changed, the start shows
-each file new, changed or removed with the lines added and removed (an
-`env` or `headers` value, a key that names a secret and a url's password
-show as `…`) and asks `approve these and start Claude Code? [y/N]`; only y
-starts it and records the approval. With no terminal to ask on it starts
+each file new, changed or removed with the lines added and removed, every
+secret as `…`: an `env` or `headers` value, a key that names a secret, a
+url's userinfo and query values, an `Authorization` header and a Bearer or
+Basic credential, curl's `-u user:…`, the value of a flag that names a key,
+token, password or secret (`--api-key …`, `--token=…`, in a command or in
+a server's arguments), and `NAME=…` where NAME names one (`GH_PAT`,
+`*_TOKEN`, `*_KEY`, `*_SECRET`, `*PASSWORD*`); it asks `approve these and
+start Claude Code? [y/N]`; only y starts it and records the approval. With no terminal to ask on it starts
 nothing (exit 1) and says to run `jhon start --approve-hooks` (`jhon start
 pi --approve-hooks`), which shows the same list, records it and starts. The
 approvals live in jhon's state folder
@@ -548,11 +562,41 @@ and kept from every agent by the guards; an agent's `jhon start
 --approve-hooks` (behind `env`, a shell's `-c`, a pane run or a path to the
 binary too) is asked at the top level, as the settings question no grant and
 no mode answers, and refused to a sub-agent. A folder never approved records
-without asking when nothing runs there, or when HEAD holds each counted file
-as it is on the disk (its blob, so no index flag hides a change) and, if
-another worktree of the repository was approved, it matches one of them;
-anything else asks once. A commit is no approval: a sandboxed command can
-commit too, so a hook you change and commit asks once at the next start.
+without asking only when nothing runs there; anything else asks once, the
+folder marked `(first start here)`, even when HEAD holds it as it is. A
+commit is no approval: a sandboxed command can commit too, so a hook you
+change and commit asks once at the next start, and so does a never-started
+repository inside `sandbox.allow_write` that a sandboxed command committed a
+hook into.
+
+So that your own projects do not each ask at their first start, `jhon sync`,
+run from your terminal, seeds the records once before it builds: every
+folder `jhon start` never saw under `sandbox.allow_write` (each repository
+there with its main checkout and worktrees, and the folder itself) and every
+project with Jhon state (a grant, a mode, a workspace pointer). It prints
+each folder where something runs with how many files run there, never a
+line of them, and asks `record them? [y/N]`; only y records. A folder already
+recorded is never asked again (its next start asks when it changed). With no
+terminal it skips the seed in one line and the sync goes on; inside the
+sandbox (`JHON_IN_SANDBOX`) it never seeds; and an agent's `jhon sync` is
+asked at the top level and refused to a sub-agent, as `--approve-hooks` is.
+The seed adds a few milliseconds to a sync (measured on 9 roots).
+
+Known gaps of the check, each left open on purpose (T266, phase 1 frozen in
+L1769):
+
+- Folders named by `additionalDirectories` or `--add-dir` are not checked,
+  as the check covers only the folders a session starts in; what a runtime
+  loads from them (a skill's frontmatter hooks) is left for a later phase.
+- A skill's helper script (`scripts/run.sh` beside a SKILL.md) is not
+  compared unless a setting names it, as a skill only tells the model to run
+  it, which happens inside the sandbox and through the guards.
+- A spelling of `jhon start --approve-hooks` or `jhon sync` the guards do
+  not read (a copy of the binary under another name, a flag built at run
+  time) passes them, harmless because the approvals are read-only to every
+  sandboxed command, so such an approval fails to record.
+- A file a hook's command reaches other than by naming it (a script that
+  runs another) is not compared, as only what a setting names is followed.
 
 The shell talks to Jhon only through the binary (`shell/CONTRACT.md`).
 Its commands:
