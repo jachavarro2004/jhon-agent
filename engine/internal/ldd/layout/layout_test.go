@@ -116,3 +116,23 @@ func TestNativePathsAndDetection(t *testing.T) {
 		t.Fatal("IgnoredByAny")
 	}
 }
+
+// jhon-studio's working output, .jhon/studio/ at any depth (T8g), is no
+// code and no test of the project in either layout.
+func TestStudioOutputIsIgnored(t *testing.T) {
+	for p, want := range map[string]bool{
+		".jhon/studio/tour/script.json": true, ".jhon/studio": true, ".jhon/studio/": true, "apps/web/.jhon/studio/tour/out/tour.mp4": true,
+		"/work/p/.jhon/studio/tour/review.png": true, ".jhon/studio.yaml": false, ".jhon/studios/x": false, ".jhon/x": false,
+		"src/studio/x.go": false, "jhon/studio/x": false, "x.jhon/studio/y": false,
+	} {
+		if StudioOutput(p) != want {
+			t.Errorf("StudioOutput(%q) = %v", p, !want)
+		}
+		if rel := strings.TrimPrefix(p, "/"); OpenSpec.Ignored(rel) != want || Native.Ignored(rel) != want || IgnoredByAny(rel) != want {
+			t.Errorf("Ignored(%q) is not %v in every layout", rel, want)
+		}
+	}
+	if !OpenSpec.Ignored("openspec/changes/c1/tasks.md") || OpenSpec.Ignored("src/app.py") {
+		t.Error("the record stays ignored, and code is not")
+	}
+}

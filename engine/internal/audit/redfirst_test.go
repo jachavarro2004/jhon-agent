@@ -50,6 +50,21 @@ func TestEditBeforeRed(t *testing.T) {
 		step{kind: "bash", text: "jhon executions run " + acme, result: "1 failed", isError: true}))
 }
 
+// jhon-studio's working output (.jhon/studio/, T8g) is no code edit: a
+// video's files written before the change's RED are no finding; a code
+// edit after them still is.
+func TestEditBeforeRedLeavesStudioOutput(t *testing.T) {
+	studio := []string{".jhon/studio/tour/script.json", ".jhon/studio/tour/state.json", "web/.jhon/studio/tour/scene.js"}
+	for _, p := range studio {
+		eq(t, p+" before RED", len(findingsOf(t, "edit-before-red", user("go"), delegate("d01", "jhon-builder", acme, codeEdit(p), red(acme)))), 0)
+	}
+	f := findingsOf(t, "edit-before-red", user("go"), delegate("d01", "jhon-builder", acme, codeEdit(studio[0]), codeEdit("svca/src/totals.py"), red(acme)))
+	wouldBe(t, f)
+	if !strings.Contains(f[0].Message, "Edit "+testRoot+"/svca/src/totals.py changes code of acme-totals before its RED") {
+		t.Errorf("message: %s", f[0].Message)
+	}
+}
+
 func TestEditBeforeRedFindingJSON(t *testing.T) {
 	f := findingsOf(t, "edit-before-red", user("go"), delegate("d01", "jhon-builder", acme, codeEdit("svca/src/totals.py"), red(acme)))
 	wouldBe(t, f)
