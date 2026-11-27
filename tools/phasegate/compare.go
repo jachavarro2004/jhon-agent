@@ -175,11 +175,28 @@ func objectsCell(p *ProjectSpeed) string {
 	return "kept"
 }
 
+// countingRule is the rule f was counted by; a record without one was
+// counted by rule 1.
+func countingRule(f *Friction) int { return max(1, f.Counting) }
+
+// countingNote is the line that says base's and new's friction were
+// counted by different rules, "" when they were not.
+func countingNote(base, new *Record) string {
+	b, n := base.Friction, new.Friction
+	if b == nil || n == nil || countingRule(b) == countingRule(n) {
+		return ""
+	}
+	return fmt.Sprintf("phasegate: friction counted by rule %d in base and rule %d in new: its rows are not comparable", countingRule(b), countingRule(n))
+}
+
+// frictionRows: friction counted by different rules is shown, not held to
+// the base ("not comparable").
 func frictionRows(base, new *Record) []row {
 	b, n := base.Friction, new.Friction
 	if b == nil && n == nil {
 		return nil
 	}
+	comparable := countingNote(base, new) == ""
 	rate := func(f *Friction) (float64, bool) {
 		if f == nil || f.ToolResults == 0 {
 			return 0, false
@@ -210,6 +227,8 @@ func frictionRows(base, new *Record) []row {
 		switch {
 		case !nok:
 			r.verdict = "not measured"
+		case !comparable:
+			r.verdict = "not comparable"
 		case !gated:
 			r.verdict = "info"
 		case !bok:
@@ -238,12 +257,12 @@ func frictionRows(base, new *Record) []row {
 		nc, nin := classOf(n, c)
 		rows = append(rows, rateRow("stops per 100: "+c, bc, bok && bin, nc, nok && nin, false))
 	}
-	return append(rows, runtimeRows(b, n)...)
+	return append(rows, runtimeRows(b, n, comparable)...)
 }
 
 // runtimeRows say which runtime the friction is in: each runtime's stops,
 // tool results and stops per 100, as information.
-func runtimeRows(b, n *Friction) []row {
+func runtimeRows(b, n *Friction, comparable bool) []row {
 	var names []string
 	for _, f := range []*Friction{b, n} {
 		if f != nil {
@@ -269,6 +288,9 @@ func runtimeRows(b, n *Friction) []row {
 	for _, rt := range slices.Compact(names) {
 		bc, nc := get(b, rt), get(n, rt)
 		r := row{measure: "runtime " + rt + " stops/tool results", base: cell(bc), new: cell(nc), verdict: "info"}
+		if !comparable {
+			r.verdict = "not comparable"
+		}
 		if bc != nil && nc != nil {
 			r.change = signed(round(nc.Per100-bc.Per100, 3))
 			if bc.Per100 > 0 {

@@ -26,6 +26,7 @@ const usage = `usage:
   phasegate measure --label <name> --jhon <binary> [--projects-file <file>] [--sessions-since <YYYY-MM-DD>] [--out <dir>]
                     [--pi-sessions <dir>] [--claude-projects <dir>] [--repo <dir>] [--jhon-root <dir>]
                     [--suite-tmp <dir>] [--result <name>=pass|fail]...
+                    [--against <old binary> --against-label <name>]   (with --projects-file: times both back to back)
   phasegate compare --base <label> --new <label> [--out <dir>] [--markdown]
 `
 
@@ -91,6 +92,8 @@ func measure(args []string, stdout, stderr io.Writer) int {
 	suiteTmp := fs.String("suite-tmp", "", "the TMPDIR a suite run was given; its leftover entries are counted")
 	res := results{}
 	fs.Var(res, "result", "a correctness result, <name>=pass|fail (repeatable)")
+	against := fs.String("against", "", "an older jhon binary timed back to back with --jhon, in the same run")
+	againstLabel := fs.String("against-label", "", "the older binary's record: <out>/<against-label>.json")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -102,6 +105,22 @@ func measure(args []string, stdout, stderr io.Writer) int {
 	}
 	if st, err := os.Stat(*bin); *bin == "" || err != nil || st.IsDir() {
 		return fail("--jhon names no binary: %q", *bin)
+	}
+	switch {
+	case *against == "" && *againstLabel != "":
+		return fail("--against-label needs --against")
+	case *against == "":
+	case *againstLabel == "":
+		return fail("--against needs --against-label")
+	case !labelName.MatchString(*againstLabel):
+		return fail("--against-label takes a name of letters, digits, '.', '_' and '-', not %q", *againstLabel)
+	case *againstLabel == *label:
+		return fail("--against-label must differ from --label")
+	case *projectsFile == "":
+		return fail("--against needs --projects-file: it times the two binaries")
+	}
+	if st, err := os.Stat(*against); *against != "" && (err != nil || st.IsDir()) {
+		return fail("--against names no binary: %q", *against)
 	}
 	var since time.Time
 	if *sinceFlag != "" {
@@ -130,14 +149,30 @@ func measure(args []string, stdout, stderr io.Writer) int {
 	}
 	env := append(os.Environ(), "JHON_TELEMETRY=off")
 
-	r := &Record{Label: *label, Created: time.Now().UTC().Format(time.RFC3339), Skipped: map[string]string{}}
+	created := time.Now().UTC().Format(time.RFC3339)
+	r := &Record{Label: *label, Created: created, Skipped: map[string]string{}}
+	// old is the --against binary's record: its speed only, timed back to
+	// back with the new one's; what does not depend on a binary is measured
+	// once, in r.
+	var old *Record
+	bins, roots := []string{*bin}, []string{*jhonRoot}
+	if *against != "" {
+		once := "measured once, in " + *label + " (back to back)"
+		old = &Record{Label: *againstLabel, Created: created, Pair: *label, Jhon: jhonVersion(*against, env),
+			Skipped: map[string]string{"friction": once, "budgets": once, "hygiene": once}}
+		r.Pair = *againstLabel
+		bins, roots = []string{*against, *bin}, []string{findJhonRoot(*against, *repo), *jhonRoot}
+	}
 	r.Jhon = jhonVersion(*bin, env)
 	if projects != nil {
-		s, err := measureSpeed(speedConfig{bin: *bin, jhonRoot: *jhonRoot, home: home, projects: projects, env: env})
+		s, err := measureSpeed(speedConfig{bins: bins, roots: roots, home: home, projects: projects, env: env})
 		if err != nil {
 			return fail("%v", err)
 		}
-		r.Speed = s
+		r.Speed = s[len(s)-1]
+		if old != nil {
+			old.Speed = s[0]
+		}
 	} else {
 		r.Skipped["speed"] = "no --projects-file"
 	}
@@ -163,20 +198,34 @@ func measure(args []string, stdout, stderr io.Writer) int {
 		r.Skipped = nil
 	}
 
-	body, _ := json.MarshalIndent(r, "", "  ")
-	path := filepath.Join(*out, *label+".json")
-	if err := os.MkdirAll(*out, 0o755); err != nil {
-		return fail("%v", err)
+	grew := false
+	for _, rec := range []*Record{old, r} {
+		if rec == nil {
+			continue
+		}
+		path, err := writeRecord(*out, rec)
+		if err != nil {
+			return fail("%v", err)
+		}
+		if summarize(stdout, rec) {
+			grew = true
+		}
+		fmt.Fprintln(stdout, "phasegate: wrote", path)
 	}
-	if err := os.WriteFile(path, append(body, '\n'), 0o644); err != nil {
-		return fail("%v", err)
-	}
-	grew := summarize(stdout, r)
-	fmt.Fprintln(stdout, "phasegate: wrote", path)
 	if grew {
 		return 1
 	}
 	return 0
+}
+
+// writeRecord writes r as <out>/<label>.json and says where.
+func writeRecord(out string, r *Record) (string, error) {
+	body, _ := json.MarshalIndent(r, "", "  ")
+	path := filepath.Join(out, r.Label+".json")
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		return "", err
+	}
+	return path, os.WriteFile(path, append(body, '\n'), 0o644)
 }
 
 // summarize prints the record in a few lines; it says whether a project's
@@ -208,9 +257,10 @@ func summarize(w io.Writer, r *Record) (grew bool) {
 				runtimes = append(runtimes, fmt.Sprintf("%s %d/%d", rt, c.Stops, c.ToolResults))
 			}
 		}
-		fmt.Fprintf(w, "phasegate: friction since %s: %d stops in %d tool results (%s per 100), %d sessions (%s); left out: jhon %d tool results, scratch %d, bridge mirrors %d\n",
+		fmt.Fprintf(w, "phasegate: friction since %s: %d stops in %d tool results (%s per 100), %d sessions (%s); left out: jhon %d tool results, scratch %d, bridge mirrors %d, bridge copies %d, repeats %d\n",
 			f.Since, f.Stops, f.ToolResults, num(f.Per100), f.Sessions, strings.Join(runtimes, ", "),
-			f.LeftOut["jhon"].ToolResults, f.LeftOut["scratch"].ToolResults, f.LeftOut[bridgeMirror].ToolResults)
+			f.LeftOut["jhon"].ToolResults, f.LeftOut["scratch"].ToolResults, f.LeftOut[bridgeMirror].ToolResults,
+			f.LeftOut[bridgeCopy].ToolResults, f.LeftOut[repeated].ToolResults)
 	}
 	if len(r.Budgets) > 0 {
 		var keys []string
@@ -326,7 +376,14 @@ func compare(args []string, stdout, stderr io.Writer) int {
 			worse++
 		}
 	}
-	fmt.Fprintf(stdout, "\nphasegate: %d worse (base %s, jhon %s; new %s, jhon %s)\n", worse, recs[0].Label, recs[0].Jhon.Version, recs[1].Label, recs[1].Jhon.Version)
+	fmt.Fprintln(stdout)
+	if recs[0].Pair == recs[1].Label && recs[1].Pair == recs[0].Label {
+		fmt.Fprintln(stdout, "phasegate: base and new were timed back to back, in one run")
+	}
+	if note := countingNote(recs[0], recs[1]); note != "" {
+		fmt.Fprintln(stdout, note)
+	}
+	fmt.Fprintf(stdout, "phasegate: %d worse (base %s, jhon %s; new %s, jhon %s)\n", worse, recs[0].Label, recs[0].Jhon.Version, recs[1].Label, recs[1].Jhon.Version)
 	if worse > 0 {
 		return 1
 	}
