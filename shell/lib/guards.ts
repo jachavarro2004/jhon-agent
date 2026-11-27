@@ -192,7 +192,9 @@ export async function runGuard(config: JhonPiConfig, guard: string, args: string
   const r = await runAsync(config.jhon, ["hook", guard, ...args], { input: JSON.stringify(payload), timeoutMs });
   // Killed on the timeout: whatever it printed is not a verdict.
   if (r.timedOut) {
-    return { block: true, reason: `jhon hook ${guard} did not answer in ${timeoutMs / 1000}s; the call is refused; try again or check \`jhon doctor\`` };
+    // Never "try again" (T268, L1762): a check too slow for the timeout is
+    // as slow on the next call, and the owner's agent retried five times.
+    return { block: true, reason: `jhon hook ${guard} did not answer in ${timeoutMs / 1000}s; the call is refused. Do not run the same call again: run \`jhon doctor\` (and \`jhon deliver check <change>\` for a PR) to find what is slow.` };
   }
   if (r.status === 0) {
     if (!ASK.test(r.stdout ?? "")) {

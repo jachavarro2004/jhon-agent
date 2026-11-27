@@ -30,8 +30,9 @@ import (
 // staged and unstaged edits, and untracked files), or when it depends,
 // directly or through other projects, on a selected project. A file belongs to
 // the deepest discovered project whose directory holds it; `openspec/` is the
-// change's record, never project input, and is ignored, as is jhon-studio's
-// working output under `.jhon/studio/` at any depth (layout.StudioOutput, T8g).
+// change's record, never project input, and is ignored, as is a tool's own
+// data at any depth (layout.ToolData): jhon-studio's working output under
+// `.jhon/studio/` (T8g), noted, and CodeGraph's index or Engram's data (T268).
 //
 // Every project is selected, with the reason recorded, when the selection
 // cannot be trusted: a changed file outside every project (root
@@ -633,9 +634,12 @@ func SelectChanged(root, since string, files, outside, projects, candidates, ine
 			skipped++
 			continue
 		}
-		// jhon-studio's working output, at any depth, is no test input (T8g).
-		if layout.StudioOutput(f) {
-			studio++
+		// A tool's own data, at any depth, is no test input (T268);
+		// jhon-studio's output is noted, as T8g pins it.
+		if layout.ToolData(f) {
+			if layout.StudioOutput(f) {
+				studio++
+			}
 			continue
 		}
 		if Inert(f, inert) {

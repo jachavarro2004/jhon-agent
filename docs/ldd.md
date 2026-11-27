@@ -281,6 +281,43 @@ an archived change whose member is not ready, route-guard says to move it
 back from the archive and run it. Whether the members' PRs merged is not
 checked.
 
+Route-guard gives the members' check 6 s, well under the 10 s the shell
+waits for a guard (T268). When the check runs out of time, the owner is asked
+at the top level, and a sub-agent's PR is refused. Either way the message
+names `jhon deliver check <change>` in each member it could not judge, and
+says not to retry the PR before then.
+
+### A tool's own data is never project input
+
+CodeGraph's index (`.codegraph/`, `.codegraph-wsl/`), jhon-studio's output
+(`.jhon/studio/`) and Engram's data folder (`.engram/`), at any depth, are
+left out of every tree Jhon reads, whatever the project's .gitignore says
+(T268). That covers a run's candidate and working tree, deliver check,
+status, route-guard, the risk of the diff and the route, an `--affected`
+run's selection, and the audit's edit-before-red. Git is given
+pathspec excludes, so it never reads their bytes. A tree an earlier jhon
+recorded with them in it is still the tested tree once they are ignored.
+`jhon doctor` warns about each such folder that git does not ignore, with
+the `.gitignore` line.
+
+`jhon status`, deliver check and the guards read the working tree into a
+private object directory in the system's temporary folder, with the
+repository's objects as an alternate. The tree id is the one a run records,
+nothing lands in the repository's `.git`, and the folder is removed after.
+They hash at most 10000 untracked files or 128 MB that git does not ignore
+(measured: about 2 s on the owner's machine). Over that, the check is not
+ready, and it names the untracked folders, the largest first, with the
+`.gitignore` lines that leave them out. The risk and the route keep the
+same budget: past it they judge the tracked changes only. The risk then
+says so once, in the same words; the route lists the untracked files but
+counts no line of them. Within the budget, a file over 1 MiB is never read
+whole. An untracked binary file (a NUL in its first 8000 bytes, as git
+tells one) has no content for the risk's rules, as a tracked one's diff has
+no added lines. A reading's folder that a killed process left behind is
+removed by the next reading once it is 10 minutes old. A write to `.git/info/exclude`
+stays refused, and the refusal says to write the same lines to the
+project's `.gitignore`, which is allowed.
+
 ## The change's state in Engram
 
 The change's record is its state. The engine keeps one copy of it in

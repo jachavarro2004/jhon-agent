@@ -341,7 +341,7 @@ test("a refused call is the guard's band: the reason and the fix, every guard's 
 	const cases: Array<[string, string, string]> = [
 		["safety-guard: refused: git push --force: it rewrites history. This is destructive or irreversible.", "safety guard", "git push --force: it rewrites history."],
 		["vcs-guard: a commit outside the session's worktree", "vcs guard", "a commit outside the session's worktree"],
-		["jhon hook route-guard did not answer in 10s; the call is refused; try again or check `jhon doctor`", "route guard", "jhon hook route-guard did not answer in 10s; the call is refused; try again or check `jhon doctor`"],
+		["jhon hook route-guard did not answer in 10s; the call is refused. Do not run the same call again: run `jhon doctor` (and `jhon deliver check <change>` for a PR) to find what is slow.", "route guard", "jhon hook route-guard did not answer in 10s; the call is refused. Do not run the same call again: run `jhon doctor` (and `jhon deliver check <change>` for a PR) to find what is slow."],
 		["jhon: writer mode: this edit changes 30 lines of a.ts more than the 20 the orchestrator writes inline per request. Hand the rest to a jhon-builder.", "writer guard", "this edit changes 30 lines of a.ts more than the 20 the orchestrator writes inline per request."],
 		["jhon: sandbox.mode is on and the sandbox cannot run here: no bwrap; the command is refused, never run unsandboxed in silence. Fix: install bubblewrap", "sandbox", "sandbox.mode is on and the sandbox cannot run here: no bwrap; the command is refused, never run unsandboxed in silence."],
 		["push: git push origin main: the owner did not authorize it", "permission", "push: git push origin main: the owner did not authorize it"],

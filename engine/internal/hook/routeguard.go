@@ -149,7 +149,10 @@ func RouteGuard(args []string, io IO) int {
 		}
 		return 0
 	}
-	routeOf, reviewsOf := judged(top)
+	// One reading of each repository the call judges: the branch's changes
+	// and the rest are read once, however many checks ask (T268).
+	reads := ldd.NewReads()
+	routeOf, reviewsOf := judged(top, reads)
 	// ask has the owner asked at the top level; elsewhere it refuses, as
 	// only the owner answers it. The owner's mode for the project passes it
 	// with a note, as safety-guard's asks.
@@ -195,7 +198,7 @@ func RouteGuard(args []string, io IO) int {
 		judgedAt := func(root string) (func() ldd.Route, func() []ldd.Review) {
 			j, ok := byRoot[root]
 			if !ok {
-				j.route, j.reviews = judged(root)
+				j.route, j.reviews = judged(root, reads)
 				byRoot[root] = j
 			}
 			return j.route, j.reviews
@@ -218,8 +221,18 @@ func RouteGuard(args []string, io IO) int {
 			why, note := "", ""
 			if primary := memberPrimary(root); primary != "" {
 				why, note = memberRefusal(root, primary, command, r)
-			} else if why, note = deliveryRefusal(root, command, r, v); why == "" {
-				why = membersRefusal(root, cwd, command)
+			} else if why, note = deliveryRefusal(root, command, r, v, reads); why == "" {
+				var late string
+				if why, late = membersRefusal(root, cwd, command, reads); late != "" {
+					// The members' check ran out of its time: the owner is
+					// asked where one can be; elsewhere the PR waits, with
+					// the check to run (T268).
+					if canAsk(p) {
+						fmt.Fprintln(io.Out, askJSON(layout.Words(root, late)))
+						return 0
+					}
+					why = late
+				}
 			}
 			if why != "" {
 				return block(layout.Words(root, why))
@@ -228,7 +241,7 @@ func RouteGuard(args []string, io IO) int {
 				notes = append(notes, layout.Words(root, note))
 			}
 		}
-		if note := suiteNote(top, command); note != "" {
+		if note := suiteNote(top, command, reads); note != "" {
 			notes = append(notes, layout.Words(top, note))
 		}
 		if d.commit {
@@ -374,7 +387,7 @@ func lightVerifyNote(change string) string {
 
 // judged is the route and the reviews of the branch in the repository at
 // top, each read once, when first asked for.
-func judged(top string) (routeOf func() ldd.Route, reviewsOf func() []ldd.Review) {
+func judged(top string, reads *ldd.Reads) (routeOf func() ldd.Route, reviewsOf func() []ldd.Review) {
 	var route *ldd.Route
 	routeOf = func() ldd.Route {
 		if route == nil {
@@ -389,7 +402,7 @@ func judged(top string) (routeOf func() ldd.Route, reviewsOf func() []ldd.Review
 	var reviews *[]ldd.Review
 	reviewsOf = func() []ldd.Review {
 		if reviews == nil {
-			v := branchReviews(top, routeOf())
+			v := branchReviews(top, routeOf(), reads)
 			reviews = &v
 		}
 		return *reviews
@@ -448,8 +461,8 @@ func homeTilde(f string) string {
 
 // isCode is whether f, a file written, is code in the repository at top:
 // anything inside it but .git, the layouts' directories (openspec/, ldd/),
-// which setting LDD up writes, and jhon-studio's working output
-// (layout.StudioOutput, T8g).
+// which setting LDD up writes, and a tool's own data (layout.ToolData:
+// jhon-studio's working output, T8g; CodeGraph's index, T268).
 func isCode(top, f string) bool {
 	f = project.Realish(f)
 	if !project.Within(f, top) || f == top {
@@ -460,7 +473,7 @@ func isCode(top, f string) bool {
 		return false
 	}
 	first := strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
-	if first == ".git" || layout.StudioOutput(rel) {
+	if first == ".git" || layout.ToolData(rel) {
 		return false
 	}
 	for _, l := range layout.Layouts {
@@ -478,7 +491,7 @@ var (
 
 // deliveryRefusal is why a PR command is refused, "" when it may run, and
 // the note it runs with.
-func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf func() []ldd.Review) (refusal, note string) {
+func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf func() []ldd.Review, reads *ldd.Reads) (refusal, note string) {
 	byChange := ldd.DeliveryUnit(top) == "change"
 	if prMerge.MatchString(command) && byChange && !rebase.MatchString(command) {
 		return "delivery: change merges with rebase, so each slice stays its own commit: run `gh pr merge <n> --rebase --delete-branch`.", ""
@@ -486,7 +499,7 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 	if !deliveryOf(command).pr {
 		return "", ""
 	}
-	active, archived := ldd.BranchChanges(top)
+	active, archived := reads.BranchChanges(top)
 	lay := layout.For(top)
 	dir := func(c string) string { return layout.At(top, lay.ChangeDir(c)) }
 	if byChange {
@@ -498,7 +511,7 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 			}
 		}
 	}
-	if undocumented := ldd.UndocumentedProjects(top); len(undocumented) > 0 {
+	if undocumented := reads.UndocumentedProjects(top); len(undocumented) > 0 {
 		return fmt.Sprintf("docs_with_code: %s change(s) code but not its docs/. Update the documentation the change makes stale before the PR, or state `No docs change: <why>` in the change's tasks.md.", strings.Join(undocumented, ", ")), ""
 	}
 	if r := routeOf(); r.Behaviour {
@@ -508,7 +521,7 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		for _, c := range archived {
 			changes = append(changes, filepath.Join("archive", c))
 		}
-		folderless := ldd.FolderlessChange(top)
+		folderless := reads.FolderlessChange(top)
 		if folderless != "" {
 			changes = append(changes, folderless)
 		}
@@ -550,7 +563,7 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 		return "the route is verified (" + why + "): verify is due before delivery: launch the `jhon-checker` agent and record its verify-report.md (`verdict: pass`) under openspec/changes/<change>/ before the PR (contracts/ldd.md, \"Delivery\").", ""
 	}
 	change := "<change>"
-	if active, _ := ldd.BranchChanges(top); len(active) == 1 {
+	if active, _ := reads.BranchChanges(top); len(active) == 1 {
 		change = active[0]
 	}
 	r := routeOf()
@@ -577,8 +590,8 @@ func deliveryRefusal(top, command string, routeOf func() ldd.Route, reviewsOf fu
 
 // branchReviews is the reviews the branch's changes, active and archived,
 // owe on route r (ldd.ReviewsOf).
-func branchReviews(top string, r ldd.Route) []ldd.Review {
-	active, archived := ldd.BranchChanges(top)
+func branchReviews(top string, r ldd.Route, reads *ldd.Reads) []ldd.Review {
+	active, archived := reads.BranchChanges(top)
 	changes := slices.Clone(active)
 	for _, c := range archived {
 		changes = append(changes, filepath.Join("archive", c))
@@ -596,11 +609,11 @@ func owes(reviews []ldd.Review, kind string) bool {
 // branch carries an active change; "" for any other. It is never a refusal:
 // it names the unit's run of `jhon executions`, which records the tests, and
 // the wide one a slice's close takes.
-func suiteNote(top, command string) string {
+func suiteNote(top, command string, reads *ldd.Reads) string {
 	if !guard.WholeSuiteByHand(command, top) {
 		return ""
 	}
-	active, _ := ldd.BranchChanges(top)
+	active, _ := reads.BranchChanges(top)
 	if len(active) == 0 {
 		return ""
 	}

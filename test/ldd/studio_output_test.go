@@ -149,3 +149,25 @@ func TestStudioSettingsStillCount(t *testing.T) {
 		t.Errorf("status with studio.yaml: %+v", s)
 	}
 }
+
+// T268: a tool's own data (CodeGraph's index, untracked, at the root and in
+// a project) is no test input either: beside a source edit in a, an
+// affected run runs a's tests, as without it, and needs no note for it.
+func TestAffectedRunLeavesToolDataOut(t *testing.T) {
+	t.Parallel()
+	with, env := goProjects(t)
+	without, envWithout := goProjects(t)
+	support.Write(t, with, map[string]string{".codegraph/codegraph.db": "index\n", "b/.codegraph/codegraph.db": "index\n"})
+	for _, repo := range []string{with, without} {
+		support.Write(t, repo, map[string]string{"a/a.go": "package a\n\nfunc X() int { return 2 }\n"})
+	}
+	run := func(env []string, repo string) (support.Result, string) {
+		r := support.Jhon(t, repo, env, "executions", "run", "feat-tour", "--affected", "main", "--dry-run")
+		return r, strings.ReplaceAll(r.Stdout, filepath.Dir(repo), "<base>")
+	}
+	got, gotOut := run(env, with)
+	_, wantOut := run(envWithout, without)
+	if got.Code != 0 || got.Stderr != "" || gotOut != wantOut || !strings.Contains(gotOut, "would run  a: ") || strings.Contains(gotOut, "would run  b: ") {
+		t.Errorf("--affected beside CodeGraph's index: exit %d, stderr %q, stdout:\n%s\nwant the run without it:\n%s", got.Code, got.Stderr, gotOut, wantOut)
+	}
+}

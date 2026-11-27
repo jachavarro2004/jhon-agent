@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jachavarro2004/jhon-agent/engine/internal/execution"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/vcs"
 )
 
@@ -162,7 +161,7 @@ func SliceCommitRefusal(top string) string {
 				strings.Join(closed, ", "), change, why)
 		}
 		// The tree it records is judged as deliver check judges HEAD's (TestedTree).
-		if tt := TestedTree(top, change, vcs.WorkingTree(top, execution.ChangeRecordPaths(top, change))); tt.Why != "" {
+		if tt := WorkingTested(top, change); tt.Why != "" {
 			why := tt.Why
 			// An affected run of nothing is what wrote an empty record: only
 			// the full run clears it.

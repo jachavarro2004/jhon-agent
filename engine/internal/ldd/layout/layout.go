@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/jachavarro2004/jhon-agent/engine/internal/integrations"
 	"github.com/jachavarro2004/jhon-agent/engine/internal/lazyre"
 )
 
@@ -40,8 +41,8 @@ type Layout interface {
 	// SpecsDir is the directory of the main specs.
 	SpecsDir() string
 	// Ignored is whether rel, a path relative to the root, is no code,
-	// and no test, of the project: the record's, or jhon-studio's working
-	// output (StudioOutput).
+	// and no test, of the project: the record's, or a tool's own data
+	// (ToolData: jhon-studio's working output, CodeGraph's index).
 	Ignored(rel string) bool
 
 	// The grammar of the record (T57 slice 1): what a change's artifacts
@@ -142,7 +143,44 @@ func StudioOutput(p string) bool {
 	return strings.Contains("/"+strings.Trim(filepath.ToSlash(p), "/")+"/", "/"+StudioDir+"/")
 }
 
-// IgnoredByAny is whether rel is any layout's record, or StudioOutput.
+// ToolData is whether p, a path relative to a root or absolute, is a tool's
+// own data, never project input (T268, L1762), whatever the project's
+// .gitignore says: jhon-studio's working output (StudioOutput) or a folder
+// an integration keeps its data in (integrations.DataFolders: CodeGraph's
+// index, Engram's data), or a path in one, at any depth. It is the one test
+// every tree Jhon computes (vcs: the candidate, the working tree, a tree
+// diff) and every LDD reading of a change's edits leaves those files out
+// by, as StudioOutput was (T8g).
+func ToolData(p string) bool {
+	if StudioOutput(p) {
+		return true
+	}
+	wrapped := "/" + strings.Trim(filepath.ToSlash(p), "/") + "/"
+	for _, d := range integrations.DataFolders() {
+		if strings.Contains(wrapped, "/"+d+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// ToolDataFolders are the folders ToolData leaves out, as paths relative to
+// a root: StudioDir, then each integration's data folder.
+func ToolDataFolders() []string {
+	return append([]string{StudioDir}, integrations.DataFolders()...)
+}
+
+// ToolDataExcludes are git pathspecs that leave every ToolData path out, at
+// any depth below the git top level, so git never reads their bytes.
+func ToolDataExcludes() []string {
+	var out []string
+	for _, d := range ToolDataFolders() {
+		out = append(out, ":(top,exclude,glob)**/"+d+"/**")
+	}
+	return out
+}
+
+// IgnoredByAny is whether rel is any layout's record, or ToolData.
 func IgnoredByAny(rel string) bool {
 	for _, l := range Layouts {
 		if l.Ignored(rel) {
@@ -195,5 +233,5 @@ func (l shaped) Scenarios(src string, depth int) ([]Requirement, error) {
 	return shapedScenarios(src, depth)
 }
 func (l shaped) Ignored(rel string) bool {
-	return strings.HasPrefix(filepath.ToSlash(rel), l.dir+"/") || StudioOutput(rel)
+	return strings.HasPrefix(filepath.ToSlash(rel), l.dir+"/") || ToolData(rel)
 }

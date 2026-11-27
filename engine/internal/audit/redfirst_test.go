@@ -65,6 +65,14 @@ func TestEditBeforeRedLeavesStudioOutput(t *testing.T) {
 	}
 }
 
+// A tool's own data (layout.ToolData, T268: CodeGraph's index, Engram's
+// data) is no code edit either, whatever its files are named.
+func TestEditBeforeRedLeavesToolData(t *testing.T) {
+	for _, p := range []string{".codegraph/index.js", "svca/.codegraph-wsl/cache.py", ".engram/hook.sh"} {
+		eq(t, p+" before RED", len(findingsOf(t, "edit-before-red", user("go"), delegate("d01", "jhon-builder", acme, codeEdit(p), red(acme)))), 0)
+	}
+}
+
 func TestEditBeforeRedFindingJSON(t *testing.T) {
 	f := findingsOf(t, "edit-before-red", user("go"), delegate("d01", "jhon-builder", acme, codeEdit("svca/src/totals.py"), red(acme)))
 	wouldBe(t, f)

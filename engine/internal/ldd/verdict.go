@@ -1,6 +1,8 @@
 package ldd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -41,7 +43,36 @@ func TestedTree(root, change, tree string) Tested {
 	return testedTree(root, change, run, tree)
 }
 
+// WorkingTested is TestedTree of root's working tree, but for change's own
+// records, read with a vcs.Reading (T268): it writes nothing into the
+// repository, and an untracked tree over the reading's budget is not hashed
+// but named, as the reason.
+func WorkingTested(root, change string) Tested {
+	run, err := execution.ReadLastRun(root, change)
+	if err != nil {
+		run = nil
+	}
+	rd, err := vcs.OpenReading(context.Background(), root)
+	if err != nil {
+		return testedTree(root, change, run, "")
+	}
+	defer rd.Close()
+	tree, err := rd.WorkingTree(execution.ChangeRecordPaths(root, change))
+	var large *vcs.LargeError
+	if errors.As(err, &large) && run != nil {
+		return Tested{Why: large.Error()}
+	}
+	return testedTreeBy(rd.TreeDiff, root, change, run, tree)
+}
+
+// treeDiffer is vcs.TreeDiff, or a Reading's, for the trees it wrote.
+type treeDiffer func(a, b string) ([]string, bool)
+
 func testedTree(root, change string, run *execution.LastRun, tree string) Tested {
+	return testedTreeBy(func(a, b string) ([]string, bool) { return vcs.TreeDiff(root, a, b) }, root, change, run, tree)
+}
+
+func testedTreeBy(diff treeDiffer, root, change string, run *execution.LastRun, tree string) Tested {
 	switch {
 	case run == nil:
 		return Tested{Why: "the change has no recorded test run"}
@@ -60,7 +91,7 @@ func testedTree(root, change string, run *execution.LastRun, tree string) Tested
 	case tree == "":
 		return Tested{Why: "the working tree cannot be read"}
 	}
-	paths, ok := outsideRecord(root, change, run.WorkingTree, tree)
+	paths, ok := outsideRecordBy(diff, root, change, run.WorkingTree, tree)
 	if !ok {
 		return Tested{Why: "the tree its last test run tested is not in the repository"}
 	}
@@ -72,17 +103,22 @@ func testedTree(root, change string, run *execution.LastRun, tree string) Tested
 
 // outsideRecord is the paths that differ between trees a and b in root, but
 // for change's record files and the rest of its own folder,
-// written after the run (T150), and jhon-studio's working output (a video
-// rendered after the run, layout.StudioOutput, T8g); ok is false when a
+// written after the run (T150), and a tool's own data (a video rendered
+// after the run, layout.StudioOutput, T8g; CodeGraph's index a tree an
+// earlier jhon recorded holds, layout.ToolData, T268); ok is false when a
 // tree does not resolve.
 func outsideRecord(root, change, a, b string) ([]string, bool) {
-	diff, ok := vcs.TreeDiff(root, a, b)
+	return outsideRecordBy(func(a, b string) ([]string, bool) { return vcs.TreeDiff(root, a, b) }, root, change, a, b)
+}
+
+func outsideRecordBy(treeDiff treeDiffer, root, change, a, b string) ([]string, bool) {
+	diff, ok := treeDiff(a, b)
 	exempt := execution.ChangeRecordPaths(root, change)
 	folder := execution.ChangeDirInRepo(root, change) + "/"
 	outside := []string{}
 	for _, p := range diff {
 		own := change != "" && strings.HasPrefix(p, folder)
-		if !exempt[p] && !own && !layout.StudioOutput(p) {
+		if !exempt[p] && !own && !layout.ToolData(p) {
 			outside = append(outside, p)
 		}
 	}
