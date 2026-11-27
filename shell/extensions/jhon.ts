@@ -6,8 +6,9 @@
  *
  * - The main session receives the orchestrator's prompt (the body, the
  *   persona, and the always-on contracts the renderer wrote to the file
- *   `jhon.json` names), appended to `systemPromptOptions.appendSystemPrompt`
- *   because pi-claude-bridge forwards only the structured prompt options. A
+ *   `jhon.json` names), appended to `systemPromptOptions.appendSystemPrompt`,
+ *   which pi renders into the prompt every provider receives (pi-claude-bridge
+ *   0.13 forwards that prompt whole; 0.9 forwarded only these options). A
  *   sub-agent, a child pi process (JHON_PI_CHILD=1), receives its own body
  *   through its definition instead.
  * - Every tool call is judged by Jhon's guards before it runs (pi/guards.ts),
@@ -257,7 +258,7 @@ export function childLimits(env: NodeJS.ProcessEnv = process.env): { tools?: str
   return out;
 }
 
-/** pi-claude-bridge forwards only the structured prompt options, so the prompt is appended there, once. */
+/** The prompt is appended to the structured prompt options, which reach every provider, pi-claude-bridge included, once. */
 function appendOnce(options: { appendSystemPrompt?: string } | undefined, text: string): void {
   if (!options || !text || (options.appendSystemPrompt ?? "").includes(text)) return;
   options.appendSystemPrompt = options.appendSystemPrompt ? `${options.appendSystemPrompt}\n\n${text}` : text;

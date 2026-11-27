@@ -1,8 +1,9 @@
 /**
  * How the shell's extensions add their text to the system prompt. They never
- * return a replacement prompt from before_agent_start: a provider bridge
- * (pi-claude-bridge) passes on only the structured systemPromptOptions parts,
- * so each extension writes into those options instead.
+ * return a replacement prompt from before_agent_start: each extension writes
+ * into the structured systemPromptOptions parts instead, which pi renders
+ * into the prompt every provider receives (pi-claude-bridge 0.13 forwards it
+ * whole; 0.9 passed on only these parts).
  *
  * Both helpers add a block once: a handler that runs again on the same
  * options object leaves it as it is. A block loses its leading newlines and
@@ -33,7 +34,11 @@ export function appendSystemPromptOnce(options: AppendableSystemPromptOptions | 
  * The prompt section that changes per run or per owner message (T45b). pi
  * draws custom sections after the appended prompt, and pi-claude-bridge
  * passes them on after it, so text that varies goes here and the appended
- * prompt, with the cached prefix that ends at it, never changes.
+ * prompt, with the cached prefix that ends at it, never changes. A change
+ * here still costs on pi-claude-bridge 0.13, which starts a new Claude Code
+ * session, the conversation re-sent uncached, whenever the prompt it
+ * forwards changes; the memory index, its one text today, is read once a
+ * session.
  */
 export const SESSION_SECTION = "jhon_session";
 

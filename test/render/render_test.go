@@ -2432,7 +2432,7 @@ func sharedPiHome(t *testing.T) (home, pi string) {
 // the release's own pi package. No gentle-pi: the shell carries everything it bridged.
 func piPackages(current string) []any {
 	pretty := map[string]any{"source": "npm:@heyhuynhgiabuu/pi-pretty@0.6.27", "extensions": []any{}, "skills": []any{}, "prompts": []any{}, "themes": []any{}}
-	return []any{"npm:pi-claude-bridge@0.9.3", "npm:pi-web-access@0.43.0", pretty, filepath.Join(current, "shell")}
+	return []any{"npm:pi-claude-bridge@0.13.0", "npm:pi-web-access@0.43.0", pretty, filepath.Join(current, "shell")}
 }
 
 func TestRenderPi(t *testing.T) {
@@ -2758,7 +2758,7 @@ func TestRenderPi(t *testing.T) {
 			edit func(s map[string]any)
 		}{
 			{"defaultProvider", func(s map[string]any) { s["defaultProvider"] = "anthropic" }},
-			{"packages", func(s map[string]any) { s["packages"] = []any{"npm:pi-claude-bridge@0.9.3"} }},
+			{"packages", func(s map[string]any) { s["packages"] = []any{"npm:pi-claude-bridge@0.13.0"} }},
 		} {
 			home, pi := piHome(t, nil)
 			path := filepath.Join(pi, "settings.json")

@@ -78,6 +78,7 @@ func runDoctor(argv []string) (int, error) {
 	d.sandbox()
 	d.engramQueue()
 	d.versions()
+	d.bridgeWindows()
 	d.remoteProbed(remote)
 	d.cliIntegrations()
 	fmt.Fprint(o.W, "\n")
@@ -135,6 +136,18 @@ func (d doctor) versions() {
 		default:
 			o.Warn(fmt.Sprintf("%s %s is installed; Jhon pins %s", t.Command, got, t.Version))
 		}
+	}
+}
+
+// bridgeWindows warns, in the versions section and never as a failure, of
+// each pi model of the active profile on claude-bridge that the pinned
+// pi-claude-bridge serves below a 1M window (T282, L1781): pi compacts by
+// the window the bridge registers, so a model it has no row for runs at
+// 200K silently. It reads the profile as `jhon doctor --runtime pi` does,
+// with no network call.
+func (d doctor) bridgeWindows() {
+	for _, w := range render.BridgeWindowWarnings(d.src) {
+		d.o.Warn(w)
 	}
 }
 

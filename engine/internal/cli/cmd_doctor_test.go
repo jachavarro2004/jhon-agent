@@ -229,6 +229,33 @@ func TestDoctorVersionRowOfEachToolKeepsItsShape(t *testing.T) {
 	}
 }
 
+// T282 (L1781): doctor warns, never fails, when the active profile runs a
+// pi model on claude-bridge that the pinned bridge serves at 200,000 tokens,
+// and says nothing for a model it serves at 1M.
+func TestDoctorWarnsOfABridgeModelServedBelow1M(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	// pi counts as installed by its ~/.pi, with no pi on PATH (CI).
+	must(t, os.Mkdir(filepath.Join(dir, ".pi"), 0o755))
+	t.Setenv("JHON_SETTINGS", filepath.Join(dir, "settings.toml"))
+	file := filepath.Join(dir, "profiles.json")
+	t.Setenv("JHON_PROFILES", file)
+	for model, want := range map[string]string{
+		"claude-fable-5-2": "",
+		// Its maker documents 200K: no false "update Jhon" (L1786).
+		"claude-opus-4-5":  "",
+		"claude-fable-5-3": "  warn  pi model claude-bridge/claude-fable-5-3 (profile work: jhon-orchestrator) runs with a 200,000-token context window, not 1,000,000: pi-claude-bridge " + render.PiClaudeBridgeVersion + ", the version Jhon pins, has no 1M row for it, so pi compacts it by 200,000 — update Jhon (jhon update), or pick a model the bridge serves at 1M (jhon profile set)\n",
+	} {
+		must(t, os.WriteFile(file, []byte(`{"active":"work","profiles":{"work":{"agents":{"jhon-orchestrator":{"pi":"claude-bridge/`+model+`@xhigh"}}}}}`), 0o644))
+		var b strings.Builder
+		o := &release.Out{W: &b, E: &b}
+		doctor{o: o, src: "../../.."}.bridgeWindows()
+		if got := b.String(); got != want || o.Failed != 0 {
+			t.Errorf("%s: got %q (failed %d), want %q", model, got, o.Failed, want)
+		}
+	}
+}
+
 func TestInstalledVersionIsTheFirstVersionInTheOutput(t *testing.T) {
 	for out, want := range map[string]string{"2.1.310 (Claude Code)": "2.1.310", "engram 3.6.1\n": "3.6.1", "v1.6.2": "1.6.2", "none": ""} {
 		if got := installedVersion(out); got != want {
